@@ -53,7 +53,7 @@ export interface Person {
   phone?: string;
   email?: string;
   dateOfBirth?: string;
-  gender?: 'MALE' | 'FEMALE' | 'OTHER';
+  gender?: 'MALE' | 'FEMALE';
   address?: string;
   nationalId?: string;
   /** Date joined this local church. */
@@ -124,6 +124,55 @@ export interface PersonDocumentMeta {
   kind: 'CERTIFICATE' | 'ID' | 'LETTER' | 'OTHER';
   issuedOn?: string;
   note?: string;
+  /** Uploaded file (prototype — stored as data URL in memory). */
+  fileName?: string;
+  fileMime?: string;
+  fileDataUrl?: string;
+}
+
+/** Work / livelihood on the pastoral 360 record. */
+export interface PersonEmploymentRecord {
+  id: string;
+  personId: string;
+  employer: string;
+  title?: string;
+  sector?: string;
+  status: 'CURRENT' | 'FORMER';
+  startedOn?: string;
+  endedOn?: string;
+  notes?: string;
+}
+
+/** Schooling / training on the pastoral 360 record. */
+export interface PersonEducationRecord {
+  id: string;
+  personId: string;
+  institution: string;
+  level?: string;
+  field?: string;
+  status: 'COMPLETED' | 'IN_PROGRESS' | 'INCOMPLETE';
+  startedOn?: string;
+  endedOn?: string;
+  notes?: string;
+}
+
+/** Natural talent or learned skill. */
+export interface PersonTalentSkill {
+  id: string;
+  personId: string;
+  kind: 'TALENT' | 'SKILL';
+  name: string;
+  proficiency?: 'BEGINNER' | 'INTERMEDIATE' | 'ADVANCED' | 'EXPERT';
+  notes?: string;
+}
+
+/** Spiritual gift noted for ministry placement. */
+export interface PersonSpiritualGift {
+  id: string;
+  personId: string;
+  gift: string;
+  evidence?: string;
+  notes?: string;
 }
 
 /**
@@ -416,7 +465,9 @@ export type Resource =
   /** Software config for a system (invites, role plumbing) — not domain ledgers. */
   | 'SYSTEM_CONFIG'
   /** Itorero Board of Directors meetings & decisions. */
-  | 'BOARD';
+  | 'BOARD'
+  /** Official letters & correspondence (request → document → version → sign). */
+  | 'CORRESPONDENCE';
 
 export type Action =
   | 'ENTER'
@@ -471,6 +522,7 @@ export const RESOURCE_SENSITIVITY: Record<Resource, ResourceSensitivity> = {
   AUDIT: 'CHURCH',
   SYSTEM_CONFIG: 'CHURCH',
   BOARD: 'CHURCH',
+  CORRESPONDENCE: 'CHURCH',
 };
 
 /** A concrete right held right now in a system (optionally fund-scoped). */
@@ -1306,7 +1358,10 @@ export type ProtocolOffice =
   | 'COORDINATOR'
   | 'MEMBER';
 
-/** Which service days this person may be scheduled for. */
+/**
+ * Broad serve-day preference. Narrower leader-excused limits use
+ * `allowedServiceKinds` (e.g. Tuesday-only or SS1-only).
+ */
 export type ServeDayCapability = 'SUNDAY' | 'TUESDAY' | 'BOTH';
 
 export interface ProtocolRosterMember {
@@ -1314,15 +1369,21 @@ export interface ProtocolRosterMember {
   personId: string;
   office: ProtocolOffice;
   serveDays: ServeDayCapability;
+  /**
+   * Leader-excused limits — only these kinds (e.g. `['TUESDAY']` or `['SS1']`).
+   * When omitted, `serveDays` applies.
+   */
+  allowedServiceKinds?: ProtocolServiceKind[];
   status: 'ACTIVE' | 'INACTIVE' | 'LEAVE';
   /** ISO dates this person must not be scheduled. */
   unavailableDates: string[];
   notes?: string;
 }
 
-export type ProtocolServiceKind = 'SS1' | 'SS2' | 'TUESDAY';
+/** Protocol never staffs Friday — Music may still schedule choirs there. */
+export type ProtocolServiceKind = 'SS1' | 'SS2' | 'TUESDAY' | 'IGABURO';
 
-/** One service slot in a month calendar (SS1 / SS2 / Tuesday…). */
+/** One service slot synced from a published Music schedule (no Friday). */
 export interface ProtocolService {
   id: string;
   monthKey: string;
@@ -1330,6 +1391,8 @@ export interface ProtocolService {
   kind: ProtocolServiceKind;
   label: string;
   targetTeamSize: number;
+  /** Music service id this slot mirrors. */
+  musicServiceId?: string;
 }
 
 export type ProtocolMonthStatus = 'OPEN' | 'DRAFT' | 'REVIEW' | 'PUBLISHED';
@@ -1348,11 +1411,30 @@ export interface ProtocolMonthPlan {
   publishedByPersonId?: string;
 }
 
+/** Temporary per-service leadership — expires when that service ends. */
+export type ProtocolTeamRole = 'MEMBER' | 'TEAM_LEADER' | 'VICE_LEADER';
+
+/** REGULAR counts toward monthly 3; EXTRA = 4th; FILL_IN does not count as official. */
+export type ProtocolSlotKind = 'REGULAR' | 'EXTRA' | 'FILL_IN';
+
+export type ProtocolRoleDecision =
+  | 'RECOMMENDED'
+  | 'APPROVED'
+  | 'DECLINED'
+  | 'MANUAL';
+
 export interface ProtocolTeamSlot {
   id: string;
   serviceId: string;
   personId: string;
-  source: 'ENGINE' | 'MANUAL';
+  source: 'ENGINE' | 'MANUAL' | 'FILL_IN' | 'SWAP';
+  role: ProtocolTeamRole;
+  /** Engine suggestion for TL/VTL before coordinator decision. */
+  recommendedRole?: ProtocolTeamRole;
+  roleStatus?: ProtocolRoleDecision;
+  slotKind: ProtocolSlotKind;
+  /** When this row is a fill-in, who was excused. */
+  replacedPersonId?: string;
 }
 
 /** Immutable snapshot after publish (history / archive). */
@@ -1368,9 +1450,9 @@ export interface ProtocolScheduleVersion {
 
 export type ProtocolAttendanceStatus =
   | 'PRESENT'
-  | 'ABSENT'
-  | 'LATE'
-  | 'EXCUSED';
+  | 'HALF_PRESENT'
+  | 'EXCUSED'
+  | 'ABSENT';
 
 export interface ProtocolAttendanceRecord {
   id: string;
@@ -1380,6 +1462,71 @@ export interface ProtocolAttendanceRecord {
   recordedByPersonId: string;
   recordedAt: string;
   notes?: string;
+  /** Snapshot of slot kind at record time (for Faithful Servant scoring). */
+  slotKind?: ProtocolSlotKind;
+}
+
+export type ProtocolAbsenceRequestStatus =
+  | 'PENDING'
+  | 'EXCUSED'
+  | 'DENIED';
+
+/** Member asks TL/VTL to be excused from a scheduled service. */
+export interface ProtocolAbsenceRequest {
+  id: string;
+  serviceId: string;
+  personId: string;
+  reason: string;
+  status: ProtocolAbsenceRequestStatus;
+  createdAt: string;
+  decidedByPersonId?: string;
+  decidedAt?: string;
+}
+
+export type ProtocolFillInStatus =
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'CANCELLED';
+
+export interface ProtocolFillInOffer {
+  id: string;
+  serviceId: string;
+  excusedPersonId: string;
+  candidatePersonId: string;
+  offeredByPersonId: string;
+  status: ProtocolFillInStatus;
+  createdAt: string;
+  respondedAt?: string;
+}
+
+export type ProtocolSwapStatus =
+  | 'PENDING'
+  | 'ACCEPTED'
+  | 'DECLINED'
+  | 'CANCELLED';
+
+/** Member proposes swapping into another member's scheduled service. */
+export interface ProtocolSwapProposal {
+  id: string;
+  serviceId: string;
+  proposerPersonId: string;
+  targetPersonId: string;
+  status: ProtocolSwapStatus;
+  createdAt: string;
+  respondedAt?: string;
+}
+
+/** TL/VTL service report for one service. */
+export interface ProtocolServiceReport {
+  id: string;
+  serviceId: string;
+  authorPersonId: string;
+  challenges: string;
+  solutions: string;
+  issues: string;
+  recommendations: string;
+  submittedAt: string;
 }
 
 export type ProtocolPaymentMethod = 'CASH' | 'MOMO' | 'BANK';
@@ -1416,6 +1563,9 @@ export type ProtocolNotificationKind =
   | 'SCHEDULE_PUBLISHED'
   | 'CONTRIBUTION_SUBMITTED'
   | 'CONTRIBUTION_VERIFIED'
+  | 'ABSENCE_REQUEST'
+  | 'FILL_IN_OFFER'
+  | 'SWAP_PROPOSAL'
   | 'GENERAL';
 
 export interface ProtocolNotification {
@@ -1438,12 +1588,18 @@ export interface ProtocolActivityEvent {
 }
 
 export interface ProtocolSchedulingRules {
-  /** Prefer filling duty load toward this count first. */
+  /** Official monthly serve target (not fill-ins). */
   preferTarget: number;
+  /** Soft ceiling before allowing Extra (normally = preferTarget). */
   softMax: number;
+  /** Absolute max including one Extra (preferTarget + 1). */
   hardMax: number;
   defaultTeamSize: number;
-  avoidChoirConflicts: boolean;
+  /**
+   * When true, choir members may only be placed on services where Music
+   * scheduled their choir (hard block, not soft deprioritize).
+   */
+  requireChoirOnService: boolean;
 }
 
 /** President/vice publish for Itorero oversight — not live ledger access. */
@@ -1630,6 +1786,140 @@ export interface TransferLetterOut {
   signedByPersonId?: string;
   signedOn?: string;
   note?: string;
+  /** Linked ChurchDocument when migrated onto the correspondence engine. */
+  documentId?: string;
+}
+
+/** Correspondence letter types (Phase 1–2). */
+export type CorrespondenceLetterType =
+  | 'TRANSFER_OUT'
+  | 'MEMBERSHIP_CONFIRMATION'
+  | 'RECOMMENDATION'
+  | 'INCOMING'
+  | 'PROGRAM_CERTIFICATE'
+  | 'MINISTRY_APPOINTMENT';
+
+export type DocumentDirection = 'OUT' | 'IN' | 'INTERNAL';
+
+export type DocumentOrigin =
+  | 'CHURCH_GENERATED'
+  | 'MEMBER_UPLOADED'
+  | 'MEMBER_REQUESTED'
+  | 'MINISTRY_UPLOADED'
+  | 'EXTERNAL_INTAKE'
+  /** Free-text origin; see originDetail. */
+  | 'OTHER';
+
+export type DocumentSensitivity =
+  | 'PUBLIC'
+  | 'INTERNAL'
+  | 'CONFIDENTIAL'
+  | 'RESTRICTED';
+
+/**
+ * Letter lifecycle (v1):
+ * SUBMITTED → IN_PREPARATION → AWAITING_SIGNATURE → FINALIZED → DELIVERED
+ * Side: NEEDS_INFORMATION | REJECTED | CANCELLED
+ */
+export type CorrespondenceStatus =
+  | 'SUBMITTED'
+  | 'IN_PREPARATION'
+  | 'NEEDS_INFORMATION'
+  | 'AWAITING_SIGNATURE'
+  | 'FINALIZED'
+  | 'DELIVERED'
+  | 'REJECTED'
+  | 'CANCELLED';
+
+export type DocumentDeliveryMethod =
+  | 'COLLECTED_AT_OFFICE'
+  | 'EMAIL'
+  | 'DOWNLOAD';
+
+/** Intake / ask — one request becomes one ChurchDocument. */
+export interface DocumentRequest {
+  id: string;
+  letterType: CorrespondenceLetterType;
+  personId: string;
+  requestedByPersonId: string;
+  requestedOn: string;
+  status: CorrespondenceStatus;
+  origin: DocumentOrigin;
+  purpose?: string;
+  destinationChurch?: string;
+  note?: string;
+  documentId?: string;
+  /** When origin is OTHER — free-text source. */
+  originDetail?: string;
+  /** Incoming mail: who sent it. */
+  senderName?: string;
+  senderOrg?: string;
+}
+
+/** Official letter artifact (versions hang off this). */
+export interface ChurchDocument {
+  id: string;
+  requestId: string;
+  letterType: CorrespondenceLetterType;
+  direction: DocumentDirection;
+  personId: string;
+  status: CorrespondenceStatus;
+  origin: DocumentOrigin;
+  sensitivity: DocumentSensitivity;
+  title: string;
+  purpose?: string;
+  destinationChurch?: string;
+  referenceNumber?: string;
+  currentVersionId?: string;
+  transferLetterId?: string;
+  createdByPersonId: string;
+  createdOn: string;
+  finalizedOn?: string;
+  finalizedByPersonId?: string;
+  deliveredOn?: string;
+  deliveredByPersonId?: string;
+  deliveryMethod?: DocumentDeliveryMethod;
+  /** Incoming correspondence. */
+  senderName?: string;
+  senderOrg?: string;
+  /** Program certificate link. */
+  programId?: string;
+  /** Ministry appointment org unit. */
+  orgUnitId?: string;
+  /** When origin is OTHER — free-text source (e.g. district courier, lawyer). */
+  originDetail?: string;
+  /** Corrections / missing info requested by office or Leader. */
+  infoRequestNote?: string;
+  infoRequestedByPersonId?: string;
+  infoRequestedOn?: string;
+  /** Latest reply when office/member answered the info request. */
+  infoResponseNote?: string;
+}
+
+export interface DocumentVersion {
+  id: string;
+  documentId: string;
+  versionNumber: number;
+  uploadedByPersonId: string;
+  uploadedOn: string;
+  origin: DocumentOrigin;
+  fileName: string;
+  /** Demo body (template fill or pasted text). */
+  bodyText?: string;
+  /** Demo upload (data URL or empty for template-only). */
+  fileDataUrl?: string;
+  isFinal: boolean;
+  note?: string;
+}
+
+export interface DocumentSignature {
+  id: string;
+  documentId: string;
+  versionId: string;
+  signedByPersonId: string;
+  signedOn: string;
+  authorityRole: string;
+  kind: 'SYSTEM_AUTHORITY' | 'WET_INK_UPLOAD';
 }
 
 export type PulpitSlotStatus =
@@ -1640,13 +1930,22 @@ export type PulpitSlotStatus =
   | 'CANCELLED';
 
 /** Evangelism prepares → Catechist reviews → Church Leader approves. */
+export type PulpitServiceKind = 'SS1' | 'SS2' | 'TUESDAY' | 'IGABURO';
+
 export interface PulpitSlot {
   id: string;
   serviceDate: string;
+  /** Canonical kind when known (SS1 / SS2 / Tuesday / Igaburo). */
+  serviceKind?: PulpitServiceKind;
   serviceLabel: string;
-  preacherPersonId: string;
+  /** Church preacher when not a guest; omit/empty for outside guests. */
+  preacherPersonId?: string;
   isGuest?: boolean;
   guestName?: string;
+  /** Guest church / district / title note. */
+  guestFrom?: string;
+  /** Contact phone for outside guests. */
+  guestPhone?: string;
   status: PulpitSlotStatus;
   preparedByPersonId?: string;
   catechistReviewedByPersonId?: string;
