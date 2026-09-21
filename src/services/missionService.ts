@@ -12,6 +12,7 @@ import {
   pushMissionShare,
   updateMissionShare,
 } from '../data/seed';
+import { scheduleLocalDomainPersist } from '../data/localDomainStore';
 import {
   matchesEligibility,
   personInAudiencePool,
@@ -99,6 +100,7 @@ import {
   type MissionStewardship,
 } from '../domain/stewardship';
 import { peopleService } from './authService';
+import { correspondenceService } from './correspondenceService';
 import { financeService } from './financeService';
 import { participationService } from './participationService';
 import { systemsService } from './orgService';
@@ -367,6 +369,7 @@ export const missionService = {
       approvedAt: startActive ? new Date().toISOString() : undefined,
     };
     PROGRAMS.unshift(p);
+    scheduleLocalDomainPersist();
     return p;
   },
 
@@ -651,8 +654,15 @@ export const missionService = {
   }): { ok: boolean; reason?: string; enrollment?: ProgramEnrollment } {
     const p = this.getProgram(input.programId);
     if (!p) return { ok: false, reason: 'Program not found' };
-    if (p.status !== 'ACTIVE' && p.status !== 'PENDING_APPROVAL') {
-      return { ok: false, reason: 'Program must be ACTIVE (or pending) to enroll' };
+    if (
+      p.status !== 'ACTIVE' &&
+      p.status !== 'PENDING_APPROVAL' &&
+      p.status !== 'SETUP'
+    ) {
+      return {
+        ok: false,
+        reason: 'Program must be SETUP, ACTIVE, or pending to enroll',
+      };
     }
     const exists = PROGRAM_ENROLLMENTS.find(
       (e) =>
@@ -808,6 +818,13 @@ export const missionService = {
         issuedOn: today,
         note: program.cohortLabel ?? program.programType,
       });
+      correspondenceService.issueProgramCertificate({
+        personId: e.personId,
+        programId: program.id,
+        programName: program.name,
+        actorPersonId: input.actorPersonId ?? e.personId,
+        cohortLabel: program.cohortLabel,
+      });
     }
 
     const ns = input.nextSteps;
@@ -847,8 +864,11 @@ export const missionService = {
   }): { ok: boolean; reason?: string; activity?: Activity } {
     const p = this.getProgram(input.programId);
     if (!p) return { ok: false, reason: 'Program not found' };
-    if (p.status !== 'ACTIVE') {
-      return { ok: false, reason: 'Sessions only on ACTIVE programs' };
+    if (p.status !== 'ACTIVE' && p.status !== 'SETUP') {
+      return {
+        ok: false,
+        reason: 'Sessions only on SETUP or ACTIVE programs',
+      };
     }
     const activity: Activity = {
       id: nid('act'),
@@ -1030,6 +1050,7 @@ export const missionService = {
       status: beyond ? 'PENDING_APPROVAL' : 'CONFIRMED',
     };
     EVENTS.unshift(e);
+    scheduleLocalDomainPersist();
     if (e.projectId) {
       this.ensureEventOnProjectDelivery(e.projectId, e);
     }
@@ -1507,6 +1528,7 @@ export const missionService = {
       createdByPersonId: input.createdByPersonId,
     };
     PROJECTS.unshift(p);
+    scheduleLocalDomainPersist();
     return { ok: true, project: p };
   },
 
@@ -2105,6 +2127,7 @@ export const missionService = {
       startDate: new Date().toISOString().slice(0, 10),
     };
     TASKS.unshift(t);
+    scheduleLocalDomainPersist();
     return t;
   },
 
@@ -2112,6 +2135,7 @@ export const missionService = {
     const i = TASKS.findIndex((t) => t.id === id);
     if (i < 0) return null;
     TASKS[i] = { ...TASKS[i], ...patch, id };
+    scheduleLocalDomainPersist();
     return TASKS[i];
   },
 
