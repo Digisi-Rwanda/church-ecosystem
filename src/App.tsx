@@ -16,6 +16,10 @@ import { BoardPage } from './pages/BoardPage';
 import { BoardFollowUpPage } from './pages/BoardFollowUpPage';
 import { BoardMeetingPage } from './pages/BoardMeetingPage';
 import { PastoralDeskPage } from './pages/PastoralDeskPage';
+import {
+  CorrespondenceDetailPage,
+  CorrespondencePage,
+} from './pages/CorrespondencePage';
 import { SystemAdminPage } from './pages/SystemAdminPage';
 import { InboxPage } from './pages/InboxPage';
 import { LoginPage } from './pages/LoginPage';
@@ -95,8 +99,11 @@ import {
   ProtocolMembersPage,
   ProtocolMySchedulePage,
   ProtocolReviewPage,
-  ProtocolTeamsPage,
 } from './pages/ministry/ProtocolPages';
+import {
+  ProtocolFaithfulPage,
+  ProtocolTeamsPage,
+} from './pages/ministry/ProtocolSchedulingPages';
 import {
   ProtocolExportPage,
   ProtocolFinancePage,
@@ -182,6 +189,13 @@ function ShellWithTitle() {
     title = 'Pastoral desk';
     subtitle =
       'Pathways, baptism names, discipline, transfer letters, and pulpit.';
+  } else if (location.pathname.startsWith('/correspondence/')) {
+    title = 'Letter';
+    subtitle = 'Draft, sign, deliver, and archive official correspondence.';
+  } else if (location.pathname.startsWith('/correspondence')) {
+    title = 'Correspondence';
+    subtitle =
+      'Transfer, membership confirmation, and recommendation letters.';
   } else if (location.pathname.startsWith('/system-admin')) {
     title = 'System admin';
     subtitle = 'Configure tools for systems you are appointed to — not church ledgers.';
@@ -321,6 +335,7 @@ const PROTOCOL_NAV = [
   { to: '/systems/protocol/teams', label: 'Service teams' },
   { to: '/systems/protocol/review', label: 'Review' },
   { to: '/systems/protocol/attendance', label: 'Attendance' },
+  { to: '/systems/protocol/faithful', label: 'Faithful Servant' },
   { to: '/systems/protocol/mine', label: 'My schedule' },
   { to: '/systems/protocol/finance', label: 'Finance' },
   { to: '/systems/protocol/inbox', label: 'Inbox' },
@@ -920,6 +935,7 @@ export default function App() {
             <Route path="teams" element={<ProtocolTeamsPage />} />
             <Route path="review" element={<ProtocolReviewPage />} />
             <Route path="attendance" element={<ProtocolAttendancePage />} />
+            <Route path="faithful" element={<ProtocolFaithfulPage />} />
             <Route path="mine" element={<ProtocolMySchedulePage />} />
             <Route path="finance" element={<ProtocolFinancePage />} />
             <Route path="reports" element={<ProtocolReportsPage />} />
@@ -987,6 +1003,11 @@ export default function App() {
               element={<BoardFollowUpPage />}
             />
             <Route path="pastoral" element={<PastoralDeskPage />} />
+            <Route path="correspondence" element={<CorrespondencePage />} />
+            <Route
+              path="correspondence/:id"
+              element={<CorrespondenceDetailPage />}
+            />
             <Route path="system-admin" element={<SystemAdminPage />} />
             <Route path="finance" element={<FinanceHomePage />} />
             <Route
