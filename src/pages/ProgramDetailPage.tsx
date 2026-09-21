@@ -6,6 +6,7 @@ import { useAuth } from '../auth/AuthContext';
 import { MissionPulsePanel } from '../components/MissionPulsePanel';
 import { StewardshipPanel } from '../components/StewardshipPanel';
 import { StatusPill } from '../components/ui/StatusPill';
+import { useToast } from '../components/ui/Toast';
 import {
   confirmedFundingTotal,
   formatRwf,
@@ -46,6 +47,7 @@ export function ProgramDetailPage() {
   const listPath = missionListPath(location.pathname, 'programs');
   const navigate = useNavigate();
   const { account, can, roles, refreshSession } = useAuth();
+  const { push: toast } = useToast();
   const [, setTick] = useState(0);
   const refresh = () => {
     void (async () => {
@@ -270,7 +272,15 @@ export function ProgramDetailPage() {
       account!.personId,
       roles,
     );
-    setMsg(r.ok ? 'Approved — SETUP (prep before run)' : (r.reason ?? 'Failed'));
+    const text = r.ok
+      ? 'Approved — SETUP (prep before run)'
+      : (r.reason ?? 'Failed');
+    setMsg(text);
+    toast({
+      title: r.ok ? 'Program approved' : 'Could not approve',
+      detail: text,
+      tone: r.ok ? 'success' : 'danger',
+    });
     refresh();
   }
 
@@ -351,10 +361,11 @@ export function ProgramDetailPage() {
 
   function runComplete(e: FormEvent) {
     e.preventDefault();
-    if (!completeId) return;
+    if (!completeId || !account) return;
     const r = missionService.completeEnrollment({
       enrollmentId: completeId,
       issueCertificate: issueCert,
+      actorPersonId: account.personId,
       nextSteps: {
         addMembershipType: addMem ? memType : undefined,
         membershipLabel: addMem ? 'Church member' : undefined,
@@ -545,7 +556,11 @@ export function ProgramDetailPage() {
         )}
       </div>
 
-      {msg && <p className="badge">{msg}</p>}
+      {msg && (
+        <p className="steward-banner" role="status">
+          {msg}
+        </p>
+      )}
 
       {cohorts.length > 0 && (
         <div className="panel">
@@ -1001,6 +1016,7 @@ export function ProgramDetailPage() {
 
         {canManageEnroll &&
           (program.status === 'ACTIVE' ||
+            program.status === 'SETUP' ||
             program.status === 'PENDING_APPROVAL') && (
             <form className="row" onSubmit={onEnroll} style={{ marginTop: '0.75rem' }}>
               <select
@@ -1193,7 +1209,8 @@ export function ProgramDetailPage() {
           </tbody>
         </table>
 
-        {canManageSessions && program.status === 'ACTIVE' && (
+        {canManageSessions &&
+          (program.status === 'ACTIVE' || program.status === 'SETUP') && (
           <form className="stack" onSubmit={onAddSession} style={{ marginTop: '0.75rem' }}>
             <h4 style={{ margin: 0 }}>Add session</h4>
             <div className="grid-2">
