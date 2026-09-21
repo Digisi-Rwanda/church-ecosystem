@@ -573,8 +573,8 @@ export function ProtocolReportsPage() {
           <span className="badge">v{report.version}</span>
           <span className="badge">{report.services} services</span>
           <span className="badge">
-            Present {report.attendanceByStatus.PRESENT} · Late{' '}
-            {report.attendanceByStatus.LATE} · Absent{' '}
+            Present {report.attendanceByStatus.PRESENT} · Half{' '}
+            {report.attendanceByStatus.HALF_PRESENT} · Absent{' '}
             {report.attendanceByStatus.ABSENT}
           </span>
           <Link to="/systems/protocol/export">Exports →</Link>
