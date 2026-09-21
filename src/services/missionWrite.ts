@@ -16,8 +16,13 @@ import {
   apiCancelProject,
   apiCompleteEvent,
   apiCreateActivity,
+  apiCreateEvent,
+  apiCreateProgram,
+  apiCreateProject,
+  apiCreateTask,
   apiEnroll,
   apiEventNextSteps,
+  apiGetProgram,
   apiMarkAttendance,
   apiMarkEventAttendance,
   apiRegisterForEvent,
@@ -40,18 +45,55 @@ import {
   PROJECTS,
   TASKS,
 } from '../data/seed';
+import { scheduleLocalDomainPersist } from '../data/localDomainStore';
 import type {
+  ChurchEvent,
+  ChurchEventType,
+  ChurchProject,
   EventRegistration,
+  EventRegistrationMode,
   EventRegistrationStatus,
   MembershipType,
+  MissionVisibility,
   Position,
+  Program,
   ProgramEnrollment,
   ProgramEnrollmentRole,
   ProgramEnrollmentStatus,
+  ProgramType,
   SystemId,
   SystemRole,
+  WorkTask,
 } from '../domain/types';
 import { missionService } from './missionService';
+
+function upsertProgram(program: Program) {
+  const i = PROGRAMS.findIndex((p) => p.id === program.id);
+  if (i >= 0) PROGRAMS[i] = { ...PROGRAMS[i], ...program, id: program.id };
+  else PROGRAMS.unshift(program);
+  scheduleLocalDomainPersist();
+}
+
+function upsertEvent(event: ChurchEvent) {
+  const i = EVENTS.findIndex((e) => e.id === event.id);
+  if (i >= 0) EVENTS[i] = { ...EVENTS[i], ...event, id: event.id };
+  else EVENTS.unshift(event);
+  scheduleLocalDomainPersist();
+}
+
+function upsertProject(project: ChurchProject) {
+  const i = PROJECTS.findIndex((p) => p.id === project.id);
+  if (i >= 0) PROJECTS[i] = { ...PROJECTS[i], ...project, id: project.id };
+  else PROJECTS.unshift(project);
+  scheduleLocalDomainPersist();
+}
+
+function upsertTask(task: WorkTask) {
+  const i = TASKS.findIndex((t) => t.id === task.id);
+  if (i >= 0) TASKS[i] = { ...TASKS[i], ...task, id: task.id };
+  else TASKS.unshift(task);
+  scheduleLocalDomainPersist();
+}
 
 function syncProgram(program: { id: string; status: string; approvedByPersonId?: string; approvedAt?: string }) {
   const i = PROGRAMS.findIndex((p) => p.id === program.id);
@@ -64,6 +106,16 @@ function syncProgram(program: { id: string; status: string; approvedByPersonId?:
   };
 }
 
+/**
+ * Lists fall back to seed when the API is unreachable/unauthenticated.
+ * Writes must do the same for seed-only demo programs (e.g. Baptism Q3).
+ */
+function canFallbackProgramWrite(e: unknown, programId: string): boolean {
+  if (!(e instanceof ApiError)) return false;
+  if (!missionService.getProgram(programId)) return false;
+  return e.status === 0 || e.status === 401 || e.status === 404;
+}
+
 export async function writeSubmitProgram(id: string) {
   if (isApiEnabled()) {
     try {
@@ -71,6 +123,9 @@ export async function writeSubmitProgram(id: string) {
       syncProgram(program);
       return { ok: true as const, program };
     } catch (e) {
+      if (canFallbackProgramWrite(e, id)) {
+        return missionService.submitProgramForApproval(id);
+      }
       const msg = e instanceof ApiError ? e.message : 'API submit failed';
       return { ok: false as const, reason: msg };
     }
@@ -89,6 +144,9 @@ export async function writeApproveProgram(
       syncProgram(program);
       return { ok: true as const, program };
     } catch (e) {
+      if (canFallbackProgramWrite(e, id)) {
+        return missionService.approveProgram(id, approverPersonId, roles);
+      }
       const msg = e instanceof ApiError ? e.message : 'API approve failed';
       return { ok: false as const, reason: msg };
     }
@@ -108,6 +166,9 @@ export async function writeStartProgram(id: string) {
         openRequired: r.openRequired,
       };
     } catch (e) {
+      if (canFallbackProgramWrite(e, id)) {
+        return missionService.startProgram(id);
+      }
       const msg = e instanceof ApiError ? e.message : 'API start failed';
       return { ok: false as const, reason: msg };
     }
@@ -127,6 +188,253 @@ export async function writeBeginCloseProgram(id: string) {
     }
   }
   return missionService.beginCloseProgram(id);
+}
+
+export async function writeCreateProgram(input: {
+  name: string;
+  description: string;
+  ownerSystemId: SystemId;
+  visibility?: MissionVisibility;
+  programType?: ProgramType;
+  scheduleHint?: string;
+  parentProgramId?: string;
+  cohortLabel?: string;
+  orgUnitId?: string;
+  createdByPersonId: string;
+  startActive?: boolean;
+}) {
+  const startActive = input.startActive === true;
+  if (isApiEnabled()) {
+    try {
+      const program = await apiCreateProgram({
+        name: input.name,
+        description: input.description,
+        ownerSystemId: input.ownerSystemId,
+        visibility: input.visibility,
+        status: startActive ? 'ACTIVE' : 'DRAFT',
+        programType: input.programType,
+        scheduleHint: input.scheduleHint,
+        parentProgramId: input.parentProgramId,
+        cohortLabel: input.cohortLabel,
+      });
+      const merged: Program = {
+        ...program,
+        parentProgramId: input.parentProgramId ?? program.parentProgramId,
+        cohortLabel: input.cohortLabel ?? program.cohortLabel,
+        orgUnitId: input.orgUnitId ?? program.orgUnitId,
+        createdByPersonId:
+          input.createdByPersonId ?? program.createdByPersonId,
+        approvedByPersonId: startActive
+          ? input.createdByPersonId
+          : program.approvedByPersonId,
+        approvedAt: startActive
+          ? new Date().toISOString()
+          : program.approvedAt,
+      };
+      upsertProgram(merged);
+      return { ok: true as const, program: merged };
+    } catch (e) {
+      if (!(e instanceof ApiError) || (e.status !== 0 && e.status !== 401)) {
+        return {
+          ok: false as const,
+          reason: e instanceof ApiError ? e.message : 'API create failed',
+        };
+      }
+      /* fall through to seed */
+    }
+  }
+  const program = missionService.createProgram({
+    name: input.name,
+    description: input.description,
+    ownerSystemId: input.ownerSystemId,
+    visibility: input.visibility,
+    programType: input.programType,
+    scheduleHint: input.scheduleHint,
+    parentProgramId: input.parentProgramId,
+    cohortLabel: input.cohortLabel,
+    orgUnitId: input.orgUnitId,
+    createdByPersonId: input.createdByPersonId,
+    startActive,
+  });
+  return { ok: true as const, program };
+}
+
+export async function writeCreateProject(input: {
+  name: string;
+  description?: string;
+  ownerSystemId: SystemId;
+  visibility?: MissionVisibility;
+  leadPersonId?: string;
+  beyondOwnerScope?: boolean;
+  willSpend?: boolean;
+  fundId?: string;
+  collaboratorSystemIds?: SystemId[];
+  programId?: string;
+  orgUnitId?: string;
+  createdByPersonId: string;
+  startActive?: boolean;
+}) {
+  const startActive = input.startActive === true;
+  if (isApiEnabled()) {
+    try {
+      const project = await apiCreateProject({
+        name: input.name,
+        description: input.description,
+        ownerSystemId: input.ownerSystemId,
+        visibility: input.visibility,
+        status: startActive ? 'ACTIVE' : 'DRAFT',
+        willSpend: input.willSpend,
+        fundId: input.fundId,
+        programId: input.programId,
+        beyondOwnerScope: input.beyondOwnerScope,
+        leadPersonId: input.leadPersonId,
+        collaboratorSystemIds: input.collaboratorSystemIds,
+      });
+      const merged: ChurchProject = {
+        ...project,
+        orgUnitId: input.orgUnitId ?? project.orgUnitId,
+        createdByPersonId:
+          input.createdByPersonId ?? project.createdByPersonId,
+        startDate:
+          startActive && !project.startDate
+            ? new Date().toISOString().slice(0, 10)
+            : project.startDate,
+      };
+      upsertProject(merged);
+      return { ok: true as const, project: merged };
+    } catch (e) {
+      if (!(e instanceof ApiError) || (e.status !== 0 && e.status !== 401)) {
+        return {
+          ok: false as const,
+          reason: e instanceof ApiError ? e.message : 'API create failed',
+        };
+      }
+    }
+  }
+  return missionService.createProject({
+    ...input,
+    startActive,
+  });
+}
+
+export async function writeCreateEvent(input: {
+  name: string;
+  type: ChurchEventType;
+  ownerSystemId: SystemId;
+  startsAt: string;
+  endsAt?: string;
+  location?: string;
+  description?: string;
+  visibility?: MissionVisibility;
+  registrationMode: EventRegistrationMode;
+  capacity?: number;
+  beyondOwnerScope?: boolean;
+  projectId?: string;
+  programId?: string;
+  willSpend?: boolean;
+  plannedCost?: number;
+  orgUnitId?: string;
+  createdByPersonId: string;
+}) {
+  if (isApiEnabled()) {
+    try {
+      const event = await apiCreateEvent({
+        name: input.name,
+        type: input.type,
+        ownerSystemId: input.ownerSystemId,
+        startsAt: input.startsAt,
+        endsAt: input.endsAt,
+        location: input.location,
+        description: input.description,
+        visibility: input.visibility,
+        registrationMode: input.registrationMode,
+        capacity: input.capacity,
+        beyondOwnerScope: input.beyondOwnerScope,
+        projectId: input.projectId,
+        programId: input.programId,
+        willSpend: input.willSpend,
+        plannedCost: input.plannedCost,
+        status: input.beyondOwnerScope ? 'PENDING_APPROVAL' : 'CONFIRMED',
+      });
+      const merged: ChurchEvent = {
+        ...event,
+        orgUnitId: input.orgUnitId ?? event.orgUnitId,
+        createdByPersonId:
+          input.createdByPersonId ?? event.createdByPersonId,
+        lifecyclePhase: event.lifecyclePhase ?? 'PREPARE',
+        approvals: event.approvals ?? [],
+      };
+      upsertEvent(merged);
+      return { ok: true as const, event: merged };
+    } catch (e) {
+      if (!(e instanceof ApiError) || (e.status !== 0 && e.status !== 401)) {
+        return {
+          ok: false as const,
+          reason: e instanceof ApiError ? e.message : 'API create failed',
+        };
+      }
+    }
+  }
+  try {
+    const event = missionService.createEvent(input);
+    return { ok: true as const, event };
+  } catch (e) {
+    return {
+      ok: false as const,
+      reason: e instanceof Error ? e.message : 'Create failed',
+    };
+  }
+}
+
+export async function writeCreateTask(input: {
+  title: string;
+  description?: string;
+  ownerPersonId: string;
+  helperPersonIds?: string[];
+  systemId: SystemId;
+  visibility?: MissionVisibility;
+  contextType?: WorkTask['contextType'];
+  contextId?: string;
+  contextLabel?: string;
+  dueDate?: string;
+  grantsSystemAccess?: boolean;
+  createdByPersonId: string;
+}) {
+  if (isApiEnabled()) {
+    try {
+      const task = await apiCreateTask({
+        title: input.title,
+        description: input.description,
+        ownerPersonId: input.ownerPersonId,
+        helperPersonIds: input.helperPersonIds,
+        systemId: input.systemId,
+        visibility: input.visibility,
+        contextType: input.contextType,
+        contextId: input.contextId,
+        contextLabel: input.contextLabel,
+        dueDate: input.dueDate,
+        grantsSystemAccess: input.grantsSystemAccess,
+        status: 'TODO',
+      });
+      const merged: WorkTask = {
+        ...task,
+        createdByPersonId:
+          input.createdByPersonId ?? task.createdByPersonId,
+        startDate: task.startDate ?? new Date().toISOString().slice(0, 10),
+      };
+      upsertTask(merged);
+      return { ok: true as const, task: merged };
+    } catch (e) {
+      if (!(e instanceof ApiError) || (e.status !== 0 && e.status !== 401)) {
+        return {
+          ok: false as const,
+          reason: e instanceof ApiError ? e.message : 'API create failed',
+        };
+      }
+    }
+  }
+  const task = missionService.createTask(input);
+  return { ok: true as const, task };
 }
 
 export async function writeCreateActivity(input: {
@@ -690,16 +998,24 @@ function upsertEventRegistration(reg: {
   return row;
 }
 
-/** Hydrate program roster/sessions from API into seed so detail views stay coherent. */
+/** Hydrate program row + roster/sessions from API into seed so detail views stay coherent. */
 export async function hydrateProgramDetailFromApi(programId: string) {
   if (!isApiEnabled()) return false;
+  let gotProgram = false;
+  try {
+    const program = await apiGetProgram(programId);
+    upsertProgram(program);
+    gotProgram = true;
+  } catch {
+    /* keep seed row if any */
+  }
   const [acts, enrolls] = await Promise.all([
     loadActivitiesPreferApi(programId),
     loadEnrollmentsPreferApi(programId),
   ]);
   if (acts) replaceProgramActivities(programId, acts);
   if (enrolls) replaceProgramEnrollments(programId, enrolls);
-  return !!(acts || enrolls);
+  return gotProgram || !!(acts || enrolls);
 }
 
 export async function hydrateEventRegistrationsFromApi(eventId: string) {
