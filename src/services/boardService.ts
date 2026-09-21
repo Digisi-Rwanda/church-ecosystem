@@ -1,4 +1,5 @@
 import { BOARD_MEETINGS } from '../data/boardSeed';
+import { scheduleLocalDomainPersist } from '../data/localDomainStore';
 import { isChurchLeader } from '../domain/churchLeadership';
 import type {
   BoardAgendaItem,
@@ -124,6 +125,7 @@ export const boardService = {
       decisions: [],
     };
     BOARD_MEETINGS.unshift(meeting);
+    scheduleLocalDomainPersist();
     return meeting;
   },
 
