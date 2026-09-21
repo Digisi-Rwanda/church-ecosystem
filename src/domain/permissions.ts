@@ -86,6 +86,7 @@ export function resourceLabel(resource: Resource): string {
     AUDIT: 'Access audit',
     SYSTEM_CONFIG: 'System administration (config)',
     BOARD: 'Board of Directors',
+    CORRESPONDENCE: 'Letters & correspondence',
   };
   return map[resource];
 }
@@ -141,6 +142,9 @@ export const PERMISSION_PROBES: Array<{ resource: Resource; action: Action }> = 
   { resource: 'AUDIT', action: 'VIEW' },
   { resource: 'BOARD', action: 'VIEW' },
   { resource: 'BOARD', action: 'MANAGE' },
+  { resource: 'CORRESPONDENCE', action: 'VIEW' },
+  { resource: 'CORRESPONDENCE', action: 'MANAGE' },
+  { resource: 'CORRESPONDENCE', action: 'APPROVE' },
   { resource: 'SYSTEM_CONFIG', action: 'MANAGE' },
 ];
 
