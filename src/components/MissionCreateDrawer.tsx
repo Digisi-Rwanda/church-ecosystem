@@ -1,11 +1,4 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import {
-  apiCreateEvent,
-  apiCreateProgram,
-  apiCreateProject,
-  apiCreateTask,
-} from '../api/missionApi';
-import { isApiEnabled } from '../api';
 import { eventSpendPolicyOk } from '../domain/eventOps';
 import { eventTypeLabel } from '../domain/permissions';
 import type {
@@ -22,6 +15,12 @@ import {
   peopleService,
   systemsService,
 } from '../services';
+import {
+  writeCreateEvent,
+  writeCreateProgram,
+  writeCreateProject,
+  writeCreateTask,
+} from '../services/missionWrite';
 import { CreateFormActions, CreateFormSection } from './ui/CreateForm';
 import { Drawer } from './ui/Drawer';
 import {
@@ -130,7 +129,7 @@ export function MissionCreateDrawer({
   kind,
   open,
   onClose,
-  listSource,
+  listSource: _listSource,
   ownerSystemId = 'sys-main',
   accountPersonId,
   canManage,
@@ -148,6 +147,7 @@ export function MissionCreateDrawer({
   isChurchLeader: boolean;
   onCreated: (result: MissionCreateResult) => void;
 }) {
+  void _listSource;
   const { push: toast } = useToast();
   const meta = META[kind];
   const [busy, setBusy] = useState(false);
@@ -337,53 +337,36 @@ export function MissionCreateDrawer({
       let result: MissionCreateResult | null = null;
 
       if (kind === 'PROGRAM') {
-        const base = {
+        const r = await writeCreateProgram({
           name: trimmed,
           description: desc.trim() || trimmed,
           ownerSystemId,
           visibility: vis,
           programType: ptype,
           scheduleHint: hint.trim() || undefined,
-        };
-        let id = '';
-        let createdName = trimmed;
-        if (isApiEnabled() && listSource === 'api') {
-          try {
-            const p = await apiCreateProgram({
-              ...base,
-              status: churchLead ? 'ACTIVE' : 'DRAFT',
-            });
-            id = p.id;
-            createdName = p.name;
-          } catch {
-            /* seed */
-          }
-        }
-        if (!id) {
-          const p = missionService.createProgram({
-            ...base,
-            parentProgramId: parentId || undefined,
-            cohortLabel: cohort.trim() || undefined,
-            createdByPersonId: accountPersonId,
-            startActive: churchLead,
-          });
-          id = p.id;
-          createdName = p.name;
+          parentProgramId: parentId || undefined,
+          cohortLabel: cohort.trim() || undefined,
+          createdByPersonId: accountPersonId,
+          startActive: churchLead,
+        });
+        if (!r.ok || !r.program) {
+          setFormError(r.reason ?? 'Create failed');
+          return;
         }
         result = {
           kind,
-          id,
-          name: createdName,
+          id: r.program.id,
+          name: r.program.name,
           message: churchLead
-            ? `Created & active: ${createdName}`
-            : `Draft created: ${createdName} — submit for Church Leader approval`,
+            ? `Created & active: ${r.program.name}`
+            : `Draft created: ${r.program.name} — submit for Church Leader approval`,
           toastTitle: churchLead ? 'Program active' : 'Draft created',
         };
       }
 
       if (kind === 'PROJECT') {
         const startActive = churchLead && fastTrack && !beyond;
-        const base = {
+        const r = await writeCreateProject({
           name: trimmed,
           description: desc.trim() || undefined,
           ownerSystemId,
@@ -396,50 +379,31 @@ export function MissionCreateDrawer({
             ? ([collabSys] as SystemId[])
             : undefined,
           programId: programId || undefined,
-        };
-        let project = null as Awaited<
-          ReturnType<typeof apiCreateProject>
-        > | null;
-        if (isApiEnabled() && listSource === 'api') {
-          try {
-            project = await apiCreateProject({
-              ...base,
-              status: startActive ? 'ACTIVE' : 'DRAFT',
-            });
-          } catch {
-            /* seed */
-          }
-        }
-        if (!project) {
-          const r = missionService.createProject({
-            ...base,
-            createdByPersonId: accountPersonId,
-            startActive,
-          });
-          if (!r.ok || !r.project) {
-            setFormError(r.reason ?? 'Create failed');
-            return;
-          }
-          project = r.project;
+          createdByPersonId: accountPersonId,
+          startActive,
+        });
+        if (!r.ok || !r.project) {
+          setFormError(r.reason ?? 'Create failed');
+          return;
         }
         result = {
           kind,
-          id: project.id,
-          name: project.name,
+          id: r.project.id,
+          name: r.project.name,
           message:
-            project.status === 'ACTIVE'
-              ? `Created ${project.name} — fast-track ACTIVE`
-              : `Draft created: ${project.name} — submit when ready${
+            r.project.status === 'ACTIVE'
+              ? `Created ${r.project.name} — fast-track ACTIVE`
+              : `Draft created: ${r.project.name} — submit when ready${
                   beyond ? ' (beyond-scope approvals after submit)' : ''
                 }`,
           toastTitle:
-            project.status === 'ACTIVE' ? 'Project active' : 'Draft created',
+            r.project.status === 'ACTIVE' ? 'Project active' : 'Draft created',
         };
       }
 
       if (kind === 'EVENT') {
         const planned = plannedCost ? Number(plannedCost) : undefined;
-        const payload = {
+        const r = await writeCreateEvent({
           name: trimmed,
           type: etype,
           ownerSystemId,
@@ -456,31 +420,19 @@ export function MissionCreateDrawer({
           projectId: projectId || undefined,
           willSpend,
           plannedCost: planned,
-        };
-        let ev = null as Awaited<ReturnType<typeof apiCreateEvent>> | null;
-        if (isApiEnabled() && listSource === 'api') {
-          try {
-            ev = await apiCreateEvent({
-              ...payload,
-              status: beyond ? 'PENDING_APPROVAL' : 'CONFIRMED',
-            });
-          } catch {
-            /* seed */
-          }
-        }
-        if (!ev) {
-          ev = missionService.createEvent({
-            ...payload,
-            createdByPersonId: accountPersonId,
-          });
+          createdByPersonId: accountPersonId,
+        });
+        if (!r.ok || !r.event) {
+          setFormError(r.reason ?? 'Create failed');
+          return;
         }
         result = {
           kind,
-          id: ev.id,
-          name: ev.name,
+          id: r.event.id,
+          name: r.event.name,
           message: beyond
-            ? `Created ${ev.name} — pending upper approvals`
-            : `Created ${ev.name} — confirmed (in-scope)`,
+            ? `Created ${r.event.name} — pending upper approvals`
+            : `Created ${r.event.name} — confirmed (in-scope)`,
           toastTitle: beyond ? 'Event pending approval' : 'Event confirmed',
         };
       }
@@ -496,7 +448,7 @@ export function MissionCreateDrawer({
         } else if (ctxType === 'PROJECT' && ctxId) {
           contextLabel = projects.find((p) => p.id === ctxId)?.name;
         }
-        const payload = {
+        const r = await writeCreateTask({
           title: trimmed,
           description: desc.trim() || undefined,
           ownerPersonId: ownerId,
@@ -508,28 +460,19 @@ export function MissionCreateDrawer({
           contextLabel,
           dueDate: dueDate || undefined,
           grantsSystemAccess: grantAccess,
-        };
-        let t = null as Awaited<ReturnType<typeof apiCreateTask>> | null;
-        if (isApiEnabled() && listSource === 'api') {
-          try {
-            t = await apiCreateTask(payload);
-          } catch {
-            /* seed */
-          }
-        }
-        if (!t) {
-          t = missionService.createTask({
-            ...payload,
-            createdByPersonId: accountPersonId,
-          });
+          createdByPersonId: accountPersonId,
+        });
+        if (!r.ok || !r.task) {
+          setFormError(r.reason ?? 'Create failed');
+          return;
         }
         result = {
           kind,
-          id: t.id,
-          name: t.title,
+          id: r.task.id,
+          name: r.task.title,
           message: grantAccess
-            ? `Created ${t.title} — opens a ministry for the assignee until closed`
-            : `Created ${t.title}`,
+            ? `Created ${r.task.title} — opens a ministry for the assignee until closed`
+            : `Created ${r.task.title}`,
           toastTitle: 'Task created',
         };
       }
