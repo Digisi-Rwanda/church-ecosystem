@@ -98,7 +98,9 @@ const MEMBER_PROTOCOL = [
   'home',
   'mission',
   'mine',
+  'attendance',
   'inbox',
+  'faithful',
 ] as const;
 
 const MEMBER_DEACON = ['home', 'mission', 'my-contributions'] as const;
@@ -172,7 +174,7 @@ function boardModulesFor(
 
   if (office === 'TREASURER') {
     if (systemId === 'sys-protocol') {
-      return ['home', 'mission', 'mine', 'finance', 'reports', 'my-contributions'];
+      return ['home', 'mission', 'mine', 'finance', 'reports', 'my-contributions', 'faithful'];
     }
     if (systemId === 'sys-deacon') {
       return ['home', 'mission', 'my-contributions', 'finance'];
@@ -211,6 +213,7 @@ function boardModulesFor(
         'teams',
         'review',
         'attendance',
+        'faithful',
         'mine',
         'inbox',
         'export',
@@ -247,6 +250,7 @@ function boardModulesFor(
       'teams',
       'review',
       'attendance',
+      'faithful',
       'mine',
       'finance',
       'reports',
