@@ -67,6 +67,7 @@ function mainChurchGovernanceSpecs(
       { resource: 'EVENT', action: 'MANAGE' },
       { resource: 'TASK', action: 'MANAGE' },
       { resource: 'PROJECT', action: 'MANAGE' },
+      { resource: 'CORRESPONDENCE', action: 'MANAGE' },
     ];
   }
   if (kind === 'CATECHIST') {
@@ -82,6 +83,8 @@ function mainChurchGovernanceSpecs(
       { resource: 'EVENT', action: 'MANAGE' },
       { resource: 'TASK', action: 'MANAGE' },
       { resource: 'PROJECT', action: 'MANAGE' },
+      { resource: 'CORRESPONDENCE', action: 'CREATE' },
+      { resource: 'CORRESPONDENCE', action: 'UPDATE' },
     ];
   }
   // Pastor — sacraments / care visibility; less institutional power.
@@ -96,6 +99,7 @@ function mainChurchGovernanceSpecs(
     { resource: 'EVENT', action: 'VIEW' },
     { resource: 'TASK', action: 'VIEW' },
     { resource: 'PROJECT', action: 'VIEW' },
+    { resource: 'CORRESPONDENCE', action: 'VIEW' },
   ];
 }
 
@@ -166,6 +170,18 @@ function grantGovernanceBundle(
       action: s.action,
       source: 'GOVERNANCE',
       reason: `${reason} — peer oversight`,
+    });
+  }
+
+  // Church Leader may create temporary assignments into peer systems.
+  const kind = canonicalGovernanceRole(systemRole) ?? systemRole;
+  if (kind === 'CHURCH_LEADER') {
+    pushGrant(grants, {
+      systemId,
+      resource: 'ASSIGNMENT',
+      action: 'MANAGE',
+      source: 'GOVERNANCE',
+      reason: `${reason} — assign into peer system`,
     });
   }
 }
@@ -383,6 +399,24 @@ export function buildEffectiveAccess(
       continue;
     }
 
+    if (p.systemRole === 'CHURCH_SECRETARY') {
+      pushGrant(grants, {
+        systemId: 'sys-main',
+        resource: 'CORRESPONDENCE',
+        action: 'MANAGE',
+        source: 'POSITION',
+        reason: `${p.title} — letters desk`,
+      });
+      pushGrant(grants, {
+        systemId: 'sys-main',
+        resource: 'PERSON',
+        action: 'VIEW_FULL',
+        source: 'POSITION',
+        reason: `${p.title} — prepare member letters`,
+      });
+      grantPeopleDirectoryView(grants, p.title);
+    }
+
     if (p.systemId) {
       pushGrant(grants, {
         systemId: p.systemId,
@@ -483,6 +517,7 @@ export function buildEffectiveAccess(
           'EVENT',
           'TASK',
           'PROJECT',
+          'ASSIGNMENT',
         ] as const) {
           pushGrant(grants, {
             systemId: p.systemId,
@@ -757,6 +792,13 @@ export function buildEffectiveAccess(
           source: 'POSITION',
           reason: p.title,
         });
+        pushGrant(grants, {
+          systemId: 'sys-deacon',
+          resource: 'ASSIGNMENT',
+          action: 'MANAGE',
+          source: 'POSITION',
+          reason: `${p.title} · assign within Deacon`,
+        });
         grantPeopleDirectoryView(grants, p.title);
       }
     }
@@ -833,10 +875,24 @@ export function buildEffectiveAccess(
         });
         pushGrant(grants, {
           systemId: 'sys-protocol',
+          resource: 'PROTOCOL_SCHEDULE',
+          action: 'APPROVE',
+          source: 'POSITION',
+          reason: `${p.title} · review & publish month`,
+        });
+        pushGrant(grants, {
+          systemId: 'sys-protocol',
           resource: 'MEMBERSHIP',
           action: 'MANAGE',
           source: 'POSITION',
           reason: p.title,
+        });
+        pushGrant(grants, {
+          systemId: 'sys-protocol',
+          resource: 'ASSIGNMENT',
+          action: 'MANAGE',
+          source: 'POSITION',
+          reason: `${p.title} · assign within Protocol`,
         });
         grantPeopleDirectoryView(grants, p.title);
       }
