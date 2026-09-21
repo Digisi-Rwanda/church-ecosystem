@@ -201,7 +201,12 @@ export function PeerProgramsPage({
           </div>
           <div className="field">
             <label>Description</label>
-            <input value={desc} onChange={(e) => setDesc(e.target.value)} />
+            <textarea
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              rows={3}
+              placeholder="Who it is for and what happens"
+            />
           </div>
           <button type="submit" className="btn">
             Create draft
@@ -459,7 +464,12 @@ export function PeerEventsPage({
           </div>
           <div className="field">
             <label>Description</label>
-            <input value={desc} onChange={(e) => setDesc(e.target.value)} />
+            <textarea
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              rows={3}
+              placeholder="What this event is for"
+            />
           </div>
           <label className="row" style={{ gap: '0.5rem' }}>
             <input
@@ -676,7 +686,12 @@ export function PeerTasksPage({
           </div>
           <div className="field">
             <label>Description</label>
-            <input value={desc} onChange={(e) => setDesc(e.target.value)} />
+            <textarea
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              rows={3}
+              placeholder="Definition of done, links, notes"
+            />
           </div>
           <label className="row" style={{ gap: '0.5rem' }}>
             <input
@@ -887,7 +902,12 @@ export function PeerProjectsPage({
           </div>
           <div className="field">
             <label>Description</label>
-            <input value={desc} onChange={(e) => setDesc(e.target.value)} />
+            <textarea
+              value={desc}
+              onChange={(e) => setDesc(e.target.value)}
+              rows={3}
+              placeholder="Outcome and scope in a few lines"
+            />
           </div>
           <label className="row" style={{ gap: '0.5rem' }}>
             <input
