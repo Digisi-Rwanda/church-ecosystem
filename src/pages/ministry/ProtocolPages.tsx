@@ -1,9 +1,9 @@
-import { useMemo, useState } from 'react';
+﻿import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { ProtocolAttendanceStatus } from '../../domain/types';
 import { useListSelection } from '../../hooks/useListSelection';
-import { financeService, protocolService } from '../../services';
+import { financeService, peopleService, protocolService } from '../../services';
 
 const SYS = 'sys-protocol' as const;
 
@@ -69,7 +69,7 @@ export function ProtocolHomePage() {
   if (canManage && plan && plan.status !== 'PUBLISHED' && plan.status !== 'REVIEW') {
     needs.push({
       id: 'gen',
-      title: 'Build this month’s teams',
+      title: "Build this month's teams",
       reason: `Month ${monthKey} is ${plan.status}`,
       to: '/systems/protocol/teams',
     });
@@ -147,7 +147,7 @@ export function ProtocolHomePage() {
           )}
         </div>
         <p className="muted" style={{ marginBottom: 0 }}>
-          Fair monthly staffing: roster → teams → review → publish → operate.
+          Fair monthly staffing: Music publish → service teams → review → publish → operate.
           Contributions post to the shared Protocol fund (org-private).
         </p>
         <div className="overview-strip" style={{ marginTop: '0.85rem' }}>
@@ -225,7 +225,7 @@ export function ProtocolHomePage() {
             <li>
               <Link to="/systems/protocol/finance">Contributions / finance</Link>
               {pendingContribs > 0 && canVerifyFund && (
-                <span className="muted"> · {pendingContribs} pending</span>
+                <span className="muted"> · · {pendingContribs} pending</span>
               )}
             </li>
             <li>
@@ -235,7 +235,7 @@ export function ProtocolHomePage() {
               <Link to="/systems/protocol/export">CSV / bulletin export</Link>
             </li>
             <li>
-              <Link to="/systems/protocol/attendance">Attendance</Link> ·{' '}
+              <Link to="/systems/protocol/attendance">Attendance</Link> · <Link to="/systems/protocol/faithful">Faithful Servant</Link> ·{' '}
               <Link to="/systems/protocol/history">History</Link>
             </li>
             <li>
@@ -295,6 +295,7 @@ export function ProtocolMembersPage() {
           <thead>
             <tr>
               <th>Name</th>
+              <th>Email</th>
               <th>Office</th>
               <th>Serve days</th>
               <th>Status</th>
@@ -306,6 +307,9 @@ export function ProtocolMembersPage() {
             {roster.map((m) => (
               <tr key={m.id}>
                 <td>{m.name}</td>
+                <td className="muted">
+                  {peopleService.getById(m.personId)?.email ?? '—'}
+                </td>
                 <td>{protocolService.officeLabel(m.office)}</td>
                 <td>{m.serveDays}</td>
                 <td>
@@ -390,135 +394,6 @@ export function ProtocolCalendarPage() {
   );
 }
 
-export function ProtocolTeamsPage() {
-  const { can } = useAuth();
-  const canView = can('PROTOCOL_SCHEDULE', 'VIEW', SYS);
-  const canManage = can('PROTOCOL_SCHEDULE', 'MANAGE', SYS);
-  const { monthKey, setMonthKey, refresh, tick } = useProtocolMonth();
-  const [message, setMessage] = useState('');
-
-  const services = useMemo(
-    () => protocolService.servicesForMonth(monthKey),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [monthKey, tick],
-  );
-  const plan = protocolService.getMonthPlan(monthKey);
-  const load = useMemo(
-    () => protocolService.dutyLoad(monthKey),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [monthKey, tick],
-  );
-  const rules = protocolService.rules();
-
-  if (!canView) {
-    return (
-      <div className="panel">
-        <h2>Service teams</h2>
-        <p className="muted">No PROTOCOL_SCHEDULE / VIEW</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="stack">
-      <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Service teams</h2>
-            <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              teamEngine: prefer {rules.preferTarget} → {rules.softMax}, hard max{' '}
-              {rules.hardMax}
-            </p>
-          </div>
-          <MonthPicker monthKey={monthKey} onChange={setMonthKey} />
-        </div>
-
-        <div className="row">
-          <span className="badge">{plan?.status ?? 'OPEN'}</span>
-          {canManage && (
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                const result = protocolService.generateTeams(monthKey);
-                setMessage(
-                  result.ok
-                    ? `Built ${result.slotCount} slots` +
-                        (result.warnings.length
-                          ? ` · ${result.warnings.length} notes`
-                          : '')
-                    : result.reason ?? 'Failed',
-                );
-                refresh();
-              }}
-            >
-              Generate / rebuild
-            </button>
-          )}
-          <Link to="/systems/protocol/review">Review & publish →</Link>
-        </div>
-        {message && <p className="muted">{message}</p>}
-      </div>
-
-      <div className="grid-2">
-        <div className="panel">
-          <h3>Duty load ({monthKey})</h3>
-          <table className="table">
-            <thead>
-              <tr>
-                <th>Name</th>
-                <th>Office</th>
-                <th>Duties</th>
-              </tr>
-            </thead>
-            <tbody>
-              {load.map((row) => (
-                <tr key={row.personId}>
-                  <td>{row.name}</td>
-                  <td className="muted">
-                    {protocolService.officeLabel(row.office)}
-                  </td>
-                  <td>
-                    <span
-                      className={
-                        row.count >= rules.hardMax ? 'badge planned' : 'badge'
-                      }
-                    >
-                      {row.count}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="panel">
-          <h3>Teams by service</h3>
-          <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-            {services.map((s) => {
-              const team = protocolService.teamForService(s.id);
-              return (
-                <li key={s.id} style={{ marginBottom: '0.65rem' }}>
-                  <strong>
-                    {s.kind} · {s.date}
-                  </strong>
-                  <div className="muted">
-                    {team.length === 0
-                      ? 'No team yet — generate'
-                      : team
-                          .map((t) => protocolService.personLabel(t.personId))
-                          .join(', ')}
-                  </div>
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-      </div>
-    </div>
-  );
-}
 
 export function ProtocolReviewPage() {
   const { account, can } = useAuth();
@@ -653,6 +528,16 @@ export function ProtocolReviewPage() {
             )}
         </div>
         {message && <p className="muted">{message}</p>}
+
+        {canManage &&
+          plan?.status === 'REVIEW' &&
+          !plan.reviewedByPersonId &&
+          !canApprove && (
+            <p className="muted">
+              Mark reviewed (President/VP or Coordinator) to unlock Publish
+              schedule.
+            </p>
+          )}
 
         {plan?.submittedByPersonId && (
           <p className="muted">
@@ -821,12 +706,19 @@ export function ProtocolHistoryPage() {
 export function ProtocolAttendancePage() {
   const { account, can } = useAuth();
   const canView = can('PROTOCOL_SCHEDULE', 'VIEW', SYS);
-  const canRecord =
+  const canRecordGlobal =
     can('PROTOCOL_SCHEDULE', 'RECORD_ATTENDANCE', SYS) ||
     can('PROTOCOL_SCHEDULE', 'MANAGE', SYS);
   const { monthKey, setMonthKey, refresh, tick } = useProtocolMonth();
   const [serviceId, setServiceId] = useState('');
   const [message, setMessage] = useState('');
+  const [fillCandidate, setFillCandidate] = useState('');
+  const [report, setReport] = useState({
+    challenges: '',
+    solutions: '',
+    issues: '',
+    recommendations: '',
+  });
 
   const plan = protocolService.getMonthPlan(monthKey);
   const summary = useMemo(
@@ -846,6 +738,55 @@ export function ProtocolAttendancePage() {
   const records = activeServiceId
     ? protocolService.attendanceForService(activeServiceId)
     : [];
+  const isTl = Boolean(
+    account &&
+      activeServiceId &&
+      protocolService.isTeamLeaderOf(activeServiceId, account.personId),
+  );
+  const canRecord = canRecordGlobal || isTl;
+
+  const pendingAbsences = useMemo(
+    () =>
+      activeServiceId
+        ? protocolService.listAbsenceRequests({
+            serviceId: activeServiceId,
+            status: 'PENDING',
+          })
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeServiceId, tick],
+  );
+  const excusedPendingFill = useMemo(
+    () =>
+      activeServiceId
+        ? protocolService
+            .listAbsenceRequests({
+              serviceId: activeServiceId,
+              status: 'EXCUSED',
+            })
+            .filter((r) => {
+              const filled = protocolService
+                .teamForService(activeServiceId)
+                .some(
+                  (s) =>
+                    s.slotKind === 'FILL_IN' &&
+                    s.replacedPersonId === r.personId,
+                );
+              return !filled;
+            })
+        : [],
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [activeServiceId, tick],
+  );
+  const rosterCandidates = useMemo(() => {
+    if (!activeServiceId) return [];
+    const onTeam = new Set(
+      protocolService.teamForService(activeServiceId).map((s) => s.personId),
+    );
+    return protocolService
+      .listRoster(true)
+      .filter((m) => !onTeam.has(m.personId));
+  }, [activeServiceId, tick]);
 
   if (!canView) {
     return (
@@ -864,7 +805,7 @@ export function ProtocolAttendancePage() {
       status,
       recordedByPersonId: account.personId,
     });
-    setMessage(result.ok ? `Recorded ${status}` : result.reason ?? 'Failed');
+    setMessage(result.ok ? `Recorded ${status}` : (result.reason ?? 'Failed'));
     refresh();
   }
 
@@ -875,7 +816,8 @@ export function ProtocolAttendancePage() {
           <div>
             <h2 style={{ margin: 0 }}>Attendance</h2>
             <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              Record who served — only after the month is published
+              TL / VTL record present, half-present, excused, absent — after
+              publish. Handle absence requests and fill-ins here.
             </p>
           </div>
           <MonthPicker monthKey={monthKey} onChange={setMonthKey} />
@@ -885,6 +827,7 @@ export function ProtocolAttendancePage() {
           {plan?.status !== 'PUBLISHED' && (
             <span className="badge planned">Publish required</span>
           )}
+          {isTl && <span className="badge">You are TL/VTL this service</span>}
         </div>
         {message && <p className="muted">{message}</p>}
       </div>
@@ -897,7 +840,7 @@ export function ProtocolAttendancePage() {
               <th>Service</th>
               <th>Team</th>
               <th>Recorded</th>
-              <th>Present/Late</th>
+              <th>Present / Half</th>
             </tr>
           </thead>
           <tbody>
@@ -936,6 +879,7 @@ export function ProtocolAttendancePage() {
             <thead>
               <tr>
                 <th>Member</th>
+                <th>Role</th>
                 <th>Status</th>
                 {canRecord && <th>Mark</th>}
               </tr>
@@ -945,7 +889,22 @@ export function ProtocolAttendancePage() {
                 const rec = records.find((r) => r.personId === slot.personId);
                 return (
                   <tr key={slot.id}>
-                    <td>{protocolService.personLabel(slot.personId)}</td>
+                    <td>
+                      {protocolService.personLabel(slot.personId)}
+                      {slot.slotKind === 'FILL_IN' ? (
+                        <span className="badge">Fill-in</span>
+                      ) : null}
+                      {slot.slotKind === 'EXTRA' ? (
+                        <span className="badge planned">Extra</span>
+                      ) : null}
+                    </td>
+                    <td className="muted">
+                      {slot.role === 'TEAM_LEADER'
+                        ? 'TL'
+                        : slot.role === 'VICE_LEADER'
+                          ? 'VTL'
+                          : '—'}
+                    </td>
                     <td>
                       <span className="badge">{rec?.status ?? '—'}</span>
                     </td>
@@ -955,7 +914,7 @@ export function ProtocolAttendancePage() {
                           {(
                             [
                               'PRESENT',
-                              'LATE',
+                              'HALF_PRESENT',
                               'ABSENT',
                               'EXCUSED',
                             ] as ProtocolAttendanceStatus[]
@@ -963,11 +922,11 @@ export function ProtocolAttendancePage() {
                             <button
                               key={st}
                               type="button"
-                              className="btn ghost"
+                              className="btn ghost sm"
                               disabled={plan?.status !== 'PUBLISHED'}
                               onClick={() => setStatus(slot.personId, st)}
                             >
-                              {st}
+                              {st === 'HALF_PRESENT' ? 'HALF' : st}
                             </button>
                           ))}
                         </div>
@@ -980,6 +939,179 @@ export function ProtocolAttendancePage() {
           </table>
         )}
       </div>
+
+      {isTl && account && plan?.status === 'PUBLISHED' && (
+        <>
+          <div className="panel stack">
+            <h3 style={{ margin: 0 }}>Absence requests</h3>
+            {pendingAbsences.length === 0 ? (
+              <p className="muted">No pending requests for this service</p>
+            ) : (
+              pendingAbsences.map((r) => (
+                <div key={r.id} className="row" style={{ flexWrap: 'wrap' }}>
+                  <div>
+                    <strong>{protocolService.personLabel(r.personId)}</strong>
+                    <div className="muted">{r.reason}</div>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn sm"
+                    onClick={() => {
+                      const res = protocolService.decideAbsence(
+                        r.id,
+                        'EXCUSED',
+                        account.personId,
+                      );
+                      setMessage(
+                        res.ok
+                          ? 'Excused — offer a fill-in below'
+                          : (res.reason ?? 'Failed'),
+                      );
+                      refresh();
+                    }}
+                  >
+                    Excuse
+                  </button>
+                  <button
+                    type="button"
+                    className="btn secondary sm"
+                    onClick={() => {
+                      const res = protocolService.decideAbsence(
+                        r.id,
+                        'DENIED',
+                        account.personId,
+                      );
+                      setMessage(
+                        res.ok
+                          ? 'Denied — mark ABSENT if they miss'
+                          : (res.reason ?? 'Failed'),
+                      );
+                      refresh();
+                    }}
+                  >
+                    Deny
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="panel stack">
+            <h3 style={{ margin: 0 }}>Fill-in coverage</h3>
+            {excusedPendingFill.length === 0 ? (
+              <p className="muted">No excused members waiting for fill-in</p>
+            ) : (
+              excusedPendingFill.map((r) => (
+                <div key={r.id} className="stack">
+                  <strong>
+                    Cover for {protocolService.personLabel(r.personId)}
+                  </strong>
+                  <div className="row">
+                    <select
+                      value={fillCandidate}
+                      onChange={(e) => setFillCandidate(e.target.value)}
+                    >
+                      <option value="">Pick roster member…</option>
+                      {rosterCandidates.map((m) => (
+                        <option key={m.personId} value={m.personId}>
+                          {protocolService.personLabel(m.personId)}
+                        </option>
+                      ))}
+                    </select>
+                    <button
+                      type="button"
+                      className="btn sm"
+                      disabled={!fillCandidate}
+                      onClick={() => {
+                        const res = protocolService.offerFillIn({
+                          serviceId: activeServiceId,
+                          excusedPersonId: r.personId,
+                          candidatePersonId: fillCandidate,
+                          offeredByPersonId: account.personId,
+                        });
+                        setMessage(
+                          res.ok
+                            ? 'Fill-in offer sent'
+                            : (res.reason ?? 'Failed'),
+                        );
+                        setFillCandidate('');
+                        refresh();
+                      }}
+                    >
+                      Offer fill-in
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      onClick={() => {
+                        setStatus(r.personId, 'EXCUSED');
+                        setMessage(
+                          'Marked EXCUSED (no fill-in) — stays on team list',
+                        );
+                      }}
+                    >
+                      No fill-in · mark excused
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          <div className="panel stack">
+            <h3 style={{ margin: 0 }}>Service report</h3>
+            <textarea
+              rows={2}
+              placeholder="Challenges"
+              value={report.challenges}
+              onChange={(e) =>
+                setReport((x) => ({ ...x, challenges: e.target.value }))
+              }
+            />
+            <textarea
+              rows={2}
+              placeholder="Solutions"
+              value={report.solutions}
+              onChange={(e) =>
+                setReport((x) => ({ ...x, solutions: e.target.value }))
+              }
+            />
+            <textarea
+              rows={2}
+              placeholder="Issues (optional — e.g. denied absences who missed)"
+              value={report.issues}
+              onChange={(e) =>
+                setReport((x) => ({ ...x, issues: e.target.value }))
+              }
+            />
+            <textarea
+              rows={2}
+              placeholder="Recommendations"
+              value={report.recommendations}
+              onChange={(e) =>
+                setReport((x) => ({ ...x, recommendations: e.target.value }))
+              }
+            />
+            <button
+              type="button"
+              className="btn"
+              onClick={() => {
+                const res = protocolService.submitServiceReport({
+                  serviceId: activeServiceId,
+                  authorPersonId: account.personId,
+                  ...report,
+                });
+                setMessage(
+                  res.ok ? 'Service report saved' : (res.reason ?? 'Failed'),
+                );
+                refresh();
+              }}
+            >
+              Submit report
+            </button>
+          </div>
+        </>
+      )}
     </div>
   );
 }
@@ -987,6 +1119,13 @@ export function ProtocolAttendancePage() {
 export function ProtocolMySchedulePage() {
   const { account, can } = useAuth();
   const canView = can('PROTOCOL_SCHEDULE', 'VIEW', SYS);
+  const [tick, setTick] = useState(0);
+  const refresh = () => setTick((t) => t + 1);
+  const [message, setMessage] = useState('');
+  const [absenceReason, setAbsenceReason] = useState<Record<string, string>>(
+    {},
+  );
+  const [swapTarget, setSwapTarget] = useState<Record<string, string>>({});
 
   if (!account || !canView) {
     return (
@@ -998,15 +1137,128 @@ export function ProtocolMySchedulePage() {
   }
 
   const rows = protocolService.mySchedule(account.personId);
+  const pendingFillIns = protocolService.listFillInOffers({
+    candidatePersonId: account.personId,
+    status: 'PENDING',
+  });
+  const pendingSwaps = protocolService.listSwapProposals({
+    personId: account.personId,
+    status: 'PENDING',
+  });
+  const myAbsences = protocolService.listAbsenceRequests({
+    personId: account.personId,
+  });
 
   return (
     <div className="stack">
       <div className="panel">
         <h2 style={{ marginTop: 0 }}>My schedule</h2>
         <p className="muted">
-          Published protocol duties for{' '}
-          {protocolService.personLabel(account.personId)}
+          Request absence, propose swaps, and respond to fill-in / swap offers.
+          Faithful Servant counts update when attendance is recorded.
         </p>
+        {message && <p className="muted">{message}</p>}
+        <div className="row">
+          <Link to="/systems/protocol/faithful">Faithful Servant →</Link>
+          <Link to="/systems/protocol/attendance">Attendance desk →</Link>
+        </div>
+      </div>
+
+      {(pendingFillIns.length > 0 || pendingSwaps.length > 0) && (
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Needs your response</h3>
+          {pendingFillIns.map((o) => (
+            <div key={o.id} className="row" style={{ flexWrap: 'wrap' }}>
+              <div>
+                <strong>Fill-in offer</strong>
+                <div className="muted">
+                  Cover for{' '}
+                  {protocolService.personLabel(o.excusedPersonId)} ·{' '}
+                  {protocolService.getService(o.serviceId)?.label ?? o.serviceId}
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn sm"
+                onClick={() => {
+                  const r = protocolService.respondFillIn(
+                    o.id,
+                    'ACCEPTED',
+                    account.personId,
+                  );
+                  setMessage(r.ok ? 'Fill-in accepted' : (r.reason ?? 'Failed'));
+                  refresh();
+                }}
+              >
+                Accept
+              </button>
+              <button
+                type="button"
+                className="btn secondary sm"
+                onClick={() => {
+                  const r = protocolService.respondFillIn(
+                    o.id,
+                    'DECLINED',
+                    account.personId,
+                  );
+                  setMessage(r.ok ? 'Fill-in declined' : (r.reason ?? 'Failed'));
+                  refresh();
+                }}
+              >
+                Decline
+              </button>
+            </div>
+          ))}
+          {pendingSwaps
+            .filter((s) => s.targetPersonId === account.personId)
+            .map((s) => (
+              <div key={s.id} className="row" style={{ flexWrap: 'wrap' }}>
+                <div>
+                  <strong>Swap proposal</strong>
+                  <div className="muted">
+                    {protocolService.personLabel(s.proposerPersonId)} wants to
+                    swap on{' '}
+                    {protocolService.getService(s.serviceId)?.label ??
+                      s.serviceId}
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={() => {
+                    const r = protocolService.respondSwap(
+                      s.id,
+                      'ACCEPTED',
+                      account.personId,
+                    );
+                    setMessage(r.ok ? 'Swap accepted' : (r.reason ?? 'Failed'));
+                    refresh();
+                  }}
+                >
+                  Accept
+                </button>
+                <button
+                  type="button"
+                  className="btn secondary sm"
+                  onClick={() => {
+                    const r = protocolService.respondSwap(
+                      s.id,
+                      'DECLINED',
+                      account.personId,
+                    );
+                    setMessage(r.ok ? 'Swap declined' : (r.reason ?? 'Failed'));
+                    refresh();
+                  }}
+                >
+                  Decline
+                </button>
+              </div>
+            ))}
+        </div>
+      )}
+
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Your duties</h3>
         {rows.length === 0 ? (
           <p className="muted">
             No published duties yet. After Coordinator publishes a month that
@@ -1018,29 +1270,159 @@ export function ProtocolMySchedulePage() {
               <tr>
                 <th>Date</th>
                 <th>Service</th>
-                <th>Month</th>
-                <th>Version</th>
-                <th>Source</th>
+                <th>Role</th>
+                <th>Kind</th>
+                <th>Absence</th>
+                <th>Swap</th>
               </tr>
             </thead>
             <tbody>
-              {rows.map((r) => (
-                <tr key={`${r.serviceId}-${r.version}-${r.publishedAt}`}>
-                  <td>{r.date}</td>
-                  <td>
-                    <strong>{r.kind}</strong>
-                  </td>
-                  <td>{r.monthKey}</td>
-                  <td>v{r.version}</td>
-                  <td className="muted">
-                    {r.fromHistory ? 'Archive' : 'Current published'}
-                  </td>
-                </tr>
-              ))}
+              {rows.map((r) => {
+                if (r.fromHistory) {
+                  return (
+                    <tr key={`${r.serviceId}-${r.version}-${r.publishedAt}`}>
+                      <td>{r.date}</td>
+                      <td>
+                        <strong>{r.kind}</strong>
+                      </td>
+                      <td className="muted">
+                        {r.role === 'TEAM_LEADER'
+                          ? 'TL'
+                          : r.role === 'VICE_LEADER'
+                            ? 'VTL'
+                            : '—'}
+                      </td>
+                      <td className="muted">{r.slotKind}</td>
+                      <td colSpan={2} className="muted">
+                        Archive
+                      </td>
+                    </tr>
+                  );
+                }
+                const abs = myAbsences.find(
+                  (a) => a.serviceId === r.serviceId && a.status === 'PENDING',
+                );
+                const teammates = protocolService
+                  .teamForService(r.serviceId)
+                  .filter((s) => s.personId !== account.personId);
+                return (
+                  <tr key={`${r.serviceId}-${r.version}`}>
+                    <td>{r.date}</td>
+                    <td>
+                      <strong>{r.kind}</strong>
+                      <div className="muted" style={{ fontSize: '0.8rem' }}>
+                        {r.label}
+                      </div>
+                    </td>
+                    <td className="muted">
+                      {r.role === 'TEAM_LEADER'
+                        ? 'TL'
+                        : r.role === 'VICE_LEADER'
+                          ? 'VTL'
+                          : '—'}
+                    </td>
+                    <td className="muted">{r.slotKind}</td>
+                    <td>
+                      {abs ? (
+                        <span className="badge planned">Pending</span>
+                      ) : (
+                        <div className="stack">
+                          <input
+                            placeholder="Reason"
+                            value={absenceReason[r.serviceId] ?? ''}
+                            onChange={(e) =>
+                              setAbsenceReason((m) => ({
+                                ...m,
+                                [r.serviceId]: e.target.value,
+                              }))
+                            }
+                          />
+                          <button
+                            type="button"
+                            className="btn ghost sm"
+                            onClick={() => {
+                              const res = protocolService.requestAbsence(
+                                r.serviceId,
+                                account.personId,
+                                absenceReason[r.serviceId] ?? '',
+                              );
+                              setMessage(
+                                res.ok
+                                  ? 'Absence request sent to TL/VTL'
+                                  : (res.reason ?? 'Failed'),
+                              );
+                              refresh();
+                            }}
+                          >
+                            Request absence
+                          </button>
+                        </div>
+                      )}
+                    </td>
+                    <td>
+                      <div className="stack">
+                        <select
+                          value={swapTarget[r.serviceId] ?? ''}
+                          onChange={(e) =>
+                            setSwapTarget((m) => ({
+                              ...m,
+                              [r.serviceId]: e.target.value,
+                            }))
+                          }
+                        >
+                          <option value="">Swap with…</option>
+                          {teammates.map((s) => (
+                            <option key={s.personId} value={s.personId}>
+                              {protocolService.personLabel(s.personId)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn ghost sm"
+                          disabled={!swapTarget[r.serviceId]}
+                          onClick={() => {
+                            const res = protocolService.proposeSwap({
+                              serviceId: r.serviceId,
+                              proposerPersonId: account.personId,
+                              targetPersonId: swapTarget[r.serviceId]!,
+                            });
+                            setMessage(
+                              res.ok
+                                ? 'Swap proposed'
+                                : (res.reason ?? 'Failed'),
+                            );
+                            refresh();
+                          }}
+                        >
+                          Propose swap
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         )}
       </div>
+
+      {myAbsences.length > 0 && (
+        <div className="panel">
+          <h3 style={{ marginTop: 0 }}>Your absence requests</h3>
+          <ul>
+            {myAbsences.map((a) => (
+              <li key={a.id}>
+                {protocolService.getService(a.serviceId)?.label ?? a.serviceId}{' '}
+                · <span className="badge">{a.status}</span> · {a.reason}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+
+      {/* force re-render dependency */}
+      <span style={{ display: 'none' }}>{tick}</span>
     </div>
   );
 }
