@@ -468,115 +468,28 @@ async function main() {
     });
   }
 
-  await prisma.assignment.upsert({
-    where: { id: 'asgn-baptism-helper' },
-    create: {
-      id: 'asgn-baptism-helper',
-      personId: treasurer.id,
-      title: 'Baptism day helper',
-      contextType: 'EVENT',
-      contextId: 'evt-baptism-sep',
-      contextLabel: 'Baptism Sunday',
-      systemId: 'sys-protocol',
-      status: 'ACTIVE',
-      startDate: new Date('2026-09-01'),
-      endDate: new Date('2026-10-01'),
-    },
-    update: {
-      status: 'ACTIVE',
-      systemId: 'sys-protocol',
-      endDate: new Date('2026-10-01'),
-    },
+  // No demo programs / events / tasks / projects — create through the app.
+  // Delete leftover demo rows from older seeds.
+  await prisma.assignment.deleteMany({
+    where: { id: { in: ['asgn-baptism-helper'] } },
+  });
+  await prisma.program.deleteMany({
+    where: { id: { in: ['prog-discipleship', 'prog-youth-cell'] } },
+  });
+  await prisma.churchEvent.deleteMany({
+    where: { id: { in: ['evt-baptism-sep'] } },
+  });
+  await prisma.workTask.deleteMany({
+    where: { id: { in: ['task-welcome-pack'] } },
+  });
+  await prisma.churchProject.deleteMany({
+    where: { id: { in: ['proj-sanctuary-sound'] } },
   });
 
-  await prisma.program.upsert({
-    where: { id: 'prog-discipleship' },
-    create: {
-      id: 'prog-discipleship',
-      name: 'Discipleship pathway',
-      description: 'Standing church discipleship track',
-      ownerSystemId: 'sys-main',
-      visibility: 'GENERAL',
-      status: 'ACTIVE',
-      programType: 'DISCIPLESHIP',
-      scheduleHint: 'Sundays after service',
-      createdByPersonId: pastor.id,
-    },
-    update: { status: 'ACTIVE' },
-  });
-
-  await prisma.program.upsert({
-    where: { id: 'prog-youth-cell' },
-    create: {
-      id: 'prog-youth-cell',
-      name: 'Youth cell groups',
-      description: 'Youth ministry small groups',
-      ownerSystemId: 'sys-youth',
-      visibility: 'MINISTRY',
-      status: 'ACTIVE',
-      programType: 'FELLOWSHIP',
-      createdByPersonId: pastor.id,
-    },
-    update: { status: 'ACTIVE' },
-  });
-
-  await prisma.churchEvent.upsert({
-    where: { id: 'evt-baptism-sep' },
-    create: {
-      id: 'evt-baptism-sep',
-      name: 'Baptism Sunday',
-      type: 'BAPTISM',
-      description: 'Public baptisms',
-      ownerSystemId: 'sys-main',
-      visibility: 'GENERAL',
-      startsAt: new Date('2026-09-28T10:00:00.000Z'),
-      location: 'Main sanctuary',
-      status: 'CONFIRMED',
-      createdByPersonId: pastor.id,
-      lifecyclePhase: 'PREPARE',
-    },
-    update: {},
-  });
-
-  await prisma.workTask.upsert({
-    where: { id: 'task-welcome-pack' },
-    create: {
-      id: 'task-welcome-pack',
-      title: 'Prepare welcome packs',
-      description: 'For new visitors this month',
-      ownerPersonId: treasurer.id,
-      createdByPersonId: pastor.id,
-      contextType: 'GENERAL',
-      systemId: 'sys-main',
-      grantsSystemAccess: false,
-      visibility: 'GENERAL',
-      status: 'TODO',
-      startDate: new Date('2026-09-01'),
-    },
-    update: {},
-  });
-
-  await prisma.churchProject.upsert({
-    where: { id: 'proj-sanctuary-sound' },
-    create: {
-      id: 'proj-sanctuary-sound',
-      name: 'Sanctuary sound upgrade',
-      description: 'Replace mixer and stage monitors',
-      ownerSystemId: 'sys-main',
-      visibility: 'GENERAL',
-      status: 'ACTIVE',
-      willSpend: true,
-      createdByPersonId: pastor.id,
-    },
-    update: {},
-  });
-
-  console.log('Seed OK');
+  console.log('Seed OK (bootstrap — no demo mission data)');
   console.log('  pastor / pastor123  (CHURCH_LEADER)');
   console.log('  treasurer / treas123  (CHURCH_TREASURER + General + all kit funds MANAGE)');
-  console.log('  mission: 2 programs, 1 event, 1 task, 1 project');
   console.log(`  finance: fund-general + ${MINISTRY_KIT_FUNDS.length} kit + ${SPECIAL_MINISTRY_FUNDS.length} special + ${CHOIR_FUNDS.length} choir vaults`);
-  console.log('  assignment: asgn-baptism-helper → treasurer ENTER sys-protocol');
 }
 
 main()
