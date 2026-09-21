@@ -105,6 +105,43 @@ export const musicScheduleService = {
     return PUBLISHED.find((p) => p.periodKey === periodKey) ?? null;
   },
 
+  /**
+   * Demo bootstrap: if no published choir schedule exists for the period,
+   * build a calendar, generate assignments, and publish in-memory.
+   */
+  ensureDemoPublished(periodKey = '2026-09'): MusicChoirSchedule {
+    const existing = this.getPublished(periodKey);
+    if (existing) return existing;
+
+    const services = buildMusicCalendar(periodKey, 'MONTH');
+    const generated = generateMusicChoirSchedule({
+      services,
+      history: this.historyFromPublished(),
+      seed: 20260901,
+    });
+    const at = nowIso();
+    const schedule: MusicChoirSchedule = {
+      id: nid('msch'),
+      periodKey,
+      horizon: 'MONTH',
+      status: 'PUBLISHED',
+      publishedAt: at,
+      publishedByPersonId: 'p-music',
+      updatedAt: at,
+      version: 1,
+      services,
+      assignments: generated.assignments,
+      warnings: generated.ok
+        ? generated.warnings
+        : [
+            ...(generated.reason ? [generated.reason] : []),
+            ...generated.warnings,
+          ],
+    };
+    PUBLISHED.unshift(schedule);
+    return schedule;
+  },
+
   listPublished(): MusicChoirSchedule[] {
     return [...PUBLISHED].sort((a, b) =>
       b.periodKey.localeCompare(a.periodKey),
@@ -531,6 +568,30 @@ export const musicScheduleService = {
 
   formatAssignmentLine(unitIds: string[]): string {
     return unitIds.map(musicUnitName).join(' · ') || '—';
+  },
+
+  /** Browser-local persistence snapshot. */
+  exportLocalState() {
+    return {
+      drafts: DRAFTS,
+      published: PUBLISHED,
+      notifs: NOTIFS,
+      canvas: CANVAS,
+    };
+  },
+
+  importLocalState(raw: unknown) {
+    if (!raw || typeof raw !== 'object') return;
+    const s = raw as {
+      drafts?: MusicScheduleDraft[];
+      published?: MusicChoirSchedule[];
+      notifs?: MusicScheduleNotification[];
+      canvas?: typeof CANVAS;
+    };
+    if (Array.isArray(s.drafts)) DRAFTS = s.drafts;
+    if (Array.isArray(s.published)) PUBLISHED = s.published;
+    if (Array.isArray(s.notifs)) NOTIFS = s.notifs;
+    if (s.canvas !== undefined) CANVAS = s.canvas ?? null;
   },
 
   /** Test helper — reset in-memory stores. */
