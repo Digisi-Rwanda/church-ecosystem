@@ -1,7 +1,17 @@
 import { loadAttentionPreferApi, type AttentionItem } from '../api/attentionApi';
 import { canApproveEventLevel, canApproveScopeLevel } from '../domain/eventScope';
+import { isChurchLeader } from '../domain/churchLeadership';
 import type { Position, SystemRole, WorkTask } from '../domain/types';
 import { isChurchLeadership, missionService } from './missionService';
+import { correspondenceService } from './correspondenceService';
+import { rolesFromPositions } from '../domain/participation';
+import {
+  INBOX_REFRESH_EVENT,
+  markInboxUnread,
+  pingInboxRefresh,
+} from './inboxNotify';
+
+export { INBOX_REFRESH_EVENT, markInboxUnread, pingInboxRefresh, notifyInboxItem } from './inboxNotify';
 
 const READ_KEY = 'adepr.attentionRead';
 
@@ -187,6 +197,116 @@ export function buildLocalAttention(input: {
           : 'Your open task',
       href: `/tasks/${t.id}`,
       rank: overdue ? 5 : 40,
+    });
+  }
+
+  // —— Correspondence / letters (Inbox) ——
+  const letterRoles = rolesFromPositions(positions);
+  const canPrepareLetters =
+    can('CORRESPONDENCE', 'CREATE') ||
+    can('CORRESPONDENCE', 'MANAGE') ||
+    letterRoles.includes('CHURCH_SECRETARY') ||
+    letterRoles.includes('CATECHIST') ||
+    isChurchLeader(roles);
+
+  // Member (receiver): office asked you for information
+  for (const doc of correspondenceService.listDocuments({
+    status: 'NEEDS_INFORMATION',
+    personId,
+  })) {
+    items.push({
+      id: `letter-info-you-${doc.id}`,
+      kind: 'NOTICE',
+      title: `Letter needs your information`,
+      reason:
+        doc.infoRequestNote?.trim() ||
+        `${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]} — open to reply`,
+      href: `/correspondence/${doc.id}`,
+      rank: 4,
+      createdAt: doc.infoRequestedOn,
+    });
+  }
+
+  // Office / Leader: member (or anyone) replied — continue the letter
+  if (canPrepareLetters) {
+    for (const doc of correspondenceService.listDocuments({
+      status: 'IN_PREPARATION',
+    })) {
+      if (!doc.infoResponseNote?.trim()) continue;
+      items.push({
+        id: `letter-reply-${doc.id}`,
+        kind: 'NOTICE',
+        title: `Reply on letter · ${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]}`,
+        reason: doc.infoResponseNote.trim(),
+        href: `/correspondence/${doc.id}`,
+        rank: 6,
+      });
+    }
+
+    for (const doc of correspondenceService.listDocuments({
+      status: 'SUBMITTED',
+    })) {
+      items.push({
+        id: `letter-prep-${doc.id}`,
+        kind: 'NOTICE',
+        title: `Prepare letter · ${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]}`,
+        reason:
+          doc.origin === 'MEMBER_REQUESTED'
+            ? `Member request · ${doc.title}`
+            : doc.title,
+        href: `/correspondence/${doc.id}`,
+        rank: 7,
+      });
+    }
+
+    for (const doc of correspondenceService.listDocuments({
+      status: 'NEEDS_INFORMATION',
+    })) {
+      if (doc.personId === personId) continue;
+      items.push({
+        id: `letter-wait-${doc.id}`,
+        kind: 'NOTICE',
+        title: `Waiting on member · ${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]}`,
+        reason:
+          doc.infoRequestNote?.trim() ||
+          `Awaiting reply from letter subject`,
+        href: `/correspondence/${doc.id}`,
+        rank: 18,
+      });
+    }
+  }
+
+  // Church Leader: letters ready to review & sign
+  if (isChurchLeader(roles)) {
+    for (const doc of correspondenceService.listDocuments({
+      awaitingSignature: true,
+    })) {
+      if (doc.letterType === 'INCOMING') continue;
+      items.push({
+        id: `letter-sign-${doc.id}`,
+        kind: 'NOTICE',
+        title: `Review letter · ${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]}`,
+        reason: `${doc.title} — open, review, then sign`,
+        href: `/correspondence/${doc.id}`,
+        rank: 3,
+      });
+    }
+  }
+
+  // Member: signed letter ready to collect
+  for (const doc of correspondenceService.listDocuments({
+    personId,
+    status: 'FINALIZED',
+  })) {
+    items.push({
+      id: `letter-ready-${doc.id}`,
+      kind: 'NOTICE',
+      title: `Letter ready · ${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]}`,
+      reason: doc.referenceNumber
+        ? `Ref ${doc.referenceNumber} — collect or download`
+        : 'Signed — collect at office or download',
+      href: `/correspondence/${doc.id}`,
+      rank: 9,
     });
   }
 
