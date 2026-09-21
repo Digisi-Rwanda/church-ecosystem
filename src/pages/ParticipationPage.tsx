@@ -14,6 +14,7 @@ import {
   StatusPill,
 } from '../components/ui/StatusPill';
 import type {
+  AssignmentContextType,
   MembershipType,
   MissionLeaderOffice,
   SystemId,
@@ -56,10 +57,19 @@ export function ParticipationPage() {
       })
     : [];
   const openWorkCount = workBySystem.reduce((n, s) => n + s.items.length, 0);
-  const canManage =
+  const canManageRegistry =
     can('MEMBERSHIP', 'MANAGE') ||
     can('POSITION', 'MANAGE') ||
     can('ASSIGNMENT', 'MANAGE');
+  const people = peopleService.list();
+  const orgs = orgService.list();
+  const systems = systemsService.list();
+  const activeSystems = systemsService.listActive();
+  const assignableSystems = activeSystems.filter((s) =>
+    can('ASSIGNMENT', 'MANAGE', s.id),
+  );
+  const canCreateAssignment = assignableSystems.length > 0;
+  const canManage = canManageRegistry || canCreateAssignment;
   const [, setTick] = useState(0);
   const refresh = () => {
     setTick((t) => t + 1);
@@ -91,8 +101,21 @@ export function ParticipationPage() {
   const [aPerson, setAPerson] = useState('');
   const [aTitle, setATitle] = useState('');
   const [aLabel, setALabel] = useState('');
+  const [aContextType, setAContextType] =
+    useState<AssignmentContextType>('EVENT');
   const [aSystem, setASystem] = useState('');
+  const [aOrg, setAOrg] = useState('');
   const [aEnd, setAEnd] = useState('');
+
+  function openAssignmentDrawer() {
+    const preferred =
+      assignableSystems.find((s) => s.id === 'sys-main')?.id ??
+      assignableSystems[0]?.id ??
+      '';
+    setASystem(preferred);
+    setAOrg('');
+    setCreateKind('assignment');
+  }
 
   function onAddMembership(e: FormEvent) {
     e.preventDefault();
@@ -139,31 +162,47 @@ export function ParticipationPage() {
 
   function onAddAssignment(e: FormEvent) {
     e.preventDefault();
-    const d = authorize('ASSIGNMENT', 'MANAGE');
+    if (!aPerson || !aTitle.trim()) {
+      setMsg('Person and title are required');
+      return;
+    }
+    if (!aSystem) {
+      setMsg('Choose the system this assignment belongs to');
+      return;
+    }
+    const systemId = aSystem as SystemId;
+    const d = authorize('ASSIGNMENT', 'MANAGE', systemId);
     if (!d.allowed) {
       setMsg(d.reason);
       return;
     }
+    const org =
+      aOrg ||
+      orgs.find((o) => o.systemId === systemId)?.id ||
+      undefined;
     participationService.createAssignment({
       personId: aPerson,
       title: aTitle.trim(),
-      contextType: 'EVENT',
+      contextType: aContextType,
       contextId: `ctx-${Date.now()}`,
       contextLabel: aLabel.trim() || aTitle.trim(),
-      systemId: (aSystem || undefined) as SystemId | undefined,
+      orgUnitId: org,
+      systemId,
       endDate: aEnd || undefined,
     });
-    setMsg('Assignment added');
+    setMsg('Assignment created');
     setATitle('');
     setAPerson('');
+    setALabel('');
+    setAEnd('');
+    setAOrg('');
     setCreateKind(null);
     refresh();
   }
 
-  const people = peopleService.list();
-  const orgs = orgService.list();
-  const systems = systemsService.list();
-  const activeSystems = systemsService.listActive();
+  const orgsForAssignment = aSystem
+    ? orgs.filter((o) => !o.systemId || o.systemId === aSystem)
+    : orgs;
 
   return (
     <div className="stack">
@@ -209,16 +248,16 @@ export function ParticipationPage() {
 
       {tab === 'mine' && (
         <>
-          <div className="panel">
-            <div className="row" style={{ justifyContent: 'space-between' }}>
+          <div className="panel part-work-desk">
+            <div className="part-work-desk-head">
               <div>
                 <h3 style={{ margin: 0 }}>Your work by system</h3>
                 <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-                  {personName} — tasks, approvals, deadlines, and reminders (not
-                  access rights).
+                  {personName} — filed by desk: decisions, care, board, pulpit,
+                  tasks, and what’s coming up. Not access rights.
                 </p>
               </div>
-              <div className="row">
+              <div className="part-work-role-row">
                 {roles.map((r) => (
                   <span key={r} className="badge">
                     {roleLabel(r)}
@@ -235,43 +274,68 @@ export function ParticipationPage() {
               <div className="part-work-systems">
                 {workBySystem.map((sys) => (
                   <section key={sys.systemId} className="part-work-system">
-                    <div className="part-work-system-head">
-                      <h4>
-                        <Link to={sys.basePath || '/'}>{sys.shortName}</Link>
-                      </h4>
-                      <span className="muted">
-                        {sys.items.length} item
-                        {sys.items.length === 1 ? '' : 's'}
+                    <header className="part-work-system-head">
+                      <div>
+                        <p className="part-work-system-kicker">System desk</p>
+                        <h4>
+                          <Link to={sys.basePath || '/'}>{sys.shortName}</Link>
+                        </h4>
+                      </div>
+                      <span className="part-work-count">
+                        {sys.items.length} open
                       </span>
-                    </div>
-                    <ul className="inbox-items">
-                      {sys.items.map((item) => (
-                        <li
-                          key={item.id}
-                          className={`inbox-item${item.urgent ? ' unread' : ''}`}
+                    </header>
+                    <div className="part-work-trays">
+                      {sys.trays.map((tray) => (
+                        <div
+                          key={tray.category}
+                          className={`part-work-tray tray-${tray.category}`}
                         >
-                          <div>
-                            <span className="inbox-kind">
-                              {kindLabel(item.kind)}
-                              {item.dueDate ? ` · ${item.dueDate}` : ''}
-                            </span>
-                            <div>
-                              <Link className="inbox-title" to={item.href}>
-                                {item.title}
-                              </Link>
-                            </div>
-                            {item.detail && (
-                              <p className="inbox-reason muted">{item.detail}</p>
-                            )}
+                          <div className="part-work-tray-head">
+                            <h5>{tray.label}</h5>
+                            <span className="muted">{tray.items.length}</span>
                           </div>
-                          <div className="inbox-item-actions">
-                            <Link className="btn sm ghost" to={item.href}>
-                              Open
-                            </Link>
-                          </div>
-                        </li>
+                          <ul className="part-work-list">
+                            {tray.items.map((item) => (
+                              <li
+                                key={item.id}
+                                className={`part-work-row${item.urgent ? ' urgent' : ''}`}
+                              >
+                                <div className="part-work-row-main">
+                                  <div className="part-work-meta">
+                                    <span className="part-work-kind">
+                                      {kindLabel(item.kind)}
+                                    </span>
+                                    {item.dueDate ? (
+                                      <span className="part-work-due">
+                                        {item.dueDate}
+                                      </span>
+                                    ) : null}
+                                  </div>
+                                  <Link
+                                    className="part-work-title"
+                                    to={item.href}
+                                  >
+                                    {item.title}
+                                  </Link>
+                                  {item.detail ? (
+                                    <p className="part-work-detail muted">
+                                      {item.detail}
+                                    </p>
+                                  ) : null}
+                                </div>
+                                <Link
+                                  className="btn sm secondary part-work-open"
+                                  to={item.href}
+                                >
+                                  Open
+                                </Link>
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
                       ))}
-                    </ul>
+                    </div>
                   </section>
                 ))}
               </div>
@@ -287,9 +351,44 @@ export function ParticipationPage() {
             <SimplePositionTable rows={positions} />
           </div>
           <div className="panel">
-            <h3>My assignments</h3>
+            <div className="row" style={{ justifyContent: 'space-between' }}>
+              <div>
+                <h3 style={{ margin: 0 }}>My assignments</h3>
+                <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+                  Temporary roles you hold. Leaders can also assign others in
+                  their system.
+                </p>
+              </div>
+              {canCreateAssignment && (
+                <button
+                  type="button"
+                  className="btn sm"
+                  onClick={openAssignmentDrawer}
+                >
+                  Create assignment
+                </button>
+              )}
+            </div>
             {assignments.length === 0 ? (
-              <EmptyState title="No assignments" detail="None active for you." />
+              <EmptyState
+                title="No assignments on you"
+                detail={
+                  canCreateAssignment
+                    ? 'Nothing assigned to you yet. Use Create assignment to give someone a temporary role in your scope.'
+                    : 'None active for you.'
+                }
+                action={
+                  canCreateAssignment ? (
+                    <button
+                      type="button"
+                      className="btn"
+                      onClick={openAssignmentDrawer}
+                    >
+                      Create assignment
+                    </button>
+                  ) : undefined
+                }
+              />
             ) : (
               <table className="table">
                 <thead>
@@ -349,15 +448,15 @@ export function ParticipationPage() {
                     Add position
                   </button>
                 )}
-                {can('ASSIGNMENT', 'MANAGE') && (
+                {can('ASSIGNMENT', 'MANAGE') || canCreateAssignment ? (
                   <button
                     type="button"
                     className="btn ghost"
-                    onClick={() => setCreateKind('assignment')}
+                    onClick={openAssignmentDrawer}
                   >
                     Add assignment
                   </button>
-                )}
+                ) : null}
               </div>
             </div>
             <div style={{ marginTop: '0.75rem' }}>
@@ -552,14 +651,15 @@ export function ParticipationPage() {
               {allAssignments.length === 0 ? (
                 <EmptyState
                   title="No assignments"
+                  detail="Create a temporary role for someone in your system scope."
                   action={
-                    can('ASSIGNMENT', 'MANAGE') ? (
+                    canCreateAssignment ? (
                       <button
                         type="button"
                         className="btn"
-                        onClick={() => setCreateKind('assignment')}
+                        onClick={openAssignmentDrawer}
                       >
-                        Add assignment
+                        Create assignment
                       </button>
                     ) : undefined
                   }
@@ -818,74 +918,110 @@ export function ParticipationPage() {
               </button>
             </form>
           </Drawer>
-
-          <Drawer
-            open={createKind === 'assignment'}
-            title="Add assignment"
-            onClose={() => setCreateKind(null)}
-            wide
-          >
-            <form className="stack" onSubmit={onAddAssignment}>
-              <SelectField
-                label="Person"
-                name="aPerson"
-                id="aPerson"
-                value={aPerson}
-                onChange={(e) => setAPerson(e.target.value)}
-                required
-              >
-                <option value="">—</option>
-                {people.map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.fullName}
-                  </option>
-                ))}
-              </SelectField>
-              <TextField
-                label="Title"
-                name="aTitle"
-                id="aTitle"
-                value={aTitle}
-                onChange={(e) => setATitle(e.target.value)}
-                required
-              />
-              <TextField
-                label="Context label"
-                name="aLabel"
-                id="aLabel"
-                value={aLabel}
-                onChange={(e) => setALabel(e.target.value)}
-                placeholder="e.g. Youth Retreat 2026"
-              />
-              <SelectField
-                label="Temporary system access"
-                name="aSystem"
-                id="aSystem"
-                value={aSystem}
-                onChange={(e) => setASystem(e.target.value)}
-              >
-                <option value="">— none —</option>
-                {activeSystems.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.shortName}
-                  </option>
-                ))}
-              </SelectField>
-              <TextField
-                label="End date"
-                name="aEnd"
-                id="aEnd"
-                type="date"
-                value={aEnd}
-                onChange={(e) => setAEnd(e.target.value)}
-              />
-              <button type="submit" className="btn">
-                Add assignment
-              </button>
-            </form>
-          </Drawer>
         </div>
       )}
+
+      <Drawer
+        open={createKind === 'assignment'}
+        title="Create assignment"
+        onClose={() => setCreateKind(null)}
+        wide
+      >
+        <form className="stack" onSubmit={onAddAssignment}>
+          <p className="muted" style={{ margin: 0 }}>
+            Temporary role in a system you lead. Church Leader can assign across
+            church systems; ministry leaders only within their own.
+          </p>
+          <SelectField
+            label="Person"
+            name="aPerson"
+            id="aPerson"
+            value={aPerson}
+            onChange={(e) => setAPerson(e.target.value)}
+            required
+          >
+            <option value="">—</option>
+            {people.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.fullName}
+              </option>
+            ))}
+          </SelectField>
+          <TextField
+            label="Title"
+            name="aTitle"
+            id="aTitle"
+            value={aTitle}
+            onChange={(e) => setATitle(e.target.value)}
+            required
+            placeholder="e.g. Registration coordinator"
+          />
+          <SelectField
+            label="Context type"
+            name="aContextType"
+            id="aContextType"
+            value={aContextType}
+            onChange={(e) =>
+              setAContextType(e.target.value as AssignmentContextType)
+            }
+          >
+            <option value="EVENT">Event</option>
+            <option value="PROGRAM">Program</option>
+            <option value="PROJECT">Project</option>
+          </SelectField>
+          <TextField
+            label="Context label"
+            name="aLabel"
+            id="aLabel"
+            value={aLabel}
+            onChange={(e) => setALabel(e.target.value)}
+            placeholder="e.g. Youth Retreat 2026"
+          />
+          <SelectField
+            label="System (your scope)"
+            name="aSystem"
+            id="aSystem"
+            value={aSystem}
+            onChange={(e) => {
+              setASystem(e.target.value);
+              setAOrg('');
+            }}
+            required
+          >
+            <option value="">— choose system —</option>
+            {assignableSystems.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.shortName}
+              </option>
+            ))}
+          </SelectField>
+          <SelectField
+            label="Org unit (optional)"
+            name="aOrg"
+            id="aOrg"
+            value={aOrg}
+            onChange={(e) => setAOrg(e.target.value)}
+          >
+            <option value="">— default for system —</option>
+            {orgsForAssignment.map((o) => (
+              <option key={o.id} value={o.id}>
+                {o.name}
+              </option>
+            ))}
+          </SelectField>
+          <TextField
+            label="End date"
+            name="aEnd"
+            id="aEnd"
+            type="date"
+            value={aEnd}
+            onChange={(e) => setAEnd(e.target.value)}
+          />
+          <button type="submit" className="btn" disabled={!canCreateAssignment}>
+            Create assignment
+          </button>
+        </form>
+      </Drawer>
     </div>
   );
 }
