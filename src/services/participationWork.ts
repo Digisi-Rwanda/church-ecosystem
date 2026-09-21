@@ -9,6 +9,7 @@ import type {
   WorkTask,
 } from '../domain/types';
 import { boardService } from './boardService';
+import { correspondenceService } from './correspondenceService';
 import { deaconService } from './deaconService';
 import { missionService } from './missionService';
 import { systemsService } from './orgService';
@@ -23,6 +24,15 @@ export type ParticipationWorkKind =
   | 'PULPIT'
   | 'BOARD';
 
+/** Office trays — how work is filed on the Participation desk. */
+export type ParticipationWorkCategory =
+  | 'decisions'
+  | 'care'
+  | 'board'
+  | 'pulpit'
+  | 'tasks'
+  | 'upcoming';
+
 export type ParticipationWorkItem = {
   id: string;
   kind: ParticipationWorkKind;
@@ -33,11 +43,18 @@ export type ParticipationWorkItem = {
   urgent?: boolean;
 };
 
+export type ParticipationWorkTray = {
+  category: ParticipationWorkCategory;
+  label: string;
+  items: ParticipationWorkItem[];
+};
+
 export type ParticipationSystemWork = {
   systemId: SystemId;
   shortName: string;
   basePath: string;
   items: ParticipationWorkItem[];
+  trays: ParticipationWorkTray[];
 };
 
 function todayIso() {
@@ -240,12 +257,92 @@ export function buildParticipationWork(input: {
       push(map, 'sys-main', {
         id: `tlo-${letter.id}`,
         kind: 'APPROVAL',
-        title: `Sign transfer letter · ${letter.destinationChurch}`,
-        detail: 'Transfer out — Leader only signs',
-        href: '/pastoral',
+        title: `Review transfer letter · ${letter.destinationChurch}`,
+        detail: 'Open the letter, review it, then sign',
+        href: letter.documentId
+          ? `/correspondence/${letter.documentId}`
+          : '/pastoral',
         urgent: true,
       });
     }
+  }
+
+  for (const doc of correspondenceService.listDocuments({
+    awaitingSignature: true,
+  })) {
+    if (!isChurchLeader(roles)) continue;
+    if (doc.letterType === 'TRANSFER_OUT') continue; // already queued via transfer row
+    push(map, 'sys-main', {
+      id: `cdoc-sign-${doc.id}`,
+      kind: 'APPROVAL',
+      title: `Review letter · ${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]}`,
+      detail: `${doc.title} — open, review, then sign`,
+      href: `/correspondence/${doc.id}`,
+      urgent: true,
+    });
+  }
+
+  const canPrepareLetters =
+    roles.includes('CHURCH_SECRETARY') ||
+    roles.includes('CATECHIST') ||
+    isChurchLeader(roles);
+  if (canPrepareLetters) {
+    for (const doc of correspondenceService.listDocuments({
+      status: 'SUBMITTED',
+    })) {
+      push(map, 'sys-main', {
+        id: `cdoc-prep-${doc.id}`,
+        kind: 'REMINDER',
+        title: `Prepare letter · ${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]}`,
+        detail: doc.origin === 'MEMBER_REQUESTED' ? 'Member request' : doc.title,
+        href: `/correspondence/${doc.id}`,
+        urgent: true,
+      });
+    }
+    for (const doc of correspondenceService.listDocuments({
+      status: 'NEEDS_INFORMATION',
+    })) {
+      push(map, 'sys-main', {
+        id: `cdoc-info-${doc.id}`,
+        kind: 'REMINDER',
+        title: `Needs information · ${correspondenceService.LETTER_TYPE_LABELS[doc.letterType]}`,
+        detail: doc.infoRequestNote ?? doc.title,
+        href: `/correspondence/${doc.id}`,
+        urgent: true,
+      });
+    }
+    for (const doc of correspondenceService.listDocuments({
+      letterType: 'INCOMING',
+      status: ['IN_PREPARATION', 'SUBMITTED', 'NEEDS_INFORMATION'],
+    })) {
+      push(map, 'sys-main', {
+        id: `cdoc-in-${doc.id}`,
+        kind: 'REMINDER',
+        title: `Incoming · ${doc.title}`,
+        detail: doc.senderOrg
+          ? `${doc.senderName ?? ''} · ${doc.senderOrg}`
+          : doc.senderName,
+        href: `/correspondence/${doc.id}`,
+      });
+    }
+  }
+
+  // Member sees their own letters waiting for their reply (always —
+  // even if they also have office prepare rights on other letters).
+  for (const doc of correspondenceService.listDocuments({
+    status: 'NEEDS_INFORMATION',
+    personId,
+  })) {
+    push(map, 'sys-main', {
+      id: `cdoc-info-self-${doc.id}`,
+      kind: 'REMINDER',
+      title: `Letter needs your information`,
+      detail:
+        doc.infoRequestNote?.trim() ||
+        'Open the letter to see what the office asked for',
+      href: `/correspondence/${doc.id}`,
+      urgent: true,
+    });
   }
 
   for (const d of pastoralOpsService.listDiscipline({
@@ -287,7 +384,7 @@ export function buildParticipationWork(input: {
       .filter((x) => x.status === 'PENDING')) {
       push(map, 'sys-deacon', {
         id: `dexp-${e.id}`,
-        kind: 'CARE',
+        kind: 'APPROVAL',
         title: `Approve care spend · ${e.description}`,
         detail: `${e.amount.toLocaleString()} RWF · wait for Leader yes`,
         dueDate: e.occurredOn,
@@ -332,6 +429,7 @@ export function buildParticipationWork(input: {
       shortName: sys?.shortName ?? sys?.name ?? systemId,
       basePath: sys?.basePath ?? '/',
       items,
+      trays: groupWorkIntoTrays(items),
     });
   }
 
@@ -344,10 +442,75 @@ export function buildParticipationWork(input: {
   return rows;
 }
 
+const TRAY_ORDER: ParticipationWorkCategory[] = [
+  'decisions',
+  'care',
+  'board',
+  'pulpit',
+  'tasks',
+  'upcoming',
+];
+
+export function workCategory(
+  kind: ParticipationWorkKind,
+): ParticipationWorkCategory {
+  switch (kind) {
+    case 'APPROVAL':
+      return 'decisions';
+    case 'CARE':
+      return 'care';
+    case 'BOARD':
+      return 'board';
+    case 'PULPIT':
+      return 'pulpit';
+    case 'TASK':
+    case 'DEADLINE':
+      return 'tasks';
+    case 'REMINDER':
+      return 'upcoming';
+  }
+}
+
+export function workCategoryLabel(category: ParticipationWorkCategory): string {
+  switch (category) {
+    case 'decisions':
+      return 'Awaiting your decision';
+    case 'care':
+      return 'Care & people';
+    case 'board':
+      return 'Board & governance';
+    case 'pulpit':
+      return 'Pulpit & worship';
+    case 'tasks':
+      return 'Your tasks';
+    case 'upcoming':
+      return 'Coming up';
+  }
+}
+
+export function groupWorkIntoTrays(
+  items: ParticipationWorkItem[],
+): ParticipationWorkTray[] {
+  const buckets = new Map<ParticipationWorkCategory, ParticipationWorkItem[]>();
+  for (const item of items) {
+    const cat = workCategory(item.kind);
+    const list = buckets.get(cat) ?? [];
+    list.push(item);
+    buckets.set(cat, list);
+  }
+  return TRAY_ORDER.filter((c) => (buckets.get(c)?.length ?? 0) > 0).map(
+    (category) => ({
+      category,
+      label: workCategoryLabel(category),
+      items: buckets.get(category)!,
+    }),
+  );
+}
+
 export function kindLabel(kind: ParticipationWorkKind): string {
   switch (kind) {
     case 'APPROVAL':
-      return 'Approval';
+      return 'Decision';
     case 'DEADLINE':
       return 'Deadline';
     case 'REMINDER':
