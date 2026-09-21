@@ -4,6 +4,7 @@ import {
   attentionService,
   type AttentionViewItem,
 } from '../services/attentionService';
+import { INBOX_REFRESH_EVENT } from '../services/inboxNotify';
 
 export function useAttention() {
   const { account, roles, positions, tasks, can, authSource } = useAuth();
@@ -43,6 +44,12 @@ export function useAttention() {
       cancelled = true;
     };
   }, [account, roles, positions, tasks, can, authSource, tick]);
+
+  useEffect(() => {
+    const onRefresh = () => reload();
+    window.addEventListener(INBOX_REFRESH_EVENT, onRefresh);
+    return () => window.removeEventListener(INBOX_REFRESH_EVENT, onRefresh);
+  }, [reload]);
 
   const markRead = useCallback(
     (id: string) => {
