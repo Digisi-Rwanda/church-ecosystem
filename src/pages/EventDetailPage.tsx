@@ -3,6 +3,11 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { ApprovalRecord } from '../components/ui/ApprovalRecord';
 import { StatusPill } from '../components/ui/StatusPill';
+import {
+  isCatechist,
+  isChurchLeader,
+  isOrdainedPastor,
+} from '../domain/churchLeadership';
 import { canApproveEventLevel } from '../domain/eventScope';
 import {
   checkedInCount,
@@ -17,6 +22,7 @@ import {
 import { checkInToken, checkInUrl, qrImageUrl } from '../domain/checkInQr';
 import { statusLabel } from '../domain/statusCopy';
 import { eventTypeLabel } from '../domain/permissions';
+import type { SystemRole } from '../domain/types';
 import { PEOPLE } from '../data/seed';
 import { missionListPath } from '../navigation/missionPaths';
 import { missionService, systemsService } from '../services';
@@ -33,6 +39,20 @@ import {
   writeRegisterForEvent,
   writeSubmitEvent,
 } from '../services/missionWrite';
+
+/** Pastor (not Leader / Catechist) — pastoral summary, not event ops console. */
+function isPastoralEventLens(roles: SystemRole[]) {
+  return (
+    isOrdainedPastor(roles) &&
+    !isChurchLeader(roles) &&
+    !isCatechist(roles)
+  );
+}
+
+/** Church Leader — attendance outcome + event report; not day-of ops. */
+function isLeaderEventLens(roles: SystemRole[]) {
+  return isChurchLeader(roles);
+}
 
 export function EventDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -92,6 +112,10 @@ export function EventDetailPage() {
     (r) => r.personId === account.personId && r.status !== 'CANCELLED',
   );
   const canManage = can('EVENT', 'MANAGE');
+  const pastoralLens = isPastoralEventLens(roles);
+  const leaderLens = isLeaderEventLens(roles);
+  /** Catechist / ministry EVENT managers — not Leader or Pastor. */
+  const showOps = canManage && !pastoralLens && !leaderLens;
   const openForReg =
     event.status === 'CONFIRMED' || event.status === 'PLANNED';
   const regMode = event.registrationMode ?? 'ANNOUNCEMENT_ONLY';
@@ -227,13 +251,15 @@ export function EventDetailPage() {
     canApproveEventLevel(level, roles, positions),
   );
   const verbs = eventPrimaryVerbs(opState, {
-    canManage,
+    canManage: showOps,
     canApprove: canApproveAny,
   });
   const capPct =
     event.capacity && event.capacity > 0
       ? Math.min(100, Math.round((activeRegs / event.capacity) * 100))
       : 0;
+
+  const activePeople = regs.filter((r) => r.status !== 'CANCELLED');
 
   const primaryCta =
     event.beyondOwnerScope &&
@@ -244,12 +270,408 @@ export function EventDetailPage() {
         canApproveEventLevel(level, roles, positions),
     )
       ? { label: 'Review approvals', scroll: 'approvals' }
-      : regMode === 'REGISTRATION_REQUIRED' &&
+      : !pastoralLens &&
+          !leaderLens &&
+          regMode === 'REGISTRATION_REQUIRED' &&
           openForReg &&
           (!myReg || myReg.status === 'CANCELLED')
         ? { label: 'Register myself', action: doRegister }
         : null;
 
+  const noShowCount = regs.filter((r) => r.status === 'NO_SHOW').length;
+  const attendedList = regs.filter(
+    (r) => r.status === 'ATTENDED' || r.attendedAt,
+  );
+
+  /* ── Church Leader: report + attendance results only ────────────── */
+  if (leaderLens) {
+    return (
+      <div className="stack">
+        <p>
+          <Link to={listPath}>← Events</Link>
+        </p>
+        {msg && <p className="badge">{msg}</p>}
+
+        <div className="detail-hero">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div>
+              <p className="hero-kicker">
+                {eventTypeLabel(event.type)} ·{' '}
+                {owner?.shortName ?? owner?.name} ·{' '}
+                {event.beyondOwnerScope ? 'Beyond scope' : 'In-scope'}
+              </p>
+              <h2>{event.name}</h2>
+            </div>
+            <StatusPill status={event.status} />
+          </div>
+          <p className="hero-when">
+            {new Date(event.startsAt).toLocaleString()}
+            {event.location ? ` · ${event.location}` : ''}
+          </p>
+          {event.description && (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              {event.description}
+            </p>
+          )}
+          <p className="muted" style={{ marginBottom: 0, marginTop: '0.75rem' }}>
+            Oversight view — QR check-in and lifecycle are for Catechist /
+            Protocol / ministry ops. You see the report and attendance
+            results.
+          </p>
+        </div>
+
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Event report</h3>
+          <p style={{ margin: 0 }}>
+            Status: <strong>{statusLabel(event.status)}</strong>
+            {' · '}
+            Stage: <strong>{eventOpStateLabel(opState)}</strong>
+            {event.lifecyclePhase
+              ? ` (${statusLabel(event.lifecyclePhase)})`
+              : ''}
+          </p>
+          <p className="muted" style={{ margin: 0 }}>
+            {regMode === 'REGISTRATION_REQUIRED'
+              ? event.capacity != null
+                ? `${activeRegs} / ${event.capacity} registered${
+                    waitlisted > 0 ? ` · ${waitlisted} waitlisted` : ''
+                  }`
+                : `${activeRegs} registered${
+                    waitlisted > 0 ? ` · ${waitlisted} waitlisted` : ''
+                  }`
+              : 'Announcement only — no registration list'}
+            {event.seriesLabel ? ` · Series: ${event.seriesLabel}` : ''}
+          </p>
+          {event.programId && (
+            <p style={{ margin: 0 }}>
+              Program:{' '}
+              <Link to={`/programs/${event.programId}`}>
+                {missionService.getProgram(event.programId)?.name ??
+                  event.programId}
+              </Link>
+            </p>
+          )}
+          {event.projectId && (
+            <p style={{ margin: 0 }}>
+              Project:{' '}
+              <Link to={`/projects/${event.projectId}`}>
+                {missionService.getProject(event.projectId)?.name ??
+                  event.projectId}
+              </Link>
+            </p>
+          )}
+          {(event.collaboratorSystemIds?.length ||
+            event.collaboratorPersonIds?.length) ? (
+            <p style={{ marginBottom: 0 }}>
+              Collaborators:{' '}
+              {[
+                ...(event.collaboratorSystemIds ?? []).map(
+                  (sid) => systemsService.getById(sid)?.shortName ?? sid,
+                ),
+                ...(event.collaboratorPersonIds ?? []).map((pid) =>
+                  personName(pid),
+                ),
+              ].join(' · ')}
+            </p>
+          ) : null}
+        </div>
+
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Attendance results</h3>
+          <p style={{ margin: 0, fontSize: '1.15rem' }}>
+            <strong>{checked}</strong>{' '}
+            {checked === 1 ? 'person attended' : 'people attended'}
+            {noShowCount > 0 ? (
+              <span className="muted">
+                {' '}
+                · {noShowCount} no-show
+              </span>
+            ) : null}
+          </p>
+          {attendedList.length > 0 ? (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Person</th>
+                  <th>Checked in</th>
+                </tr>
+              </thead>
+              <tbody>
+                {attendedList.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <Link to={`/people/${r.personId}`}>
+                        {personName(r.personId)}
+                      </Link>
+                    </td>
+                    <td className="muted">
+                      {r.attendedAt
+                        ? new Date(r.attendedAt).toLocaleString()
+                        : 'Attended'}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          ) : (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              {event.status === 'COMPLETED'
+                ? 'Nobody was marked as attended for this event.'
+                : 'Attendance not recorded yet. Numbers appear here after ops check people in.'}
+            </p>
+          )}
+        </div>
+
+        {event.beyondOwnerScope && (
+          <div className="panel" id="approvals">
+            <h3>Approval chain</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Beyond-scope events need each level before confirmation.
+            </p>
+            <ApprovalRecord
+              routeLabel="Beyond owner scope · event chain"
+              gateHint="Every level must approve before the event is confirmed."
+              completeHint="All levels approved — event is confirmed."
+              timeline={(event.approvals ?? []).map((a) => ({
+                id: `${a.levelKey}-${a.approvedAt}`,
+                at: a.approvedAt.slice(0, 10),
+                label: a.label,
+                detail: personName(a.personId),
+              }))}
+              steps={chain.map((level) => {
+                const done = (event.approvals ?? []).some(
+                  (a) => a.levelKey === level.levelKey,
+                );
+                const canHere = canApproveEventLevel(level, roles, positions);
+                const approver = (event.approvals ?? []).find(
+                  (a) => a.levelKey === level.levelKey,
+                );
+                return {
+                  key: level.levelKey,
+                  label: level.label,
+                  done,
+                  detail:
+                    done && approver
+                      ? personName(approver.personId)
+                      : undefined,
+                  action:
+                    !done && canHere ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => void doApprove(level.levelKey)}
+                      >
+                        Approve
+                      </button>
+                    ) : undefined,
+                };
+              })}
+            />
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ── Pastor lens: pastoral summary only ─────────────────────────── */
+  if (pastoralLens) {
+    return (
+      <div className="stack">
+        <p>
+          <Link to={listPath}>← Events</Link>
+        </p>
+        {msg && <p className="badge">{msg}</p>}
+
+        <div className="detail-hero">
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <div>
+              <p className="hero-kicker">
+                {eventTypeLabel(event.type)} ·{' '}
+                {owner?.shortName ?? owner?.name}
+              </p>
+              <h2>{event.name}</h2>
+            </div>
+            <StatusPill status={event.status} />
+          </div>
+          <p className="hero-when">
+            {new Date(event.startsAt).toLocaleString()}
+            {event.location ? ` · ${event.location}` : ''}
+          </p>
+          {event.description && (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              {event.description}
+            </p>
+          )}
+          <p className="muted" style={{ marginBottom: 0, marginTop: '0.75rem' }}>
+            Pastoral view — check-in, QR, and lifecycle are run by Protocol /
+            ministry ops, not from this desk.
+          </p>
+        </div>
+
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>At a glance</h3>
+          <p style={{ margin: 0 }}>
+            {regMode === 'REGISTRATION_REQUIRED' ? (
+              <>
+                <strong>{activeRegs}</strong>
+                {event.capacity != null ? ` / ${event.capacity}` : ''} registered
+                {waitlisted > 0 ? ` · ${waitlisted} waitlisted` : ''}
+                {event.status === 'COMPLETED' || checked > 0
+                  ? ` · ${checked} attended`
+                  : ''}
+              </>
+            ) : (
+              <>Announcement only — no seat list.</>
+            )}
+          </p>
+          {event.programId && (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              Linked program:{' '}
+              <Link to={`/programs/${event.programId}`}>
+                {missionService.getProgram(event.programId)?.name ??
+                  event.programId}
+              </Link>
+            </p>
+          )}
+          {event.type === 'BAPTISM' && (
+            <p style={{ marginBottom: 0 }}>
+              <Link to="/pastoral">Open pastoral desk →</Link>
+              <span className="muted">
+                {' '}
+                (baptism pathways, name gate, follow-up)
+              </span>
+            </p>
+          )}
+        </div>
+
+        {regMode === 'REGISTRATION_REQUIRED' && activePeople.length > 0 && (
+          <div className="panel">
+            <h3>
+              {event.type === 'BAPTISM' ? 'Candidates / seats' : 'People'}
+            </h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Read-only roster. Staff mark check-in on the ops console.
+            </p>
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Person</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {activePeople.map((r) => (
+                  <tr key={r.id}>
+                    <td>
+                      <Link to={`/people/${r.personId}`}>
+                        {personName(r.personId)}
+                      </Link>
+                    </td>
+                    <td>
+                      <StatusPill status={r.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+
+        {event.beyondOwnerScope && (
+          <div className="panel" id="approvals">
+            <h3>Approval chain</h3>
+            <ApprovalRecord
+              routeLabel="Beyond owner scope · event chain"
+              gateHint="Every level must approve before the event is confirmed."
+              completeHint="All levels approved — event is confirmed."
+              timeline={(event.approvals ?? []).map((a) => ({
+                id: `${a.levelKey}-${a.approvedAt}`,
+                at: a.approvedAt.slice(0, 10),
+                label: a.label,
+                detail: personName(a.personId),
+              }))}
+              steps={chain.map((level) => {
+                const done = (event.approvals ?? []).some(
+                  (a) => a.levelKey === level.levelKey,
+                );
+                const canHere = canApproveEventLevel(level, roles, positions);
+                const approver = (event.approvals ?? []).find(
+                  (a) => a.levelKey === level.levelKey,
+                );
+                return {
+                  key: level.levelKey,
+                  label: level.label,
+                  done,
+                  detail:
+                    done && approver
+                      ? personName(approver.personId)
+                      : undefined,
+                  action:
+                    !done && canHere ? (
+                      <button
+                        type="button"
+                        className="btn"
+                        onClick={() => void doApprove(level.levelKey)}
+                      >
+                        Approve
+                      </button>
+                    ) : undefined,
+                };
+              })}
+            />
+          </div>
+        )}
+
+        {event.status === 'COMPLETED' && (
+          <div className="panel">
+            <h3>Post-event follow-up</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Pastoral next steps for people who attended (enroll + follow-up
+              task).
+            </p>
+            {event.type === 'BAPTISM' && (
+              <label className="row">
+                <input
+                  type="checkbox"
+                  checked={enrollProgram}
+                  onChange={(e) => setEnrollProgram(e.target.checked)}
+                />
+                Enroll in Baptism class (
+                {activePrograms.find((p) => p.id === 'prg-baptism-standing')
+                  ?.name ?? 'standing'}
+                )
+              </label>
+            )}
+            <div className="row">
+              <select
+                value={nextPersonId}
+                onChange={(e) => setNextPersonId(e.target.value)}
+              >
+                <option value="">Select attended person…</option>
+                {regs
+                  .filter((r) => r.status === 'ATTENDED' || r.attendedAt)
+                  .map((r) => (
+                    <option key={r.id} value={r.personId}>
+                      {personName(r.personId)}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                className="btn"
+                disabled={!nextPersonId}
+                onClick={() => void doNextSteps()}
+              >
+                Apply next steps
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  /* ── Ops / general event console ─────────────────────────────────── */
   return (
     <div className="stack">
       <p>
@@ -268,13 +690,15 @@ export function EventDetailPage() {
           </div>
           <StatusPill status={event.status} />
         </div>
-        <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-          Operating · <strong>{eventOpStateLabel(opState)}</strong>
-          {event.lifecyclePhase
-            ? ` · ${statusLabel(event.lifecyclePhase)}`
-            : ''}
-        </p>
-        {verbs.length > 0 && (
+        {showOps && (
+          <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+            Operating · <strong>{eventOpStateLabel(opState)}</strong>
+            {event.lifecyclePhase
+              ? ` · ${statusLabel(event.lifecyclePhase)}`
+              : ''}
+          </p>
+        )}
+        {showOps && verbs.length > 0 && (
           <div className="row" style={{ marginTop: '0.5rem', flexWrap: 'wrap' }}>
             {verbs.map((v) => (
               <button
@@ -342,80 +766,87 @@ export function EventDetailPage() {
         )}
       </div>
 
-      <div className="panel stack">
-        <h3 style={{ margin: 0 }}>Check-in QR</h3>
-        <p className="muted" style={{ margin: 0 }}>
-          Staff scan or open the link to mark attendance.
-        </p>
-        <div className="row" style={{ alignItems: 'flex-start', gap: '1rem' }}>
-          <img
-            src={qrImageUrl(checkInUrl('event', event.id))}
-            alt="Check-in QR"
-            width={160}
-            height={160}
-          />
-          <div>
-            <p style={{ marginTop: 0 }}>
-              <Link
-                to={`/check-in?k=event&id=${encodeURIComponent(event.id)}&t=${encodeURIComponent(
-                  checkInToken('event', event.id),
-                )}`}
+      {showOps && (
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Check-in QR</h3>
+          <p className="muted" style={{ margin: 0 }}>
+            Staff scan or open the link to mark attendance.
+          </p>
+          <div className="row" style={{ alignItems: 'flex-start', gap: '1rem' }}>
+            <img
+              src={qrImageUrl(checkInUrl('event', event.id))}
+              alt="Check-in QR"
+              width={160}
+              height={160}
+            />
+            <div>
+              <p style={{ marginTop: 0 }}>
+                <Link
+                  to={`/check-in?k=event&id=${encodeURIComponent(event.id)}&t=${encodeURIComponent(
+                    checkInToken('event', event.id),
+                  )}`}
+                >
+                  Open check-in page →
+                </Link>
+              </p>
+              <p
+                className="muted"
+                style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}
               >
-                Open check-in page →
-              </Link>
-            </p>
-            <p className="muted" style={{ fontSize: '0.85rem', wordBreak: 'break-all' }}>
-              {checkInUrl('event', event.id)}
-            </p>
+                {checkInUrl('event', event.id)}
+              </p>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
-      <div className="panel stack">
-        <h3 style={{ margin: 0 }}>Lifecycle</h3>
-        <p className="muted" style={{ margin: 0 }}>
-          Same as the operating verbs above — prepare → deliver → close-out.
-          Current: <strong>{statusLabel(event.lifecyclePhase ?? 'PREPARE')}</strong>
-        </p>
-        <div className="row">
-          {(['PREPARE', 'DELIVER', 'CLOSE'] as const).map((phase) => (
-            <button
-              key={phase}
-              type="button"
-              className={`btn ${
-                (event.lifecyclePhase ?? 'PREPARE') === phase ? '' : 'ghost'
-              }`}
-              disabled={!canManage}
-              onClick={() => void doSetPhase(phase)}
-            >
-              {statusLabel(phase)}
-            </button>
-          ))}
+      {showOps && (
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Lifecycle</h3>
+          <p className="muted" style={{ margin: 0 }}>
+            Same as the operating verbs above — prepare → deliver → close-out.
+            Current:{' '}
+            <strong>{statusLabel(event.lifecyclePhase ?? 'PREPARE')}</strong>
+          </p>
+          <div className="row">
+            {(['PREPARE', 'DELIVER', 'CLOSE'] as const).map((phase) => (
+              <button
+                key={phase}
+                type="button"
+                className={`btn ${
+                  (event.lifecyclePhase ?? 'PREPARE') === phase ? '' : 'ghost'
+                }`}
+                onClick={() => void doSetPhase(phase)}
+              >
+                {statusLabel(phase)}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      )}
 
-      <div className="panel stack">
-        <h3 style={{ margin: 0 }}>Collaborators</h3>
-        <p className="muted" style={{ margin: 0 }}>
-          Peer systems and people helping run this event (like projects).
-        </p>
-        <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
-          {(event.collaboratorSystemIds ?? []).map((sid) => (
-            <span key={sid} className="badge">
-              {systemsService.getById(sid)?.shortName ?? sid}
-            </span>
-          ))}
-          {(event.collaboratorPersonIds ?? []).map((pid) => (
-            <span key={pid} className="badge">
-              {personName(pid)}
-            </span>
-          ))}
-          {!event.collaboratorSystemIds?.length &&
-            !event.collaboratorPersonIds?.length && (
-              <span className="muted">None yet</span>
-            )}
-        </div>
-        {canManage && (
+      {showOps && (
+        <div className="panel stack">
+          <h3 style={{ margin: 0 }}>Collaborators</h3>
+          <p className="muted" style={{ margin: 0 }}>
+            Peer systems and people helping run this event (like projects).
+          </p>
+          <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+            {(event.collaboratorSystemIds ?? []).map((sid) => (
+              <span key={sid} className="badge">
+                {systemsService.getById(sid)?.shortName ?? sid}
+              </span>
+            ))}
+            {(event.collaboratorPersonIds ?? []).map((pid) => (
+              <span key={pid} className="badge">
+                {personName(pid)}
+              </span>
+            ))}
+            {!event.collaboratorSystemIds?.length &&
+              !event.collaboratorPersonIds?.length && (
+                <span className="muted">None yet</span>
+              )}
+          </div>
           <div className="row">
             <select
               value={collabSys}
@@ -444,7 +875,9 @@ export function EventDetailPage() {
                   collabSys as typeof event.ownerSystemId,
                 );
                 setCollabSys('');
-                setMsg(r.ok ? 'Collaborator system added' : (r.reason ?? 'Failed'));
+                setMsg(
+                  r.ok ? 'Collaborator system added' : (r.reason ?? 'Failed'),
+                );
                 refresh();
               }}
             >
@@ -471,33 +904,33 @@ export function EventDetailPage() {
                   collabPerson,
                 );
                 setCollabPerson('');
-                setMsg(r.ok ? 'Collaborator person added' : (r.reason ?? 'Failed'));
+                setMsg(
+                  r.ok ? 'Collaborator person added' : (r.reason ?? 'Failed'),
+                );
                 refresh();
               }}
             >
               Add person
             </button>
           </div>
-        )}
-        {event.programId && (
-          <p className="muted" style={{ marginBottom: 0 }}>
-            Linked program:{' '}
-            <Link to={`/programs/${event.programId}`}>
-              {missionService.getProgram(event.programId)?.name ??
-                event.programId}
-            </Link>
-          </p>
-        )}
-        {event.projectId && (
-          <p className="muted" style={{ marginBottom: 0 }}>
-            Linked project:{' '}
-            <Link to={`/projects/${event.projectId}`}>
-              {missionService.getProject(event.projectId)?.name ??
-                event.projectId}
-            </Link>
-          </p>
-        )}
-        {canManage && (
+          {event.programId && (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              Linked program:{' '}
+              <Link to={`/programs/${event.programId}`}>
+                {missionService.getProgram(event.programId)?.name ??
+                  event.programId}
+              </Link>
+            </p>
+          )}
+          {event.projectId && (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              Linked project:{' '}
+              <Link to={`/projects/${event.projectId}`}>
+                {missionService.getProject(event.projectId)?.name ??
+                  event.projectId}
+              </Link>
+            </p>
+          )}
           <form
             className="row"
             style={{ marginTop: '0.5rem' }}
@@ -534,8 +967,8 @@ export function EventDetailPage() {
               Save project link
             </button>
           </form>
-        )}
-      </div>
+        </div>
+      )}
 
       {event.beyondOwnerScope && (
         <div className="panel" id="approvals">
@@ -565,13 +998,14 @@ export function EventDetailPage() {
                 key: level.levelKey,
                 label: level.label,
                 done,
-                detail: done && approver ? personName(approver.personId) : undefined,
+                detail:
+                  done && approver ? personName(approver.personId) : undefined,
                 action:
                   !done && canHere ? (
                     <button
                       type="button"
                       className="btn"
-                      onClick={() => doApprove(level.levelKey)}
+                      onClick={() => void doApprove(level.levelKey)}
                     >
                       Approve
                     </button>
@@ -591,7 +1025,7 @@ export function EventDetailPage() {
             {waitlisted > 0 ? ` · ${waitlisted} waitlisted` : ''}
           </p>
           {!myReg || myReg.status === 'CANCELLED' ? (
-            <button type="button" className="btn" onClick={doRegister}>
+            <button type="button" className="btn" onClick={() => void doRegister()}>
               Register myself
             </button>
           ) : (
@@ -611,51 +1045,47 @@ export function EventDetailPage() {
               )}
             </div>
           )}
-          {regs.filter((r) => r.status !== 'CANCELLED').length > 0 && (
+          {activePeople.length > 0 && (
             <table className="table" style={{ marginTop: '0.75rem' }}>
               <thead>
                 <tr>
                   <th>Person</th>
                   <th>Status</th>
                   <th>Offer</th>
-                  {canManage && <th />}
+                  {showOps && <th />}
                 </tr>
               </thead>
               <tbody>
-                {regs
-                  .filter((r) => r.status !== 'CANCELLED')
-                  .map((r) => (
-                    <tr key={r.id}>
-                      <td>{personName(r.personId)}</td>
+                {activePeople.map((r) => (
+                  <tr key={r.id}>
+                    <td>{personName(r.personId)}</td>
+                    <td>
+                      <StatusPill status={r.status} />
+                    </td>
+                    <td className="muted">{offerWindowLabel(r) ?? '—'}</td>
+                    {showOps && (
                       <td>
-                        <StatusPill status={r.status} />
+                        {r.status !== 'ATTENDED' && (
+                          <button
+                            type="button"
+                            className="btn ghost"
+                            onClick={() => void doCancel(r.personId)}
+                          >
+                            Cancel
+                          </button>
+                        )}
                       </td>
-                      <td className="muted">
-                        {offerWindowLabel(r) ?? '—'}
-                      </td>
-                      {canManage && (
-                        <td>
-                          {r.status !== 'ATTENDED' && (
-                            <button
-                              type="button"
-                              className="btn ghost"
-                              onClick={() => void doCancel(r.personId)}
-                            >
-                              Cancel
-                            </button>
-                          )}
-                        </td>
-                      )}
-                    </tr>
-                  ))}
+                    )}
+                  </tr>
+                ))}
               </tbody>
             </table>
           )}
         </div>
       )}
 
-      {regMode === 'REGISTRATION_REQUIRED' &&
-        canManage &&
+      {showOps &&
+        regMode === 'REGISTRATION_REQUIRED' &&
         (event.status === 'CONFIRMED' ||
           event.lifecyclePhase === 'DELIVER' ||
           event.status === 'COMPLETED') && (
@@ -713,21 +1143,28 @@ export function EventDetailPage() {
           </div>
         )}
 
-      {canManage &&
-        (event.status === 'CONFIRMED' || opState === 'LIVE' || opState === 'CLOSING') && (
-        <div className="panel">
-          <h3>Complete event</h3>
-          <p className="muted" style={{ marginTop: 0 }}>
-            Remaining REGISTERED seats become NO_SHOW. Then use follow-up enroll.
-          </p>
-          <button type="button" className="btn" onClick={() => void doComplete()}>
-            Mark completed
-          </button>
-        </div>
-      )}
+      {showOps &&
+        (event.status === 'CONFIRMED' ||
+          opState === 'LIVE' ||
+          opState === 'CLOSING') && (
+          <div className="panel">
+            <h3>Complete event</h3>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Remaining REGISTERED seats become NO_SHOW. Then use follow-up
+              enroll.
+            </p>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => void doComplete()}
+            >
+              Mark completed
+            </button>
+          </div>
+        )}
 
       {(event.status === 'COMPLETED' ||
-        (canManage && event.lifecyclePhase === 'CLOSE')) && (
+        (showOps && event.lifecyclePhase === 'CLOSE')) && (
         <div className="panel">
           <h3>
             {event.status === 'COMPLETED'
@@ -746,7 +1183,10 @@ export function EventDetailPage() {
                 checked={enrollProgram}
                 onChange={(e) => setEnrollProgram(e.target.checked)}
               />
-              Enroll in Baptism class ({activePrograms.find((p) => p.id === 'prg-baptism-standing')?.name ?? 'standing'})
+              Enroll in Baptism class (
+              {activePrograms.find((p) => p.id === 'prg-baptism-standing')
+                ?.name ?? 'standing'}
+              )
             </label>
           )}
           <div className="row">
@@ -773,7 +1213,10 @@ export function EventDetailPage() {
             </button>
           </div>
           {event.status !== 'COMPLETED' && (
-            <p className="muted" style={{ marginBottom: 0, fontSize: '0.85rem' }}>
+            <p
+              className="muted"
+              style={{ marginBottom: 0, fontSize: '0.85rem' }}
+            >
               Complete the event to unlock next-steps writes.
             </p>
           )}
