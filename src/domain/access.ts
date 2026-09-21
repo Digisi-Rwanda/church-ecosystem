@@ -34,6 +34,13 @@ export function getEffectiveScope(roles: SystemRole[]): AccessScope {
   return 'LIMITED';
 }
 
+const PASTORAL_360 = [
+  'employment',
+  'education',
+  'talents',
+  'gifts',
+] as const;
+
 export function allowedProfileSections(scope: AccessScope): string[] {
   const common = ['overview', 'personal', 'contact', 'account'];
   if (scope === 'FULL') {
@@ -47,31 +54,23 @@ export function allowedProfileSections(scope: AccessScope): string[] {
       'marriage',
       'certificates',
       'documents',
-      'ministries',
       'teams',
-      'service',
       'history',
-      'timeline',
+      ...PASTORAL_360,
       'account',
     ];
   }
-  if (scope === 'CHOIR') {
-    return [...common, 'teams', 'ministries', 'service'];
-  }
-  if (scope === 'WORSHIP') {
-    return [...common, 'teams', 'ministries', 'service'];
-  }
-  if (scope === 'YOUTH') {
-    return [...common, 'ministries', 'teams', 'service'];
+  if (scope === 'CHOIR' || scope === 'WORSHIP' || scope === 'YOUTH') {
+    return [...common, 'teams'];
   }
   if (scope === 'PROTOCOL') {
-    return [...common, 'teams', 'service'];
+    return [...common, 'teams'];
   }
   if (scope === 'DEACON') {
-    return [...common, 'teams', 'ministries', 'service', 'family'];
+    return [...common, 'teams', 'family'];
   }
   if (scope === 'FINANCE') {
-    return [...common, 'membership', 'ministries'];
+    return [...common, 'membership'];
   }
   return common;
 }
@@ -88,11 +87,9 @@ export function allowedOwnProfileSections(): string[] {
     'marriage',
     'certificates',
     'documents',
-    'ministries',
     'teams',
-    'service',
     'history',
-    'timeline',
+    ...PASTORAL_360,
     'account',
   ];
 }
