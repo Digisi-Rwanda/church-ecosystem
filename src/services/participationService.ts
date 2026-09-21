@@ -5,6 +5,7 @@ import {
   SYSTEMS,
   TASKS,
 } from '../data/seed';
+import { persistPeopleLocalStore } from '../data/peopleLocalStore';
 import {
   isAssignmentActive,
   isMembershipActive,
@@ -165,6 +166,7 @@ export const participationService = {
       startDate: input.startDate ?? new Date().toISOString().slice(0, 10),
     };
     MEMBERSHIPS.unshift(m);
+    persistPeopleLocalStore();
     return m;
   },
 
@@ -176,6 +178,7 @@ export const participationService = {
       status: 'ENDED',
       endDate: new Date().toISOString().slice(0, 10),
     };
+    persistPeopleLocalStore();
     return MEMBERSHIPS[i];
   },
 
@@ -185,6 +188,7 @@ export const participationService = {
     orgUnitId: string;
     systemRole?: Position['systemRole'];
     ministryOffice?: Position['ministryOffice'];
+    systemAdmin?: boolean;
     grantsAllSystems?: boolean;
     systemId?: SystemId;
     startDate?: string;
@@ -196,12 +200,14 @@ export const participationService = {
       orgUnitId: input.orgUnitId,
       systemRole: input.systemRole,
       ministryOffice: input.ministryOffice,
+      systemAdmin: input.systemAdmin,
       grantsAllSystems: input.grantsAllSystems,
       systemId: input.systemId,
       status: 'ACTIVE',
       startDate: input.startDate ?? new Date().toISOString().slice(0, 10),
     };
     POSITIONS.unshift(p);
+    persistPeopleLocalStore();
     return p;
   },
 
@@ -213,6 +219,7 @@ export const participationService = {
       status: 'ENDED',
       endDate: new Date().toISOString().slice(0, 10),
     };
+    persistPeopleLocalStore();
     return POSITIONS[i];
   },
 
@@ -241,6 +248,7 @@ export const participationService = {
       endDate: input.endDate,
     };
     ASSIGNMENTS.unshift(a);
+    persistPeopleLocalStore();
     return a;
   },
 
@@ -252,6 +260,7 @@ export const participationService = {
       status: 'COMPLETED',
       endDate: new Date().toISOString().slice(0, 10),
     };
+    persistPeopleLocalStore();
     return ASSIGNMENTS[i];
   },
 };
