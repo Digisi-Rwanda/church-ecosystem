@@ -23,11 +23,29 @@ import type {
   PersonPathway,
   PersonPathwayKind,
   PersonPathwayStatus,
+  PulpitServiceKind,
   PulpitSlot,
   SystemRole,
   TransferLetterOut,
 } from '../domain/types';
+import { MUSIC_SERVICE_LABELS } from '../domain/musicSchedule';
 import { rolesFromPositions } from '../domain/participation';
+import { correspondenceService } from './correspondenceService';
+
+/** Sanctuary services used for pulpit planning (same set as Protocol / Music). */
+export const PULPIT_SERVICE_KINDS: readonly PulpitServiceKind[] = [
+  'SS1',
+  'SS2',
+  'TUESDAY',
+  'IGABURO',
+];
+
+export const PULPIT_SERVICE_LABELS: Record<PulpitServiceKind, string> = {
+  SS1: MUSIC_SERVICE_LABELS.SS1,
+  SS2: MUSIC_SERVICE_LABELS.SS2,
+  TUESDAY: MUSIC_SERVICE_LABELS.TUESDAY,
+  IGABURO: MUSIC_SERVICE_LABELS.IGABURO,
+};
 
 function nid(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 5)}`;
@@ -207,6 +225,30 @@ export const pastoralOpsService = {
     draftedByPersonId: string;
     note?: string;
   }): TransferLetterOut {
+    const opened = correspondenceService.openLetter({
+      letterType: 'TRANSFER_OUT',
+      personId: input.personId,
+      actorPersonId: input.draftedByPersonId,
+      origin: 'CHURCH_GENERATED',
+      purpose: input.note,
+      destinationChurch: input.destinationChurch,
+      note: input.note,
+      useTemplate: true,
+    });
+    if (opened.ok && opened.document.transferLetterId) {
+      const linked = TRANSFER_LETTERS_OUT.find(
+        (x) => x.id === opened.document.transferLetterId,
+      );
+      if (linked) {
+        correspondenceService.submitForSignature(opened.document.id);
+        return (
+          TRANSFER_LETTERS_OUT.find(
+            (x) => x.id === opened.document.transferLetterId,
+          ) ?? linked
+        );
+      }
+    }
+    // Fallback if correspondence open failed
     const l: TransferLetterOut = {
       id: nid('tlo'),
       personId: input.personId,
@@ -229,6 +271,10 @@ export const pastoralOpsService = {
     }
     const l = TRANSFER_LETTERS_OUT.find((x) => x.id === id);
     if (!l) return { ok: false, reason: 'Letter not found' };
+    if (l.documentId) {
+      const r = correspondenceService.sign(l.documentId, actorPersonId);
+      return { ok: r.ok, reason: r.reason };
+    }
     updateTransferLetter(id, {
       status: 'SIGNED',
       signedByPersonId: actorPersonId,
@@ -245,26 +291,68 @@ export const pastoralOpsService = {
 
   preparePulpit(input: {
     serviceDate: string;
-    serviceLabel: string;
-    preacherPersonId: string;
+    /** One or more sanctuary services (e.g. SS1 + SS2 same preacher). */
+    serviceKinds: PulpitServiceKind[];
+    preacherPersonId?: string;
     preparedByPersonId: string;
     isGuest?: boolean;
     guestName?: string;
+    guestFrom?: string;
+    guestPhone?: string;
     notes?: string;
-  }): PulpitSlot {
-    const s: PulpitSlot = {
-      id: nid('pulpit'),
-      serviceDate: input.serviceDate,
-      serviceLabel: input.serviceLabel,
-      preacherPersonId: input.preacherPersonId,
-      preparedByPersonId: input.preparedByPersonId,
-      isGuest: input.isGuest,
-      guestName: input.guestName,
-      notes: input.notes,
-      status: 'CATECHIST_REVIEW',
-    };
-    pushPulpit(s);
-    return s;
+  }):
+    | { ok: true; slots: PulpitSlot[] }
+    | { ok: false; reason: string } {
+    const kinds = [...new Set(input.serviceKinds)].filter((k) =>
+      (PULPIT_SERVICE_KINDS as readonly string[]).includes(k),
+    );
+    if (kinds.length === 0) {
+      return {
+        ok: false,
+        reason: 'Select at least one service (SS1, SS2, Tuesday, or Igaburo)',
+      };
+    }
+    const isGuest = Boolean(input.isGuest);
+    if (isGuest) {
+      if (!input.guestName?.trim()) {
+        return {
+          ok: false,
+          reason: 'Guest name is required for an outside preacher',
+        };
+      }
+      if (!input.guestPhone?.trim()) {
+        return {
+          ok: false,
+          reason: 'Guest phone is required so the guest can be contacted',
+        };
+      }
+    } else if (!input.preacherPersonId) {
+      return {
+        ok: false,
+        reason: 'Select a church preacher, or switch to Outside guest',
+      };
+    }
+
+    const slots: PulpitSlot[] = [];
+    for (const kind of kinds) {
+      const s: PulpitSlot = {
+        id: nid('pulpit'),
+        serviceDate: input.serviceDate,
+        serviceKind: kind,
+        serviceLabel: PULPIT_SERVICE_LABELS[kind],
+        preacherPersonId: isGuest ? undefined : input.preacherPersonId,
+        preparedByPersonId: input.preparedByPersonId,
+        isGuest,
+        guestName: isGuest ? input.guestName!.trim() : undefined,
+        guestFrom: isGuest ? input.guestFrom?.trim() || undefined : undefined,
+        guestPhone: isGuest ? input.guestPhone!.trim() : undefined,
+        notes: input.notes,
+        status: 'CATECHIST_REVIEW',
+      };
+      pushPulpit(s);
+      slots.push(s);
+    }
+    return { ok: true, slots };
   },
 
   catechistReviewPulpit(
