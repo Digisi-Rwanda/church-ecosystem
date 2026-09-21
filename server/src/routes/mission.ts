@@ -109,6 +109,8 @@ const programCreateSchema = z.object({
     .optional(),
   programType: z.string().optional(),
   scheduleHint: z.string().optional(),
+  parentProgramId: z.string().optional(),
+  cohortLabel: z.string().optional(),
 });
 
 missionRouter.post('/programs', requireAuth, async (req: AuthedRequest, res) => {
@@ -136,6 +138,8 @@ missionRouter.post('/programs', requireAuth, async (req: AuthedRequest, res) => 
       status: parsed.data.status ?? 'DRAFT',
       programType: parsed.data.programType,
       scheduleHint: parsed.data.scheduleHint,
+      parentProgramId: parsed.data.parentProgramId,
+      cohortLabel: parsed.data.cohortLabel,
       createdByPersonId: req.auth!.personId,
     },
   });
