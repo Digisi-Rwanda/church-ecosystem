@@ -2,10 +2,12 @@ import { useMemo, useState, type FormEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
 import { isChurchLeader, isCatechist, isOrdainedPastor } from '../domain/churchLeadership';
-import { pastoralOpsService } from '../services/pastoralOpsService';
+import { pastoralOpsService, PULPIT_SERVICE_KINDS, PULPIT_SERVICE_LABELS } from '../services/pastoralOpsService';
 import { peopleService } from '../services';
+import type { PulpitServiceKind } from '../domain/types';
 
-function nameOf(id: string) {
+function nameOf(id: string | undefined) {
+  if (!id) return '—';
   return (
     peopleService.getById(id)?.preferredName ||
     peopleService.getById(id)?.fullName ||
@@ -221,7 +223,8 @@ export function PastoralDeskPage() {
       <div className="panel stack">
         <h2 style={{ margin: 0 }}>Transfer letters out</h2>
         <p className="muted" style={{ margin: 0 }}>
-          Church Leader only signs.
+          Church Leader only signs. Full letter file lives under{' '}
+          <Link to="/correspondence">Correspondence</Link>.
         </p>
         <table className="table">
           <thead>
@@ -239,22 +242,20 @@ export function PastoralDeskPage() {
                 <td>{l.destinationChurch}</td>
                 <td>{l.status}</td>
                 <td>
-                  {leader && l.status === 'AWAITING_LEADER' ? (
-                    <button
-                      type="button"
-                      className="btn"
-                      onClick={() => {
-                        const r = pastoralOpsService.signTransferOut(
-                          l.id,
-                          account.personId,
-                        );
-                        setMsg(r.ok ? 'Letter signed' : r.reason ?? 'Failed');
-                        refresh();
-                      }}
-                    >
-                      Sign
-                    </button>
-                  ) : null}
+                  <div className="row" style={{ gap: '0.35rem' }}>
+                    {l.documentId ? (
+                      <Link
+                        className="btn sm"
+                        to={`/correspondence/${l.documentId}`}
+                      >
+                        {leader && l.status === 'AWAITING_LEADER'
+                          ? 'View'
+                          : 'Letter'}
+                      </Link>
+                    ) : leader && l.status === 'AWAITING_LEADER' ? (
+                      <span className="muted">No linked letter yet</span>
+                    ) : null}
+                  </div>
                 </td>
               </tr>
             ))}
@@ -281,11 +282,29 @@ export function PastoralDeskPage() {
             {pulpit.map((s) => (
               <tr key={s.id}>
                 <td>{s.serviceDate}</td>
-                <td>{s.serviceLabel}</td>
                 <td>
-                  {s.isGuest && s.guestName
-                    ? s.guestName
-                    : nameOf(s.preacherPersonId)}
+                  {s.serviceKind
+                    ? PULPIT_SERVICE_LABELS[s.serviceKind]
+                    : s.serviceLabel}
+                </td>
+                <td>
+                  {s.isGuest && s.guestName ? (
+                    <span>
+                      {s.guestName}
+                      {s.guestFrom ? ` · ${s.guestFrom}` : ''}{' '}
+                      <span className="muted">(guest)</span>
+                      {s.guestPhone ? (
+                        <>
+                          <br />
+                          <a href={`tel:${s.guestPhone.replace(/\s+/g, '')}`}>
+                            {s.guestPhone}
+                          </a>
+                        </>
+                      ) : null}
+                    </span>
+                  ) : (
+                    nameOf(s.preacherPersonId)
+                  )}
                 </td>
                 <td>{s.status}</td>
                 <td>
@@ -328,9 +347,13 @@ export function PastoralDeskPage() {
         {(catechist || leader) && (
           <PulpitPrepareForm
             actorId={account.personId}
-            onDone={() => {
-              setMsg('Pulpit slot prepared — awaiting catechist review');
-              refresh();
+            onDone={(ok, reason) => {
+              setMsg(
+                ok
+                  ? 'Pulpit slot(s) prepared — awaiting catechist review'
+                  : (reason ?? 'Could not prepare slot'),
+              );
+              if (ok) refresh();
             }}
           />
         )}
@@ -344,56 +367,137 @@ function PulpitPrepareForm({
   onDone,
 }: {
   actorId: string;
-  onDone: () => void;
+  onDone: (ok: boolean, reason?: string) => void;
 }) {
   const [date, setDate] = useState('2026-10-12');
-  const [label, setLabel] = useState('Sunday SS1');
+  const [kinds, setKinds] = useState<PulpitServiceKind[]>(['SS1', 'SS2']);
+  const [mode, setMode] = useState<'church' | 'guest'>('church');
   const [preacherId, setPreacherId] = useState('p-assistant');
+  const [guestName, setGuestName] = useState('');
+  const [guestFrom, setGuestFrom] = useState('');
+  const [guestPhone, setGuestPhone] = useState('');
+  const [error, setError] = useState('');
+
+  function toggleKind(kind: PulpitServiceKind) {
+    setKinds((prev) =>
+      prev.includes(kind) ? prev.filter((k) => k !== kind) : [...prev, kind],
+    );
+  }
 
   function onSubmit(e: FormEvent) {
     e.preventDefault();
-    pastoralOpsService.preparePulpit({
+    setError('');
+    const r = pastoralOpsService.preparePulpit({
       serviceDate: date,
-      serviceLabel: label,
-      preacherPersonId: preacherId,
+      serviceKinds: kinds,
       preparedByPersonId: actorId,
+      ...(mode === 'guest'
+        ? {
+            isGuest: true,
+            guestName: guestName.trim(),
+            guestFrom: guestFrom.trim() || undefined,
+            guestPhone: guestPhone.trim(),
+          }
+        : { preacherPersonId: preacherId }),
     });
-    onDone();
+    if (!r.ok) {
+      setError(r.reason);
+      onDone(false, r.reason);
+      return;
+    }
+    setGuestName('');
+    setGuestFrom('');
+    setGuestPhone('');
+    onDone(true);
   }
 
   return (
     <form className="stack" onSubmit={onSubmit} style={{ marginTop: '0.75rem' }}>
       <h3 style={{ margin: 0 }}>Prepare slot (Evangelism / ops)</h3>
-      <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem' }}>
+      <p className="muted" style={{ margin: 0 }}>
+        Pick the real sanctuary services for that date. Tick both SS1 and SS2
+        when the same preacher covers both. Guest preachers do not need a church
+        account.
+      </p>
+      <div className="row" style={{ flexWrap: 'wrap', gap: '0.5rem', alignItems: 'center' }}>
         <input
           type="date"
           value={date}
           onChange={(e) => setDate(e.target.value)}
           required
-        />
-        <input
-          value={label}
-          onChange={(e) => setLabel(e.target.value)}
-          placeholder="Service label"
-          required
+          aria-label="Service date"
         />
         <select
-          value={preacherId}
-          onChange={(e) => setPreacherId(e.target.value)}
+          value={mode}
+          onChange={(e) => setMode(e.target.value as 'church' | 'guest')}
+          aria-label="Preacher type"
         >
-          {peopleService
-            .list()
-            .slice(0, 12)
-            .map((p) => (
+          <option value="church">Church person</option>
+          <option value="guest">Outside guest</option>
+        </select>
+        {mode === 'church' ? (
+          <select
+            value={preacherId}
+            onChange={(e) => setPreacherId(e.target.value)}
+            aria-label="Church preacher"
+            required
+          >
+            {peopleService.list().map((p) => (
               <option key={p.id} value={p.id}>
                 {p.preferredName || p.fullName}
               </option>
             ))}
-        </select>
+          </select>
+        ) : (
+          <>
+            <input
+              value={guestName}
+              onChange={(e) => setGuestName(e.target.value)}
+              placeholder="Guest full name"
+              required
+              aria-label="Guest name"
+            />
+            <input
+              value={guestFrom}
+              onChange={(e) => setGuestFrom(e.target.value)}
+              placeholder="From (church / district)"
+              aria-label="Guest from"
+            />
+            <input
+              type="tel"
+              value={guestPhone}
+              onChange={(e) => setGuestPhone(e.target.value)}
+              placeholder="Phone number"
+              required
+              aria-label="Guest phone"
+              autoComplete="tel"
+            />
+          </>
+        )}
         <button type="submit" className="btn">
           Submit for review
         </button>
       </div>
+      <fieldset className="pulpit-service-picks">
+        <legend>Services on this date</legend>
+        <div className="row" style={{ flexWrap: 'wrap', gap: '0.65rem' }}>
+          {PULPIT_SERVICE_KINDS.map((kind) => (
+            <label key={kind} className="pulpit-service-check">
+              <input
+                type="checkbox"
+                checked={kinds.includes(kind)}
+                onChange={() => toggleKind(kind)}
+              />
+              <span>{PULPIT_SERVICE_LABELS[kind]}</span>
+            </label>
+          ))}
+        </div>
+      </fieldset>
+      {error ? (
+        <p className="error" role="alert" style={{ margin: 0 }}>
+          {error}
+        </p>
+      ) : null}
     </form>
   );
 }
