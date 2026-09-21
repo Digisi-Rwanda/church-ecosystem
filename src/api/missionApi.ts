@@ -17,6 +17,8 @@ export type ApiProgram = {
   status: string;
   programType?: string | null;
   scheduleHint?: string | null;
+  parentProgramId?: string | null;
+  cohortLabel?: string | null;
   createdByPersonId?: string | null;
 };
 
@@ -94,6 +96,8 @@ export function mapApiProgram(p: ApiProgram): Program {
     status: (p.status as Program['status']) || 'DRAFT',
     programType: (p.programType as Program['programType']) || undefined,
     scheduleHint: p.scheduleHint ?? undefined,
+    parentProgramId: p.parentProgramId ?? undefined,
+    cohortLabel: p.cohortLabel ?? undefined,
     createdByPersonId: p.createdByPersonId ?? undefined,
   };
 }
@@ -220,6 +224,8 @@ export async function apiCreateProgram(input: {
   status?: string;
   programType?: string;
   scheduleHint?: string;
+  parentProgramId?: string;
+  cohortLabel?: string;
 }): Promise<Program> {
   const res = await apiFetch<{ program: ApiProgram }>('/api/mission/programs', {
     method: 'POST',
@@ -233,6 +239,8 @@ export async function apiCreateProgram(input: {
       status: input.status,
       programType: input.programType,
       scheduleHint: input.scheduleHint,
+      parentProgramId: input.parentProgramId,
+      cohortLabel: input.cohortLabel,
     },
   });
   return mapApiProgram(res.program);
