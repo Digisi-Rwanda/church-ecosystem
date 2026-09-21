@@ -1,4 +1,4 @@
-import { useMemo, useState, type ReactNode } from 'react';
+import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   allowedOwnProfileSections,
@@ -11,8 +11,11 @@ import {
   ForbiddenState,
   StatusPill,
 } from '../components/ui/StatusPill';
+import { SelectField, TextField } from '../components/ui/Field';
+import type { CorrespondenceLetterType } from '../domain/types';
 import {
   buildPersonParticipationPlaces,
+  correspondenceService,
   orgService,
   participationService,
   peopleService,
@@ -28,12 +31,13 @@ const SECTION_LABELS: Record<string, string> = {
   baptism: 'Baptism',
   marriage: 'Marriage',
   certificates: 'Certificates',
-  documents: 'Documents',
-  ministries: 'Ministries',
+  documents: 'Documents & Letters',
   teams: 'Teams / service',
-  service: 'Service history',
   history: 'History',
-  timeline: 'Timeline',
+  employment: 'Employment info',
+  education: 'Education info',
+  talents: 'Talents and skills',
+  gifts: 'Spiritual gifts',
   account: 'Account',
 };
 
@@ -56,6 +60,7 @@ export function PersonProfilePage() {
   const { id } = useParams();
   const {
     account,
+    can,
     canManagePeople,
     canViewFullRecord,
     canViewPeople,
@@ -63,6 +68,12 @@ export function PersonProfilePage() {
   } = useAuth();
   const person = id ? peopleService.getById(id) : null;
   const [section, setSection] = useState('overview');
+  const [letterMsg, setLetterMsg] = useState('');
+  const [reqType, setReqType] =
+    useState<CorrespondenceLetterType>('MEMBERSHIP_CONFIRMATION');
+  const [reqPurpose, setReqPurpose] = useState('');
+  const [reqDest, setReqDest] = useState('');
+  const [, setDocTick] = useState(0);
   const isSelf = Boolean(account && person && account.personId === person.id);
 
   const memberships = person
@@ -144,8 +155,33 @@ export function PersonProfilePage() {
   const timeline = peopleService.timeline(person.id);
   const documents = peopleService.documents(person.id);
   const certificates = peopleService.certificates(person.id);
+  const employment = peopleService.employment(person.id);
+  const education = peopleService.education(person.id);
+  const talents = peopleService.talents(person.id);
+  const spiritualGifts = peopleService.spiritualGifts(person.id);
+  const letters = correspondenceService.listDocuments({ personId: person.id });
   /** Own profile or pastoral FULL — show 360 fields (not pastoral-only notes). */
   const seeFullFields = canViewFullRecord || isSelf;
+
+  function submitMemberLetterRequest(e: FormEvent) {
+    e.preventDefault();
+    if (!account || !person) return;
+    const r = correspondenceService.memberRequestLetter({
+      letterType: reqType,
+      personId: person.id,
+      purpose: reqPurpose.trim() || undefined,
+      destinationChurch:
+        reqType === 'TRANSFER_OUT' ? reqDest.trim() : undefined,
+    });
+    if (!r.ok) {
+      setLetterMsg(r.reason);
+      return;
+    }
+    setLetterMsg('Request submitted — church office will prepare the letter.');
+    setReqPurpose('');
+    setReqDest('');
+    setDocTick((t) => t + 1);
+  }
 
   let body: ReactNode = null;
 
@@ -413,28 +449,184 @@ export function PersonProfilePage() {
     );
   } else if (activeSection === 'documents') {
     body = (
-      <SectionPanel title="Documents">
-        {!seeFullFields ? (
-          <ForbiddenState resource="PERSON" action="VIEW_FULL" />
-        ) : documents.length === 0 ? (
-          <EmptyState title="None on file" />
-        ) : (
-          <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-            {documents.map((d) => (
-              <li key={d.id}>
-                [{d.kind}] {d.label}
-                {d.issuedOn ? ` · ${d.issuedOn}` : ''}
-              </li>
-            ))}
-          </ul>
-        )}
-      </SectionPanel>
+      <div className="stack">
+        <SectionPanel title="Documents & Letters">
+          {!seeFullFields ? (
+            <ForbiddenState resource="PERSON" action="VIEW_FULL" />
+          ) : (
+            <>
+              <div className="row" style={{ justifyContent: 'space-between' }}>
+                <p className="muted" style={{ margin: 0 }}>
+                  Official letters on the correspondence engine, plus archived
+                  meta (certificates, ID copies).
+                </p>
+                {canManagePeople || can('CORRESPONDENCE', 'CREATE') ? (
+                  <Link className="btn sm" to="/correspondence">
+                    New letter
+                  </Link>
+                ) : null}
+              </div>
+              {letterMsg ? (
+                <p className="muted" style={{ margin: '0.5rem 0 0' }}>
+                  {letterMsg}
+                </p>
+              ) : null}
+              {letters.length === 0 ? (
+                <EmptyState title="No official letters yet" />
+              ) : (
+                <div className="stack" style={{ marginTop: '0.75rem' }}>
+                  {letters.map((d) => (
+                    <div
+                      key={d.id}
+                      className={
+                        d.status === 'NEEDS_INFORMATION'
+                          ? 'panel stack letter-info-needed'
+                          : 'panel stack'
+                      }
+                    >
+                      <div
+                        className="row"
+                        style={{
+                          justifyContent: 'space-between',
+                          gap: '0.75rem',
+                          flexWrap: 'wrap',
+                        }}
+                      >
+                        <div>
+                          <strong>
+                            {
+                              correspondenceService.LETTER_TYPE_LABELS[
+                                d.letterType
+                              ]
+                            }
+                          </strong>
+                          {d.destinationChurch
+                            ? ` · ${d.destinationChurch}`
+                            : ''}
+                          {d.origin === 'MEMBER_REQUESTED'
+                            ? ' · (your request)'
+                            : ''}
+                          <div className="muted" style={{ marginTop: '0.2rem' }}>
+                            {d.status}
+                            {d.referenceNumber
+                              ? ` · Ref ${d.referenceNumber}`
+                              : ''}
+                            {d.purpose ? ` · ${d.purpose}` : ''}
+                          </div>
+                        </div>
+                        <Link
+                          className={
+                            d.status === 'NEEDS_INFORMATION'
+                              ? 'btn sm'
+                              : 'btn ghost sm'
+                          }
+                          to={`/correspondence/${d.id}`}
+                        >
+                          {d.status === 'NEEDS_INFORMATION'
+                            ? isSelf
+                              ? 'See what is needed & reply'
+                              : 'Open · needs info'
+                            : 'Open'}
+                        </Link>
+                      </div>
+                      {d.status === 'NEEDS_INFORMATION' ? (
+                        <div>
+                          <p
+                            style={{
+                              margin: '0 0 0.35rem',
+                              fontWeight: 600,
+                            }}
+                          >
+                            {isSelf
+                              ? 'What the office asked you to provide:'
+                              : 'Information requested:'}
+                          </p>
+                          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
+                            {d.infoRequestNote?.trim() ||
+                              'No details recorded — open the letter or ask the secretary.'}
+                          </p>
+                        </div>
+                      ) : null}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </>
+          )}
+        </SectionPanel>
+        {isSelf && seeFullFields ? (
+          <SectionPanel title="Request a letter">
+            <p className="muted" style={{ marginTop: 0 }}>
+              Ask the church office for a transfer, membership confirmation, or
+              recommendation. You will collect it after the Leader signs.
+            </p>
+            <form className="stack" onSubmit={submitMemberLetterRequest}>
+              <SelectField
+                label="Letter type"
+                value={reqType}
+                onChange={(e) =>
+                  setReqType(e.target.value as CorrespondenceLetterType)
+                }
+              >
+                <option value="MEMBERSHIP_CONFIRMATION">
+                  Membership confirmation
+                </option>
+                <option value="RECOMMENDATION">Recommendation</option>
+                <option value="TRANSFER_OUT">Transfer out</option>
+              </SelectField>
+              {reqType === 'TRANSFER_OUT' ? (
+                <TextField
+                  label="Destination church"
+                  value={reqDest}
+                  onChange={(e) => setReqDest(e.target.value)}
+                  required
+                />
+              ) : null}
+              <TextField
+                label="Purpose / note"
+                value={reqPurpose}
+                onChange={(e) => setReqPurpose(e.target.value)}
+                placeholder="Why do you need this letter?"
+              />
+              <button type="submit" className="btn">
+                Submit request
+              </button>
+            </form>
+          </SectionPanel>
+        ) : null}
+        {seeFullFields ? (
+          <SectionPanel title="On file (meta)">
+            {documents.length === 0 ? (
+              <EmptyState title="None on file" />
+            ) : (
+              <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
+                {documents.map((d) => (
+                  <li key={d.id}>
+                    [{d.kind}] {d.label}
+                    {d.issuedOn ? ` · ${d.issuedOn}` : ''}
+                    {d.fileDataUrl ? (
+                      <>
+                        {' · '}
+                        <a
+                          href={d.fileDataUrl}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          View{d.fileName ? ` ${d.fileName}` : ' file'}
+                        </a>
+                      </>
+                    ) : (
+                      ' · no file uploaded'
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </SectionPanel>
+        ) : null}
+      </div>
     );
-  } else if (
-    activeSection === 'ministries' ||
-    activeSection === 'teams' ||
-    activeSection === 'service'
-  ) {
+  } else if (activeSection === 'teams') {
     body = (
       <div className="stack">
         <SectionPanel title="Where they participate">
@@ -499,22 +691,17 @@ export function PersonProfilePage() {
         </div>
       </div>
     );
-  } else if (
-    activeSection === 'timeline' ||
-    activeSection === 'history'
-  ) {
+  } else if (activeSection === 'history') {
     body = (
-      <SectionPanel
-        title={activeSection === 'timeline' ? 'Timeline' : 'History'}
-      >
+      <SectionPanel title="History">
         {!seeFullFields ? (
           <ForbiddenState
             resource="PERSON"
             action="VIEW_FULL"
-            detail="Full timeline requires Pastor, Assistant Pastor, or Secretary."
+            detail="Full history requires Pastor, Assistant Pastor, or Secretary."
           />
         ) : timeline.length === 0 ? (
-          <EmptyState title="No timeline events" />
+          <EmptyState title="No history events" />
         ) : (
           <ul className="timeline-list">
             {timeline.map((e) => (
@@ -525,6 +712,95 @@ export function PersonProfilePage() {
                   <strong>{e.title}</strong>
                   {e.detail && <div className="muted">{e.detail}</div>}
                 </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionPanel>
+    );
+  } else if (activeSection === 'employment') {
+    body = (
+      <SectionPanel title="Employment info">
+        {employment.length === 0 ? (
+          <EmptyState title="No employment on file" />
+        ) : (
+          <ul className="rail-list">
+            {employment.map((job) => (
+              <li key={job.id}>
+                <strong>{job.title ?? 'Role'}</strong>
+                {job.employer ? ` · ${job.employer}` : ''}
+                <div className="muted">
+                  {job.status}
+                  {job.sector ? ` · ${job.sector}` : ''}
+                  {job.startedOn ? ` · from ${job.startedOn}` : ''}
+                  {job.endedOn ? ` → ${job.endedOn}` : ''}
+                </div>
+                {job.notes ? <div className="muted">{job.notes}</div> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionPanel>
+    );
+  } else if (activeSection === 'education') {
+    body = (
+      <SectionPanel title="Education info">
+        {education.length === 0 ? (
+          <EmptyState title="No education on file" />
+        ) : (
+          <ul className="rail-list">
+            {education.map((ed) => (
+              <li key={ed.id}>
+                <strong>{ed.institution}</strong>
+                {ed.level ? ` · ${ed.level}` : ''}
+                {ed.field ? ` · ${ed.field}` : ''}
+                <div className="muted">
+                  {ed.status}
+                  {ed.startedOn ? ` · from ${ed.startedOn}` : ''}
+                  {ed.endedOn ? ` → ${ed.endedOn}` : ''}
+                </div>
+                {ed.notes ? <div className="muted">{ed.notes}</div> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionPanel>
+    );
+  } else if (activeSection === 'talents') {
+    body = (
+      <SectionPanel title="Talents and skills">
+        {talents.length === 0 ? (
+          <EmptyState title="No talents or skills on file" />
+        ) : (
+          <ul className="rail-list">
+            {talents.map((t) => (
+              <li key={t.id}>
+                <StatusPill tone="neutral">{t.kind}</StatusPill>{' '}
+                <strong>{t.name}</strong>
+                {t.proficiency ? (
+                  <span className="muted"> · {t.proficiency}</span>
+                ) : null}
+                {t.notes ? <div className="muted">{t.notes}</div> : null}
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionPanel>
+    );
+  } else if (activeSection === 'gifts') {
+    body = (
+      <SectionPanel title="Spiritual gifts">
+        {spiritualGifts.length === 0 ? (
+          <EmptyState title="No spiritual gifts on file" />
+        ) : (
+          <ul className="rail-list">
+            {spiritualGifts.map((g) => (
+              <li key={g.id}>
+                <strong>{g.gift}</strong>
+                {g.evidence ? (
+                  <div className="muted">{g.evidence}</div>
+                ) : null}
+                {g.notes ? <div className="muted">{g.notes}</div> : null}
               </li>
             ))}
           </ul>
