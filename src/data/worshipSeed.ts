@@ -309,35 +309,7 @@ export const WORSHIP_PAYMENT_METHODS: WorshipPaymentMethodConfig[] = [
   },
 ];
 
-export let WORSHIP_CONTRIBUTIONS: WorshipContribution[] = [
-  {
-    id: 'ccon-seed-1',
-    personId: 'p-member',
-    teamId: 'cteam-alpha',
-    typeId: 'cct-monthly',
-    amount: 5_000,
-    paymentMethod: 'MOMO',
-    occurredOn: '2026-09-01',
-    status: 'PENDING',
-    submittedAt: '2026-09-01T10:00:00.000Z',
-    note: 'September monthly',
-  },
-  {
-    id: 'ccon-seed-2',
-    personId: 'p-worship-pres',
-    teamId: 'cteam-beta',
-    typeId: 'cct-monthly',
-    amount: 5_000,
-    confirmedAmount: 5_000,
-    paymentMethod: 'CASH',
-    occurredOn: '2026-08-28',
-    status: 'CONFIRMED',
-    submittedAt: '2026-08-28T09:00:00.000Z',
-    verifiedAt: '2026-08-29T11:00:00.000Z',
-    verifiedByPersonId: 'p-worship-treas',
-    financeTxnId: 'txn-worship-contrib-seed',
-  },
-];
+export let WORSHIP_CONTRIBUTIONS: WorshipContribution[] = [];
 
 export let WORSHIP_FOLLOW_UPS: WorshipFollowUp[] = [];
 
@@ -364,21 +336,7 @@ export function updateWorshipFollowUp(id: string, patch: Partial<WorshipFollowUp
   );
 }
 
-export let WORSHIP_DONATIONS: WorshipDonation[] = [
-  {
-    id: 'cdon-1',
-    donorName: 'Anonymous friend',
-    source: 'Community',
-    donationType: 'General gift',
-    amount: 50_000,
-    occurredOn: '2026-09-02',
-    paymentMethod: 'BANK',
-    evidenceNote: 'Bank slip #441',
-    recordedByPersonId: 'p-worship-treas',
-    recordedAt: '2026-09-02T14:00:00.000Z',
-    financeTxnId: 'txn-worship-don-1',
-  },
-];
+export let WORSHIP_DONATIONS: WorshipDonation[] = [];
 
 export const WORSHIP_SPONSORS: WorshipSponsor[] = [
   {
@@ -420,17 +378,7 @@ export const WORSHIP_CAMPAIGNS: WorshipFundraisingCampaign[] = [
   },
 ];
 
-export let WORSHIP_CAMPAIGN_GIFTS: WorshipCampaignGift[] = [
-  {
-    id: 'cgift-1',
-    campaignId: 'ccamp-uniforms',
-    contributorName: 'Family Alpha pool',
-    amount: 75_000,
-    occurredOn: '2026-08-15',
-    paymentMethod: 'CASH',
-    recordedByPersonId: 'p-worship-treas',
-  },
-];
+export let WORSHIP_CAMPAIGN_GIFTS: WorshipCampaignGift[] = [];
 
 export const WORSHIP_BUDGETS: WorshipBudget[] = [
   {
@@ -473,73 +421,13 @@ export const WORSHIP_BUDGET_LINES: WorshipBudgetLine[] = [
   },
 ];
 
-export let WORSHIP_INCOME: WorshipIncomeRecord[] = [
-  {
-    id: 'cinc-1',
-    category: 'Workshop fees',
-    amount: 30_000,
-    occurredOn: '2026-08-20',
-    description: 'Vocal clinic registration',
-    recordedByPersonId: 'p-worship-treas',
-    budgetId: 'cbud-2026',
-    financeTxnId: 'txn-worship-inc-1',
-  },
-];
+export let WORSHIP_INCOME: WorshipIncomeRecord[] = [];
 
-export let WORSHIP_EXPENSES: WorshipExpenseRecord[] = [
-  {
-    id: 'cexp-1',
-    category: 'Transport',
-    amount: 25_000,
-    occurredOn: '2026-09-01',
-    description: 'Bus for retreat',
-    status: 'PENDING',
-    recordedByPersonId: 'p-worship-leader',
-  },
-  {
-    id: 'cexp-2',
-    category: 'Sheet music',
-    amount: 45_000,
-    occurredOn: '2026-09-03',
-    description: 'Sheet music purchase',
-    status: 'APPROVED',
-    recordedByPersonId: 'p-worship-treas',
-    approvedByPersonId: 'p-worship-pres',
-    financeTxnId: 'txn-worship-2',
-  },
-];
+export let WORSHIP_EXPENSES: WorshipExpenseRecord[] = [];
 
-export let WORSHIP_ASSETS: WorshipAsset[] = [
-  {
-    id: 'cass-1',
-    name: 'Keyboard Yamaha',
-    category: 'Instrument',
-    value: 450_000,
-    assignedToPersonId: 'p-worship-leader',
-    acquiredOn: '2024-05-01',
-    status: 'ACTIVE',
-    historyNote: 'Assigned to Music Director',
-  },
-  {
-    id: 'cass-2',
-    name: 'Worship robes (set of 40)',
-    category: 'Costume',
-    value: 800_000,
-    acquiredOn: '2023-01-15',
-    status: 'ACTIVE',
-  },
-];
+export let WORSHIP_ASSETS: WorshipAsset[] = [];
 
-export let WORSHIP_LIABILITIES: WorshipLiability[] = [
-  {
-    id: 'cliab-1',
-    name: 'Uniform supplier balance',
-    amount: 120_000,
-    dueDate: '2026-10-31',
-    status: 'OPEN',
-    notes: 'Final installment',
-  },
-];
+export let WORSHIP_LIABILITIES: WorshipLiability[] = [];
 
 export function pushWorshipDonation(d: WorshipDonation) {
   WORSHIP_DONATIONS = [d, ...WORSHIP_DONATIONS];
