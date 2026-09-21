@@ -1,4 +1,5 @@
 import { ORG_UNITS, SYSTEMS } from '../data/seed';
+import { scheduleLocalDomainPersist } from '../data/localDomainStore';
 import type { ChurchSystem, OrgUnit, SystemId } from '../domain/types';
 
 export const systemsService = {
@@ -64,6 +65,7 @@ export const orgService = {
       leaderPersonId: input.leaderPersonId,
     };
     ORG_UNITS.push(unit);
+    scheduleLocalDomainPersist();
     return unit;
   },
 
@@ -71,6 +73,7 @@ export const orgService = {
     const i = ORG_UNITS.findIndex((u) => u.id === id);
     if (i < 0) return null;
     ORG_UNITS[i] = { ...ORG_UNITS[i], ...patch, id };
+    scheduleLocalDomainPersist();
     return ORG_UNITS[i];
   },
 };
