@@ -3,7 +3,7 @@ import { Link, Navigate } from 'react-router-dom';
 import { roleLabel } from '../domain/access';
 import { useAuth } from '../auth/AuthContext';
 import { FilterBar, PageHead } from '../components/ui/FilterBar';
-import { TextField } from '../components/ui/Field';
+import { SelectField, TextField } from '../components/ui/Field';
 import { Icon } from '../components/ui/Icon';
 import { MasterDetail } from '../components/ui/MasterDetail';
 import {
@@ -13,6 +13,7 @@ import {
 } from '../components/ui/StatusPill';
 import { useListSelection } from '../hooks/useListSelection';
 import type { Person } from '../domain/types';
+import type { PeopleSearchFacet, PeopleSearchScope } from '../services';
 import {
   buildPersonParticipationPlaces,
   participationService,
@@ -22,12 +23,80 @@ import { pastoralOpsService } from '../services/pastoralOpsService';
 
 type StatusFilter = 'all' | 'ACTIVE' | 'INACTIVE' | 'VISITOR' | 'pathway';
 
+const SEARCH_SCOPE_OPTIONS: { value: PeopleSearchScope; label: string }[] = [
+  { value: 'all', label: 'All fields' },
+  { value: 'address', label: 'Address' },
+  { value: 'membership', label: 'Membership' },
+  { value: 'baptism', label: 'Baptism' },
+  { value: 'employment', label: 'Employment' },
+  { value: 'education', label: 'Education' },
+  { value: 'service', label: 'Service' },
+  { value: 'talents', label: 'Talents & skills' },
+  { value: 'gifts', label: 'Spiritual gifts' },
+];
+
+function defaultFacetFor(scope: PeopleSearchScope): PeopleSearchFacet {
+  if (scope === 'employment') return 'current';
+  if (scope === 'baptism' || scope === 'address') return 'yes';
+  if (scope === 'all') return 'any';
+  return 'any';
+}
+
+function searchPlaceholder(scope: PeopleSearchScope): string {
+  switch (scope) {
+    case 'employment':
+      return 'Search job title, employer…';
+    case 'education':
+      return 'Search school, field, level…';
+    case 'baptism':
+      return 'Search place, minister…';
+    case 'address':
+      return 'Search street, area…';
+    case 'membership':
+      return 'Search membership type…';
+    case 'service':
+      return 'Search position, team…';
+    case 'talents':
+      return 'Search talent or skill…';
+    case 'gifts':
+      return 'Search spiritual gift…';
+    default:
+      return 'Name, job, school, gift, phone…';
+  }
+}
+
 export function PeoplePage() {
   const { canManagePeople, canViewPeople, account } = useAuth();
   const [q, setQ] = useState('');
+  const [searchScope, setSearchScope] = useState<PeopleSearchScope>('all');
+  const [searchFacet, setSearchFacet] = useState<PeopleSearchFacet>('any');
+  const [searchCategory, setSearchCategory] = useState('');
   const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
 
-  const searched = useMemo(() => peopleService.search(q), [q]);
+  const facetOptions = useMemo(
+    () =>
+      searchScope === 'all'
+        ? []
+        : peopleService.searchFacetOptions(searchScope),
+    [searchScope],
+  );
+  const categoryOptions = useMemo(
+    () =>
+      searchScope === 'all'
+        ? []
+        : peopleService.searchCategoryOptions(searchScope),
+    [searchScope],
+  );
+
+  const searched = useMemo(
+    () =>
+      peopleService.search(q, {
+        scope: searchScope,
+        facet: searchScope === 'all' ? 'any' : searchFacet,
+        category: searchCategory || undefined,
+      }),
+    [q, searchScope, searchFacet, searchCategory],
+  );
   const pathwayPersonIds = useMemo(
     () =>
       new Set(
@@ -109,16 +178,92 @@ export function PeoplePage() {
           }
         />
         <div className="list-toolbar people-toolbar">
-          <div className="people-search">
-            <TextField
-              label="Search"
-              name="search"
-              id="people-search"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Name, phone, or email"
-            />
+          <div className="people-search-row">
+            <div className="people-search">
+              <TextField
+                label="Search"
+                name="search"
+                id="people-search"
+                value={q}
+                onChange={(e) => setQ(e.target.value)}
+                placeholder={searchPlaceholder(searchScope)}
+              />
+            </div>
+            <div className="people-search-scope">
+              <SelectField
+                label="Look in"
+                name="people-search-scope"
+                id="people-search-scope"
+                value={searchScope}
+                onChange={(e) => {
+                  const next = e.target.value as PeopleSearchScope;
+                  setSearchScope(next);
+                  setSearchFacet(defaultFacetFor(next));
+                  setSearchCategory('');
+                }}
+              >
+                {SEARCH_SCOPE_OPTIONS.map((opt) => (
+                  <option key={opt.value} value={opt.value}>
+                    {opt.label}
+                  </option>
+                ))}
+              </SelectField>
+            </div>
+            {facetOptions.length > 0 ? (
+              <div className="people-search-scope">
+                <SelectField
+                  label="Show"
+                  name="people-search-facet"
+                  id="people-search-facet"
+                  value={searchFacet}
+                  onChange={(e) =>
+                    setSearchFacet(e.target.value as PeopleSearchFacet)
+                  }
+                >
+                  {facetOptions.map((opt) => (
+                    <option key={opt.value} value={opt.value}>
+                      {opt.label}
+                    </option>
+                  ))}
+                </SelectField>
+              </div>
+            ) : null}
+            {categoryOptions.length > 0 &&
+            searchFacet !== 'none' &&
+            searchFacet !== 'no' ? (
+              <div className="people-search-scope">
+                <SelectField
+                  label={
+                    searchScope === 'employment'
+                      ? 'Sector'
+                      : searchScope === 'education'
+                        ? 'Level / field'
+                        : searchScope === 'membership'
+                          ? 'Membership type'
+                          : 'Category'
+                  }
+                  name="people-search-category"
+                  id="people-search-category"
+                  value={searchCategory}
+                  onChange={(e) => setSearchCategory(e.target.value)}
+                >
+                  <option value="">All</option>
+                  {categoryOptions.map((opt) => (
+                    <option key={opt} value={opt}>
+                      {opt}
+                    </option>
+                  ))}
+                </SelectField>
+              </div>
+            ) : null}
           </div>
+          {searchScope !== 'all' ? (
+            <p className="muted people-search-hint" style={{ margin: 0 }}>
+              {searchScope === 'employment'
+                ? 'Employment: pick who to show (employed, former, or none), optionally by sector, then search a job title.'
+                : 'Use Show to choose who appears; Search narrows within that group.'}
+            </p>
+          ) : null}
           <FilterBar
             value={statusFilter}
             onChange={(v) => setStatusFilter(v as StatusFilter)}
@@ -135,6 +280,9 @@ export function PeoplePage() {
             ]}
             onClearAll={() => {
               setStatusFilter('all');
+              setSearchScope('all');
+              setSearchFacet('any');
+              setSearchCategory('');
               setQ('');
             }}
           />
@@ -144,24 +292,43 @@ export function PeoplePage() {
       {people.length === 0 ? (
         <div className="list-surface" style={{ padding: '1rem' }}>
           <EmptyState
-            variant={q || statusFilter !== 'all' ? 'no-results' : 'first-use'}
+            variant={
+              q ||
+              statusFilter !== 'all' ||
+              searchScope !== 'all' ||
+              searchCategory
+                ? 'no-results'
+                : 'first-use'
+            }
             title={
-              q || statusFilter !== 'all'
+              q ||
+              statusFilter !== 'all' ||
+              searchScope !== 'all' ||
+              searchCategory
                 ? 'No people match'
                 : 'Directory is empty'
             }
             detail={
-              q || statusFilter !== 'all'
-                ? 'Try another name, or clear filters.'
+              q ||
+              statusFilter !== 'all' ||
+              searchScope !== 'all' ||
+              searchCategory
+                ? 'Try another term, change Show / Sector, or clear search.'
                 : 'Add the first person so ministries know who they serve.'
             }
             action={
-              q || statusFilter !== 'all' ? (
+              q ||
+              statusFilter !== 'all' ||
+              searchScope !== 'all' ||
+              searchCategory ? (
                 <button
                   type="button"
                   className="btn secondary"
                   onClick={() => {
                     setQ('');
+                    setSearchScope('all');
+                    setSearchFacet('any');
+                    setSearchCategory('');
                     setStatusFilter('all');
                   }}
                 >
@@ -191,6 +358,11 @@ export function PeoplePage() {
                     person={p}
                     selected={selectedId === p.id}
                     onSelect={() => setSelectedId(p.id)}
+                    subtitle={
+                      searchScope === 'all'
+                        ? p.phone || p.email || 'No contact on file'
+                        : peopleService.searchMatchSummary(p.id, searchScope)
+                    }
                   />
                 ))}
               </ul>
@@ -225,10 +397,12 @@ function PersonRow({
   person: p,
   selected,
   onSelect,
+  subtitle,
 }: {
   person: Person;
   selected: boolean;
   onSelect: () => void;
+  subtitle: string;
 }) {
   return (
     <li>
@@ -244,9 +418,7 @@ function PersonRow({
         </span>
         <span className="people-master-body">
           <strong>{p.preferredName || p.fullName}</strong>
-          <span className="muted">
-            {p.phone || p.email || 'No contact on file'}
-          </span>
+          <span className="muted">{subtitle}</span>
         </span>
         <StatusPill status={p.status} />
       </button>
