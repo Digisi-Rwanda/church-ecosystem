@@ -4,6 +4,7 @@ import {
   SERVICE_COLLECTIONS,
 } from '../data/churchFinanceSeed';
 import { FINANCE_TXNS, pushFinanceTxn } from '../data/financeSeed';
+import { scheduleLocalDomainPersist } from '../data/localDomainStore';
 import type {
   BalanceSheetLine,
   BalanceSheetSection,
@@ -136,6 +137,7 @@ export const churchFinanceService = {
       txnIds,
     };
     SERVICE_COLLECTIONS.unshift(collection);
+    scheduleLocalDomainPersist();
     return { ok: true, collection };
   },
 
@@ -276,6 +278,7 @@ export const churchFinanceService = {
       notes: input.notes,
     };
     BUDGET_LINES.unshift(line);
+    scheduleLocalDomainPersist();
     return line;
   },
 
@@ -347,6 +350,7 @@ export const churchFinanceService = {
       linkedFundId: input.linkedFundId,
     };
     BALANCE_SHEET_LINES.unshift(line);
+    scheduleLocalDomainPersist();
     return line;
   },
 
