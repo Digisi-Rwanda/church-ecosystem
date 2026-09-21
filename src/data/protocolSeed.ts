@@ -1,331 +1,60 @@
+import { PROTOCOL_ROSTER } from './protocolMembersSeed';
 import type {
   ProtocolActivityEvent,
+  ProtocolAbsenceRequest,
   ProtocolAttendanceRecord,
   ProtocolContribution,
+  ProtocolFillInOffer,
   ProtocolMonthPlan,
   ProtocolNotification,
-  ProtocolRosterMember,
   ProtocolScheduleVersion,
   ProtocolSchedulingRules,
   ProtocolService,
+  ProtocolServiceReport,
+  ProtocolSwapProposal,
   ProtocolTeamSlot,
 } from '../domain/types';
 
+export { PROTOCOL_ROSTER };
+
 export const PROTOCOL_RULES: ProtocolSchedulingRules = {
   preferTarget: 3,
-  softMax: 4,
-  hardMax: 5,
-  defaultTeamSize: 4,
-  avoidChoirConflicts: true,
+  softMax: 3,
+  hardMax: 4,
+  defaultTeamSize: 10,
+  requireChoirOnService: true,
 };
 
 /** Live month + next month only (demo clock: Sep 2026). */
 export const PROTOCOL_ALLOWED_MONTHS = ['2026-09', '2026-10'] as const;
 
-export const PROTOCOL_ROSTER: ProtocolRosterMember[] = [
-  {
-    id: 'prm-coord',
-    personId: 'p-proto-coord',
-    office: 'COORDINATOR',
-    serveDays: 'BOTH',
-    status: 'ACTIVE',
-    unavailableDates: [],
-    notes: 'Schedules teams; publishes month',
-  },
-  {
-    id: 'prm-pres',
-    personId: 'p-proto-pres',
-    office: 'PRESIDENT',
-    serveDays: 'SUNDAY',
-    status: 'ACTIVE',
-    unavailableDates: [],
-  },
-  {
-    id: 'prm-vp',
-    personId: 'p-proto-vp',
-    office: 'VP',
-    serveDays: 'SUNDAY',
-    status: 'ACTIVE',
-    unavailableDates: [],
-  },
-  {
-    id: 'prm-sec',
-    personId: 'p-proto-sec',
-    office: 'SECRETARY',
-    serveDays: 'BOTH',
-    status: 'ACTIVE',
-    unavailableDates: [],
-  },
-  {
-    id: 'prm-treas',
-    personId: 'p-proto-treas',
-    office: 'TREASURER',
-    serveDays: 'SUNDAY',
-    status: 'ACTIVE',
-    unavailableDates: [],
-  },
-  {
-    id: 'prm-patrick',
-    personId: 'p-member',
-    office: 'MEMBER',
-    serveDays: 'SUNDAY',
-    status: 'ACTIVE',
-    unavailableDates: [],
-    notes: 'Also choir — conflict avoidance demo',
-  },
-  {
-    id: 'prm-eric',
-    personId: 'p-choir-leader',
-    office: 'MEMBER',
-    serveDays: 'SUNDAY',
-    status: 'ACTIVE',
-    unavailableDates: [],
-    notes: 'Choir SECTION_LEAD on 2026-09-14',
-  },
-  {
-    id: 'prm-m1',
-    personId: 'p-proto-m1',
-    office: 'MEMBER',
-    serveDays: 'BOTH',
-    status: 'ACTIVE',
-    unavailableDates: [],
-  },
-  {
-    id: 'prm-m2',
-    personId: 'p-proto-m2',
-    office: 'MEMBER',
-    serveDays: 'SUNDAY',
-    status: 'ACTIVE',
-    unavailableDates: ['2026-09-21'],
-  },
-  {
-    id: 'prm-m3',
-    personId: 'p-proto-m3',
-    office: 'MEMBER',
-    serveDays: 'TUESDAY',
-    status: 'ACTIVE',
-    unavailableDates: [],
-    notes: 'Tuesday-only server',
-  },
-  {
-    id: 'prm-m4',
-    personId: 'p-proto-m4',
-    office: 'MEMBER',
-    serveDays: 'BOTH',
-    status: 'ACTIVE',
-    unavailableDates: [],
-  },
-  {
-    id: 'prm-m5',
-    personId: 'p-proto-m5',
-    office: 'MEMBER',
-    serveDays: 'SUNDAY',
-    status: 'LEAVE',
-    unavailableDates: [],
-    notes: 'On leave — must not be scheduled',
-  },
-  {
-    id: 'prm-m6',
-    personId: 'p-proto-m6',
-    office: 'MEMBER',
-    serveDays: 'BOTH',
-    status: 'ACTIVE',
-    unavailableDates: [],
-  },
-];
+/**
+ * Services are synced from published Music schedule (no Friday).
+ * Start empty until Protocol syncs a month.
+ */
+export let PROTOCOL_SERVICES: ProtocolService[] = [];
 
-function sundaysInMonth(year: number, monthIndex0: number): string[] {
-  const dates: string[] = [];
-  const d = new Date(Date.UTC(year, monthIndex0, 1));
-  while (d.getUTCMonth() === monthIndex0) {
-    if (d.getUTCDay() === 0) {
-      dates.push(d.toISOString().slice(0, 10));
-    }
-    d.setUTCDate(d.getUTCDate() + 1);
-  }
-  return dates;
-}
+export let PROTOCOL_MONTH_PLANS: ProtocolMonthPlan[] = [];
 
-function tuesdaysInMonth(year: number, monthIndex0: number): string[] {
-  const dates: string[] = [];
-  const d = new Date(Date.UTC(year, monthIndex0, 1));
-  while (d.getUTCMonth() === monthIndex0) {
-    if (d.getUTCDay() === 2) {
-      dates.push(d.toISOString().slice(0, 10));
-    }
-    d.setUTCDate(d.getUTCDate() + 1);
-  }
-  return dates;
-}
-
-function buildMonthServices(monthKey: string): ProtocolService[] {
-  const [y, m] = monthKey.split('-').map(Number);
-  const monthIndex0 = m - 1;
-  const services: ProtocolService[] = [];
-  for (const date of sundaysInMonth(y, monthIndex0)) {
-    services.push({
-      id: `psvc-${date}-ss1`,
-      monthKey,
-      date,
-      kind: 'SS1',
-      label: `SS1 ${date}`,
-      targetTeamSize: 4,
-    });
-    services.push({
-      id: `psvc-${date}-ss2`,
-      monthKey,
-      date,
-      kind: 'SS2',
-      label: `SS2 ${date}`,
-      targetTeamSize: 4,
-    });
-  }
-  for (const date of tuesdaysInMonth(y, monthIndex0)) {
-    services.push({
-      id: `psvc-${date}-tue`,
-      monthKey,
-      date,
-      kind: 'TUESDAY',
-      label: `Tuesday ${date}`,
-      targetTeamSize: 3,
-    });
-  }
-  return services;
-}
-
-export const PROTOCOL_SERVICES: ProtocolService[] = [
-  ...buildMonthServices('2026-09'),
-  ...buildMonthServices('2026-10'),
-];
-
-/** Mutable month plans — regenerated by protocolService. */
-export let PROTOCOL_MONTH_PLANS: ProtocolMonthPlan[] = [
-  {
-    monthKey: '2026-09',
-    status: 'OPEN',
-    version: 0,
-    validationNotes: [],
-  },
-  {
-    monthKey: '2026-10',
-    status: 'OPEN',
-    version: 0,
-    validationNotes: [],
-  },
-];
-
-/** Mutable team slots for draft months. */
 export let PROTOCOL_TEAM_SLOTS: ProtocolTeamSlot[] = [];
 
-/** Published schedule archive (includes a seed past month). */
-export let PROTOCOL_HISTORY: ProtocolScheduleVersion[] = [
-  {
-    id: 'psv-2026-08-v1',
-    monthKey: '2026-08',
-    version: 1,
-    publishedAt: '2026-07-28T10:00:00.000Z',
-    publishedByPersonId: 'p-proto-coord',
-    validationNotes: [],
-    slots: [
-      {
-        id: 'hist-1',
-        serviceId: 'psvc-2026-08-03-ss1',
-        personId: 'p-proto-m1',
-        source: 'ENGINE',
-      },
-      {
-        id: 'hist-2',
-        serviceId: 'psvc-2026-08-03-ss1',
-        personId: 'p-proto-m4',
-        source: 'ENGINE',
-      },
-      {
-        id: 'hist-3',
-        serviceId: 'psvc-2026-08-03-ss2',
-        personId: 'p-proto-coord',
-        source: 'ENGINE',
-      },
-      {
-        id: 'hist-4',
-        serviceId: 'psvc-2026-08-03-ss2',
-        personId: 'p-member',
-        source: 'ENGINE',
-      },
-    ],
-  },
-];
+export let PROTOCOL_HISTORY: ProtocolScheduleVersion[] = [];
 
-/** Mutable attendance rows (operate after publish). */
 export let PROTOCOL_ATTENDANCE: ProtocolAttendanceRecord[] = [];
+export let PROTOCOL_ABSENCE_REQUESTS: ProtocolAbsenceRequest[] = [];
+export let PROTOCOL_FILL_IN_OFFERS: ProtocolFillInOffer[] = [];
+export let PROTOCOL_SWAP_PROPOSALS: ProtocolSwapProposal[] = [];
+export let PROTOCOL_SERVICE_REPORTS: ProtocolServiceReport[] = [];
 
-/** Member contributions — verified rows post into shared Finance. */
-export let PROTOCOL_CONTRIBUTIONS: ProtocolContribution[] = [
-  {
-    id: 'pcon-seed-1',
-    personId: 'p-member',
-    amount: 5_000,
-    contributionType: 'MONTHLY',
-    paymentMethod: 'MOMO',
-    status: 'PENDING',
-    submittedAt: '2026-09-05T09:00:00.000Z',
-    note: 'September contribution',
-  },
-  {
-    id: 'pcon-seed-2',
-    personId: 'p-proto-m1',
-    amount: 10_000,
-    contributionType: 'MONTHLY',
-    paymentMethod: 'CASH',
-    status: 'VERIFIED',
-    submittedAt: '2026-09-01T08:00:00.000Z',
-    verifiedAt: '2026-09-02T11:00:00.000Z',
-    verifiedByPersonId: 'p-proto-treas',
-    financeTxnId: 'txn-protocol-contrib-seed',
-  },
-];
+export let PROTOCOL_CONTRIBUTIONS: ProtocolContribution[] = [];
 
-export let PROTOCOL_NOTIFICATIONS: ProtocolNotification[] = [
-  {
-    id: 'pnot-seed-1',
-    personId: 'p-proto-treas',
-    kind: 'CONTRIBUTION_SUBMITTED',
-    title: 'New contribution to verify',
-    body: 'Patrick · 5,000 RWF (September contribution)',
-    createdAt: '2026-09-05T09:05:00.000Z',
-    read: false,
-    href: '/systems/protocol/finance',
-  },
-  {
-    id: 'pnot-seed-2',
-    personId: 'p-proto-coord',
-    kind: 'GENERAL',
-    title: 'September schedule ready for review',
-    body: 'Generate teams, then submit for President review before publish.',
-    createdAt: '2026-09-01T07:00:00.000Z',
-    read: false,
-    href: '/systems/protocol/review',
-  },
-  {
-    id: 'pnot-seed-3',
-    personId: 'p-member',
-    kind: 'GENERAL',
-    title: 'Welcome to Protocol',
-    body: 'Check My schedule after the month is published.',
-    createdAt: '2026-09-01T08:00:00.000Z',
-    read: true,
-    href: '/systems/protocol/mine',
-  },
-];
+export let PROTOCOL_NOTIFICATIONS: ProtocolNotification[] = [];
 
-export let PROTOCOL_ACTIVITY: ProtocolActivityEvent[] = [
-  {
-    id: 'pact-seed-1',
-    at: '2026-07-28T10:00:00.000Z',
-    actorPersonId: 'p-proto-coord',
-    kind: 'SCHEDULE_PUBLISHED',
-    summary: 'Published August 2026 schedule v1',
-  },
-];
+export let PROTOCOL_ACTIVITY: ProtocolActivityEvent[] = [];
+
+export function replaceProtocolServices(services: ProtocolService[]) {
+  PROTOCOL_SERVICES = services;
+}
 
 export function replaceProtocolTeamSlots(slots: ProtocolTeamSlot[]) {
   PROTOCOL_TEAM_SLOTS = slots;
@@ -354,6 +83,58 @@ export function upsertProtocolAttendance(record: ProtocolAttendanceRecord) {
     );
   } else {
     PROTOCOL_ATTENDANCE = [...PROTOCOL_ATTENDANCE, record];
+  }
+}
+
+export function pushProtocolAbsence(r: ProtocolAbsenceRequest) {
+  PROTOCOL_ABSENCE_REQUESTS = [r, ...PROTOCOL_ABSENCE_REQUESTS];
+}
+
+export function updateProtocolAbsence(
+  id: string,
+  patch: Partial<ProtocolAbsenceRequest>,
+) {
+  PROTOCOL_ABSENCE_REQUESTS = PROTOCOL_ABSENCE_REQUESTS.map((r) =>
+    r.id === id ? { ...r, ...patch } : r,
+  );
+}
+
+export function pushProtocolFillIn(o: ProtocolFillInOffer) {
+  PROTOCOL_FILL_IN_OFFERS = [o, ...PROTOCOL_FILL_IN_OFFERS];
+}
+
+export function updateProtocolFillIn(
+  id: string,
+  patch: Partial<ProtocolFillInOffer>,
+) {
+  PROTOCOL_FILL_IN_OFFERS = PROTOCOL_FILL_IN_OFFERS.map((o) =>
+    o.id === id ? { ...o, ...patch } : o,
+  );
+}
+
+export function pushProtocolSwap(s: ProtocolSwapProposal) {
+  PROTOCOL_SWAP_PROPOSALS = [s, ...PROTOCOL_SWAP_PROPOSALS];
+}
+
+export function updateProtocolSwap(
+  id: string,
+  patch: Partial<ProtocolSwapProposal>,
+) {
+  PROTOCOL_SWAP_PROPOSALS = PROTOCOL_SWAP_PROPOSALS.map((s) =>
+    s.id === id ? { ...s, ...patch } : s,
+  );
+}
+
+export function upsertProtocolServiceReport(r: ProtocolServiceReport) {
+  const idx = PROTOCOL_SERVICE_REPORTS.findIndex(
+    (x) => x.serviceId === r.serviceId,
+  );
+  if (idx >= 0) {
+    PROTOCOL_SERVICE_REPORTS = PROTOCOL_SERVICE_REPORTS.map((x, i) =>
+      i === idx ? r : x,
+    );
+  } else {
+    PROTOCOL_SERVICE_REPORTS = [r, ...PROTOCOL_SERVICE_REPORTS];
   }
 }
 
