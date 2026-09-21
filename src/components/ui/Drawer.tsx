@@ -20,6 +20,8 @@ export function Drawer({
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
 
   useEffect(() => {
     if (!open) return;
@@ -27,7 +29,7 @@ export function Drawer({
     function onKey(e: KeyboardEvent) {
       if (e.key === 'Escape') {
         e.preventDefault();
-        onClose();
+        onCloseRef.current();
         return;
       }
       if (e.key !== 'Tab' || !panelRef.current) return;
@@ -62,7 +64,9 @@ export function Drawer({
       document.body.style.overflow = prev;
       previouslyFocused.current?.focus?.();
     };
-  }, [open, onClose]);
+    // Only re-run when the drawer opens/closes — not when parent re-renders
+    // (e.g. typing in description would otherwise steal focus back to Name).
+  }, [open]);
 
   if (!open) return null;
 
