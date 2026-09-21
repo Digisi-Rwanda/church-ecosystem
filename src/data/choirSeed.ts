@@ -403,283 +403,23 @@ export const CHOIR_PAYMENT_METHODS: ChoirPaymentMethodConfig[] = [
 ];
 
 /** Timed member-contribution windows with scoped goals (kit). */
-export let CHOIR_CONTRIBUTION_DRIVES: ChoirContributionDrive[] = [
-  {
-    id: 'cdrive-monthly-2026',
-    orgUnitId: IJWI,
-    systemId: 'sys-choir',
-    name: 'Choir monthly 2026',
-    typeId: 'cct-monthly',
-    frequency: 'MONTHLY',
-    startsOn: '2026-01-01',
-    endsOn: '2026-12-31',
-    status: 'ACTIVE',
-    description: 'Standing monthly member contribution',
-    ministryGoalPublic: false,
-    createdByPersonId: 'p-choir-treas',
-    createdAt: '2026-01-01T08:00:00.000Z',
-  },
-  {
-    id: 'cdrive-concert-26',
-    orgUnitId: IJWI,
-    systemId: 'sys-choir',
-    name: 'Concert support drive',
-    typeId: 'cct-concert',
-    frequency: 'EVENT',
-    startsOn: '2026-09-01',
-    endsOn: '2026-10-15',
-    status: 'ACTIVE',
-    description: 'Each member + family + whole choir targets for the concert',
-    ministryGoalPublic: false,
-    createdByPersonId: 'p-choir-treas',
-    createdAt: '2026-09-01T08:00:00.000Z',
-  },
-];
+export let CHOIR_CONTRIBUTION_DRIVES: ChoirContributionDrive[] = [];
 
-export let CHOIR_CONTRIBUTION_GOALS: ChoirContributionGoal[] = [
-  {
-    id: 'cgoal-monthly-member',
-    driveId: 'cdrive-monthly-2026',
-    scope: 'MEMBER',
-    targetAmount: 5_000,
-    label: 'Each member · 5,000 / month',
-  },
-  {
-    id: 'cgoal-monthly-ministry',
-    driveId: 'cdrive-monthly-2026',
-    scope: 'MINISTRY',
-    targetAmount: 600_000,
-    label: 'Whole choir · 600,000 / year',
-  },
-  {
-    id: 'cgoal-concert-member',
-    driveId: 'cdrive-concert-26',
-    scope: 'MEMBER',
-    targetAmount: 10_000,
-    label: 'Each member · 10,000',
-  },
-  {
-    id: 'cgoal-concert-team-a',
-    driveId: 'cdrive-concert-26',
-    scope: 'TEAM',
-    teamId: 'cteam-alpha',
-    targetAmount: 80_000,
-    label: 'Family Alpha · 80,000',
-  },
-  {
-    id: 'cgoal-concert-ministry',
-    driveId: 'cdrive-concert-26',
-    scope: 'MINISTRY',
-    targetAmount: 250_000,
-    label: 'Whole choir · 250,000',
-  },
-];
+export let CHOIR_CONTRIBUTION_GOALS: ChoirContributionGoal[] = [];
 
-export let CHOIR_CONTRIBUTIONS: ChoirContribution[] = [
-  {
-    id: 'ccon-seed-1',
-    orgUnitId: IJWI,
-    personId: 'p-member',
-    teamId: 'cteam-alpha',
-    typeId: 'cct-monthly',
-    driveId: 'cdrive-monthly-2026',
-    amount: 5_000,
-    paymentMethod: 'MOMO',
-    familyRailId: 'cfrail-alpha-momo',
-    occurredOn: '2026-09-01',
-    status: 'PENDING',
-    submittedAt: '2026-09-01T10:00:00.000Z',
-    note: 'September monthly — awaiting family leader',
-  },
-  {
-    id: 'ccon-seed-grace',
-    orgUnitId: IJWI,
-    personId: 'p-secretary',
-    teamId: 'cteam-alpha',
-    typeId: 'cct-monthly',
-    driveId: 'cdrive-monthly-2026',
-    amount: 5_000,
-    paymentMethod: 'MOMO',
-    familyRailId: 'cfrail-alpha-momo',
-    occurredOn: '2026-09-02',
-    status: 'FAMILY_CONFIRMED',
-    submittedAt: '2026-09-02T09:00:00.000Z',
-    familyRespondedAt: '2026-09-02T12:00:00.000Z',
-    familyRespondedByPersonId: 'p-member',
-    familyConfirmedAmount: 5_000,
-    receivedByPersonId: 'p-member',
-    receivedAt: '2026-09-02T12:00:00.000Z',
-    note: 'Grace monthly — family confirmed, ready to batch',
-  },
-  {
-    id: 'ccon-seed-2',
-    orgUnitId: IJWI,
-    personId: 'p-choir-pres',
-    teamId: 'cteam-beta',
-    typeId: 'cct-monthly',
-    driveId: 'cdrive-monthly-2026',
-    amount: 5_000,
-    confirmedAmount: 5_000,
-    paymentMethod: 'CASH',
-    occurredOn: '2026-08-28',
-    status: 'CONFIRMED',
-    submittedAt: '2026-08-28T09:00:00.000Z',
-    familyRespondedAt: '2026-08-28T10:00:00.000Z',
-    familyRespondedByPersonId: 'p-choir-pres',
-    familyConfirmedAmount: 5_000,
-    receivedByPersonId: 'p-choir-pres',
-    receivedAt: '2026-08-28T10:00:00.000Z',
-    verifiedAt: '2026-08-29T11:00:00.000Z',
-    verifiedByPersonId: 'p-choir-treas',
-    financeTxnId: 'txn-choir-contrib-seed',
-  },
-  {
-    id: 'ccon-seed-partial',
-    orgUnitId: IJWI,
-    personId: 'p-choir-leader',
-    teamId: 'cteam-beta',
-    typeId: 'cct-concert',
-    driveId: 'cdrive-concert-26',
-    amount: 10_000,
-    confirmedAmount: 6_000,
-    familyConfirmedAmount: 6_000,
-    paymentMethod: 'BANK',
-    familyRailId: 'cfrail-beta-bank',
-    occurredOn: '2026-09-05',
-    status: 'FAMILY_PARTIAL',
-    submittedAt: '2026-09-05T14:00:00.000Z',
-    familyRespondedAt: '2026-09-05T16:00:00.000Z',
-    familyRespondedByPersonId: 'p-choir-pres',
-    familyResponseNote: 'Only 6,000 landed — rest pending',
-    receivedByPersonId: 'p-choir-pres',
-    receivedAt: '2026-09-05T16:00:00.000Z',
-    followUpId: 'cfu-seed-1',
-  },
-];
+export let CHOIR_CONTRIBUTIONS: ChoirContribution[] = [];
 
-export let CHOIR_FOLLOW_UPS: ChoirFollowUp[] = [
-  {
-    id: 'cfu-seed-1',
-    contributionId: 'ccon-seed-partial',
-    personId: 'p-choir-leader',
-    reason: 'Partial family confirm 6,000 of 10,000 RWF',
-    status: 'OPEN',
-    createdAt: '2026-09-05T16:00:00.000Z',
-    createdByPersonId: 'p-choir-pres',
-  },
-];
+export let CHOIR_FOLLOW_UPS: ChoirFollowUp[] = [];
 
-export let CHOIR_FAMILY_RAILS: ChoirFamilyPaymentRail[] = [
-  {
-    id: 'cfrail-alpha-momo',
-    orgUnitId: IJWI,
-    teamId: 'cteam-alpha',
-    kind: 'MOMO',
-    label: 'Alpha MTN MoMo',
-    accountRef: '*182*8*1*0788001001#',
-    createdByPersonId: 'p-member',
-    createdAt: '2026-01-15T10:00:00.000Z',
-    active: true,
-  },
-  {
-    id: 'cfrail-beta-bank',
-    orgUnitId: IJWI,
-    teamId: 'cteam-beta',
-    kind: 'BANK',
-    label: 'Beta BK account',
-    accountRef: '1000123456789',
-    createdByPersonId: 'p-choir-pres',
-    createdAt: '2026-01-20T10:00:00.000Z',
-    active: true,
-  },
-];
+export let CHOIR_FAMILY_RAILS: ChoirFamilyPaymentRail[] = [];
 
-export let CHOIR_OFFICE_RAILS: ChoirOfficePaymentRail[] = [
-  {
-    id: 'corail-coord-momo',
-    orgUnitId: IJWI,
-    holderOffice: 'COORDINATOR',
-    kind: 'MOMO',
-    label: 'Coordinator MoMo',
-    accountRef: '*182*8*1*0788002002#',
-    createdByPersonId: 'p-choir-coord',
-    createdAt: '2026-01-10T10:00:00.000Z',
-    active: true,
-  },
-  {
-    id: 'corail-treas-bank',
-    orgUnitId: IJWI,
-    holderOffice: 'TREASURER',
-    kind: 'BANK',
-    label: 'Choir treasurer BK',
-    accountRef: '1000987654321',
-    createdByPersonId: 'p-choir-treas',
-    createdAt: '2026-01-10T10:00:00.000Z',
-    active: true,
-  },
-];
+export let CHOIR_OFFICE_RAILS: ChoirOfficePaymentRail[] = [];
 
 export let CHOIR_HANDOFFS: ChoirContributionHandoff[] = [];
 
-export let CHOIR_CONTRIB_EVENTS: ChoirContributionEvent[] = [
-  {
-    id: 'cev-1',
-    orgUnitId: IJWI,
-    contributionId: 'ccon-seed-1',
-    at: '2026-09-01T10:00:00.000Z',
-    actorPersonId: 'p-member',
-    action: 'CLAIM_SUBMITTED',
-    detail: 'September monthly 5,000 MoMo',
-  },
-  {
-    id: 'cev-2',
-    orgUnitId: IJWI,
-    contributionId: 'ccon-seed-grace',
-    at: '2026-09-02T12:00:00.000Z',
-    actorPersonId: 'p-member',
-    action: 'FAMILY_CONFIRMED',
-    detail: 'Family Alpha confirmed 5,000',
-  },
-  {
-    id: 'cev-3',
-    orgUnitId: IJWI,
-    contributionId: 'ccon-seed-partial',
-    at: '2026-09-05T16:00:00.000Z',
-    actorPersonId: 'p-choir-pres',
-    action: 'FAMILY_PARTIAL',
-    detail: '6,000 of 10,000 — follow-up opened',
-  },
-];
+export let CHOIR_CONTRIB_EVENTS: ChoirContributionEvent[] = [];
 
-export let CHOIR_CONTRIB_NOTIFICATIONS: ChoirContribNotification[] = [
-  {
-    id: 'cnotif-1',
-    orgUnitId: IJWI,
-    audienceOffices: ['TREASURER', 'COORDINATOR'],
-    kind: 'NEW_CLAIM',
-    contributionId: 'ccon-seed-1',
-    message: 'New claim: Patrick · Monthly · 5,000 (PENDING)',
-    createdAt: '2026-09-01T10:00:00.000Z',
-  },
-  {
-    id: 'cnotif-2',
-    orgUnitId: IJWI,
-    audienceOffices: ['TREASURER', 'COORDINATOR'],
-    kind: 'FAMILY_RESPONSE',
-    contributionId: 'ccon-seed-grace',
-    message: 'Family Alpha confirmed Grace · 5,000',
-    createdAt: '2026-09-02T12:00:00.000Z',
-  },
-  {
-    id: 'cnotif-3',
-    orgUnitId: IJWI,
-    audienceOffices: ['TREASURER', 'COORDINATOR'],
-    kind: 'FAMILY_RESPONSE',
-    contributionId: 'ccon-seed-partial',
-    message: 'Family Beta partial · Eric · 6,000 of 10,000',
-    createdAt: '2026-09-05T16:00:00.000Z',
-  },
-];
+export let CHOIR_CONTRIB_NOTIFICATIONS: ChoirContribNotification[] = [];
 
 type ChoirFinanceListener = () => void;
 const choirFinanceListeners = new Set<ChoirFinanceListener>();
@@ -757,22 +497,7 @@ export function pushChoirGoal(g: ChoirContributionGoal) {
   notifyChoirFinance();
 }
 
-export let CHOIR_DONATIONS: ChoirDonation[] = [
-  {
-    id: 'cdon-1',
-    orgUnitId: IJWI,
-    donorName: 'Anonymous friend',
-    source: 'Community',
-    donationType: 'General gift',
-    amount: 50_000,
-    occurredOn: '2026-09-02',
-    paymentMethod: 'BANK',
-    evidenceNote: 'Bank slip #441',
-    recordedByPersonId: 'p-choir-treas',
-    recordedAt: '2026-09-02T14:00:00.000Z',
-    financeTxnId: 'txn-choir-don-1',
-  },
-];
+export let CHOIR_DONATIONS: ChoirDonation[] = [];
 
 export const CHOIR_SPONSORS: ChoirSponsor[] = [
   {
@@ -818,18 +543,7 @@ export const CHOIR_CAMPAIGNS: ChoirFundraisingCampaign[] = [
   },
 ];
 
-export let CHOIR_CAMPAIGN_GIFTS: ChoirCampaignGift[] = [
-  {
-    id: 'cgift-1',
-    orgUnitId: IJWI,
-    campaignId: 'ccamp-uniforms',
-    contributorName: 'Family Alpha pool',
-    amount: 75_000,
-    occurredOn: '2026-08-15',
-    paymentMethod: 'CASH',
-    recordedByPersonId: 'p-choir-treas',
-  },
-];
+export let CHOIR_CAMPAIGN_GIFTS: ChoirCampaignGift[] = [];
 
 export const CHOIR_BUDGETS: ChoirBudget[] = [
   {
@@ -873,79 +587,13 @@ export const CHOIR_BUDGET_LINES: ChoirBudgetLine[] = [
   },
 ];
 
-export let CHOIR_INCOME: ChoirIncomeRecord[] = [
-  {
-    id: 'cinc-1',
-    orgUnitId: IJWI,
-    category: 'Workshop fees',
-    amount: 30_000,
-    occurredOn: '2026-08-20',
-    description: 'Vocal clinic registration',
-    recordedByPersonId: 'p-choir-treas',
-    budgetId: 'cbud-2026',
-    financeTxnId: 'txn-choir-inc-1',
-  },
-];
+export let CHOIR_INCOME: ChoirIncomeRecord[] = [];
 
-export let CHOIR_EXPENSES: ChoirExpenseRecord[] = [
-  {
-    id: 'cexp-1',
-    orgUnitId: IJWI,
-    category: 'Transport',
-    amount: 25_000,
-    occurredOn: '2026-09-01',
-    description: 'Bus for retreat',
-    status: 'PENDING',
-    recordedByPersonId: 'p-choir-leader',
-  },
-  {
-    id: 'cexp-2',
-    orgUnitId: IJWI,
-    category: 'Sheet music',
-    amount: 45_000,
-    occurredOn: '2026-09-03',
-    description: 'Sheet music purchase',
-    status: 'APPROVED',
-    recordedByPersonId: 'p-choir-treas',
-    approvedByPersonId: 'p-choir-pres',
-    financeTxnId: 'txn-choir-2',
-  },
-];
+export let CHOIR_EXPENSES: ChoirExpenseRecord[] = [];
 
-export let CHOIR_ASSETS: ChoirAsset[] = [
-  {
-    id: 'cass-1',
-    orgUnitId: IJWI,
-    name: 'Keyboard Yamaha',
-    category: 'Instrument',
-    value: 450_000,
-    assignedToPersonId: 'p-choir-leader',
-    acquiredOn: '2024-05-01',
-    status: 'ACTIVE',
-    historyNote: 'Assigned to Music Director',
-  },
-  {
-    id: 'cass-2',
-    orgUnitId: IJWI,
-    name: 'Choir robes (set of 40)',
-    category: 'Costume',
-    value: 800_000,
-    acquiredOn: '2023-01-15',
-    status: 'ACTIVE',
-  },
-];
+export let CHOIR_ASSETS: ChoirAsset[] = [];
 
-export let CHOIR_LIABILITIES: ChoirLiability[] = [
-  {
-    id: 'cliab-1',
-    orgUnitId: IJWI,
-    name: 'Uniform supplier balance',
-    amount: 120_000,
-    dueDate: '2026-10-31',
-    status: 'OPEN',
-    notes: 'Final installment',
-  },
-];
+export let CHOIR_LIABILITIES: ChoirLiability[] = [];
 
 export function pushChoirDonation(d: ChoirDonation) {
   CHOIR_DONATIONS = [d, ...CHOIR_DONATIONS];
