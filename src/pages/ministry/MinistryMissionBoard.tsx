@@ -1,12 +1,13 @@
 import { type FormEvent, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
+import {
+  MissionCreateDrawer,
+  type MissionCreateKind,
+} from '../../components/MissionCreateDrawer';
 import { Drawer } from '../../components/ui/Drawer';
 import {
-  CheckboxField,
   SelectField,
-  TextAreaField,
-  TextField,
 } from '../../components/ui/Field';
 import { FilterBar, PageHead } from '../../components/ui/FilterBar';
 import {
@@ -17,12 +18,15 @@ import {
 import { eventTypeLabel } from '../../domain/permissions';
 import { visibilityLabel } from '../../domain/missionScope';
 import type {
-  EventRegistrationMode,
-  MissionVisibility,
   SystemId,
   WorkTask,
 } from '../../domain/types';
-import { missionService, peopleService, systemsService } from '../../services';
+import {
+  isChurchLeader,
+  missionService,
+  peopleService,
+  systemsService,
+} from '../../services';
 
 type Tab = 'board' | 'shares';
 type KindFilter = 'all' | 'PROGRAM' | 'EVENT' | 'TASK' | 'PROJECT';
@@ -87,7 +91,8 @@ export function MinistryMissionBoard({
   title?: string;
   orgUnitId?: string;
 }) {
-  const { account, positions, authorize, can } = useAuth();
+  const { account, positions, authorize, can, roles } = useAuth();
+  const navigate = useNavigate();
   const [, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
   const [tab, setTab] = useState<Tab>('board');
@@ -95,6 +100,10 @@ export function MinistryMissionBoard({
   const [createOpen, setCreateOpen] = useState(false);
   const [shareOpen, setShareOpen] = useState(false);
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
+  const churchLead = isChurchLeader(roles);
+  const basePath =
+    systemsService.getById(systemId)?.basePath ??
+    (systemId === 'sys-main' ? '' : `/systems/${systemId.replace(/^sys-/, '')}`);
 
   const viewOpts = useMemo(
     () => ({
@@ -143,24 +152,9 @@ export function MinistryMissionBoard({
     projects.own.length +
     projects.selective.length;
 
-  const [kind, setKind] = useState<'PROGRAM' | 'EVENT' | 'TASK' | 'PROJECT'>(
-    'PROGRAM',
-  );
-  const [name, setName] = useState('');
-  const [desc, setDesc] = useState('');
-  const [visibility, setVisibility] =
-    useState<MissionVisibility>('MINISTRY_PRIVATE');
-  const [startsAt, setStartsAt] = useState(
-    () => new Date().toISOString().slice(0, 16),
-  );
-  const [eventRegMode, setEventRegMode] =
-    useState<EventRegistrationMode>('ANNOUNCEMENT_ONLY');
-  const [eventBeyond, setEventBeyond] = useState(false);
-  const [taskGrantAccess, setTaskGrantAccess] = useState(false);
-  const [taskOwnerId, setTaskOwnerId] = useState(account?.personId ?? '');
-  const [ownerSystemId, setOwnerSystemId] = useState<SystemId>(systemId);
+  const [kind, setKind] = useState<MissionCreateKind>('PROGRAM');
 
-  const [shareKind, setShareKind] = useState<
+const [shareKind, setShareKind] = useState<
     'PROGRAM' | 'EVENT' | 'TASK' | 'PROJECT'
   >('PROGRAM');
   const [shareResourceId, setShareResourceId] = useState('');
@@ -229,82 +223,17 @@ export function MinistryMissionBoard({
     return true;
   }
 
-  function onCreate(e: FormEvent) {
-    e.preventDefault();
-    if (!gate(kind) || !name.trim()) return;
-
-    if (kind === 'PROGRAM') {
-      const p = missionService.createProgram({
-        name: name.trim(),
-        description: desc,
-        ownerSystemId,
-        orgUnitId,
-        visibility,
-        createdByPersonId: account!.personId,
-        startActive: false,
-      });
-      setMsg(
-        `Draft program ${p.name} (${visibilityLabel(p.visibility)}) — submit/approve on Programs`,
-      );
-    } else if (kind === 'EVENT') {
-      const ev = missionService.createEvent({
-        name: name.trim(),
-        type: 'OTHER',
-        ownerSystemId,
-        orgUnitId,
-        startsAt: new Date(startsAt).toISOString(),
-        description: desc,
-        visibility,
-        registrationMode: eventRegMode,
-        beyondOwnerScope: eventBeyond,
-        createdByPersonId: account!.personId,
-      });
-      setMsg(
-        eventBeyond
-          ? `Created event ${ev.name} — pending upper approvals`
-          : `Created event ${ev.name} — confirmed (in-scope)`,
-      );
-    } else if (kind === 'PROJECT') {
-      const r = missionService.createProject({
-        name: name.trim(),
-        description: desc,
-        ownerSystemId,
-        orgUnitId,
-        visibility,
-        beyondOwnerScope: eventBeyond,
-        createdByPersonId: account!.personId,
-      });
-      setMsg(
-        r.ok && r.project
-          ? r.project.status === 'DRAFT'
-            ? `Draft project ${r.project.name} — submit when ready`
-            : `Created project ${r.project.name}`
-          : (r.reason ?? 'Create failed'),
-      );
-    } else {
-      const t = missionService.createTask({
-        title: name.trim(),
-        description: desc,
-        ownerPersonId: taskOwnerId || account!.personId,
-        createdByPersonId: account!.personId,
-        systemId: ownerSystemId,
-        visibility,
-        grantsSystemAccess: taskGrantAccess,
-      });
-      setMsg(
-        `Created task ${t.title} → ${peopleService.getById(t.ownerPersonId)?.preferredName}${
-          taskGrantAccess ? ' · temp access while active' : ''
-        }`,
-      );
-    }
-    setName('');
-    setDesc('');
-    setVisibility('MINISTRY_PRIVATE');
-    setEventBeyond(false);
-    setTaskGrantAccess(false);
-    setCreateOpen(false);
-    refresh();
-    setTab('board');
+  function detailPath(createKind: MissionCreateKind, id: string) {
+    const segment =
+      createKind === 'PROGRAM'
+        ? 'programs'
+        : createKind === 'EVENT'
+          ? 'events'
+          : createKind === 'PROJECT'
+            ? 'projects'
+            : 'tasks';
+    if (!basePath || basePath === '/') return `/${segment}/${id}`;
+    return `${basePath.replace(/\/$/, '')}/${segment}/${id}`;
   }
 
   function onShare(e: FormEvent) {
@@ -349,8 +278,6 @@ export function MinistryMissionBoard({
   }
 
   const systemName = systemsService.getById(systemId)?.shortName ?? systemId;
-  const activeSystems = systemsService.listActive();
-
   function laneProps(bucket: 'church' | 'own' | 'selective') {
     const showP = kindFilter === 'all' || kindFilter === 'PROGRAM';
     const showE = kindFilter === 'all' || kindFilter === 'EVENT';
@@ -388,6 +315,19 @@ export function MinistryMissionBoard({
                   >
                     Shares
                   </button>
+                  <select
+                    aria-label="Create type"
+                    value={kind}
+                    onChange={(e) =>
+                      setKind(e.target.value as MissionCreateKind)
+                    }
+                    style={{ minHeight: '2.25rem' }}
+                  >
+                    <option value="PROGRAM">Program</option>
+                    <option value="EVENT">Event</option>
+                    <option value="TASK">Task</option>
+                    <option value="PROJECT">Project</option>
+                  </select>
                   <button
                     type="button"
                     className="btn"
@@ -559,139 +499,24 @@ export function MinistryMissionBoard({
         </div>
       )}
 
-      <Drawer
-        open={createOpen}
-        title="Create mission item"
-        onClose={() => setCreateOpen(false)}
-        wide
-      >
-        <form className="stack" onSubmit={onCreate}>
-          <SelectField
-            label="Type"
-            name="kind"
-            id="kind"
-            value={kind}
-            onChange={(e) => setKind(e.target.value as typeof kind)}
-          >
-            <option value="PROGRAM">Program</option>
-            <option value="EVENT">Event</option>
-            <option value="TASK">Task</option>
-            <option value="PROJECT">Project</option>
-          </SelectField>
-          {systemId === 'sys-main' && (
-            <SelectField
-              label="Owner system"
-              name="ownerSys"
-              id="ownerSys"
-              value={ownerSystemId}
-              onChange={(e) =>
-                setOwnerSystemId(e.target.value as SystemId)
-              }
-            >
-              {activeSystems.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.shortName}
-                </option>
-              ))}
-            </SelectField>
-          )}
-          <SelectField
-            label="Visibility"
-            name="vis"
-            id="vis"
-            value={visibility}
-            onChange={(e) =>
-              setVisibility(e.target.value as MissionVisibility)
-            }
-          >
-            <option value="MINISTRY_PRIVATE">
-              Ministry private (default)
-            </option>
-            <option value="SELECTIVE">Selected members</option>
-            <option value="CHURCH">General church (publish)</option>
-          </SelectField>
-          <TextField
-            label="Name / title"
-            name="nm"
-            id="nm"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            required
-          />
-          <TextAreaField
-            label="Description"
-            name="ds"
-            id="ds"
-            value={desc}
-            onChange={(e) => setDesc(e.target.value)}
-            rows={2}
-          />
-          {kind === 'EVENT' && (
-            <>
-              <TextField
-                label="Starts"
-                name="st"
-                id="st"
-                type="datetime-local"
-                value={startsAt}
-                onChange={(e) => setStartsAt(e.target.value)}
-                required
-              />
-              <SelectField
-                label="Registration mode"
-                name="erm"
-                id="erm"
-                value={eventRegMode}
-                onChange={(e) =>
-                  setEventRegMode(e.target.value as EventRegistrationMode)
-                }
-              >
-                <option value="ANNOUNCEMENT_ONLY">Announcement only</option>
-                <option value="REGISTRATION_REQUIRED">
-                  Registration required
-                </option>
-              </SelectField>
-              <CheckboxField
-                label="Beyond owner scope (needs upper approvals)"
-                checked={eventBeyond}
-                onChange={setEventBeyond}
-              />
-            </>
-          )}
-          {kind === 'PROJECT' && (
-            <CheckboxField
-              label="Beyond owner scope (needs upper approvals)"
-              checked={eventBeyond}
-              onChange={setEventBeyond}
-            />
-          )}
-          {kind === 'TASK' && (
-            <>
-              <SelectField
-                label="Responsible person"
-                name="to"
-                id="to"
-                value={taskOwnerId}
-                onChange={(e) => setTaskOwnerId(e.target.value)}
-              >
-                {peopleService.list().map((p) => (
-                  <option key={p.id} value={p.id}>
-                    {p.fullName}
-                  </option>
-                ))}
-              </SelectField>
-              <CheckboxField
-                label="Grant temporary system entry while active"
-                checked={taskGrantAccess}
-                onChange={setTaskGrantAccess}
-              />
-            </>
-          )}
-          <button type="submit" className="btn">
-            Create
-          </button>
-        </form>
-      </Drawer>
+      {account ? (
+        <MissionCreateDrawer
+          kind={kind}
+          open={createOpen}
+          onClose={() => setCreateOpen(false)}
+          listSource="seed"
+          ownerSystemId={systemId}
+          accountPersonId={account.personId}
+          canManage={isLeader && authorize(kind, 'MANAGE', systemId).allowed}
+          isChurchLeader={churchLead}
+          onCreated={(r) => {
+            setMsg(r.message);
+            refresh();
+            setTab('board');
+            navigate(detailPath(r.kind, r.id));
+          }}
+        />
+      ) : null}
 
       <Drawer
         open={shareOpen}
