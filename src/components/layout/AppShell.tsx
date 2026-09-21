@@ -48,6 +48,12 @@ const NAV_GROUPS: Array<{
       { to: '/board', label: 'Board', icon: 'board', secondary: true },
       { to: '/pastoral', label: 'Pastoral desk', icon: 'pastoral', secondary: true },
       {
+        to: '/correspondence',
+        label: 'Correspondence',
+        icon: 'folder',
+        secondary: true,
+      },
+      {
         to: '/system-admin',
         label: 'System admin',
         icon: 'settings',
@@ -202,6 +208,10 @@ export function AppShell({
       canViewBoard(account.personId, positions, roles));
   const canPastoral =
     isChurchLeader(roles) || isCatechist(roles) || isOrdainedPastor(roles);
+  const canCorrespondence =
+    can('CORRESPONDENCE', 'VIEW') ||
+    can('CORRESPONDENCE', 'CREATE') ||
+    can('CORRESPONDENCE', 'MANAGE');
   const canSystemAdmin = Boolean(
     account && canSeeSystemAdminNav(account.personId, positions, roles),
   );
@@ -223,6 +233,8 @@ export function AppShell({
         return canBoard;
       case '/pastoral':
         return canPastoral;
+      case '/correspondence':
+        return canCorrespondence;
       case '/system-admin':
         return canSystemAdmin;
       case '/people':
