@@ -6,24 +6,16 @@ import type { SystemId } from '../domain/types';
 import { systemsService, authService } from '../services';
 import { Spinner } from '../components/ui/Spinner';
 import { TextField } from '../components/ui/Field';
-import { ThemeToggle } from '../components/ui/ThemeToggle';
 
 const DEMO_HINTS = [
-  { user: 'pastor', pass: 'pastor123', note: 'Church Leader · oversight into peer systems' },
-  { user: 'assistant', pass: 'assist123', note: 'Pastor (ordained) · lighter oversight' },
-  { user: 'catechist', pass: 'catechist123', note: 'Umwarimu · Itorero ops oversight' },
-  { user: 'secretary', pass: 'secret123', note: 'Church Secretary (appointment)' },
-  { user: 'patrick', pass: 'member123', note: 'Member · Protocol / Choir (no System admin)' },
-  { user: 'youthsec', pass: 'youth123', note: 'Youth Secretary · appointed Youth System Admin' },
-  { user: 'treasurer', pass: 'treas123', note: 'Church Treasurer · also on API' },
-  { user: 'choirtreas', pass: 'choir123', note: 'Choir finance (local seed)' },
-  { user: 'worship', pass: 'worship123', note: 'Worship leader' },
-  { user: 'worshiptreas', pass: 'worship123', note: 'Worship finance' },
-  { user: 'deacon', pass: 'deacon123', note: 'Deacon care coordinator' },
-  { user: 'deacontreas', pass: 'deacon123', note: 'Deacon benevolence vault' },
-  { user: 'music', pass: 'music123', note: 'Music oversight' },
-  { user: 'children', pass: 'children123', note: 'Children / Sunday School' },
-  { user: 'men', pass: 'men123', note: 'Men ministry' },
+  { user: 'pastor', pass: 'pastor123', note: 'Church Leader' },
+  { user: 'assistant', pass: 'assist123', note: 'Pastor (ordained)' },
+  { user: 'catechist', pass: 'catechist123', note: 'Catechist / Umwarimu' },
+  { user: 'secretary', pass: 'secret123', note: 'Church Secretary' },
+  { user: 'treasurer', pass: 'treas123', note: 'Church Treasurer' },
+  { user: 'patrick', pass: 'member123', note: 'Member (flows: baptism, transfer, wedding)' },
+  { user: 'youth', pass: 'youth123', note: 'Youth President (ministry programs/events)' },
+  { user: 'music', pass: 'music123', note: 'Music President' },
 ];
 
 const SCRIPTURES = [
@@ -165,8 +157,23 @@ export function LoginPage() {
 
   return (
     <div className="login-page login-split">
+      <aside className="login-hero-pane" aria-label="Welcome">
+        <img
+          className="login-hero-media"
+          src="/brand/church-building.png?v=2"
+          alt="ADEPR Kacyiru church building"
+          decoding="async"
+          fetchPriority="high"
+        />
+        <div className="login-hero-shade" aria-hidden />
+        <div className="login-hero-copy">
+          <p className="login-hero-brand">“{scripture.text}”</p>
+          <p className="login-hero-line">{scripture.ref}</p>
+        </div>
+        <div className="login-hero-wave" aria-hidden />
+      </aside>
+
       <div className="login-form-pane">
-        <ThemeToggle className="theme-toggle login-theme-toggle" />
         <div className="login-card stack">
           <div className="login-brand">
             <img src="/brand/adepr-logo.png" alt="ADEPR" width={76} height={76} />
@@ -252,22 +259,6 @@ export function LoginPage() {
           ) : null}
         </div>
       </div>
-
-      <aside className="login-hero-pane" aria-label="Welcome">
-        <img
-          className="login-hero-media"
-          src="/brand/church-building.png?v=2"
-          alt="ADEPR Kacyiru church building"
-          decoding="async"
-          fetchPriority="high"
-        />
-        <div className="login-hero-shade" aria-hidden />
-        <div className="login-hero-copy">
-          <p className="login-hero-brand">“{scripture.text}”</p>
-          <p className="login-hero-line">{scripture.ref}</p>
-        </div>
-        <div className="login-hero-wave" aria-hidden />
-      </aside>
     </div>
   );
 }
