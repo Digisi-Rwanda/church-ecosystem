@@ -5,12 +5,6 @@ import type { Position, SystemRole, WorkTask } from '../domain/types';
 import { isChurchLeadership, missionService } from './missionService';
 import { correspondenceService } from './correspondenceService';
 import { rolesFromPositions } from '../domain/participation';
-import {
-  INBOX_REFRESH_EVENT,
-  markInboxUnread,
-  pingInboxRefresh,
-} from './inboxNotify';
-
 export { INBOX_REFRESH_EVENT, markInboxUnread, pingInboxRefresh, notifyInboxItem } from './inboxNotify';
 
 const READ_KEY = 'adepr.attentionRead';

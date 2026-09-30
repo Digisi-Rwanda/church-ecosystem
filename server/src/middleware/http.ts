@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { verifyAccessToken, type JwtPayload } from '../lib/auth.js';
+import { prisma } from '../lib/prisma.js';
 
 export type AuthedRequest = Request & { auth?: JwtPayload };
 
@@ -14,22 +15,32 @@ export function pathParam(
   return undefined;
 }
 
-export function requireAuth(
+export async function requireAuth(
   req: AuthedRequest,
   res: Response,
   next: NextFunction,
-): void {
+): Promise<void> {
   const header = req.headers.authorization;
   if (!header?.startsWith('Bearer ')) {
     res.status(401).json({ error: 'Missing Bearer token' });
     return;
   }
+  let payload: JwtPayload;
   try {
-    req.auth = verifyAccessToken(header.slice(7));
-    next();
+    payload = verifyAccessToken(header.slice(7));
   } catch {
     res.status(401).json({ error: 'Invalid or expired token' });
+    return;
   }
+  // A valid signature is not enough: the person must still exist and be active,
+  // so deactivating someone takes effect immediately, not after 12 hours.
+  const person = await prisma.person.findUnique({ where: { id: payload.personId } });
+  if (!person || person.status === 'INACTIVE') {
+    res.status(401).json({ error: 'Account is no longer active' });
+    return;
+  }
+  req.auth = payload;
+  next();
 }
 
 export function errorHandler(

@@ -194,11 +194,11 @@ describe('peer oversight entry', () => {
   });
 
   it('youth system admin gets SYSTEM_CONFIG without MINISTRY_FINANCE', () => {
-    const grants = grantsFor('p-youth-sec');
+    const grants = grantsFor('p-youth-sysadmin');
     expect(
       authorize(
         {
-          personId: 'p-youth-sec',
+          personId: 'p-youth-sysadmin',
           systemId: 'sys-youth',
           resource: 'SYSTEM_CONFIG',
           action: 'MANAGE',
@@ -209,7 +209,7 @@ describe('peer oversight entry', () => {
     expect(
       authorize(
         {
-          personId: 'p-youth-sec',
+          personId: 'p-youth-sysadmin',
           systemId: 'sys-youth',
           resource: 'MINISTRY_FINANCE',
           action: 'VIEW',

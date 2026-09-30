@@ -64,9 +64,23 @@ export function updateProtocolMonthPlan(
   monthKey: string,
   patch: Partial<ProtocolMonthPlan>,
 ) {
-  PROTOCOL_MONTH_PLANS = PROTOCOL_MONTH_PLANS.map((p) =>
-    p.monthKey === monthKey ? { ...p, ...patch } : p,
-  );
+  const existing = PROTOCOL_MONTH_PLANS.find((p) => p.monthKey === monthKey);
+  if (existing) {
+    PROTOCOL_MONTH_PLANS = PROTOCOL_MONTH_PLANS.map((p) =>
+      p.monthKey === monthKey ? { ...p, ...patch } : p,
+    );
+    return;
+  }
+  PROTOCOL_MONTH_PLANS = [
+    ...PROTOCOL_MONTH_PLANS,
+    {
+      monthKey,
+      status: 'OPEN',
+      version: 0,
+      validationNotes: [],
+      ...patch,
+    },
+  ];
 }
 
 export function pushProtocolHistory(version: ProtocolScheduleVersion) {

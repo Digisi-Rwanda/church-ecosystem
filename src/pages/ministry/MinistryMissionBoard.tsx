@@ -16,7 +16,6 @@ import {
   StatusPill,
 } from '../../components/ui/StatusPill';
 import { eventTypeLabel } from '../../domain/permissions';
-import { visibilityLabel } from '../../domain/missionScope';
 import type {
   SystemId,
   WorkTask,

@@ -11,6 +11,7 @@ import { downloadLetterPdf } from '../services/letterPdf';
 import { EmptyState, StatusPill } from '../components/ui/StatusPill';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useToast } from '../components/ui/Toast';
+import { canSubmitForSignature } from './correspondenceActions';
 
 function nameOf(id: string | undefined) {
   if (!id) return '—';
@@ -114,13 +115,15 @@ export function CorrespondencePage() {
       origin === 'CHURCH_GENERATED');
 
   /** Document preview pane: office template always; other origins only after Paste text. */
+  const showPasteBodyPreview =
+    letterType !== 'INCOMING' &&
+    letterType !== 'MINISTRY_APPOINTMENT' &&
+    origin !== 'CHURCH_GENERATED' &&
+    bodyEntryMode === 'paste';
   const showDocumentPreview =
     showTemplatePreview ||
     letterType === 'INCOMING' ||
-    (letterType !== 'INCOMING' &&
-      origin !== 'CHURCH_GENERATED' &&
-      letterType !== 'MINISTRY_APPOINTMENT' &&
-      bodyEntryMode === 'paste');
+    showPasteBodyPreview;
 
   const liveTemplate = useMemo(() => {
     if (!showTemplatePreview || !personId) return '';
@@ -1303,7 +1306,7 @@ export function CorrespondenceDetailPage() {
               {editingDraft ? 'Close editor' : 'View / edit letter'}
             </button>
           ) : null}
-          {canPrepare &&
+          {canSubmitForSignature(canPrepare, leader) &&
           doc.letterType !== 'INCOMING' &&
           doc.status === 'IN_PREPARATION' ? (
             <button

@@ -228,7 +228,7 @@ async function main() {
       username: 'pastor',
       passwordHash: hash,
     },
-    update: { passwordHash: hash },
+    update: {},
   });
 
   await prisma.account.upsert({
@@ -239,7 +239,7 @@ async function main() {
       username: 'treasurer',
       passwordHash: treasHash,
     },
-    update: { passwordHash: treasHash },
+    update: {},
   });
 
   await prisma.position.deleteMany({
@@ -467,6 +467,26 @@ async function main() {
       },
     });
   }
+
+  // Temporary ENTER for policy smoke + assignment API demos.
+  await prisma.assignment.upsert({
+    where: { id: 'asgn-treas-protocol-enter' },
+    update: {
+      personId: treasurer.id,
+      systemId: 'sys-protocol',
+      status: 'ACTIVE',
+    },
+    create: {
+      id: 'asgn-treas-protocol-enter',
+      personId: treasurer.id,
+      title: 'Protocol finance support (demo)',
+      contextType: 'PROGRAM',
+      contextId: 'demo-protocol-support',
+      contextLabel: 'Protocol support',
+      systemId: 'sys-protocol',
+      status: 'ACTIVE',
+    },
+  });
 
   // No demo programs / events / tasks / projects — create through the app.
   // Delete leftover demo rows from older seeds.

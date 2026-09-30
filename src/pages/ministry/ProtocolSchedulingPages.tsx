@@ -53,6 +53,24 @@ export function ProtocolTeamsPage() {
   const { monthKey, setMonthKey, refresh, tick } = useProtocolMonth();
   const [message, setMessage] = useState('');
   const [focusServiceId, setFocusServiceId] = useState<string | null>(null);
+  const [staffPick, setStaffPick] = useState<
+    Record<string, { from: string; to: string; add: string }>
+  >({});
+
+  function staffPicks(serviceId: string) {
+    return staffPick[serviceId] ?? { from: '', to: '', add: '' };
+  }
+
+  function setStaffPickField(
+    serviceId: string,
+    field: 'from' | 'to' | 'add',
+    value: string,
+  ) {
+    setStaffPick((prev) => ({
+      ...prev,
+      [serviceId]: { ...staffPicks(serviceId), [field]: value },
+    }));
+  }
 
   const musicPublished = useMemo(
     () => musicScheduleService.getPublished(monthKey),
@@ -197,6 +215,9 @@ export function ProtocolTeamsPage() {
           <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
             {services.map((svc) => {
               const team = protocolService.teamForService(svc.id);
+              const staffTeam = team.filter((s) => s.slotKind !== 'FILL_IN');
+              const picks = staffPicks(svc.id);
+              const eligible = protocolService.eligibleForServiceTeam(svc.id);
               return (
                 <li key={svc.id} className="panel" style={{ padding: '0.65rem' }}>
                   <div className="row" style={{ justifyContent: 'space-between' }}>
@@ -238,115 +259,151 @@ export function ProtocolTeamsPage() {
                           {slot.slotKind === 'FILL_IN' ? (
                             <span className="badge">Fill-in</span>
                           ) : null}
-                          {teamsEditable && slot.slotKind !== 'FILL_IN' && (
-                            <span className="row" style={{ marginLeft: '0.35rem' }}>
-                              <select
-                                defaultValue=""
-                                aria-label={`Replace ${protocolService.personLabel(slot.personId)}`}
-                                onChange={(e) => {
-                                  const toId = e.target.value;
-                                  if (!toId || !account) return;
-                                  const r = protocolService.replaceTeamMember(
-                                    svc.id,
-                                    slot.personId,
-                                    toId,
-                                    account.personId,
-                                  );
-                                  setMessage(
-                                    r.ok
-                                      ? 'Member replaced'
-                                      : (r.reason ?? 'Failed'),
-                                  );
-                                  refresh();
-                                  e.target.value = '';
-                                }}
-                              >
-                                <option value="">Replace…</option>
-                                {protocolService
-                                  .eligibleForServiceTeam(svc.id)
-                                  .map((m) => (
-                                    <option key={m.id} value={m.personId}>
-                                      {protocolService.personLabel(m.personId)}
-                                    </option>
-                                  ))}
-                              </select>
-                              <button
-                                type="button"
-                                className="btn ghost sm"
-                                onClick={() => {
-                                  if (!account) return;
-                                  const r = protocolService.removeTeamMember(
-                                    svc.id,
-                                    slot.personId,
-                                    account.personId,
-                                  );
-                                  setMessage(
-                                    r.ok
-                                      ? 'Member removed'
-                                      : (r.reason ?? 'Failed'),
-                                  );
-                                  refresh();
-                                }}
-                              >
-                                Remove
-                              </button>
-                            </span>
-                          )}
                         </li>
                       ))}
-                      {teamsEditable &&
-                        team.filter((s) => s.slotKind !== 'FILL_IN').length <
-                          svc.targetTeamSize && (
-                          <li style={{ marginTop: '0.35rem' }}>
-                            <label className="muted" style={{ fontSize: '0.85rem' }}>
-                              Add member (target {svc.targetTeamSize})
-                              <select
-                                defaultValue=""
-                                onChange={(e) => {
-                                  const pid = e.target.value;
-                                  if (!pid || !account) return;
-                                  const r = protocolService.addTeamMember(
-                                    svc.id,
-                                    pid,
-                                    account.personId,
-                                  );
-                                  setMessage(
-                                    r.ok ? 'Member added' : (r.reason ?? 'Failed'),
-                                  );
-                                  refresh();
-                                  e.target.value = '';
-                                }}
-                              >
-                                <option value="">Choose…</option>
-                                {protocolService
-                                  .eligibleForServiceTeam(svc.id)
-                                  .map((m) => (
-                                    <option key={m.id} value={m.personId}>
-                                      {protocolService.personLabel(m.personId)}
-                                    </option>
-                                  ))}
-                              </select>
-                            </label>
-                          </li>
-                        )}
                     </ul>
                   )}
-                  {canManage && team.length > 0 && (
-                    <button
-                      type="button"
-                      className="btn ghost sm"
-                      style={{ marginTop: '0.35rem' }}
-                      onClick={() =>
-                        setFocusServiceId(
-                          focusServiceId === svc.id ? null : svc.id,
-                        )
-                      }
-                    >
-                      {focusServiceId === svc.id
-                        ? 'Hide TL/VTL'
-                        : 'Approve TL / VTL'}
-                    </button>
-                  )}
+                  <div
+                    className="row"
+                    style={{
+                      marginTop: '0.5rem',
+                      flexWrap: 'wrap',
+                      gap: '0.35rem',
+                      alignItems: 'center',
+                    }}
+                  >
+                    {canManage && team.length > 0 && (
+                      <button
+                        type="button"
+                        className="btn ghost sm"
+                        onClick={() =>
+                          setFocusServiceId(
+                            focusServiceId === svc.id ? null : svc.id,
+                          )
+                        }
+                      >
+                        {focusServiceId === svc.id
+                          ? 'Hide TL/VTL'
+                          : 'Approve TL / VTL'}
+                      </button>
+                    )}
+                    {teamsEditable && staffTeam.length > 0 && (
+                      <>
+                        <select
+                          className="sm"
+                          value={picks.from}
+                          aria-label="Member to change"
+                          onChange={(e) =>
+                            setStaffPickField(svc.id, 'from', e.target.value)
+                          }
+                        >
+                          <option value="">On team…</option>
+                          {staffTeam.map((s) => (
+                            <option key={s.id} value={s.personId}>
+                              {protocolService.personLabel(s.personId)}
+                            </option>
+                          ))}
+                        </select>
+                        <select
+                          className="sm"
+                          value={picks.to}
+                          aria-label="Replacement"
+                          onChange={(e) =>
+                            setStaffPickField(svc.id, 'to', e.target.value)
+                          }
+                        >
+                          <option value="">Replace with…</option>
+                          {eligible.map((m) => (
+                            <option key={m.id} value={m.personId}>
+                              {protocolService.personLabel(m.personId)}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          type="button"
+                          className="btn secondary sm"
+                          disabled={!picks.from || !picks.to || !account}
+                          onClick={() => {
+                            if (!account || !picks.from || !picks.to) return;
+                            const r = protocolService.replaceTeamMember(
+                              svc.id,
+                              picks.from,
+                              picks.to,
+                              account.personId,
+                            );
+                            setMessage(
+                              r.ok ? 'Member replaced' : (r.reason ?? 'Failed'),
+                            );
+                            setStaffPickField(svc.id, 'from', '');
+                            setStaffPickField(svc.id, 'to', '');
+                            refresh();
+                          }}
+                        >
+                          Replace
+                        </button>
+                        <button
+                          type="button"
+                          className="btn ghost sm"
+                          disabled={!picks.from || !account}
+                          onClick={() => {
+                            if (!account || !picks.from) return;
+                            const r = protocolService.removeTeamMember(
+                              svc.id,
+                              picks.from,
+                              account.personId,
+                            );
+                            setMessage(
+                              r.ok ? 'Member removed' : (r.reason ?? 'Failed'),
+                            );
+                            setStaffPickField(svc.id, 'from', '');
+                            refresh();
+                          }}
+                        >
+                          Remove
+                        </button>
+                      </>
+                    )}
+                    {teamsEditable &&
+                      staffTeam.length < svc.targetTeamSize && (
+                        <>
+                          <select
+                            className="sm"
+                            value={picks.add}
+                            aria-label="Add member"
+                            onChange={(e) =>
+                              setStaffPickField(svc.id, 'add', e.target.value)
+                            }
+                          >
+                            <option value="">Add member…</option>
+                            {eligible.map((m) => (
+                              <option key={m.id} value={m.personId}>
+                                {protocolService.personLabel(m.personId)}
+                              </option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            className="btn secondary sm"
+                            disabled={!picks.add || !account}
+                            onClick={() => {
+                              if (!account || !picks.add) return;
+                              const r = protocolService.addTeamMember(
+                                svc.id,
+                                picks.add,
+                                account.personId,
+                              );
+                              setMessage(
+                                r.ok ? 'Member added' : (r.reason ?? 'Failed'),
+                              );
+                              setStaffPickField(svc.id, 'add', '');
+                              refresh();
+                            }}
+                          >
+                            Add
+                          </button>
+                        </>
+                      )}
+                  </div>
                   {canManage && focusServiceId === svc.id && (
                     <div className="stack" style={{ marginTop: '0.5rem' }}>
                       {team

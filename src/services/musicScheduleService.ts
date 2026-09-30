@@ -13,7 +13,12 @@ import {
   type MusicEngineHistory,
   validateSchedule,
 } from '../domain/musicScheduleEngine';
+import { scheduleLocalDomainPersist } from '../data/localDomainStore';
 import { musicUnitName } from '../domain/musicUnits';
+
+function touchCanvasPersist() {
+  scheduleLocalDomainPersist();
+}
 
 function nid(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
@@ -158,6 +163,7 @@ export const musicScheduleService = {
       assignments: [],
       warnings: [],
     };
+    touchCanvasPersist();
     return CANVAS;
   },
 
@@ -232,6 +238,7 @@ export const musicScheduleService = {
       assignments: result.assignments,
       warnings: result.warnings,
     };
+    touchCanvasPersist();
     return { ok: true, warnings: result.warnings };
   },
 
@@ -244,9 +251,10 @@ export const musicScheduleService = {
     const svc = CANVAS.services.find((s) => s.id === serviceId);
     if (!svc) return { ok: false, reason: 'Unknown service' };
     const rest = CANVAS.assignments.filter((a) => a.serviceId !== serviceId);
+    const uniqueUnitIds = [...new Set(unitIds)];
     const next = [
       ...rest,
-      ...unitIds.map((unitId) => ({
+      ...uniqueUnitIds.map((unitId) => ({
         id: nid('masg'),
         serviceId,
         unitId,
@@ -256,6 +264,7 @@ export const musicScheduleService = {
     const v = validateSchedule(CANVAS.services, next, 'manual');
     if (!v.ok) return { ok: false, reason: v.reason, warnings: v.warnings };
     CANVAS = { ...CANVAS, assignments: next, warnings: v.warnings };
+    touchCanvasPersist();
     return { ok: true, warnings: v.warnings };
   },
 
@@ -412,6 +421,7 @@ export const musicScheduleService = {
     PUBLISHED = PUBLISHED.map((p) =>
       p.periodKey === periodKey ? updated : p,
     );
+    touchCanvasPersist();
     this.notifyMany(recipientPersonIds, {
       kind: 'UPDATED',
       periodKey,
@@ -561,9 +571,15 @@ export const musicScheduleService = {
     assignments: MusicAssignment[],
     serviceId: string,
   ): string[] {
-    return assignments
-      .filter((a) => a.serviceId === serviceId)
-      .map((a) => a.unitId);
+    const seen = new Set<string>();
+    const out: string[] = [];
+    for (const a of assignments) {
+      if (a.serviceId !== serviceId) continue;
+      if (seen.has(a.unitId)) continue;
+      seen.add(a.unitId);
+      out.push(a.unitId);
+    }
+    return out;
   },
 
   formatAssignmentLine(unitIds: string[]): string {

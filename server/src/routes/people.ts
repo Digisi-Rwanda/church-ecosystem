@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { authorizePerson, grantsForPerson } from '../policy/index.js';
 import {
   pathParam,
   requireAuth,
@@ -9,7 +10,17 @@ import {
 
 export const peopleRouter = Router();
 
-peopleRouter.get('/', requireAuth, async (req, res) => {
+/** Directory access needs at least one real role — not just a bare account. */
+async function isInvolved(personId: string): Promise<boolean> {
+  const grants = await grantsForPerson(personId);
+  return grants.some((g) => g.source !== 'ACCOUNT');
+}
+
+peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
+  if (!(await isInvolved(req.auth!.personId))) {
+    res.status(403).json({ error: 'Directory is limited to church members with a role' });
+    return;
+  }
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
   const people = await prisma.person.findMany({
     where: q
@@ -28,7 +39,11 @@ peopleRouter.get('/', requireAuth, async (req, res) => {
   res.json({ people });
 });
 
-peopleRouter.get('/:id', requireAuth, async (req, res) => {
+peopleRouter.get('/:id', requireAuth, async (req: AuthedRequest, res) => {
+  if (!(await isInvolved(req.auth!.personId))) {
+    res.status(403).json({ error: 'Directory is limited to church members with a role' });
+    return;
+  }
   const id = pathParam(req, 'id');
   if (!id) {
     res.status(400).json({ error: 'Missing id' });
@@ -60,6 +75,16 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   const parsed = createSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
+    return;
+  }
+  const gate = await authorizePerson({
+    personId: req.auth!.personId,
+    systemId: 'sys-main',
+    resource: 'PERSON',
+    action: 'MANAGE',
+  });
+  if (!gate.allowed) {
+    res.status(403).json({ error: gate.reason });
     return;
   }
   const id = `p-${crypto.randomUUID().slice(0, 8)}`;

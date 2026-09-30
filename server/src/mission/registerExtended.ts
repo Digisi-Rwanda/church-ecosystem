@@ -59,6 +59,34 @@ function serializeProgram(p: {
   };
 }
 
+type MissionKind = 'PROGRAM' | 'EVENT' | 'TASK' | 'PROJECT';
+
+/** Owning system of a mission resource, or null if it does not exist. */
+async function ownerSystemOf(kind: MissionKind, id: string): Promise<string | null> {
+  if (kind === 'PROGRAM') return (await prisma.program.findUnique({ where: { id } }))?.ownerSystemId ?? null;
+  if (kind === 'EVENT') return (await prisma.churchEvent.findUnique({ where: { id } }))?.ownerSystemId ?? null;
+  if (kind === 'PROJECT') return (await prisma.churchProject.findUnique({ where: { id } }))?.ownerSystemId ?? null;
+  const t = await prisma.workTask.findUnique({ where: { id } });
+  return t ? (t.systemId ?? 'sys-main') : null;
+}
+
+async function requireAuthz(
+  req: AuthedRequest,
+  kind: MissionKind,
+  id: string,
+  action: 'VIEW' | 'MANAGE',
+): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
+  const systemId = await ownerSystemOf(kind, id);
+  if (!systemId) return { ok: false, status: 404, error: `${kind} not found` };
+  const d = await authorizePerson({
+    personId: req.auth!.personId,
+    systemId,
+    resource: kind,
+    action,
+  });
+  return d.allowed ? { ok: true } : { ok: false, status: 403, error: d.reason };
+}
+
 async function requireProgramManage(
   req: AuthedRequest,
   programId: string,
@@ -699,6 +727,17 @@ export function registerMissionExtendedRoutes(router: Router) {
         res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
         return;
       }
+      if (
+        parsed.data.status &&
+        event.status === 'PENDING_APPROVAL' &&
+        parsed.data.status !== 'PENDING_APPROVAL' &&
+        parsed.data.status !== 'CANCELLED'
+      ) {
+        res.status(409).json({
+          error: 'Awaiting approval — use the approval chain, not a status edit',
+        });
+        return;
+      }
       const result = await life.setEventStatus(id, parsed.data);
       if (!result.ok) {
         res.status(result.status).json({ error: result.error });
@@ -826,12 +865,29 @@ export function registerMissionExtendedRoutes(router: Router) {
         res.status(403).json({ error: decision.reason });
         return;
       }
+      if (!decision.allowed) {
+        // Self-registration: only for events the person may actually see.
+        const publicEvent = ['GENERAL', 'CHURCH'].includes(String(event.visibility));
+        const canSee = publicEvent
+          ? { allowed: true }
+          : await authorizePerson({
+              personId: req.auth!.personId,
+              systemId: event.ownerSystemId,
+              resource: 'EVENT',
+              action: 'VIEW',
+            });
+        if (!canSee.allowed) {
+          res.status(403).json({ error: 'You cannot register for this event' });
+          return;
+        }
+      }
       const parsed = regSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
         return;
       }
-      let status = parsed.data.status ?? 'REGISTERED';
+      // Only event managers may set a status; self-registration is always REGISTERED.
+      let status = decision.allowed ? (parsed.data.status ?? 'REGISTERED') : 'REGISTERED';
       const { expireAndPromote, mapRegistration } = await import(
         '../mission/eventRegistrations.js'
       );
@@ -918,6 +974,11 @@ export function registerMissionExtendedRoutes(router: Router) {
       res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
       return;
     }
+    const gate = await requireAuthz(req, parsed.data.kind, parsed.data.resourceId, 'MANAGE');
+    if (!gate.ok) {
+      res.status(gate.status).json({ error: gate.error });
+      return;
+    }
     const share = await prisma.missionShare.create({
       data: {
         kind: parsed.data.kind,
@@ -952,6 +1013,18 @@ export function registerMissionExtendedRoutes(router: Router) {
       typeof req.query.resourceId === 'string' ? req.query.resourceId : undefined;
     const personId =
       typeof req.query.personId === 'string' ? req.query.personId : undefined;
+    const me = req.auth!.personId;
+    if (kind && resourceId) {
+      const gate = await requireAuthz(req, kind as MissionKind, resourceId, 'MANAGE');
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
+        return;
+      }
+    } else if (personId !== me) {
+      // Without a specific resource you may only list your own shares.
+      res.status(403).json({ error: 'Specify kind + resourceId you manage, or list your own shares' });
+      return;
+    }
     const shares = await prisma.missionShare.findMany({
       where: {
         ...(kind ? { kind } : {}),
@@ -986,6 +1059,11 @@ export function registerMissionExtendedRoutes(router: Router) {
       const id = pathParam(req, 'id');
       if (!id) {
         res.status(400).json({ error: 'Missing id' });
+        return;
+      }
+      const gate = await requireAuthz(req, 'PROJECT', id, 'VIEW');
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
         return;
       }
       const result = await life.getApprovalChainFor('PROJECT', id);
@@ -1174,6 +1252,11 @@ export function registerMissionExtendedRoutes(router: Router) {
       const id = pathParam(req, 'id');
       if (!id) {
         res.status(400).json({ error: 'Missing id' });
+        return;
+      }
+      const gate = await requireAuthz(req, 'EVENT', id, 'VIEW');
+      if (!gate.ok) {
+        res.status(gate.status).json({ error: gate.error });
         return;
       }
       const result = await life.getApprovalChainFor('EVENT', id);
@@ -1792,6 +1875,22 @@ export function registerMissionExtendedRoutes(router: Router) {
         res.status(400).json({ error: 'programId or projectId required' });
         return;
       }
+      for (const [kind, rid] of [
+        ['PROGRAM', parsed.data.programId],
+        ['PROJECT', parsed.data.projectId],
+      ] as const) {
+        if (!rid) continue;
+        const gate = await requireAuthz(req, kind, rid, 'MANAGE');
+        if (!gate.ok) {
+          res.status(gate.status).json({ error: gate.error });
+          return;
+        }
+      }
+      const giftFund = await prisma.fund.findUnique({ where: { id: parsed.data.fundId } });
+      if (!giftFund) {
+        res.status(404).json({ error: 'Fund not found' });
+        return;
+      }
       const { applyDesignatedGiftToStewardship } = await import(
         '../mission/moneyHooks.js'
       );
@@ -1850,6 +1949,17 @@ export function registerMissionExtendedRoutes(router: Router) {
       if (!parsed.data.programId && !parsed.data.projectId) {
         res.status(400).json({ error: 'programId or projectId required' });
         return;
+      }
+      for (const [kind, rid] of [
+        ['PROGRAM', parsed.data.programId],
+        ['PROJECT', parsed.data.projectId],
+      ] as const) {
+        if (!rid) continue;
+        const gate = await requireAuthz(req, kind, rid, 'MANAGE');
+        if (!gate.ok) {
+          res.status(gate.status).json({ error: gate.error });
+          return;
+        }
       }
       const { incrementUsedCost } = await import('../mission/moneyHooks.js');
       const results = [];

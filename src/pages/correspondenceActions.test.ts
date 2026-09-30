@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { canSubmitForSignature } from './CorrespondencePage';
+import { canSubmitForSignature } from './correspondenceActions';
 
 describe('canSubmitForSignature', () => {
   it('blocks the signer from submitting for signature', () => {

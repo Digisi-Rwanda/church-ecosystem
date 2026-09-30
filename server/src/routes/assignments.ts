@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
+import { authorizePerson } from '../policy/index.js';
 
 export const assignmentsRouter = Router();
 
@@ -42,6 +43,17 @@ assignmentsRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   const d = parsed.data;
+  // Assignments grant SYSTEM ENTER, so creating one is itself a privileged act.
+  const gate = await authorizePerson({
+    personId: req.auth!.personId,
+    systemId: d.systemId ?? 'sys-main',
+    resource: 'ASSIGNMENT',
+    action: 'MANAGE',
+  });
+  if (!gate.allowed) {
+    res.status(403).json({ error: gate.reason });
+    return;
+  }
   const assignment = await prisma.assignment.create({
     data: {
       personId: d.personId,

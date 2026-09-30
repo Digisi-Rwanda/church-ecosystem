@@ -107,13 +107,11 @@ contributionsRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     },
   });
 
-  let canVerify = false;
+  const managedFundIds: string[] = [];
   for (const f of funds) {
-    if (await activeFundManage(req.auth!.personId, f.id)) {
-      canVerify = true;
-      break;
-    }
+    if (await activeFundManage(req.auth!.personId, f.id)) managedFundIds.push(f.id);
   }
+  const canVerify = managedFundIds.length > 0;
 
   const claims = await prisma.contributionClaim.findMany({
     where: {
@@ -121,7 +119,15 @@ contributionsRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
       ...(status ? { status } : {}),
       ...(fundId ? { fundId } : {}),
       ...(orgUnitId ? { orgUnitId } : {}),
-      ...(mineOnly || !canVerify ? { personId: req.auth!.personId } : {}),
+      // Own claims always; other people's claims only in vaults the caller manages.
+      ...(mineOnly || !canVerify
+        ? { personId: req.auth!.personId }
+        : {
+            OR: [
+              { personId: req.auth!.personId },
+              { fundId: { in: managedFundIds } },
+            ],
+          }),
     },
     orderBy: { submittedAt: 'desc' },
   });
@@ -245,6 +251,13 @@ contributionsRouter.post(
       return;
     }
 
+    if (claim.personId === req.auth!.personId) {
+      res.status(403).json({
+        error: 'Separation of duties — you cannot verify your own contribution',
+      });
+      return;
+    }
+
     const { decision, confirmedAmount, note } = parsed.data;
 
     if (decision === 'DECLINED') {
@@ -284,7 +297,15 @@ contributionsRouter.post(
     });
     const label = `Contribution · ${person?.preferredName || person?.fullName || claim.personId} · ${claim.typeLabel}`;
 
-    const result = await prisma.$transaction(async (tx) => {
+    let result;
+    try {
+    result = await prisma.$transaction(async (tx) => {
+      // Claim the PENDING row first; a concurrent verify gets count 0 and rolls back.
+      const won = await tx.contributionClaim.updateMany({
+        where: { id: claim.id, status: 'PENDING' },
+        data: { status: decision },
+      });
+      if (won.count !== 1) throw new Error('ALREADY_PROCESSED');
       const txn = await tx.financeTxn.create({
         data: {
           fundId: claim.fundId,
@@ -319,6 +340,13 @@ contributionsRouter.post(
       });
       return { claim: updated, financeTxn: txn };
     });
+    } catch (e) {
+      if (e instanceof Error && e.message === 'ALREADY_PROCESSED') {
+        res.status(409).json({ error: 'Already processed' });
+        return;
+      }
+      throw e;
+    }
 
     res.json(result);
   },

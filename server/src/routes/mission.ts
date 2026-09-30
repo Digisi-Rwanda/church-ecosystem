@@ -13,6 +13,11 @@ import { parseStewardship } from '../mission/stewardshipJson.js';
 
 export const missionRouter = Router();
 
+/** Clients may ask for a draft or to submit for approval — never to start approved. */
+function safeInitialStatus(requested: string | undefined): string {
+  return requested === 'PENDING_APPROVAL' ? 'PENDING_APPROVAL' : 'DRAFT';
+}
+
 function parseJsonArray(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try {
@@ -135,7 +140,7 @@ missionRouter.post('/programs', requireAuth, async (req: AuthedRequest, res) => 
       description: parsed.data.description ?? '',
       ownerSystemId: parsed.data.ownerSystemId,
       visibility: toStoredVisibility(parsed.data.visibility),
-      status: parsed.data.status ?? 'DRAFT',
+      status: safeInitialStatus(parsed.data.status),
       programType: parsed.data.programType,
       scheduleHint: parsed.data.scheduleHint,
       parentProgramId: parsed.data.parentProgramId,
@@ -266,9 +271,10 @@ missionRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
     res.status(403).json({ error: decision.reason });
     return;
   }
-  const status =
-    parsed.data.status ??
-    (parsed.data.beyondOwnerScope ? 'PENDING_APPROVAL' : 'CONFIRMED');
+  // Beyond-scope events must go through the approval chain, whatever the client asks.
+  const status = parsed.data.beyondOwnerScope
+    ? 'PENDING_APPROVAL'
+    : (parsed.data.status ?? 'CONFIRMED');
   const event = await prisma.churchEvent.create({
     data: {
       name: parsed.data.name,
@@ -535,7 +541,7 @@ missionRouter.post('/projects', requireAuth, async (req: AuthedRequest, res) => 
       description: parsed.data.description ?? '',
       ownerSystemId: parsed.data.ownerSystemId,
       visibility: toStoredVisibility(parsed.data.visibility),
-      status: parsed.data.status ?? 'DRAFT',
+      status: safeInitialStatus(parsed.data.status),
       willSpend: parsed.data.willSpend ?? false,
       fundId: parsed.data.fundId,
       programId: parsed.data.programId,

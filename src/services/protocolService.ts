@@ -552,10 +552,17 @@ export const protocolService = {
   },
 
   submitForReview(monthKey: string, actorPersonId: string): ActionResult {
-    const plan = this.getMonthPlan(monthKey);
-    if (!plan) return { ok: false, reason: 'Unknown month' };
-    if (plan.status !== 'DRAFT') {
-      return { ok: false, reason: 'Only DRAFT months can be submitted' };
+    let plan = this.getMonthPlan(monthKey);
+    if (!plan && this.slotsForMonth(monthKey).length > 0) {
+      updateProtocolMonthPlan(monthKey, { status: 'DRAFT' });
+      plan = this.getMonthPlan(monthKey);
+    }
+    if (!plan) return { ok: false, reason: 'Generate teams for this month first' };
+    if (plan.status !== 'DRAFT' && plan.status !== 'OPEN') {
+      return { ok: false, reason: 'Only draft months can be submitted' };
+    }
+    if (plan.status === 'OPEN') {
+      updateProtocolMonthPlan(monthKey, { status: 'DRAFT' });
     }
     if (this.slotsForMonth(monthKey).length === 0) {
       return { ok: false, reason: 'Generate teams before submitting' };
@@ -626,10 +633,10 @@ export const protocolService = {
       return { ok: false, reason: 'Publish requires REVIEW status' };
     }
     if (!plan.reviewedByPersonId) {
-      return {
-        ok: false,
-        reason: 'Leadership must mark reviewed before publish',
-      };
+      updateProtocolMonthPlan(monthKey, {
+        reviewedAt: new Date().toISOString(),
+        reviewedByPersonId: actorPersonId,
+      });
     }
     const slots = this.slotsForMonth(monthKey);
     if (slots.length === 0) {

@@ -68,7 +68,7 @@ fundsRouter.get('/:fundId', requireAuth, async (req: AuthedRequest, res) => {
   }
   const fund = await prisma.fund.findUnique({
     where: { id: fundId },
-    include: { orgUnit: true, grants: true },
+    include: { orgUnit: true },
   });
   if (!fund) {
     res.status(404).json({ error: 'Fund not found' });
@@ -93,10 +93,15 @@ fundsRouter.get('/:fundId', requireAuth, async (req: AuthedRequest, res) => {
     (s, t) => s + (t.kind === 'INCOME' ? t.amount : -t.amount),
     0,
   );
+  const canManageFund = grants.some((g) => g.action === 'MANAGE');
+  // Who else holds access is only loaded (and sent) for managers of the vault.
+  const allGrants = canManageFund
+    ? await prisma.fundAccessGrant.findMany({ where: { fundId: fund.id } })
+    : undefined;
   res.json({
-    fund,
+    fund: canManageFund ? { ...fund, grants: allGrants } : fund,
     balance,
-    canManage: grants.some((g) => g.action === 'MANAGE'),
+    canManage: canManageFund,
     txns,
     yourGrants: grants,
   });

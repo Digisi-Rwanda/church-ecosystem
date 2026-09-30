@@ -21,10 +21,11 @@ export async function verifyPassword(
 
 export function signAccessToken(payload: JwtPayload): string {
   return jwt.sign(payload, config.jwtSecret, {
+    algorithm: 'HS256',
     expiresIn: config.jwtExpiresIn,
   });
 }
 
 export function verifyAccessToken(token: string): JwtPayload {
-  return jwt.verify(token, config.jwtSecret) as JwtPayload;
+  return jwt.verify(token, config.jwtSecret, { algorithms: ['HS256'] }) as JwtPayload;
 }

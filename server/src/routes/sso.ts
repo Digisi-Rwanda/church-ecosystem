@@ -3,6 +3,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
+import { authorizePerson } from '../policy/index.js';
 
 /**
  * One-time SSO handoff (church → peer).
@@ -26,6 +27,17 @@ ssoRouter.post('/issue', requireAuth, async (req: AuthedRequest, res) => {
   const system = await prisma.churchSystem.findUnique({ where: { id: systemId } });
   if (!system) {
     res.status(404).json({ error: 'System not found' });
+    return;
+  }
+
+  const enter = await authorizePerson({
+    personId: req.auth!.personId,
+    systemId,
+    resource: 'SYSTEM',
+    action: 'ENTER',
+  });
+  if (!enter.allowed) {
+    res.status(403).json({ error: enter.reason });
     return;
   }
 
@@ -70,10 +82,15 @@ ssoRouter.post('/redeem', async (req, res) => {
     res.status(400).json({ error: 'Invalid or expired handoff token' });
     return;
   }
-  await prisma.ssoHandoffToken.update({
-    where: { id: row.id },
+  // Atomic claim: only one concurrent redeem can flip redeemedAt from null.
+  const claimed = await prisma.ssoHandoffToken.updateMany({
+    where: { id: row.id, redeemedAt: null },
     data: { redeemedAt: new Date() },
   });
+  if (claimed.count !== 1) {
+    res.status(400).json({ error: 'Invalid or expired handoff token' });
+    return;
+  }
   const account = await prisma.account.findUnique({
     where: { id: row.accountId },
     include: { person: true },

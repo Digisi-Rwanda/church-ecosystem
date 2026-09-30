@@ -6,6 +6,25 @@ import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 
 export const authRouter = Router();
 
+/** Failed-login throttle (per username, in memory). Good enough for one API instance. */
+const FAIL_WINDOW_MS = 15 * 60 * 1000;
+const MAX_FAILS = 8;
+const fails = new Map<string, { n: number; first: number }>();
+function throttled(key: string): boolean {
+  const f = fails.get(key);
+  if (!f) return false;
+  if (Date.now() - f.first > FAIL_WINDOW_MS) {
+    fails.delete(key);
+    return false;
+  }
+  return f.n >= MAX_FAILS;
+}
+function noteFail(key: string) {
+  const f = fails.get(key);
+  if (!f || Date.now() - f.first > FAIL_WINDOW_MS) fails.set(key, { n: 1, first: Date.now() });
+  else f.n += 1;
+}
+
 const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
@@ -20,14 +39,25 @@ authRouter.post('/login', async (req, res) => {
     return;
   }
   const { username, password, systemId } = parsed.data;
+  const throttleKey = username.toLowerCase();
+  if (throttled(throttleKey)) {
+    res.status(429).json({ error: 'Too many failed attempts — try again later' });
+    return;
+  }
   const account = await prisma.account.findUnique({
     where: { username },
     include: { person: true },
   });
-  if (!account || !(await verifyPassword(password, account.passwordHash))) {
+  if (
+    !account ||
+    !(await verifyPassword(password, account.passwordHash)) ||
+    account.person.status === 'INACTIVE'
+  ) {
+    noteFail(throttleKey);
     res.status(401).json({ error: 'Invalid username or password' });
     return;
   }
+  fails.delete(throttleKey);
 
   const token = signAccessToken({
     sub: account.id,

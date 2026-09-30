@@ -21,10 +21,13 @@ import {
 export async function personIsChurchLeadership(
   personId: string,
 ): Promise<boolean> {
+  const now = new Date();
   const n = await prisma.position.count({
     where: {
       personId,
       status: 'ACTIVE',
+      startDate: { lte: now },
+      OR: [{ endDate: null }, { endDate: { gte: now } }],
       systemRole: { in: ['CHURCH_LEADER', 'PASTOR', 'ASSISTANT_PASTOR', 'CATECHIST'] },
     },
   });

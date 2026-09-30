@@ -353,9 +353,11 @@ export function buildEffectiveAccess(
 
   for (const p of positions) {
     if (!isPositionActive(p, now)) continue;
-    const isGov =
-      p.grantsAllSystems ||
-      (p.systemRole ? GOVERNANCE_ROLES.includes(p.systemRole) : false);
+    // A named role decides. The grantsAllSystems flag only applies when no role
+    // is set — otherwise a flagged Treasurer would silently become Church Leader.
+    const isGov = p.systemRole
+      ? GOVERNANCE_ROLES.includes(p.systemRole)
+      : Boolean(p.grantsAllSystems);
 
     if (isGov) {
       const govRole =

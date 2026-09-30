@@ -16,6 +16,7 @@ import {
   ministryFinanceService,
   missionService,
 } from '../../services';
+import { downloadMusicSchedulePdf } from '../../services/musicSchedulePdf';
 import { musicScheduleService } from '../../services/musicScheduleService';
 import { MinistryMissionBoard } from './MinistryMissionBoard';
 
@@ -44,6 +45,7 @@ function unitsEligibleForService(
     if (u.id === 'mu-hope' && kind !== 'SS1') return false;
     if (u.id === 'mu-worship' && kind !== 'TUESDAY') return false;
     if (kind !== 'TUESDAY' && u.id === 'mu-worship') return false;
+    if (opts?.forReplaceOf && u.id === opts.forReplaceOf) return false;
     if (scheduled.includes(u.id) && u.id !== opts?.forReplaceOf) return false;
     return true;
   });
@@ -87,6 +89,10 @@ function ScheduleEditDrawer({
     setPickFrom(focused ?? '');
     setPickTo('');
   }, [targetKey, focused]);
+
+  useEffect(() => {
+    setPickTo('');
+  }, [scheduled.join('|')]);
 
   if (!target) return null;
 
@@ -237,10 +243,11 @@ function ScheduleEditDrawer({
               <button
                 type="button"
                 className="btn"
-                disabled={!pickFrom || !pickTo}
-                onClick={() =>
-                  pickFrom && pickTo && onReplace(pickFrom, pickTo)
-                }
+                disabled={!(focused || pickFrom) || !pickTo}
+                onClick={() => {
+                  const fromId = focused || pickFrom;
+                  if (fromId && pickTo) onReplace(fromId, pickTo);
+                }}
               >
                 Replace
               </button>
@@ -671,6 +678,7 @@ export function MusicScheduleWorkspacePage() {
   function applyEditResult(
     r: { ok: boolean; reason?: string; warnings?: string[] },
     okMsg: string,
+    opts?: { closeDrawer?: boolean },
   ) {
     if (!r.ok) {
       setMsg(r.reason ?? 'Edit failed');
@@ -678,8 +686,22 @@ export function MusicScheduleWorkspacePage() {
     }
     const notes = r.warnings?.length ? ` · ${r.warnings.length} note(s)` : '';
     setMsg(`${okMsg}${notes}`);
-    setEdit(null);
+    if (opts?.closeDrawer !== false) setEdit(null);
     refresh();
+  }
+
+  function onDownloadPdf() {
+    if (!canvas?.services.length) {
+      setMsg('Build a calendar first');
+      return;
+    }
+    const r = downloadMusicSchedulePdf({
+      periodKey: canvas.periodKey,
+      horizon: canvas.horizon,
+      services: canvas.services,
+      assignments: canvas.assignments,
+    });
+    setMsg(r.ok ? `Downloaded ${r.filename}` : r.reason ?? 'Export failed');
   }
 
   const services = canvas?.services ?? [];
@@ -693,12 +715,7 @@ export function MusicScheduleWorkspacePage() {
       <div className="panel">
         <PageHead
           title="Choir schedule workspace"
-          subtitle="Build calendar → generate choir schedule → edit manually → save draft. Identical schedules cannot be saved twice — rebuild or change a choir first. Publish from Drafts."
-          actions={
-            <Link className="btn secondary" to={`${BASE}/schedule-drafts`}>
-              Drafts
-            </Link>
-          }
+          subtitle="Build calendar → generate choir schedule → edit manually → save draft. Identical schedules cannot be saved twice — rebuild or change a choir first. Publish from Open drafts."
         />
         <div className="row" style={{ marginTop: '0.75rem', flexWrap: 'wrap' }}>
           <label className="field" style={{ margin: 0 }}>
@@ -728,6 +745,9 @@ export function MusicScheduleWorkspacePage() {
           </label>
         </div>
         <div className="row" style={{ marginTop: '0.75rem', flexWrap: 'wrap' }}>
+          <Link className="btn secondary" to={`${BASE}/schedule-drafts`}>
+            Open drafts
+          </Link>
           <button type="button" className="btn" onClick={onBuildCalendar}>
             Build calendar
           </button>
@@ -749,6 +769,14 @@ export function MusicScheduleWorkspacePage() {
               Save draft
             </button>
           )}
+          <button
+            type="button"
+            className="btn secondary"
+            onClick={onDownloadPdf}
+            disabled={!services.length}
+          >
+            Download PDF
+          </button>
         </div>
         {msg && <p className="badge" style={{ marginTop: '0.75rem' }}>{msg}</p>}
         {canvas?.warnings?.length ? (
@@ -850,6 +878,7 @@ export function MusicScheduleWorkspacePage() {
           applyEditResult(
             musicScheduleService.removeCanvasUnit(edit.serviceId, unitId),
             `Removed ${musicUnitName(unitId)}`,
+            { closeDrawer: false },
           );
         }}
         onReplace={(from, to) => {
@@ -857,6 +886,7 @@ export function MusicScheduleWorkspacePage() {
           applyEditResult(
             musicScheduleService.replaceCanvasUnit(edit.serviceId, from, to),
             `Replaced ${musicUnitName(from)} with ${musicUnitName(to)}`,
+            { closeDrawer: false },
           );
         }}
         onAdd={(unitId) => {
@@ -864,6 +894,7 @@ export function MusicScheduleWorkspacePage() {
           applyEditResult(
             musicScheduleService.addCanvasUnit(edit.serviceId, unitId),
             `Added ${musicUnitName(unitId)}`,
+            { closeDrawer: false },
           );
         }}
       />
@@ -1180,6 +1211,7 @@ export function MusicSchedulePublishedPage() {
   function applyEditResult(
     r: { ok: boolean; reason?: string; warnings?: string[]; schedule?: { version: number } },
     okMsg: string,
+    opts?: { closeDrawer?: boolean },
   ) {
     if (!r.ok) {
       setMsg(r.reason ?? 'Edit failed');
@@ -1188,8 +1220,23 @@ export function MusicSchedulePublishedPage() {
     const ver = r.schedule ? ` · v${r.schedule.version}` : '';
     const notes = r.warnings?.length ? ` · ${r.warnings.length} note(s)` : '';
     setMsg(`${okMsg}${ver}${notes}`);
-    setEdit(null);
+    if (opts?.closeDrawer !== false) setEdit(null);
     refresh();
+  }
+
+  function onDownloadPublishedPdf() {
+    if (!published) {
+      setMsg('Nothing published for this period');
+      return;
+    }
+    const r = downloadMusicSchedulePdf({
+      periodKey: published.periodKey,
+      horizon: published.horizon,
+      services: published.services,
+      assignments: published.assignments,
+      label: `Published v${published.version}`,
+    });
+    setMsg(r.ok ? `Downloaded ${r.filename}` : r.reason ?? 'Export failed');
   }
 
   const editUnits =
@@ -1237,6 +1284,15 @@ export function MusicSchedulePublishedPage() {
           <p className="muted">
             Updated {new Date(published.updatedAt).toLocaleString()}
           </p>
+          <div className="row" style={{ marginBottom: '0.75rem' }}>
+            <button
+              type="button"
+              className="btn secondary"
+              onClick={onDownloadPublishedPdf}
+            >
+              Download PDF
+            </button>
+          </div>
           <table className="table">
             <thead>
               <tr>
@@ -1333,6 +1389,7 @@ export function MusicSchedulePublishedPage() {
                 musicNotifyRecipients(),
               ),
               `Removed ${musicUnitName(unitId)}`,
+              { closeDrawer: false },
             );
           }}
           onReplace={(from, to) => {
@@ -1347,6 +1404,7 @@ export function MusicSchedulePublishedPage() {
                 musicNotifyRecipients(),
               ),
               `Replaced ${musicUnitName(from)} with ${musicUnitName(to)}`,
+              { closeDrawer: false },
             );
           }}
           onAdd={(unitId) => {
@@ -1360,6 +1418,7 @@ export function MusicSchedulePublishedPage() {
                 musicNotifyRecipients(),
               ),
               `Added ${musicUnitName(unitId)}`,
+              { closeDrawer: false },
             );
           }}
         />

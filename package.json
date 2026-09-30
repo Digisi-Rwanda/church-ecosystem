@@ -12,6 +12,7 @@
     "preview": "vite preview",
     "test": "vitest run",
     "test:watch": "vitest",
+    "check": "npm run lint && npm run test && npm run build && npm run test:policy --prefix server",
     "api:setup": "npm run setup --prefix server",
     "api:seed": "npm run db:seed --prefix server"
   },

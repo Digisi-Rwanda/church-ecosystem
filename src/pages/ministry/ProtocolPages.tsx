@@ -477,38 +477,58 @@ export function ProtocolReviewPage() {
               Submit for review
             </button>
           )}
-          {canApprove && plan?.status === 'REVIEW' && !plan.reviewedByPersonId && (
+          {(canApprove || canManage) &&
+            plan?.status === 'REVIEW' &&
+            !plan.reviewedByPersonId && (
+              <button
+                type="button"
+                className="btn secondary"
+                onClick={() =>
+                  run(
+                    () =>
+                      protocolService.markReviewed(monthKey, account!.personId),
+                    'Marked reviewed',
+                  )
+                }
+              >
+                Mark reviewed
+              </button>
+            )}
+          {canManage && plan?.status === 'REVIEW' && (
             <button
               type="button"
               className="btn"
               onClick={() =>
-                run(
-                  () =>
-                    protocolService.markReviewed(monthKey, account!.personId),
-                  'Marked reviewed',
-                )
+                run(() => {
+                  const r = protocolService.publish(
+                    monthKey,
+                    account!.personId,
+                  );
+                  return r;
+                }, 'Published — version archived')
               }
             >
-              Mark reviewed
+              Publish schedule
             </button>
           )}
           {canManage &&
-            plan?.status === 'REVIEW' &&
-            plan.reviewedByPersonId && (
+            !plan &&
+            protocolService.slotsForMonth(monthKey).length > 0 && (
               <button
                 type="button"
                 className="btn"
                 onClick={() =>
-                  run(() => {
-                    const r = protocolService.publish(
-                      monthKey,
-                      account!.personId,
-                    );
-                    return r;
-                  }, 'Published — version archived')
+                  run(
+                    () =>
+                      protocolService.submitForReview(
+                        monthKey,
+                        account!.personId,
+                      ),
+                    'Submitted for leadership review',
+                  )
                 }
               >
-                Publish schedule
+                Submit for review
               </button>
             )}
           {canManage &&
@@ -529,15 +549,11 @@ export function ProtocolReviewPage() {
         </div>
         {message && <p className="muted">{message}</p>}
 
-        {canManage &&
-          plan?.status === 'REVIEW' &&
-          !plan.reviewedByPersonId &&
-          !canApprove && (
-            <p className="muted">
-              Mark reviewed (President/VP or Coordinator) to unlock Publish
-              schedule.
-            </p>
-          )}
+        {canManage && plan?.status === 'DRAFT' && (
+          <p className="muted" style={{ fontSize: '0.9rem' }}>
+            Submit when teams are ready, then publish (Mark reviewed is optional).
+          </p>
+        )}
 
         {plan?.submittedByPersonId && (
           <p className="muted">
