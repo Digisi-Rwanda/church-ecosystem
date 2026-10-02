@@ -1,4 +1,6 @@
+import { Suspense, lazy } from 'react';
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { ScheduleSyncGate } from './components/ScheduleSyncGate';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { AppShell } from './components/layout/AppShell';
@@ -6,161 +8,362 @@ import { RequireAdminTools } from './components/RequireAdminTools';
 import { ToastProvider } from './components/ui/Toast';
 import { ThemeProvider } from './theme/theme';
 import { SystemScopeGuard } from './navigation/SystemScopeGuard';
-import { AccessEnginePage } from './pages/AccessEnginePage';
-import { ActivitySessionPage } from './pages/ActivitySessionPage';
-import { CalendarPage } from './pages/CalendarPage';
-import { CheckInPage } from './pages/CheckInPage';
-import { DashboardPage } from './pages/DashboardPage';
-import { EventDetailPage } from './pages/EventDetailPage';
-import { EventsPage } from './pages/EventsPage';
-import { BoardPage } from './pages/BoardPage';
-import { BoardFollowUpPage } from './pages/BoardFollowUpPage';
-import { BoardMeetingPage } from './pages/BoardMeetingPage';
-import { PastoralDeskPage } from './pages/PastoralDeskPage';
-import {
-  CorrespondenceDetailPage,
-  CorrespondencePage,
-} from './pages/CorrespondencePage';
-import { SystemAdminPage } from './pages/SystemAdminPage';
-import { InboxPage } from './pages/InboxPage';
 import { LoginPage } from './pages/LoginPage';
-import { ReportsHubPage } from './pages/reports/ReportsHubPage';
-import {
-  ChoirHomePage,
-  ChoirRehearsalsPage,
-  ChoirRepertoirePage,
-  ChoirRosterPage,
-  ChoirSectionsPage,
-} from './pages/ministry/ChoirPages';
-import {
-  ChoirFinancePage,
-  ChoirMyContributionsPage,
-  ChoirPeoplePage,
-  ChoirTeamsPage,
-} from './pages/ministry/ChoirFinancePages';
-import {
-  ChoirAccountingPage,
-  ChoirAssetsPage,
-  ChoirDonationsPage,
-  ChoirFundraisingPage,
-  ChoirReportsPage,
-  ChoirSponsorsPage,
-} from './pages/ministry/ChoirOpsPages';
-import {
-  WorshipHomePage,
-  WorshipRehearsalsPage,
-  WorshipRepertoirePage,
-  WorshipRosterPage,
-  WorshipSectionsPage,
-} from './pages/ministry/WorshipPages';
-import {
-  WorshipFinancePage,
-  WorshipMyContributionsPage,
-  WorshipPeoplePage,
-  WorshipTeamsPage,
-} from './pages/ministry/WorshipFinancePages';
-import {
-  WorshipAccountingPage,
-  WorshipAssetsPage,
-  WorshipDonationsPage,
-  WorshipFundraisingPage,
-  WorshipReportsPage,
-  WorshipSponsorsPage,
-} from './pages/ministry/WorshipOpsPages';
-import {
-  DeaconCasesPage,
-  DeaconFinancePage,
-  DeaconHomePage,
-  DeaconMyContributionsPage,
-  DeaconRosterPage,
-  DeaconVisitsPage,
-} from './pages/ministry/DeaconPages';
-import { ChoirShell } from './pages/ministry/ChoirShell';
-import { MinistryMissionBoard } from './pages/ministry/MinistryMissionBoard';
-import { MinistryShell, RequireMinistryModule } from './pages/ministry/MinistryShell';
-import { RequireChoirNav } from './pages/ministry/RequireChoirNav';
 import { useActiveChoir } from './pages/ministry/useActiveChoir';
-import {
-  FinanceFundLedgerPage,
-  FinanceHomePage,
-  FinanceSystemRedirect,
-  MinistryFundLedgerPage,
-} from './pages/ministry/FinancePages';
-import {
-  ChurchBalanceSheetPage,
-  ChurchBudgetsPage,
-  ChurchCollectionsPage,
-  ChurchReportsPage,
-} from './pages/ministry/ChurchFinancePages';
-import {
-  ProtocolAttendancePage,
-  ProtocolCalendarPage,
-  ProtocolHistoryPage,
-  ProtocolHomePage,
-  ProtocolMembersPage,
-  ProtocolMySchedulePage,
-  ProtocolReviewPage,
-} from './pages/ministry/ProtocolPages';
-import {
-  ProtocolFaithfulPage,
-  ProtocolTeamsPage,
-} from './pages/ministry/ProtocolSchedulingPages';
-import { ProtocolMusicFeedPage } from './pages/ministry/ProtocolMusicFeedPage';
-import { ProtocolAvailabilityPage } from './pages/ministry/ProtocolAvailabilityPage';
-import {
-  ProtocolExportPage,
-  ProtocolFinancePage,
-  ProtocolNotificationsPage,
-  ProtocolReportsPage,
-} from './pages/ministry/ProtocolOpsPages';
-import {
-  YouthHomePage,
-  YouthMissionPage,
-} from './pages/ministry/YouthPages';
-import {
-  MusicHomePage,
-  MusicMissionPage,
-  MusicScheduleDraftsPage,
-  MusicScheduleInboxPage,
-  MusicSchedulePublishedPage,
-  MusicScheduleWorkspacePage,
-} from './pages/ministry/MusicSchedulePages';
-import {
-  PeerMinistryHomePage,
-  PeerMinistryMissionPage,
-} from './pages/ministry/PeerMinistryPages';
-import {
-  PeerEventsPage,
-  PeerProgramsPage,
-  PeerProjectsPage,
-  PeerTasksPage,
-} from './pages/ministry/PeerMissionPages';
-import {
-  MinistryAccountingPage,
-  MinistryAssetsPage,
-  MinistryDonationsPage,
-  MinistryFinanceOverviewPage,
-  MinistryFinanceReportsPage,
-  MinistryFundraisingPage,
-  MinistryMyContributionsPage,
-  MinistrySponsorsPage,
-} from './pages/ministry/MinistryFinanceKitPages';
 import { PEER_CORE_SYSTEMS, peerCoreNav } from './ministry/peerCoreSystems';
-import { OrganizationDetailPage } from './pages/OrganizationDetailPage';
-import { OrganizationPage } from './pages/OrganizationPage';
-import { ParticipationPage } from './pages/ParticipationPage';
-import { PeoplePage } from './pages/PeoplePage';
-import { PeopleTablePage } from './pages/PeopleTablePage';
-import { PersonFormPage } from './pages/PersonFormPage';
-import { PersonProfilePage } from './pages/PersonProfilePage';
-import { ProgramsPage } from './pages/ProgramsPage';
-import { ProgramDetailPage } from './pages/ProgramDetailPage';
-import { SsoHandoffPage } from './pages/SsoHandoffPage';
-import { SystemsPage } from './pages/SystemsPage';
-import { ProjectDetailPage } from './pages/ProjectDetailPage';
-import { ProjectsPage } from './pages/ProjectsPage';
-import { TaskDetailPage } from './pages/TaskDetailPage';
-import { TasksPage } from './pages/TasksPage';
+
+// Each page loads on first visit, so the first screen downloads only what it needs.
+const AccessEnginePage = lazy(() =>
+  import('./pages/AccessEnginePage').then((m) => ({ default: m.AccessEnginePage })),
+);
+const ActivitySessionPage = lazy(() =>
+  import('./pages/ActivitySessionPage').then((m) => ({ default: m.ActivitySessionPage })),
+);
+const CalendarPage = lazy(() =>
+  import('./pages/CalendarPage').then((m) => ({ default: m.CalendarPage })),
+);
+const CheckInPage = lazy(() =>
+  import('./pages/CheckInPage').then((m) => ({ default: m.CheckInPage })),
+);
+const DashboardPage = lazy(() =>
+  import('./pages/DashboardPage').then((m) => ({ default: m.DashboardPage })),
+);
+const EventDetailPage = lazy(() =>
+  import('./pages/EventDetailPage').then((m) => ({ default: m.EventDetailPage })),
+);
+const EventsPage = lazy(() =>
+  import('./pages/EventsPage').then((m) => ({ default: m.EventsPage })),
+);
+const BoardPage = lazy(() =>
+  import('./pages/BoardPage').then((m) => ({ default: m.BoardPage })),
+);
+const BoardFollowUpPage = lazy(() =>
+  import('./pages/BoardFollowUpPage').then((m) => ({ default: m.BoardFollowUpPage })),
+);
+const BoardMeetingPage = lazy(() =>
+  import('./pages/BoardMeetingPage').then((m) => ({ default: m.BoardMeetingPage })),
+);
+const PastoralDeskPage = lazy(() =>
+  import('./pages/PastoralDeskPage').then((m) => ({ default: m.PastoralDeskPage })),
+);
+const CorrespondenceDetailPage = lazy(() =>
+  import('./pages/CorrespondencePage').then((m) => ({ default: m.CorrespondenceDetailPage })),
+);
+const CorrespondencePage = lazy(() =>
+  import('./pages/CorrespondencePage').then((m) => ({ default: m.CorrespondencePage })),
+);
+const SystemAdminPage = lazy(() =>
+  import('./pages/SystemAdminPage').then((m) => ({ default: m.SystemAdminPage })),
+);
+const InboxPage = lazy(() =>
+  import('./pages/InboxPage').then((m) => ({ default: m.InboxPage })),
+);
+const ReportsHubPage = lazy(() =>
+  import('./pages/reports/ReportsHubPage').then((m) => ({ default: m.ReportsHubPage })),
+);
+const ChoirHomePage = lazy(() =>
+  import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirHomePage })),
+);
+const ChoirRehearsalsPage = lazy(() =>
+  import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirRehearsalsPage })),
+);
+const ChoirRepertoirePage = lazy(() =>
+  import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirRepertoirePage })),
+);
+const ChoirRosterPage = lazy(() =>
+  import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirRosterPage })),
+);
+const ChoirSectionsPage = lazy(() =>
+  import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirSectionsPage })),
+);
+const ChoirFinancePage = lazy(() =>
+  import('./pages/ministry/ChoirFinancePages').then((m) => ({ default: m.ChoirFinancePage })),
+);
+const ChoirMyContributionsPage = lazy(() =>
+  import('./pages/ministry/ChoirFinancePages').then((m) => ({ default: m.ChoirMyContributionsPage })),
+);
+const ChoirPeoplePage = lazy(() =>
+  import('./pages/ministry/ChoirFinancePages').then((m) => ({ default: m.ChoirPeoplePage })),
+);
+const ChoirTeamsPage = lazy(() =>
+  import('./pages/ministry/ChoirFinancePages').then((m) => ({ default: m.ChoirTeamsPage })),
+);
+const ChoirAccountingPage = lazy(() =>
+  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirAccountingPage })),
+);
+const ChoirAssetsPage = lazy(() =>
+  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirAssetsPage })),
+);
+const ChoirDonationsPage = lazy(() =>
+  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirDonationsPage })),
+);
+const ChoirFundraisingPage = lazy(() =>
+  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirFundraisingPage })),
+);
+const ChoirReportsPage = lazy(() =>
+  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirReportsPage })),
+);
+const ChoirSponsorsPage = lazy(() =>
+  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirSponsorsPage })),
+);
+const WorshipHomePage = lazy(() =>
+  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipHomePage })),
+);
+const WorshipRehearsalsPage = lazy(() =>
+  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipRehearsalsPage })),
+);
+const WorshipRepertoirePage = lazy(() =>
+  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipRepertoirePage })),
+);
+const WorshipRosterPage = lazy(() =>
+  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipRosterPage })),
+);
+const WorshipSectionsPage = lazy(() =>
+  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipSectionsPage })),
+);
+const WorshipFinancePage = lazy(() =>
+  import('./pages/ministry/WorshipFinancePages').then((m) => ({ default: m.WorshipFinancePage })),
+);
+const WorshipMyContributionsPage = lazy(() =>
+  import('./pages/ministry/WorshipFinancePages').then((m) => ({ default: m.WorshipMyContributionsPage })),
+);
+const WorshipPeoplePage = lazy(() =>
+  import('./pages/ministry/WorshipFinancePages').then((m) => ({ default: m.WorshipPeoplePage })),
+);
+const WorshipTeamsPage = lazy(() =>
+  import('./pages/ministry/WorshipFinancePages').then((m) => ({ default: m.WorshipTeamsPage })),
+);
+const WorshipAccountingPage = lazy(() =>
+  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipAccountingPage })),
+);
+const WorshipAssetsPage = lazy(() =>
+  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipAssetsPage })),
+);
+const WorshipDonationsPage = lazy(() =>
+  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipDonationsPage })),
+);
+const WorshipFundraisingPage = lazy(() =>
+  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipFundraisingPage })),
+);
+const WorshipReportsPage = lazy(() =>
+  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipReportsPage })),
+);
+const WorshipSponsorsPage = lazy(() =>
+  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipSponsorsPage })),
+);
+const DeaconCasesPage = lazy(() =>
+  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconCasesPage })),
+);
+const DeaconFinancePage = lazy(() =>
+  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconFinancePage })),
+);
+const DeaconHomePage = lazy(() =>
+  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconHomePage })),
+);
+const DeaconMyContributionsPage = lazy(() =>
+  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconMyContributionsPage })),
+);
+const DeaconRosterPage = lazy(() =>
+  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconRosterPage })),
+);
+const DeaconVisitsPage = lazy(() =>
+  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconVisitsPage })),
+);
+const ChoirShell = lazy(() =>
+  import('./pages/ministry/ChoirShell').then((m) => ({ default: m.ChoirShell })),
+);
+const MinistryMissionBoard = lazy(() =>
+  import('./pages/ministry/MinistryMissionBoard').then((m) => ({ default: m.MinistryMissionBoard })),
+);
+const MinistryShell = lazy(() =>
+  import('./pages/ministry/MinistryShell').then((m) => ({ default: m.MinistryShell })),
+);
+const RequireMinistryModule = lazy(() =>
+  import('./pages/ministry/MinistryShell').then((m) => ({ default: m.RequireMinistryModule })),
+);
+const RequireChoirNav = lazy(() =>
+  import('./pages/ministry/RequireChoirNav').then((m) => ({ default: m.RequireChoirNav })),
+);
+const FinanceFundLedgerPage = lazy(() =>
+  import('./pages/ministry/FinancePages').then((m) => ({ default: m.FinanceFundLedgerPage })),
+);
+const FinanceHomePage = lazy(() =>
+  import('./pages/ministry/FinancePages').then((m) => ({ default: m.FinanceHomePage })),
+);
+const FinanceSystemRedirect = lazy(() =>
+  import('./pages/ministry/FinancePages').then((m) => ({ default: m.FinanceSystemRedirect })),
+);
+const MinistryFundLedgerPage = lazy(() =>
+  import('./pages/ministry/FinancePages').then((m) => ({ default: m.MinistryFundLedgerPage })),
+);
+const ChurchBalanceSheetPage = lazy(() =>
+  import('./pages/ministry/ChurchFinancePages').then((m) => ({ default: m.ChurchBalanceSheetPage })),
+);
+const ChurchBudgetsPage = lazy(() =>
+  import('./pages/ministry/ChurchFinancePages').then((m) => ({ default: m.ChurchBudgetsPage })),
+);
+const ChurchCollectionsPage = lazy(() =>
+  import('./pages/ministry/ChurchFinancePages').then((m) => ({ default: m.ChurchCollectionsPage })),
+);
+const ChurchReportsPage = lazy(() =>
+  import('./pages/ministry/ChurchFinancePages').then((m) => ({ default: m.ChurchReportsPage })),
+);
+const ProtocolAttendancePage = lazy(() =>
+  import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolAttendancePage })),
+);
+const ProtocolCalendarPage = lazy(() =>
+  import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolCalendarPage })),
+);
+const ProtocolHistoryPage = lazy(() =>
+  import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolHistoryPage })),
+);
+const ProtocolHomePage = lazy(() =>
+  import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolHomePage })),
+);
+const ProtocolMembersPage = lazy(() =>
+  import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolMembersPage })),
+);
+const ProtocolMySchedulePage = lazy(() =>
+  import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolMySchedulePage })),
+);
+const ProtocolReviewPage = lazy(() =>
+  import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolReviewPage })),
+);
+const ProtocolFaithfulPage = lazy(() =>
+  import('./pages/ministry/ProtocolSchedulingPages').then((m) => ({ default: m.ProtocolFaithfulPage })),
+);
+const ProtocolTeamsPage = lazy(() =>
+  import('./pages/ministry/ProtocolSchedulingPages').then((m) => ({ default: m.ProtocolTeamsPage })),
+);
+const ProtocolMusicFeedPage = lazy(() =>
+  import('./pages/ministry/ProtocolMusicFeedPage').then((m) => ({ default: m.ProtocolMusicFeedPage })),
+);
+const ProtocolAvailabilityPage = lazy(() =>
+  import('./pages/ministry/ProtocolAvailabilityPage').then((m) => ({ default: m.ProtocolAvailabilityPage })),
+);
+const ProtocolExportPage = lazy(() =>
+  import('./pages/ministry/ProtocolOpsPages').then((m) => ({ default: m.ProtocolExportPage })),
+);
+const ProtocolFinancePage = lazy(() =>
+  import('./pages/ministry/ProtocolOpsPages').then((m) => ({ default: m.ProtocolFinancePage })),
+);
+const ProtocolNotificationsPage = lazy(() =>
+  import('./pages/ministry/ProtocolOpsPages').then((m) => ({ default: m.ProtocolNotificationsPage })),
+);
+const ProtocolReportsPage = lazy(() =>
+  import('./pages/ministry/ProtocolOpsPages').then((m) => ({ default: m.ProtocolReportsPage })),
+);
+const YouthHomePage = lazy(() =>
+  import('./pages/ministry/YouthPages').then((m) => ({ default: m.YouthHomePage })),
+);
+const YouthMissionPage = lazy(() =>
+  import('./pages/ministry/YouthPages').then((m) => ({ default: m.YouthMissionPage })),
+);
+const MusicHomePage = lazy(() =>
+  import('./pages/ministry/MusicSchedulePages').then((m) => ({ default: m.MusicHomePage })),
+);
+const MusicMissionPage = lazy(() =>
+  import('./pages/ministry/MusicSchedulePages').then((m) => ({ default: m.MusicMissionPage })),
+);
+const MusicScheduleDraftsPage = lazy(() =>
+  import('./pages/ministry/MusicSchedulePages').then((m) => ({ default: m.MusicScheduleDraftsPage })),
+);
+const MusicScheduleInboxPage = lazy(() =>
+  import('./pages/ministry/MusicSchedulePages').then((m) => ({ default: m.MusicScheduleInboxPage })),
+);
+const MusicSchedulePublishedPage = lazy(() =>
+  import('./pages/ministry/MusicSchedulePages').then((m) => ({ default: m.MusicSchedulePublishedPage })),
+);
+const MusicScheduleWorkspacePage = lazy(() =>
+  import('./pages/ministry/MusicSchedulePages').then((m) => ({ default: m.MusicScheduleWorkspacePage })),
+);
+const PeerMinistryHomePage = lazy(() =>
+  import('./pages/ministry/PeerMinistryPages').then((m) => ({ default: m.PeerMinistryHomePage })),
+);
+const PeerMinistryMissionPage = lazy(() =>
+  import('./pages/ministry/PeerMinistryPages').then((m) => ({ default: m.PeerMinistryMissionPage })),
+);
+const PeerEventsPage = lazy(() =>
+  import('./pages/ministry/PeerMissionPages').then((m) => ({ default: m.PeerEventsPage })),
+);
+const PeerProgramsPage = lazy(() =>
+  import('./pages/ministry/PeerMissionPages').then((m) => ({ default: m.PeerProgramsPage })),
+);
+const PeerProjectsPage = lazy(() =>
+  import('./pages/ministry/PeerMissionPages').then((m) => ({ default: m.PeerProjectsPage })),
+);
+const PeerTasksPage = lazy(() =>
+  import('./pages/ministry/PeerMissionPages').then((m) => ({ default: m.PeerTasksPage })),
+);
+const MinistryAccountingPage = lazy(() =>
+  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryAccountingPage })),
+);
+const MinistryAssetsPage = lazy(() =>
+  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryAssetsPage })),
+);
+const MinistryDonationsPage = lazy(() =>
+  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryDonationsPage })),
+);
+const MinistryFinanceOverviewPage = lazy(() =>
+  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryFinanceOverviewPage })),
+);
+const MinistryFinanceReportsPage = lazy(() =>
+  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryFinanceReportsPage })),
+);
+const MinistryFundraisingPage = lazy(() =>
+  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryFundraisingPage })),
+);
+const MinistryMyContributionsPage = lazy(() =>
+  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryMyContributionsPage })),
+);
+const MinistrySponsorsPage = lazy(() =>
+  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistrySponsorsPage })),
+);
+const OrganizationDetailPage = lazy(() =>
+  import('./pages/OrganizationDetailPage').then((m) => ({ default: m.OrganizationDetailPage })),
+);
+const OrganizationPage = lazy(() =>
+  import('./pages/OrganizationPage').then((m) => ({ default: m.OrganizationPage })),
+);
+const ParticipationPage = lazy(() =>
+  import('./pages/ParticipationPage').then((m) => ({ default: m.ParticipationPage })),
+);
+const PeoplePage = lazy(() =>
+  import('./pages/PeoplePage').then((m) => ({ default: m.PeoplePage })),
+);
+const PeopleTablePage = lazy(() =>
+  import('./pages/PeopleTablePage').then((m) => ({ default: m.PeopleTablePage })),
+);
+const PersonFormPage = lazy(() =>
+  import('./pages/PersonFormPage').then((m) => ({ default: m.PersonFormPage })),
+);
+const PersonProfilePage = lazy(() =>
+  import('./pages/PersonProfilePage').then((m) => ({ default: m.PersonProfilePage })),
+);
+const ProgramsPage = lazy(() =>
+  import('./pages/ProgramsPage').then((m) => ({ default: m.ProgramsPage })),
+);
+const ProgramDetailPage = lazy(() =>
+  import('./pages/ProgramDetailPage').then((m) => ({ default: m.ProgramDetailPage })),
+);
+const SsoHandoffPage = lazy(() =>
+  import('./pages/SsoHandoffPage').then((m) => ({ default: m.SsoHandoffPage })),
+);
+const SystemsPage = lazy(() =>
+  import('./pages/SystemsPage').then((m) => ({ default: m.SystemsPage })),
+);
+const ProjectDetailPage = lazy(() =>
+  import('./pages/ProjectDetailPage').then((m) => ({ default: m.ProjectDetailPage })),
+);
+const ProjectsPage = lazy(() =>
+  import('./pages/ProjectsPage').then((m) => ({ default: m.ProjectsPage })),
+);
+const TaskDetailPage = lazy(() =>
+  import('./pages/TaskDetailPage').then((m) => ({ default: m.TaskDetailPage })),
+);
+const TasksPage = lazy(() =>
+  import('./pages/TasksPage').then((m) => ({ default: m.TasksPage })),
+);
 
 function RequireAuth() {
   const { account } = useAuth();
@@ -379,6 +582,8 @@ export default function App() {
       <ToastProvider>
       <SystemScopeGuard>
       <ScheduleSyncGate>
+      <ErrorBoundary>
+      <Suspense fallback={<div className="route-loading" role="status">Loading…</div>}>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/sso/handoff" element={<SsoHandoffPage />} />
@@ -1092,6 +1297,8 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
+      </ErrorBoundary>
       </ScheduleSyncGate>
       </SystemScopeGuard>
       </ToastProvider>

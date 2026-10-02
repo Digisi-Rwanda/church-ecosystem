@@ -1,5 +1,6 @@
 import type { NextFunction, Request, Response } from 'express';
 import { verifyAccessToken, type JwtPayload } from '../lib/auth.js';
+import { errorFields, log } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
 
 export type AuthedRequest = Request & { auth?: JwtPayload };
@@ -45,11 +46,11 @@ export async function requireAuth(
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ): void {
-  console.error(err);
+  log.error('unhandled error', { id: (req as Request & { id?: string }).id, path: req.path, ...errorFields(err) });
   const message = err instanceof Error ? err.message : 'Server error';
   res.status(500).json({ error: message });
 }

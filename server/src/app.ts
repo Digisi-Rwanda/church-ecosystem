@@ -2,6 +2,7 @@ import cors from 'cors';
 import express from 'express';
 import { config } from './config.js';
 import { errorHandler } from './middleware/http.js';
+import { rateLimit, requestLog, securityHeaders } from './middleware/hardening.js';
 import { attentionRouter } from './routes/attention.js';
 import { authRouter } from './routes/auth.js';
 import { authorizeRouter } from './routes/authorize.js';
@@ -18,6 +19,11 @@ import { systemsRouter } from './routes/systems.js';
 
 export function createApp() {
   const app = express();
+  // Render sits behind a proxy: use the real client address for rate limiting.
+  app.set('trust proxy', 1);
+  app.disable('x-powered-by');
+  app.use(securityHeaders);
+  app.use(requestLog);
   app.use(
     cors({
       origin: config.corsOrigin,
@@ -55,6 +61,11 @@ export function createApp() {
   });
 
   app.use('/api/health', healthRouter);
+  // One address trying many times. Limits are generous on purpose: a whole church
+  // can share one wifi address, and open tabs poll the shared schedules every 4 s.
+  // (Guessing one account is stopped separately by the per-username throttle.)
+  app.use('/api/auth/login', rateLimit({ name: 'login', limit: 100, windowMs: 15 * 60 * 1000 }));
+  app.use('/api', rateLimit({ name: 'api', limit: 3000, windowMs: 60 * 1000 }));
   app.use('/api/auth', authRouter);
   app.use('/api/systems', systemsRouter);
   app.use('/api/people', peopleRouter);

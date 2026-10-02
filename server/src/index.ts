@@ -1,9 +1,9 @@
 import { createApp } from './app.js';
 import { config } from './config.js';
+import { log } from './lib/logger.js';
 
 const app = createApp();
 
 app.listen(config.port, () => {
-  console.log(`Kacyiru API listening on :${config.port}`);
-  console.log(`CORS origin: ${JSON.stringify(config.corsOrigin)}`);
+  log.info('API listening', { port: config.port, corsOrigin: config.corsOrigin });
 });

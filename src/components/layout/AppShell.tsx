@@ -1,4 +1,6 @@
+import { Suspense } from 'react';
 import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { ErrorBoundary } from '../ErrorBoundary';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
 import {
@@ -417,7 +419,12 @@ export function AppShell({
           </div>
         </header>
         <main className="content" id="main-content" tabIndex={-1}>
-          <Outlet />
+          {/* A crashing page must not take the menu with it; reset when you navigate. */}
+          <ErrorBoundary key={location.pathname} label={location.pathname}>
+            <Suspense fallback={<div className="route-loading" role="status">Loading…</div>}>
+              <Outlet />
+            </Suspense>
+          </ErrorBoundary>
         </main>
       </div>
     </div>

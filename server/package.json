@@ -18,6 +18,7 @@
     "setup:pg": "npm run db:generate:pg && npm run db:push:pg && npm run db:seed:pg",
     "build:render": "npm run db:generate:pg && npm run build",
     "start:render": "npm run db:push:pg && npm run db:seed:pg && npm start",
+    "test": "vitest run",
     "test:policy": "tsx scripts/policy-smoke.ts"
   },
   "dependencies": {
