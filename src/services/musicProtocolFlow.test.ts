@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // The services persist through window.setTimeout; give node a minimal window.
 vi.stubGlobal('window', {
@@ -39,6 +39,29 @@ function withVp<T>(run: () => T): T {
     POSITIONS.splice(POSITIONS.indexOf(pos), 1);
   }
 }
+
+/**
+ * A genuinely too-small team: only `keepActive` people stay active, so some
+ * services cannot reach their target. (A roster of 49 people is enough for the
+ * month; shortages must come from real lack of people, not from the builder.)
+ */
+let restoreRoster: (() => void) | null = null;
+function shortenRoster(keepActive = 30) {
+  const others = PROTOCOL_ROSTER.filter(
+    (m) => m.status === 'ACTIVE' && m.personId !== coordinator && m.personId !== president,
+  );
+  const drop = others.slice(Math.max(0, keepActive - 2));
+  const saved = drop.map((m) => [m, m.status] as const);
+  for (const m of drop) m.status = 'LEAVE';
+  restoreRoster = () => {
+    for (const [m, st] of saved) m.status = st;
+  };
+  expect(protocolService.generateTeams(M, coordinator).ok).toBe(true);
+}
+afterEach(() => {
+  restoreRoster?.();
+  restoreRoster = null;
+});
 
 function fresh() {
   protocolService.returnToDraft(M, president);
@@ -199,6 +222,7 @@ describe('Blocking issues and overrides', () => {
   beforeEach(fresh);
 
   it('splits blocking rule violations from warnings', () => {
+    shortenRoster();
     const v = protocolService.validateMonthDetailed(M);
     expect(v.blocking).toHaveLength(0);
     expect(v.warnings.every((w) => w.severity === 'WARNING')).toBe(true);
@@ -425,12 +449,13 @@ describe('Coverage preview and the Tuesday relaxation', () => {
   beforeEach(fresh);
 
   it('warns before generating and changes nothing', () => {
+    shortenRoster();
     const slotsBefore = protocolService.slotsForMonth(M).length;
     const planBefore = JSON.stringify(protocolService.getMonthPlan(M));
     const p = protocolService.coveragePreview(M);
     expect(p.rows.length).toBeGreaterThan(10);
     expect(p.shortRows.length).toBeGreaterThan(0);
-    const short = p.shortRows.find((r) => r.date === '2026-09-29')!;
+    const short = p.shortRows[p.shortRows.length - 1]!;
     expect(short.projected).toBeLessThan(short.target);
     expect(short.limitedBy).not.toBeNull();
     // rows agree with what generating really does

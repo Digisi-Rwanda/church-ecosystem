@@ -220,66 +220,47 @@ export function buildProtocolTeams(input: {
 
     const need = service.targetTeamSize || rules.defaultTeamSize;
 
-    const loads = roster
-      .filter((m) => m.status === 'ACTIVE')
-      .map((m) => officialLoad(m.personId, slots, serviceById, service.monthKey));
-    const allAtTarget =
-      loads.length > 0 && loads.every((n) => n >= rules.preferTarget);
-
-    const eligible = roster.filter((m) => {
+    // Everyone who could take this service, ignoring how many duties they have.
+    const canTake = roster.filter((m) => {
       if (m.status !== 'ACTIVE') return false;
       if (!canServeKind(m, service.kind, service.date)) return false;
       if (isUnavailable(m, service.date)) return false;
       if (alreadyOnThisService.has(m.personId)) return false;
       if (service.kind === 'SS2' && sameDaySs1.has(m.personId)) return false;
-      if (
-        !choirAllows(
-          m,
-          service,
-          choirUnits,
-          unitsOnService,
-          musicRequirements(rules, service.kind).choir,
-          musicRequirements(rules, service.kind).worship,
-        )
-      ) {
-        return false;
-      }
-      const load = officialLoad(
-        m.personId,
-        slots,
-        serviceById,
-        service.monthKey,
+      return choirAllows(
+        m,
+        service,
+        choirUnits,
+        unitsOnService,
+        musicRequirements(rules, service.kind).choir,
+        musicRequirements(rules, service.kind).worship,
       );
-      if (load < rules.preferTarget) return true;
-      // Extra (4th) only when everyone already has 3 and team still needs people
-      if (
-        load < rules.hardMax &&
-        allAtTarget &&
-        alreadyOnThisService.size < need
-      ) {
-        return true;
-      }
-      return false;
     });
+    const byLoad = (load: (id: string) => number) => (a: ProtocolRosterMember, b: ProtocolRosterMember) =>
+      load(a.personId) - load(b.personId) || a.personId.localeCompare(b.personId);
+    const official = (id: string) => officialLoad(id, slots, serviceById, service.monthKey);
+    // Official + Extra duties already given this month (the hard maximum counts both).
+    const total = (id: string) =>
+      slots.filter(
+        (s) => s.personId === id && serviceById.get(s.serviceId)?.monthKey === service.monthKey,
+      ).length;
 
-    eligible.sort((a, b) => {
-      const loadA = officialLoad(
-        a.personId,
-        slots,
-        serviceById,
-        service.monthKey,
-      );
-      const loadB = officialLoad(
-        b.personId,
-        slots,
-        serviceById,
-        service.monthKey,
-      );
-      if (loadA !== loadB) return loadA - loadB;
-      return a.personId.localeCompare(b.personId);
-    });
-
-    const picked = eligible.slice(0, need);
+    // First, people still under the monthly target (fewest duties first).
+    const picked = canTake
+      .filter((m) => official(m.personId) < rules.preferTarget)
+      .sort(byLoad(official))
+      .slice(0, need);
+    // Extra (4th) duties only when nobody who can take this service is still under
+    // the target and the team is short. Decided here, after the under-target people
+    // have been placed, and only among people who can actually take this service
+    // (someone who cannot serve it must not block Extras for everyone else).
+    if (picked.length < need) {
+      const extras = canTake
+        .filter((m) => official(m.personId) >= rules.preferTarget && total(m.personId) < rules.hardMax)
+        .sort(byLoad(total))
+        .slice(0, need - picked.length);
+      picked.push(...extras);
+    }
     if (picked.length < need) {
       warnings.push(
         `${service.label} (${service.date}): only ${picked.length}/${need} eligible`,
