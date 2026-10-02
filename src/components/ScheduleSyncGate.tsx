@@ -35,7 +35,7 @@ function SyncBadge() {
     st.state === 'ok'
       ? `Shared with the server · Music v${st.music} · Protocol v${st.protocol}`
       : st.state === 'no-token'
-        ? 'This device only — signed in without the server, so Music and Protocol data is NOT shared'
+        ? `This device only — signed in without the server, so Music and Protocol data is NOT shared${st.note ? `. Why: ${st.note}` : ''}`
         : st.state === 'no-api'
           ? 'This device only — this site has no server address (VITE_API_URL)'
           : `Not syncing — ${st.error ?? 'server problem'}`;

@@ -46,6 +46,7 @@ import {
   setApiToken,
   setSyncToken,
 } from '../api';
+import { setLoginNote } from '../api/loginNote';
 import {
   clearSession,
   readSession,
@@ -725,6 +726,7 @@ export const authService = {
     if (isApiEnabled()) {
       try {
         const result = await apiLogin(username, password, targetSystemId);
+        setLoginNote('');
         // A demo role account that exists on the server only as a bare account
         // (no roles there) keeps its local demo permissions; the token is kept
         // just to share Music/Protocol data.
@@ -763,6 +765,11 @@ export const authService = {
         if (!isApiFallbackEnabled()) return null;
         if (e instanceof ApiError && (e.status === 0 || e.status === 401)) {
           // API down or unknown user → local demo accounts
+          setLoginNote(
+            e.status === 0
+              ? 'the server could not be reached (it may be waking up, or CORS_ORIGIN on the server does not match this site)'
+              : 'the server does not know this username/password (the account may not exist on the server yet)',
+          );
         } else {
           return null;
         }

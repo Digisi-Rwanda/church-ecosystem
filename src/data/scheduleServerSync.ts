@@ -24,6 +24,7 @@ import {
   getScheduleSyncToken,
   isApiEnabled,
 } from '../api';
+import { getLoginNote } from '../api/loginNote';
 import type { ScheduleDocKey } from '../api/scheduleStateApi';
 import { exportCollections, importCollections } from './localDomainStore';
 import { merge3 } from './mergeDoc';
@@ -166,6 +167,8 @@ export type SyncStatus = {
   /** no-api: this build has no server address; no-token: signed in without the server; error: server not reachable or refused; ok: sharing. */
   state: 'no-api' | 'no-token' | 'error' | 'ok';
   error?: string;
+  /** For no-token: why the sign-in did not use the server. */
+  note?: string;
   music: number;
   protocol: number;
 };
@@ -175,7 +178,7 @@ export function getSyncStatus(): SyncStatus {
   const music = state.music.ready ? state.music.version : 0;
   const protocol = state.protocol.ready ? state.protocol.version : 0;
   if (!isApiEnabled()) return { state: 'no-api', music, protocol };
-  if (!getScheduleSyncToken()) return { state: 'no-token', music, protocol };
+  if (!getScheduleSyncToken()) return { state: 'no-token', note: getLoginNote() || undefined, music, protocol };
   if (lastError) return { state: 'error', error: lastError, music, protocol };
   return { state: 'ok', music, protocol };
 }
