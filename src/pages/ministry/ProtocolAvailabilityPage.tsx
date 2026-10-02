@@ -50,21 +50,6 @@ function pickedSummary(list?: Picked): string {
     .join(' · ');
 }
 
-const iso = (d: Date) => d.toISOString().slice(0, 10);
-
-/** Dates from..to inclusive; optionally only Sundays and Tuesdays. */
-function datesBetween(from: string, to: string, serviceDaysOnly: boolean): string[] {
-  const out: string[] = [];
-  const a = new Date(`${from}T00:00:00Z`);
-  const b = new Date(`${to}T00:00:00Z`);
-  if (Number.isNaN(a.getTime()) || Number.isNaN(b.getTime()) || b < a) return out;
-  for (let d = a, n = 0; d <= b && n < 400; d = new Date(d.getTime() + 86400000), n++) {
-    const day = d.getUTCDay();
-    if (!serviceDaysOnly || day === 0 || day === 2) out.push(iso(d));
-  }
-  return out;
-}
-
 /**
  * Availability: for each member the Coordinator sets whether they are active,
  * on leave or inactive, which services they serve, and the dates they cannot
@@ -306,15 +291,59 @@ function DatesDrawer({
   onClose: () => void;
   onSave: (dates: string[]) => void;
 }) {
-  const [list, setList] = useState<string[]>(dates);
-  const [from, setFrom] = useState('');
-  const [to, setTo] = useState('');
-  const [serviceDaysOnly, setServiceDaysOnly] = useState(true);
-  const add = datesBetween(from, to || from, serviceDaysOnly);
+  const months = useMemo(() => nextMonths(12), []);
+  const [month, setMonth] = useState(months[0]!);
+  const [sel, setSel] = useState<Set<string>>(() => new Set(dates));
+
+  /** date -> the services held that day, for every month on offer. */
+  const calendar = useMemo(() => {
+    const byDate = new Map<string, ProtocolServiceKind[]>();
+    for (const m of months) {
+      for (const s of buildMusicCalendar(m, 'MONTH')) {
+        if (!KINDS.includes(s.kind as ProtocolServiceKind)) continue; // no Friday
+        byDate.set(s.date, [...(byDate.get(s.date) ?? []), s.kind as ProtocolServiceKind]);
+      }
+    }
+    return byDate;
+  }, [months]);
+
+  const [y, mo] = month.split('-').map(Number) as [number, number];
+  const firstWeekday = new Date(Date.UTC(y, mo - 1, 1)).getUTCDay();
+  const daysInMonth = new Date(Date.UTC(y, mo, 0)).getUTCDate();
+  const monthServiceDates = [...calendar.keys()].filter((d) => d.startsWith(month)).sort();
+  const weekdayOf = (d: string) => new Date(`${d}T00:00:00Z`).getUTCDay();
+  const countIn = (m: string) => [...sel].filter((d) => d.startsWith(m)).length;
+
+  const toggle = (d: string) =>
+    setSel((c) => {
+      const n = new Set(c);
+      if (n.has(d)) n.delete(d);
+      else n.add(d);
+      return n;
+    });
+  /** Select these dates, or clear them if they are all selected already. */
+  const toggleMany = (list: string[]) =>
+    setSel((c) => {
+      const n = new Set(c);
+      const allOn = list.length > 0 && list.every((d) => n.has(d));
+      for (const d of list) {
+        if (allOn) n.delete(d);
+        else n.add(d);
+      }
+      return n;
+    });
+
+  // Dates saved earlier that are not a service day on this calendar (kept, can be removed).
+  const otherDates = [...sel].filter((d) => !calendar.has(d)).sort();
+  const step = (by: number) => {
+    const i = months.indexOf(month) + by;
+    if (i >= 0 && i < months.length) setMonth(months[i]!);
+  };
 
   return (
     <Drawer
       open
+      wide
       title={name}
       subtitle="Dates not available"
       onClose={onClose}
@@ -323,57 +352,116 @@ function DatesDrawer({
           <button type="button" className="btn ghost" onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className="btn" onClick={() => onSave(list)}>
-            Save
+          <button type="button" className="btn" onClick={() => onSave([...sel].sort())}>
+            Save {sel.size ? `(${sel.size})` : ''}
           </button>
         </>
       }
     >
       <div className="stack">
-        <div className="row" style={{ gap: '0.6rem', flexWrap: 'wrap' }}>
-          <label className="stack" style={{ gap: '0.25rem' }}>
-            <span className="muted">From</span>
-            <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
-          </label>
-          <label className="stack" style={{ gap: '0.25rem' }}>
-            <span className="muted">To (leave empty for one day)</span>
-            <input type="date" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
-          </label>
-        </div>
-        <label className="row" style={{ gap: '0.35rem' }}>
-          <input type="checkbox" checked={serviceDaysOnly} onChange={(e) => setServiceDaysOnly(e.target.checked)} />
-          <span className="muted">Only Sundays and Tuesdays</span>
-        </label>
-        <div>
-          <button
-            type="button"
-            className="btn"
-            disabled={add.length === 0}
-            onClick={() => {
-              setList((l) => [...new Set([...l, ...add])].sort());
-              setFrom('');
-              setTo('');
-            }}
-          >
-            {add.length ? `Add ${add.length} ${add.length === 1 ? 'date' : 'dates'}` : 'Add dates'}
+        <p className="muted" style={{ margin: 0 }}>
+          Tap the service days this person cannot serve. A selected day means none of that day&apos;s services.
+        </p>
+        <div className="row" style={{ gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
+          <button type="button" className="btn ghost sm" aria-label="Previous month" onClick={() => step(-1)}>
+            ‹
+          </button>
+          <select aria-label="Month" value={month} onChange={(e) => setMonth(e.target.value)}>
+            {months.map((m) => (
+              <option key={m} value={m}>
+                {MON[Number(m.slice(5)) - 1]} {m.slice(0, 4)}
+                {countIn(m) ? ` • ${countIn(m)}` : ''}
+              </option>
+            ))}
+          </select>
+          <button type="button" className="btn ghost sm" aria-label="Next month" onClick={() => step(1)}>
+            ›
           </button>
         </div>
         <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
-          {list.length === 0 && <span className="muted">No dates set.</span>}
-          {list.map((d) => (
-            <span key={d} className="pill">
-              {d}{' '}
-              <button
-                type="button"
-                className="btn ghost sm"
-                aria-label={`Remove ${d}`}
-                onClick={() => setList((l) => l.filter((x) => x !== d))}
-              >
-                ×
-              </button>
-            </span>
-          ))}
+          <button
+            type="button"
+            className="btn secondary sm"
+            onClick={() => toggleMany(monthServiceDates.filter((d) => weekdayOf(d) === 0))}
+          >
+            All Sundays
+          </button>
+          <button
+            type="button"
+            className="btn secondary sm"
+            onClick={() => toggleMany(monthServiceDates.filter((d) => weekdayOf(d) === 2))}
+          >
+            All Tuesdays
+          </button>
+          <button type="button" className="btn secondary sm" onClick={() => toggleMany(monthServiceDates)}>
+            Whole month
+          </button>
+          {countIn(month) > 0 && (
+            <button
+              type="button"
+              className="btn ghost sm"
+              onClick={() => setSel((c) => new Set([...c].filter((d) => !d.startsWith(month))))}
+            >
+              Clear this month
+            </button>
+          )}
         </div>
+        <div
+          role="grid"
+          aria-label="Service calendar"
+          style={{ display: 'grid', gridTemplateColumns: 'repeat(7, minmax(0, 1fr))', gap: '0.3rem' }}
+        >
+          {['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((w) => (
+            <div key={w} className="muted" style={{ textAlign: 'center', fontSize: '0.8rem' }}>
+              {w}
+            </div>
+          ))}
+          {Array.from({ length: firstWeekday }, (_, i) => (
+            <div key={`b${i}`} />
+          ))}
+          {Array.from({ length: daysInMonth }, (_, i) => {
+            const day = i + 1;
+            const date = `${month}-${String(day).padStart(2, '0')}`;
+            const kinds = calendar.get(date);
+            if (!kinds) {
+              return (
+                <div key={date} className="muted" style={{ textAlign: 'center', padding: '0.4rem 0', opacity: 0.4 }}>
+                  {day}
+                </div>
+              );
+            }
+            const on = sel.has(date);
+            return (
+              <button
+                key={date}
+                type="button"
+                className={on ? 'btn' : 'btn secondary'}
+                aria-pressed={on}
+                aria-label={`${dayLabel(date)}, ${kinds.map((k) => SHORT[k]).join(' and ')}${on ? ', not available' : ''}`}
+                onClick={() => toggle(date)}
+                style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '0.3rem 0.1rem', gap: 0 }}
+              >
+                <strong>{day}</strong>
+                <span style={{ fontSize: '0.65rem', lineHeight: 1.2 }}>{kinds.map((k) => k.replace('TUESDAY', 'Tue').replace('IGABURO', 'Igab')).join(' ')}</span>
+              </button>
+            );
+          })}
+        </div>
+        {otherDates.length > 0 && (
+          <div className="stack" style={{ gap: '0.3rem' }}>
+            <span className="muted">Other saved dates (not service days)</span>
+            <div className="row" style={{ gap: '0.4rem', flexWrap: 'wrap' }}>
+              {otherDates.map((d) => (
+                <span key={d} className="pill">
+                  {d}{' '}
+                  <button type="button" className="btn ghost sm" aria-label={`Remove ${d}`} onClick={() => toggle(d)}>
+                    ×
+                  </button>
+                </span>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </Drawer>
   );
