@@ -159,10 +159,32 @@ async function syncOffices(force = false) {
   }
 }
 
+/** Why the last sync attempt failed (empty when the last attempt worked). */
+let lastError = '';
+
+export type SyncStatus = {
+  /** no-api: this build has no server address; no-token: signed in without the server; error: server not reachable or refused; ok: sharing. */
+  state: 'no-api' | 'no-token' | 'error' | 'ok';
+  error?: string;
+  music: number;
+  protocol: number;
+};
+
+/** What the small status badge shows, so "is my data shared?" has a visible answer. */
+export function getSyncStatus(): SyncStatus {
+  const music = state.music.ready ? state.music.version : 0;
+  const protocol = state.protocol.ready ? state.protocol.version : 0;
+  if (!isApiEnabled()) return { state: 'no-api', music, protocol };
+  if (!getScheduleSyncToken()) return { state: 'no-token', music, protocol };
+  if (lastError) return { state: 'error', error: lastError, music, protocol };
+  return { state: 'ok', music, protocol };
+}
+
 async function syncOne(key: ScheduleDocKey) {
   const st = state[key];
   if (st.busy) return;
   st.busy = true;
+  let failed = false;
   try {
     if (key === 'protocol') await syncOffices(!st.ready);
     if (!st.ready) {
@@ -177,10 +199,18 @@ async function syncOne(key: ScheduleDocKey) {
     if (v.version !== st.version) await pull(key, 'remote');
   } catch (e) {
     // Offline / server down: stay local, try again on the next tick.
+    failed = true;
+    lastError =
+      e instanceof ApiError
+        ? e.status === 0
+          ? 'cannot reach the server (network or CORS_ORIGIN)'
+          : `server answered ${e.status}: ${e.message}`
+        : String(e);
     if (!(e instanceof ApiError) || e.status !== 0) {
       console.warn(`[scheduleServerSync] ${key}:`, e);
     }
   } finally {
+    if (!failed) lastError = '';
     st.busy = false;
   }
 }

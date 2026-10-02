@@ -1,7 +1,9 @@
 import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import {
   SCHEDULE_SYNCED_EVENT,
+  getSyncStatus,
   type ScheduleSyncDetail,
+  type SyncStatus,
 } from '../data/scheduleServerSync';
 import { useToast } from './ui/Toast';
 
@@ -19,6 +21,47 @@ function userIsBusy(): boolean {
     tag === 'TEXTAREA' ||
     tag === 'SELECT' ||
     (a as HTMLElement).isContentEditable === true
+  );
+}
+
+/** Small corner badge: is Music/Protocol data being shared through the server? */
+function SyncBadge() {
+  const [st, setSt] = useState<SyncStatus>(() => getSyncStatus());
+  useEffect(() => {
+    const t = window.setInterval(() => setSt(getSyncStatus()), 2000);
+    return () => window.clearInterval(t);
+  }, []);
+  const text =
+    st.state === 'ok'
+      ? `Shared with the server · Music v${st.music} · Protocol v${st.protocol}`
+      : st.state === 'no-token'
+        ? 'This device only — signed in without the server, so Music and Protocol data is NOT shared'
+        : st.state === 'no-api'
+          ? 'This device only — this site has no server address (VITE_API_URL)'
+          : `Not syncing — ${st.error ?? 'server problem'}`;
+  const bad = st.state !== 'ok';
+  return (
+    <div
+      role="status"
+      title={text}
+      style={{
+        position: 'fixed',
+        left: '0.6rem',
+        bottom: '0.6rem',
+        zIndex: 60,
+        maxWidth: 'min(28rem, calc(100vw - 1.2rem))',
+        padding: '0.25rem 0.6rem',
+        borderRadius: '999px',
+        fontSize: '0.72rem',
+        lineHeight: 1.3,
+        background: bad ? '#fde8e8' : '#e6f4ea',
+        color: bad ? '#8a1c1c' : '#1e5631',
+        border: `1px solid ${bad ? '#e9a3a3' : '#a7d7b5'}`,
+        pointerEvents: 'none',
+      }}
+    >
+      {text}
+    </div>
   );
 }
 
@@ -88,5 +131,10 @@ export function ScheduleSyncGate({ children }: { children: ReactNode }) {
     };
   }, [push, apply]);
 
-  return <Fragment key={version}>{children}</Fragment>;
+  return (
+    <>
+      <Fragment key={version}>{children}</Fragment>
+      <SyncBadge />
+    </>
+  );
 }
