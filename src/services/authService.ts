@@ -41,6 +41,7 @@ import {
   apiLogin,
   ApiError,
   getApiToken,
+  apiBaseUrl,
   isApiEnabled,
   isApiFallbackEnabled,
   setApiToken,
@@ -766,9 +767,11 @@ export const authService = {
         if (e instanceof ApiError && (e.status === 0 || e.status === 401)) {
           // API down or unknown user → local demo accounts
           setLoginNote(
-            e.status === 0
-              ? 'the server could not be reached (it may be waking up, or CORS_ORIGIN on the server does not match this site)'
-              : 'the server does not know this username/password (the account may not exist on the server yet)',
+            `${
+              e.status === 0
+                ? 'the server could not be reached'
+                : 'the server does not know this username/password (the account may not exist on the server yet)'
+            } [this site calls ${apiBaseUrl() ?? 'nothing'}; browser says: ${e.status === 0 ? e.message : `HTTP ${e.status}`}]`,
           );
         } else {
           return null;
