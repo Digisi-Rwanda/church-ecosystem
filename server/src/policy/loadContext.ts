@@ -92,6 +92,8 @@ export async function loadPolicyContext(): Promise<PolicyContext> {
         status: t.status,
         grantsSystemAccess: t.grantsSystemAccess,
         dueAt: t.dueDate ? t.dueDate.toISOString() : undefined,
+        startDate: iso(t.startDate),
+        endDate: iso(t.endDate),
       }),
     ),
     fundGrants: fundGrants.map(

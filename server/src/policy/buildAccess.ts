@@ -816,6 +816,13 @@ export function buildEffectiveAccess(
           source: 'POSITION',
           reason: p.title,
         });
+        pushGrant(grants, {
+          systemId: 'sys-deacon',
+          resource: 'ASSIGNMENT',
+          action: 'MANAGE',
+          source: 'POSITION',
+          reason: `${p.title} · assign within Deacon`,
+        });
         grantPeopleDirectoryView(grants, p.title);
       }
     }

@@ -41,10 +41,17 @@ export function grantMatches(
   return actionSatisfied(grant.action, action);
 }
 
+/**
+ * A task grants access while it is open and inside its dates. Same rule as the
+ * SPA (src/domain/permissions.ts); the parity matrix test keeps them equal.
+ */
 export function isTaskActive(task: WorkTask, now = new Date()): boolean {
   if (task.status !== 'TODO' && task.status !== 'IN_PROGRESS') return false;
-  if (!task.dueAt) return true;
-  // Active work items stay valid until closed — due date is informational.
-  void now;
+  const start = new Date(task.startDate ?? '');
+  if (Number.isNaN(start.getTime()) || start > now) return false;
+  if (task.endDate) {
+    const end = new Date(task.endDate);
+    if (!Number.isNaN(end.getTime()) && end < now) return false;
+  }
   return true;
 }

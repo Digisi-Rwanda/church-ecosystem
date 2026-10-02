@@ -487,7 +487,10 @@ export const missionService = {
     };
   },
 
+  /** Only a running (or already paused) program can be paused, as on the server. */
   pauseProgram(id: string): Program | null {
+    const p = this.getProgram(id);
+    if (!p || (p.status !== 'ACTIVE' && p.status !== 'PAUSED')) return null;
     return this.updateProgram(id, { status: 'PAUSED' });
   },
 

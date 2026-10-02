@@ -64,6 +64,9 @@ export type WorkTask = {
   status: string;
   grantsSystemAccess?: boolean;
   dueAt?: string;
+  /** A task grants access only between these dates, as in the SPA (isTaskActive). */
+  startDate?: string;
+  endDate?: string;
 };
 
 export type FundAccessGrant = {
