@@ -1,0 +1,42 @@
+# Render — ADEPR Kacyiru API, PRODUCTION
+#
+# Use this file as the Blueprint path when creating the production service
+# (render.yaml stays the staging service). Tracks the `main` branch only.
+#
+# Set these by hand in the dashboard after creating it (sync: false):
+#   DATABASE_URL                 the PRODUCTION Neon connection string (never staging's)
+#   CORS_ORIGIN                  the production site, e.g. https://kacyiru.example.org
+#                                (https://, no trailing slash)
+#   BOOTSTRAP_PASTOR_PASSWORD    10+ characters; creates the `pastor` sign-in
+#   BOOTSTRAP_TREASURER_PASSWORD optional, same for `treasurer`
+# Never set SEED_DEMO_ACCOUNTS or SEED_DEFAULT_CHOIRS here.
+
+services:
+  - type: web
+    name: kacyiru-api-prod
+    runtime: node
+    plan: starter            # always-on: the free plan sleeps and the first request can fail
+    branch: main
+    rootDir: server
+    buildCommand: npm install --include=dev && npm run build:render
+    startCommand: npm run start:render
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: "10000"
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        generateValue: true
+      - key: CORS_ORIGIN
+        sync: false
+      - key: BOOTSTRAP_PASTOR_PASSWORD
+        sync: false
+      - key: BOOTSTRAP_TREASURER_PASSWORD
+        sync: false
+      - key: SCHEDULE_GUARD
+        value: warn          # change to enforce once the real office holders are recorded as Positions
+      - key: SCHEDULE_READ_FILTER
+        value: "on"
