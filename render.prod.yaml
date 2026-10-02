@@ -26,6 +26,8 @@ services:
         value: production
       - key: PORT
         value: "10000"
+      - key: APP_ENV
+        value: production    # start-up refuses demo settings (see server/src/lib/productionProfile.ts)
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

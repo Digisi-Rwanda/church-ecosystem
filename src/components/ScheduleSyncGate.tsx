@@ -5,6 +5,7 @@ import {
   type ScheduleSyncDetail,
   type SyncStatus,
 } from '../data/scheduleServerSync';
+import { appEnv } from '../lib/appEnv';
 import { useToast } from './ui/Toast';
 
 /** True while the person is in the middle of something a re-render would wipe. */
@@ -21,6 +22,31 @@ function userIsBusy(): boolean {
     tag === 'TEXTAREA' ||
     tag === 'SELECT' ||
     (a as HTMLElement).isContentEditable === true
+  );
+}
+
+/** Top ribbon on the rehearsal site so nobody mistakes it for the real one. */
+function StagingRibbon() {
+  return (
+    <div
+      role="note"
+      style={{
+        position: 'fixed',
+        top: 0,
+        left: 0,
+        right: 0,
+        zIndex: 70,
+        textAlign: 'center',
+        fontSize: '0.72rem',
+        padding: '0.1rem 0.5rem',
+        background: '#fff4cc',
+        color: '#6b4e00',
+        borderBottom: '1px solid #e6cf7a',
+        pointerEvents: 'none',
+      }}
+    >
+      TEST SITE — practice data only. Nothing here is real, and it may be reset.
+    </div>
   );
 }
 
@@ -134,7 +160,8 @@ export function ScheduleSyncGate({ children }: { children: ReactNode }) {
   return (
     <>
       <Fragment key={version}>{children}</Fragment>
-      <SyncBadge />
+      {appEnv() === 'staging' && <StagingRibbon />}
+      {appEnv() !== 'production' && <SyncBadge />}
     </>
   );
 }

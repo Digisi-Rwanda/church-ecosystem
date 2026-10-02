@@ -18,6 +18,8 @@ services:
         value: production
       - key: PORT
         value: "10000"
+      - key: APP_ENV
+        value: staging
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

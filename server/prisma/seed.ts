@@ -531,6 +531,9 @@ async function main() {
   // deployment. With them on the server, each demo login signs in through the
   // API and can share Music / Protocol data across browsers.
   if (process.env.SEED_DEMO_ACCOUNTS === 'true') {
+    if (process.env.APP_ENV === 'production') {
+      throw new Error('SEED_DEMO_ACCOUNTS=true is not allowed when APP_ENV=production');
+    }
     const demo = JSON.parse(
       readFileSync(new URL('./demoAccounts.json', import.meta.url), 'utf8'),
     ) as {

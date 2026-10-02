@@ -1,4 +1,8 @@
 import 'dotenv/config';
+import { assertProductionProfile } from './lib/productionProfile.js';
+
+// APP_ENV=production (live service only) refuses unsafe rehearsal settings at start-up.
+assertProductionProfile();
 
 function parseCorsOrigin(raw: string | undefined): string | string[] | boolean {
   const value = (raw ?? 'http://localhost:5173').trim();
@@ -22,6 +26,8 @@ if (isProdEnv) {
 }
 
 export const config = {
+  /** production | staging | unset (local) */
+  appEnv: process.env.APP_ENV,
   port: Number(process.env.PORT ?? 4000),
   databaseUrl: process.env.DATABASE_URL ?? 'file:./dev.db',
   jwtSecret: process.env.JWT_SECRET ?? 'dev-only-change-me',

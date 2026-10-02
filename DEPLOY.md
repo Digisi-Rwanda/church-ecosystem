@@ -290,3 +290,40 @@ repeat on fresh data (a new Neon branch makes this quick).
 ### Everyday flow
 
 Work on a feature branch, merge into `staging`, let the leaders test on the staging site, then open a pull request from `staging` to `main`. CI must be green. Merging deploys production. If something is wrong, redeploy the previous deployment in Render and Vercel (or reset `main` to the `live-before-protocol` tag for the very first rollback).
+
+### Settings for each environment (exact values)
+
+The code is the same in both. Only these settings differ.
+
+**Staging: practice data so leaders can test as if the system were in use**
+
+| Where | Setting | Value |
+| --- | --- | --- |
+| Render | `APP_ENV` | `staging` |
+| Render | `SEED_DEMO_ACCOUNTS` | `true` (creates the role sign-ins: `music`, `protocol`, `protocolpres`, `choir`, ...) |
+| Render | `SEED_DEFAULT_CHOIRS` | `true` (demo choirs exist on the server) |
+| Render | `SCHEDULE_GUARD` | `warn`, later `enforce` for the second rehearsal round |
+| Render | `SCHEDULE_READ_FILTER` | `off` for the first round (the demo role sign-ins hold no server roles, so with the filter on they would see nothing), `on` for the second round with imported real people |
+| Vercel | `VITE_APP_ENV` | `staging` |
+| Vercel | `VITE_API_URL` | the staging Render address |
+| Vercel | `VITE_API_FALLBACK` | `false`. Keep it off even on staging: the demo sign-ins live on the server, and a silent fallback would give sessions that are not shared (this already caused one confusing incident) |
+| Vercel | `VITE_DEMO_SEED` | unset (demo roster and demo choirs on) |
+
+Two rehearsal rounds: round one with the demo role sign-ins; round two after importing the real team CSV with `--accounts`, with the read filter on and the guard on `enforce`.
+
+**Production: real members only**
+
+| Where | Setting | Value |
+| --- | --- | --- |
+| Render | `APP_ENV` | `production` (the API refuses to start with any demo setting) |
+| Render | `SEED_DEMO_ACCOUNTS`, `SEED_DEFAULT_CHOIRS` | not set |
+| Render | `SCHEDULE_READ_FILTER` | `on` |
+| Render | `SCHEDULE_GUARD` | `warn` at first, `enforce` once the real office holders are recorded |
+| Render | `BOOTSTRAP_PASTOR_PASSWORD` | 10+ characters |
+| Vercel | `VITE_APP_ENV` | `production` (the build fails unless the next three are right) |
+| Vercel | `VITE_API_URL` | the production Render address |
+| Vercel | `VITE_API_FALLBACK` | `false` |
+| Vercel | `VITE_DEMO_SEED` | `false` |
+
+Check an environment from outside: `GET /api/health` now answers with `"env": "production"`, `"staging"` or `"unspecified"`.
+
