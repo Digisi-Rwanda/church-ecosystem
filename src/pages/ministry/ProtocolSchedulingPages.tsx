@@ -369,8 +369,8 @@ export function ProtocolTeamsPage() {
             </Link>
           )}
           {!musicPublished && (
-            <Link className="btn secondary" to="/systems/music/schedule">
-              Open Music schedule
+            <Link className="btn secondary" to="/systems/protocol/music">
+              See Music schedule
             </Link>
           )}
         </div>

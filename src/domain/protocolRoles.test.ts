@@ -53,4 +53,14 @@ describe('Protocol schedule access: build vs review', () => {
     expect(ministryOfficeMayAccessModule('sys-protocol', 'PRESIDENT', 'review')).toBe(true);
     expect(ministryOfficeMayAccessModule('sys-protocol', 'VP', 'teams')).toBe(true);
   });
+
+  it('the Coordinator-level offices can open Availability and the Music schedule feed', () => {
+    for (const office of ['PRESIDENT', 'VP', 'SECRETARY'] as const) {
+      expect(ministryOfficeMayAccessModule('sys-protocol', office, 'availability')).toBe(true);
+      expect(ministryOfficeMayAccessModule('sys-protocol', office, 'music')).toBe(true);
+    }
+    // Plain members and the treasurer do not get them.
+    expect(ministryOfficeMayAccessModule('sys-protocol', 'MEMBER', 'availability')).toBe(false);
+    expect(ministryOfficeMayAccessModule('sys-protocol', 'TREASURER', 'music')).toBe(false);
+  });
 });
