@@ -9,7 +9,7 @@ import { TextField } from '../components/ui/Field';
 
 const DEMO_HINTS = [
   { user: 'pastor', pass: 'pastor123', note: 'Church Leader' },
-  { user: 'assistant', pass: 'assist123', note: 'Pastor (ordained)' },
+  { user: 'pastor2', pass: 'pastor2123', note: 'Pastor (ordained)' },
   { user: 'catechist', pass: 'catechist123', note: 'Catechist / Umwarimu' },
   { user: 'secretary', pass: 'secret123', note: 'Church Secretary' },
   { user: 'treasurer', pass: 'treas123', note: 'Church Treasurer' },

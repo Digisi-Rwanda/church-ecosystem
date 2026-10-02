@@ -42,7 +42,7 @@ function MonthPicker({
     <select value={monthKey} onChange={(e) => onChange(e.target.value)}>
       {protocolService.allowedMonths().map((m) => (
         <option key={m} value={m}>
-          {m}
+          {protocolService.monthLabel(m)}
         </option>
       ))}
     </select>

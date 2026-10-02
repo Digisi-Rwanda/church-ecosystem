@@ -3,13 +3,13 @@ import {
   isChoirOrgUnitId,
   type ChoirOrgUnitEntry,
 } from './choirCatalog';
+import { isPastorScoped } from './governanceScope';
 import type { Membership, Position, SystemRole } from './types';
 
 /** Church-wide roles that may open any named choir (oversight, not vault manage). */
 const CHOIR_OVERSIGHT_ROLES: readonly SystemRole[] = [
   'CHURCH_LEADER',
   'PASTOR',
-  'ASSISTANT_PASTOR',
   'CATECHIST',
 ];
 
@@ -17,7 +17,9 @@ export function personHasChoirOversight(positions: Position[]): boolean {
   return positions.some(
     (p) =>
       p.status === 'ACTIVE' &&
-      (p.grantsAllSystems === true ||
+      // Pastors are limited to Main Church + Evangelism — no choir oversight.
+      !isPastorScoped(p) &&
+      ((p.systemRole == null && p.grantsAllSystems === true) ||
         (p.systemRole != null &&
           CHOIR_OVERSIGHT_ROLES.includes(p.systemRole))),
   );
@@ -25,7 +27,7 @@ export function personHasChoirOversight(positions: Position[]): boolean {
 
 /**
  * Named choirs this person may tenant into.
- * Oversight (pastor / assistant / secretary) → all choirs.
+ * Oversight (Church Leader / Catechist) → all choirs.
  * Otherwise only org units from membership or position.
  */
 export function resolveAccessibleChoirOrgUnitIds(

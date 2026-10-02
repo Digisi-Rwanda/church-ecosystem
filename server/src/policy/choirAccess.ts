@@ -19,6 +19,8 @@ export const CHOIR_OFFICE_GRANTS: Record<ChoirOffice, readonly ChoirGrantSpec[]>
       { resource: 'PROJECT', action: 'VIEW' },
     ],
     SECRETARY: [
+      { resource: 'ASSIGNMENT', action: 'VIEW' },
+      { resource: 'ASSIGNMENT', action: 'MANAGE' },
       { resource: 'CHOIR_REPERTOIRE', action: 'VIEW' },
       { resource: 'CHOIR_REPERTOIRE', action: 'MANAGE' },
       { resource: 'CHOIR_ROSTER', action: 'VIEW' },
@@ -43,6 +45,8 @@ export const CHOIR_OFFICE_GRANTS: Record<ChoirOffice, readonly ChoirGrantSpec[]>
       { resource: 'PROJECT', action: 'VIEW' },
     ],
     COORDINATOR: [
+      { resource: 'ASSIGNMENT', action: 'VIEW' },
+      { resource: 'ASSIGNMENT', action: 'MANAGE' },
       { resource: 'CHOIR_ROSTER', action: 'VIEW' },
       { resource: 'CHOIR_ROSTER', action: 'MANAGE' },
       { resource: 'MEMBERSHIP', action: 'VIEW' },
@@ -55,6 +59,8 @@ export const CHOIR_OFFICE_GRANTS: Record<ChoirOffice, readonly ChoirGrantSpec[]>
       { resource: 'PROJECT', action: 'VIEW' },
     ],
     PRESIDENT: [
+      { resource: 'ASSIGNMENT', action: 'VIEW' },
+      { resource: 'ASSIGNMENT', action: 'MANAGE' },
       { resource: 'CHOIR_REPERTOIRE', action: 'VIEW' },
       { resource: 'CHOIR_ROSTER', action: 'VIEW' },
       { resource: 'CHOIR_ROSTER', action: 'MANAGE' },
@@ -71,6 +77,8 @@ export const CHOIR_OFFICE_GRANTS: Record<ChoirOffice, readonly ChoirGrantSpec[]>
       { resource: 'PROJECT', action: 'MANAGE' },
     ],
     VP: [
+      { resource: 'ASSIGNMENT', action: 'VIEW' },
+      { resource: 'ASSIGNMENT', action: 'MANAGE' },
       { resource: 'CHOIR_REPERTOIRE', action: 'VIEW' },
       { resource: 'CHOIR_ROSTER', action: 'VIEW' },
       { resource: 'CHOIR_ROSTER', action: 'MANAGE' },

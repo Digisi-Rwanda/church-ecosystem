@@ -1,0 +1,92 @@
+import { Fragment, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import {
+  SCHEDULE_SYNCED_EVENT,
+  type ScheduleSyncDetail,
+} from '../data/scheduleServerSync';
+import { useToast } from './ui/Toast';
+
+/** True while the person is in the middle of something a re-render would wipe. */
+function userIsBusy(): boolean {
+  if (typeof document === 'undefined') return false;
+  if (document.querySelector('.drawer-panel, [role="dialog"][aria-modal="true"]')) {
+    return true;
+  }
+  const a = document.activeElement;
+  if (!a || a === document.body) return false;
+  const tag = a.tagName;
+  return (
+    tag === 'INPUT' ||
+    tag === 'TEXTAREA' ||
+    tag === 'SELECT' ||
+    (a as HTMLElement).isContentEditable === true
+  );
+}
+
+const MODULE = (k: string) => (k === 'music' ? 'Music' : 'Protocol');
+
+/**
+ * When newer shared Music/Protocol data arrives from the server, re-render the
+ * app so every screen shows it — but never while the person has a form or
+ * drawer open: then the new data waits, and a "Refresh view" button appears
+ * (it also applies on its own as soon as they are done).
+ * Merged saves and true conflicts are reported.
+ */
+export function ScheduleSyncGate({ children }: { children: ReactNode }) {
+  const [version, setVersion] = useState(0);
+  const { push } = useToast();
+  const pending = useRef(false);
+  const toastShown = useRef(false);
+
+  const apply = useCallback(() => {
+    pending.current = false;
+    toastShown.current = false;
+    setVersion((v) => v + 1);
+  }, []);
+
+  useEffect(() => {
+    const onSynced = (e: Event) => {
+      const d = (e as CustomEvent<ScheduleSyncDetail>).detail;
+      if (d?.reason === 'conflict') {
+        push({
+          title: 'Someone else changed the same thing',
+          detail: `${d.conflicts && d.conflicts > 1 ? `${d.conflicts} of your ${MODULE(d.key)} edits were` : `One of your ${MODULE(d.key)} edits was`} replaced by the newer shared version. Everything else you changed was kept. Please check it.`,
+          tone: 'warn',
+          durationMs: 9000,
+        });
+      } else if (d?.reason === 'merged') {
+        push({
+          title: 'Combined with a colleague’s changes',
+          detail: `Your ${MODULE(d.key)} change was saved together with changes someone else made at the same time.`,
+          tone: 'info',
+          durationMs: 5000,
+        });
+      }
+      if (userIsBusy()) {
+        pending.current = true;
+        if (!toastShown.current) {
+          toastShown.current = true;
+          push({
+            title: 'Newer shared data is available',
+            detail: 'It will show once you close this form, or refresh now.',
+            tone: 'info',
+            durationMs: 12000,
+            action: { label: 'Refresh view', onClick: apply },
+          });
+        }
+        return;
+      }
+      apply();
+    };
+    window.addEventListener(SCHEDULE_SYNCED_EVENT, onSynced);
+    // Apply waiting data as soon as the person is no longer busy.
+    const idle = window.setInterval(() => {
+      if (pending.current && !userIsBusy()) apply();
+    }, 1500);
+    return () => {
+      window.removeEventListener(SCHEDULE_SYNCED_EVENT, onSynced);
+      window.clearInterval(idle);
+    };
+  }, [push, apply]);
+
+  return <Fragment key={version}>{children}</Fragment>;
+}

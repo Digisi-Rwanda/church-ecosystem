@@ -333,3 +333,54 @@ export function installLocalDomainAutoPersist() {
     if (document.visibilityState === 'visible') persistLocalDomain();
   }, 2000);
 }
+
+// ---- Shared (server) documents ------------------------------------------
+// A document is a named group of registered collections that is also kept on
+// the server so every browser sees the same data.
+
+/** Current value of the named collections, as plain JSON-able data. */
+export function exportCollections(
+  names: string[],
+  opts: { omit?: Record<string, string[]> } = {},
+): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  for (const col of collections) {
+    if (!names.includes(col.name)) continue;
+    if (col.kind === 'blob') {
+      const value = col.get();
+      if (value == null) continue;
+      const omit = opts.omit?.[col.name];
+      if (omit && typeof value === 'object') {
+        const copy = { ...(value as Record<string, unknown>) };
+        for (const k of omit) delete copy[k];
+        out[col.name] = copy;
+      } else {
+        out[col.name] = value;
+      }
+    } else {
+      // Include empty arrays: an emptied collection is a real state.
+      out[col.name] = col.get().map((x) => ({ ...x }));
+    }
+  }
+  return out;
+}
+
+/** Replace the named collections with a document received from the server. */
+export function importCollections(
+  names: string[],
+  data: Record<string, unknown>,
+) {
+  for (const col of collections) {
+    if (!names.includes(col.name)) continue;
+    if (!Object.prototype.hasOwnProperty.call(data, col.name)) continue;
+    try {
+      if (col.kind === 'blob') col.set(data[col.name]);
+      else if (Array.isArray(data[col.name])) {
+        replaceInPlace(col.get(), data[col.name] as unknown[]);
+      }
+    } catch (err) {
+      console.warn(`[localDomainStore] Failed import: ${col.name}`, err);
+    }
+  }
+  persistLocalDomain();
+}

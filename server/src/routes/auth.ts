@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { signAccessToken, verifyPassword } from '../lib/auth.js';
+import { hashPassword, signAccessToken, verifyPassword } from '../lib/auth.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 
@@ -117,4 +117,44 @@ authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
     memberships: account.person.memberships,
     positions: account.person.positions,
   });
+});
+
+const changePasswordSchema = z.object({
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(10, 'Use at least 10 characters').max(200),
+});
+
+/** Anyone signed in can change their own password (needed after a temporary one). */
+authRouter.post('/change-password', requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = changePasswordSchema.safeParse(req.body);
+  if (!parsed.success) {
+    res.status(400).json({ error: parsed.error.issues[0]?.message ?? 'Invalid body' });
+    return;
+  }
+  const { currentPassword, newPassword } = parsed.data;
+  const account = await prisma.account.findUnique({ where: { id: req.auth!.sub } });
+  const key = (account?.username ?? '').toLowerCase();
+  if (!account) {
+    res.status(404).json({ error: 'Account not found' });
+    return;
+  }
+  if (throttled(key)) {
+    res.status(429).json({ error: 'Too many failed attempts — try again later' });
+    return;
+  }
+  if (!(await verifyPassword(currentPassword, account.passwordHash))) {
+    noteFail(key);
+    res.status(401).json({ error: 'Current password is not right' });
+    return;
+  }
+  if (newPassword === currentPassword) {
+    res.status(400).json({ error: 'Choose a different password' });
+    return;
+  }
+  await prisma.account.update({
+    where: { id: account.id },
+    data: { passwordHash: await hashPassword(newPassword) },
+  });
+  fails.delete(key);
+  res.json({ ok: true });
 });

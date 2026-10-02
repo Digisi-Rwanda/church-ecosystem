@@ -2,6 +2,7 @@
  * Itorero high-leader entry into peer ministry/org systems.
  * Oversight ≠ membership / officer — same module map, reports-first depth.
  */
+import { PASTOR_SYSTEM_IDS, isPastorScoped } from './governanceScope';
 import { hasOversightFinanceArtifacts } from '../data/oversightReportsSeed';
 import type { Position, SystemId, SystemRole } from './types';
 import {
@@ -14,16 +15,15 @@ import {
 export const ITORERO_OVERSIGHT_ROLES: SystemRole[] = [
   'CHURCH_LEADER',
   'PASTOR',
-  'ASSISTANT_PASTOR',
   'CATECHIST',
 ];
 
-/** Normalize deprecated ASSISTANT_PASTOR → PASTOR for depth / labels. */
+/** Map a role to its oversight seat (Church Leader, Pastor, Catechist). */
 export function canonicalOversightRole(
   role: SystemRole,
 ): 'CHURCH_LEADER' | 'PASTOR' | 'CATECHIST' | null {
   if (role === 'CHURCH_LEADER') return 'CHURCH_LEADER';
-  if (role === 'PASTOR' || role === 'ASSISTANT_PASTOR') return 'PASTOR';
+  if (role === 'PASTOR') return 'PASTOR';
   if (role === 'CATECHIST') return 'CATECHIST';
   return null;
 }
@@ -33,9 +33,6 @@ export type OversightDepth = 'rich' | 'ops' | 'light';
 export function oversightDepthForRoles(roles: SystemRole[]): OversightDepth {
   if (roles.includes('CHURCH_LEADER')) return 'rich';
   if (roles.includes('CATECHIST')) return 'ops';
-  if (roles.includes('PASTOR') || roles.includes('ASSISTANT_PASTOR')) {
-    return 'light';
-  }
   return 'light';
 }
 
@@ -60,14 +57,21 @@ function officeFromPosition(p: Position): string | undefined {
 const BOARD = new Set(['PRESIDENT', 'VP', 'SECRETARY', 'TREASURER']);
 
 /** True if person holds an Itorero high-leader mandate (or legacy grantsAllSystems). */
-export function hasItoreroOversightMandate(positions: Position[]): boolean {
-  return positions.some(
-    (p) =>
-      p.status === 'ACTIVE' &&
-      (p.grantsAllSystems === true ||
-        (p.systemRole != null &&
-          ITORERO_OVERSIGHT_ROLES.includes(p.systemRole))),
-  );
+export function hasItoreroOversightMandate(
+  positions: Position[],
+  /** When given, a Pastor only counts for the systems in PASTOR_SYSTEM_IDS. */
+  systemId?: SystemId,
+): boolean {
+  return positions.some((p) => {
+    if (p.status !== 'ACTIVE') return false;
+    if (isPastorScoped(p)) {
+      return systemId === undefined || PASTOR_SYSTEM_IDS.includes(systemId);
+    }
+    return (
+      (p.systemRole == null && p.grantsAllSystems === true) ||
+      (p.systemRole != null && ITORERO_OVERSIGHT_ROLES.includes(p.systemRole))
+    );
+  });
 }
 
 /**
@@ -118,7 +122,7 @@ export function resolvePeerEntry(
   const mine = positions.filter(
     (p) => p.personId === personId && p.status === 'ACTIVE',
   );
-  if (hasItoreroOversightMandate(mine)) {
+  if (hasItoreroOversightMandate(mine, systemId)) {
     return { kind: 'oversight', office: 'MEMBER' };
   }
 

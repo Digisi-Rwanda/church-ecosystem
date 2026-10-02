@@ -450,3 +450,27 @@ model ContributionClaim {
   @@index([fundId])
   @@index([orgUnitId])
 }
+
+/// Whole-document store for the church modules that still keep their state as
+/// one JSON document per module (Music scheduling, Protocol). One row per
+/// module key; `version` increases on every save and is used to detect
+/// concurrent edits. This is a stepping stone to normalised tables.
+model ScheduleDocument {
+  key                String   @id // 'music' | 'protocol'
+  data               String   // JSON
+  version            Int      @default(1)
+  updatedAt          DateTime @updatedAt
+  updatedByPersonId  String?
+}
+
+/// Recent previous versions of a ScheduleDocument, so a bad save can be undone.
+model ScheduleDocumentRevision {
+  id                 String   @id @default(cuid())
+  key                String
+  version            Int
+  data               String   // JSON
+  createdAt          DateTime @default(now())
+  savedByPersonId    String?
+
+  @@index([key, version])
+}

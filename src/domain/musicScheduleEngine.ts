@@ -8,7 +8,8 @@ import type {
   MusicServiceSlot,
 } from './musicSchedule';
 import { MUSIC_SERVICE_LABELS } from './musicSchedule';
-import { PRIMARY_UNIT_IDS } from './musicUnits';
+import type { MusicScheduleUnit } from './musicSchedule';
+import { activeMusicUnits, getMusicUnits } from './musicUnits';
 
 export type MusicEngineHistory = {
   /** Ordered oldest→newest Tuesday primary unit ids (recent last). */
@@ -51,6 +52,11 @@ function weekdayUtc(year: number, month1: number, day: number): number {
 
 function isoDate(year: number, month1: number, day: number): string {
   return `${year}-${pad2(month1)}-${pad2(day)}`;
+}
+
+/** Deterministic id for a calendar slot (one per date + kind). */
+export function stableServiceId(date: string, kind: MusicServiceKind): string {
+  return `msvc-${date}-${kind}`;
 }
 
 function nid(prefix: string): string {
@@ -125,6 +131,10 @@ export function buildMusicCalendar(
       });
     }
   }
+  // Stable ids: a calendar slot is identified by what it is, not by when it was
+  // generated. Republishing a month, or changing the choir lineup, therefore
+  // never re-keys services — Protocol teams stay attached.
+  for (const s of services) s.id = stableServiceId(s.date, s.kind);
   return services.sort((a, b) =>
     a.date === b.date
       ? kindOrder(a.kind) - kindOrder(b.kind)
@@ -195,21 +205,26 @@ export type GenerateMusicScheduleResult = {
 /**
  * Fill calendar with Hope, Worship, secondaries, primaries per locked rules.
  * Retries with different seeds until valid or attempts exhausted.
- */
-export function generateMusicChoirSchedule(input: {
+ */export function generateMusicChoirSchedule(input: {
   services: MusicServiceSlot[];
   history?: MusicEngineHistory;
   attempts?: number;
   seed?: number;
+  /** Lineup to schedule. Defaults to the live registry's active units. */
+  units?: readonly MusicScheduleUnit[];
 }): GenerateMusicScheduleResult {
   const attempts = input.attempts ?? 48;
   const baseSeed = input.seed ?? Date.now();
+  const lineup = lineupFrom(input.units ?? getMusicUnits());
   let best: GenerateMusicScheduleResult | null = null;
 
   for (let i = 0; i < attempts; i++) {
     const rnd = mulberry32((baseSeed + i * 9973) >>> 0);
-    const result = tryGenerateOnce(input.services, input.history, rnd);
+    const result = tryGenerateOnce(input.services, input.history, rnd, lineup);
     if (result.ok) return result;
+    // A lineup that can never work (e.g. one primary choir) fails identically
+    // every time — report it instead of burning all attempts.
+    if (result.fatal) return result;
     if (!best || result.warnings.length < best.warnings.length) best = result;
   }
   return (
@@ -222,24 +237,78 @@ export function generateMusicChoirSchedule(input: {
   );
 }
 
+/** Max choirs on one main (Sunday) service. */
+export const MAX_CHOIRS_PER_MAIN_SERVICE = 3;
+
+/** Active choirs grouped by role — the only thing the rules depend on. */
+export type MusicLineup = {
+  primaries: string[];
+  secondaries: string[];
+  children: string[];
+  worship: string[];
+  /** The catalog this lineup was built from (validation must use the same). */
+  units: readonly MusicScheduleUnit[];
+};
+
+export function lineupFrom(units: readonly MusicScheduleUnit[]): MusicLineup {
+  return {
+    primaries: activeMusicUnits('PRIMARY', units).map((u) => u.id),
+    secondaries: activeMusicUnits('SECONDARY', units).map((u) => u.id),
+    children: activeMusicUnits('CHILDREN', units).map((u) => u.id),
+    worship: activeMusicUnits('WORSHIP', units).map((u) => u.id),
+    units,
+  };
+}
+
+type InternalResult = GenerateMusicScheduleResult & { fatal?: boolean };
+
 function tryGenerateOnce(
   services: MusicServiceSlot[],
   history: MusicEngineHistory | undefined,
   rnd: Rng,
-): GenerateMusicScheduleResult {
+  lineup: MusicLineup,
+): InternalResult {
   const warnings: string[] = [];
   const assignments: MusicAssignment[] = [];
   const byPeriod = groupBy(services, (s) => s.periodKey);
-  const hist: MusicEngineHistory = history ?? {
-    tuesdayHistory: [],
-    fridayHistory: [],
-    igaburoPairs: [],
-    igaburoByUnit: {},
-  };
+  const hist: MusicEngineHistory = history
+    ? {
+        tuesdayHistory: [...history.tuesdayHistory],
+        fridayHistory: [...history.fridayHistory],
+        igaburoPairs: history.igaburoPairs.map((p) => [...p]),
+        igaburoByUnit: Object.fromEntries(
+          Object.entries(history.igaburoByUnit).map(([k, v]) => [k, [...v]]),
+        ),
+      }
+    : {
+        tuesdayHistory: [],
+        fridayHistory: [],
+        igaburoPairs: [],
+        igaburoByUnit: {},
+      };
 
-  const tueQueue = [...PRIMARY_UNIT_IDS];
+  if (lineup.primaries.length < 2) {
+    return {
+      ok: false,
+      fatal: true,
+      assignments: [],
+      warnings,
+      reason: 'At least 2 active primary choirs are needed (Igaburo uses 2)',
+    };
+  }
+  if (lineup.children.length > MAX_CHOIRS_PER_MAIN_SERVICE) {
+    return {
+      ok: false,
+      fatal: true,
+      assignments: [],
+      warnings,
+      reason: `Too many children choirs for one SS1 (max ${MAX_CHOIRS_PER_MAIN_SERVICE})`,
+    };
+  }
+
+  const tueQueue = [...lineup.primaries];
   rotateQueueFromHistory(tueQueue, hist.tuesdayHistory);
-  const friQueue = [...PRIMARY_UNIT_IDS];
+  const friQueue = [...lineup.primaries];
   rotateQueueFromHistory(friQueue, hist.fridayHistory);
 
   for (const periodKey of Object.keys(byPeriod).sort()) {
@@ -252,10 +321,12 @@ function tryGenerateOnce(
       tueQueue,
       friQueue,
       hist,
+      lineup,
     );
     if (!monthResult.ok) {
       return {
         ok: false,
+        fatal: monthResult.fatal,
         assignments: [],
         warnings,
         reason: monthResult.reason,
@@ -263,7 +334,7 @@ function tryGenerateOnce(
     }
   }
 
-  const validation = validateSchedule(services, assignments);
+  const validation = validateSchedule(services, assignments, 'strict', lineup.units);
   if (!validation.ok) {
     return {
       ok: false,
@@ -280,11 +351,14 @@ function tryGenerateOnce(
 }
 
 function rotateQueueFromHistory(queue: string[], history: string[]) {
-  // Move units that served more recently to the end.
+  // Move units that served more recently to the end. History may mention
+  // choirs that are no longer in the lineup — they are simply ignored.
   const lastIndex = new Map<string, number>();
   history.forEach((id, i) => lastIndex.set(id, i));
   queue.sort((a, b) => (lastIndex.get(a) ?? -1) - (lastIndex.get(b) ?? -1));
 }
+
+type StepResult = { ok: boolean; reason?: string; fatal?: boolean };
 
 function fillOneMonth(
   services: MusicServiceSlot[],
@@ -294,7 +368,8 @@ function fillOneMonth(
   tueQueue: string[],
   friQueue: string[],
   hist: MusicEngineHistory,
-): { ok: boolean; reason?: string } {
+  lineup: MusicLineup,
+): StepResult {
   const sundays = unique(
     services.filter((s) => s.kind === 'SS1').map((s) => s.date),
   ).sort();
@@ -305,28 +380,32 @@ function fillOneMonth(
     services.filter((s) => s.kind === 'SS2').map((s) => [s.date, s]),
   );
 
-  // Fixed: Hope on every SS1
+  // Fixed: every children choir on every SS1
   for (const s of services.filter((x) => x.kind === 'SS1')) {
-    assignments.push(assign(s.id, 'mu-hope'));
+    for (const c of lineup.children) assignments.push(assign(s.id, c));
   }
-  // Fixed: Worship on every Tuesday
+  // Fixed: every worship team on every Tuesday
   for (const s of services.filter((x) => x.kind === 'TUESDAY')) {
-    assignments.push(assign(s.id, 'mu-worship'));
+    for (const w of lineup.worship) assignments.push(assign(s.id, w));
   }
 
-  // Secondary Sundays: two distinct Sundays
-  if (sundays.length < 2) {
-    return { ok: false, reason: 'Need at least 2 Sundays for secondary choirs' };
+  // Secondary choirs: each appears once this month, each on its own Sunday
+  if (sundays.length < lineup.secondaries.length || sundays.length < 1) {
+    return {
+      ok: false,
+      fatal: true,
+      reason: `Need at least ${Math.max(1, lineup.secondaries.length)} Sundays for the secondary choirs`,
+    };
   }
-  const secondarySundays = shuffle(sundays, rnd).slice(0, 2);
-  const beulahSunday = secondarySundays[0];
-  const yeruSunday = secondarySundays[1];
-  const beulahSide: 'SS1' | 'SS2' = rnd() < 0.5 ? 'SS1' : 'SS2';
-  const yeruSide: 'SS1' | 'SS2' = rnd() < 0.5 ? 'SS1' : 'SS2';
-
+  const secondarySundays = shuffle(sundays, rnd).slice(
+    0,
+    lineup.secondaries.length,
+  );
   const unusual = new Map<string, { unitId: string; side: 'SS1' | 'SS2' }>();
-  unusual.set(beulahSunday, { unitId: 'mu-beulah', side: beulahSide });
-  unusual.set(yeruSunday, { unitId: 'mu-yerusalemu', side: yeruSide });
+  lineup.secondaries.forEach((unitId, i) => {
+    const side: 'SS1' | 'SS2' = rnd() < 0.5 ? 'SS1' : 'SS2';
+    unusual.set(secondarySundays[i], { unitId, side });
+  });
 
   for (const [date, u] of unusual) {
     const svc = u.side === 'SS1' ? ss1.get(date) : ss2.get(date);
@@ -342,6 +421,7 @@ function fillOneMonth(
     unusual,
     assignments,
     rnd,
+    lineup,
   );
   if (!sundayFill.ok) return sundayFill;
 
@@ -365,8 +445,7 @@ function fillOneMonth(
     const tueUnit = [...tueAssigned.entries()].find(([td]) =>
       sameIsoWeek(td, f.date),
     )?.[1];
-    let unit =
-      friQueue.find((id) => id !== tueUnit) ?? friQueue[0];
+    const unit = friQueue.find((id) => id !== tueUnit) ?? friQueue[0];
     const idx = friQueue.indexOf(unit);
     friQueue.splice(idx, 1);
     friQueue.push(unit);
@@ -382,7 +461,7 @@ function fillOneMonth(
   // Igaburo: exactly 2 primaries
   const igaburo = services.find((s) => s.kind === 'IGABURO');
   if (igaburo) {
-    const ig = pickIgaburoPair(rnd, hist, warnings);
+    const ig = pickIgaburoPair(rnd, hist, warnings, lineup.primaries);
     if (!ig) return { ok: false, reason: 'Could not pick Igaburo pair' };
     assignments.push(assign(igaburo.id, ig[0]));
     assignments.push(assign(igaburo.id, ig[1]));
@@ -396,12 +475,46 @@ function fillOneMonth(
   return { ok: true };
 }
 
+/** Monday (UTC) of the ISO week containing `iso` (YYYY-MM-DD). */
+function isoWeekStart(iso: string): string {
+  const d = new Date(`${iso}T12:00:00Z`);
+  const back = (d.getUTCDay() + 6) % 7; // Mon=0 … Sun=6
+  d.setUTCDate(d.getUTCDate() - back);
+  return d.toISOString().slice(0, 10);
+}
+
 function sameIsoWeek(a: string, b: string): boolean {
-  // Simple: same year-month and dates within 6 days, Tue before Fri typically
-  const da = new Date(a + 'T12:00:00Z');
-  const db = new Date(b + 'T12:00:00Z');
-  const diff = Math.abs(da.getTime() - db.getTime()) / 86400000;
-  return diff <= 5;
+  return isoWeekStart(a) === isoWeekStart(b);
+}
+
+/**
+ * How many primary choirs go on SS1 / SS2 on one Sunday.
+ * Every primary serves each Sunday when capacity allows (the long-standing
+ * 4-choir pattern); with a bigger roster the choirs rotate.
+ */
+export function sundayPrimarySplit(input: {
+  primaries: number;
+  children: number;
+  secondarySide?: 'SS1' | 'SS2';
+}): { ss1: number; ss2: number } {
+  const cap1 = Math.max(
+    0,
+    MAX_CHOIRS_PER_MAIN_SERVICE -
+      input.children -
+      (input.secondarySide === 'SS1' ? 1 : 0),
+  );
+  const cap2 = Math.max(
+    0,
+    MAX_CHOIRS_PER_MAIN_SERVICE - (input.secondarySide === 'SS2' ? 1 : 0),
+  );
+  const total = Math.min(input.primaries, cap1 + cap2);
+  let s1 = Math.min(cap1, Math.floor(total / 2));
+  let s2 = total - s1;
+  if (s2 > cap2) {
+    s2 = cap2;
+    s1 = total - s2;
+  }
+  return { ss1: s1, ss2: s2 };
 }
 
 function fillPrimarySundays(
@@ -411,38 +524,51 @@ function fillPrimarySundays(
   unusual: Map<string, { unitId: string; side: 'SS1' | 'SS2' }>,
   assignments: MusicAssignment[],
   rnd: Rng,
-): { ok: boolean; reason?: string } {
-  const primaries = [...PRIMARY_UNIT_IDS];
+  lineup: MusicLineup,
+): StepResult {
+  const primaries = [...lineup.primaries];
   const n = sundays.length;
-  const needSs1 = new Map(primaries.map((p) => [p, n === 5 ? 0 : 2]));
-  const needSs2 = new Map(primaries.map((p) => [p, n === 5 ? 0 : 2]));
+  const N = primaries.length;
 
-  // For 5 Sundays: each primary gets 5 total, split (3,2) or (2,3)
-  if (n === 5) {
-    const shuffled = shuffle(primaries, rnd);
-    for (let i = 0; i < shuffled.length; i++) {
-      const p = shuffled[i];
-      if (i % 2 === 0) {
-        needSs1.set(p, 3);
-        needSs2.set(p, 2);
-      } else {
-        needSs1.set(p, 2);
-        needSs2.set(p, 3);
-      }
+  const splits = sundays.map((d) =>
+    sundayPrimarySplit({
+      primaries: N,
+      children: lineup.children.length,
+      secondarySide: unusual.get(d)?.side,
+    }),
+  );
+  const ss1SlotsPerDay = splits.map((s) => s.ss1);
+  const ss2SlotsPerDay = splits.map((s) => s.ss2);
+  const T1 = ss1SlotsPerDay.reduce((a, b) => a + b, 0);
+  const T2 = ss2SlotsPerDay.reduce((a, b) => a + b, 0);
+  const T = T1 + T2;
+
+  // Fair monthly quotas: spread total duties evenly, then split each choir's
+  // duties between SS1 and SS2 as evenly as the slot counts allow.
+  const needSs1 = new Map<string, number>();
+  const needSs2 = new Map<string, number>();
+  const quotaFor = (order: string[]): boolean => {
+    const base = Math.floor(T / N);
+    const rem = T % N;
+    const totals = order.map((_, i) => base + (i < rem ? 1 : 0));
+    const base1 = Math.floor(T1 / N);
+    const extra1 = T1 % N;
+    const byTotalDesc = order
+      .map((_, i) => i)
+      .sort((a, b) => totals[b] - totals[a] || a - b);
+    const plusOne = new Set(byTotalDesc.slice(0, extra1));
+    for (let i = 0; i < order.length; i++) {
+      const n1 = base1 + (plusOne.has(i) ? 1 : 0);
+      const n2 = totals[i] - n1;
+      if (n2 < 0 || totals[i] > n) return false;
+      needSs1.set(order[i], n1);
+      needSs2.set(order[i], n2);
     }
+    return true;
+  };
+  if (!quotaFor(shuffle(primaries, rnd))) {
+    return { ok: false, reason: 'Could not balance primary choir quotas' };
   }
-
-  const ss1SlotsPerDay = sundays.map((d) => {
-    const u = unusual.get(d);
-    if (u?.side === 'SS1') return 1;
-    return 2;
-  });
-  const ss2SlotsPerDay = sundays.map((d) => {
-    const u = unusual.get(d);
-    if (u?.side === 'SS1') return 3;
-    if (u?.side === 'SS2') return 2;
-    return 2;
-  });
 
   // Attempt assignment matrices
   for (let attempt = 0; attempt < 80; attempt++) {
@@ -457,84 +583,59 @@ function fillPrimarySundays(
       const need1 = ss1SlotsPerDay[di];
       const need2 = ss2SlotsPerDay[di];
       const pool = shuffle(primaries, rnd);
+      const daysLeft = sundays.length - di;
+      const remTotal = (p: string) => (rem1.get(p) ?? 0) + (rem2.get(p) ?? 0);
 
-      // Pick SS1
-      const chosen1: string[] = [];
-      const scored1 = pool
-        .filter((p) => (rem1.get(p) ?? 0) > 0)
+      // Who serves today: choirs that must (their remaining duties fill every
+      // remaining Sunday) first, then those with the most duties left.
+      const dayTotal = need1 + need2;
+      const candidates = pool
+        .filter((p) => remTotal(p) > 0)
         .sort((a, b) => {
-          const ra = rem1.get(a)! - rem1.get(b)!;
-          if (ra !== 0) return ra > 0 ? -1 : 1;
-          return rnd() - 0.5;
+          const mustA = remTotal(a) >= daysLeft ? 1 : 0;
+          const mustB = remTotal(b) >= daysLeft ? 1 : 0;
+          if (mustA !== mustB) return mustB - mustA;
+          const d = remTotal(b) - remTotal(a);
+          return d !== 0 ? d : rnd() - 0.5;
         });
-      for (const p of scored1) {
-        if (chosen1.length >= need1) break;
-        chosen1.push(p);
+      if (candidates.length < dayTotal) {
+        failed = true;
+        break;
       }
-      if (chosen1.length < need1) {
+      const serving = candidates.slice(0, dayTotal);
+
+      // Split today's choirs between SS1 and SS2 within their remaining quotas.
+      const chosen1: string[] = serving.filter((p) => (rem2.get(p) ?? 0) === 0);
+      const chosen2: string[] = serving.filter((p) => (rem1.get(p) ?? 0) === 0);
+      if (chosen1.length > need1 || chosen2.length > need2) {
+        failed = true;
+        break;
+      }
+      const flexible = serving
+        .filter((p) => !chosen1.includes(p) && !chosen2.includes(p))
+        .sort((a, b) => {
+          const d = (rem1.get(b) ?? 0) - (rem1.get(a) ?? 0);
+          return d !== 0 ? d : rnd() - 0.5;
+        });
+      for (const p of flexible) {
+        if (chosen1.length < need1) chosen1.push(p);
+        else chosen2.push(p);
+      }
+      if (chosen1.length !== need1 || chosen2.length !== need2) {
         failed = true;
         break;
       }
 
-      // Pick SS2 from remaining rem2, excluding chosen1
-      const chosen2: string[] = [];
-      const scored2 = pool
-        .filter((p) => (rem2.get(p) ?? 0) > 0 && !chosen1.includes(p))
-        .sort((a, b) => {
-          const pairPenalty = (p: string) =>
-            chosen1.reduce(
-              (s, c) => s + (pairCounts.get(pairKey(p, c)) ?? 0),
-              0,
-            );
-          const pa = pairPenalty(a) - pairPenalty(b);
-          if (pa !== 0) return pa;
-          const ra = rem2.get(a)! - rem2.get(b)!;
-          if (ra !== 0) return ra > 0 ? -1 : 1;
-          return rnd() - 0.5;
-        });
-      for (const p of scored2) {
-        if (chosen2.length >= need2) break;
-        // Prefer not reusing pairs already used
-        const wouldDouble = chosen1.some(
-          (c) => (pairCounts.get(pairKey(p, c)) ?? 0) >= 1,
-        );
-        if (wouldDouble && chosen2.length + (scored2.length - scored2.indexOf(p)) > need2) {
-          // soft skip if enough others remain — keep simple: allow if needed
-        }
-        chosen2.push(p);
-      }
-      if (chosen2.length < need2) {
-        failed = true;
-        break;
-      }
-
-      // Soft pair uniqueness: reject if any pair repeats
-      const dayUnits = [...chosen1, ...chosen2];
+      // Soft pair uniqueness: choirs that already shared a service this month
+      // should not share again (relaxed after 60 attempts).
       let pairBad = false;
-      for (let i = 0; i < dayUnits.length; i++) {
-        for (let j = i + 1; j < dayUnits.length; j++) {
-          if ((pairCounts.get(pairKey(dayUnits[i], dayUnits[j])) ?? 0) >= 1) {
-            // same day pairs are new; check cross-day: if already counted from prior days
-            pairBad = true;
+      for (const group of [chosen1, chosen2]) {
+        for (let i = 0; i < group.length; i++) {
+          for (let j = i + 1; j < group.length; j++) {
+            if ((pairCounts.get(pairKey(group[i], group[j])) ?? 0) >= 1) {
+              pairBad = true;
+            }
           }
-        }
-      }
-      // Only reject if pair already appeared in a previous Sunday (count>=1 before recording)
-      for (const a of chosen1) {
-        for (const b of chosen1) {
-          if (a >= b) continue;
-          if ((pairCounts.get(pairKey(a, b)) ?? 0) >= 1) pairBad = true;
-        }
-      }
-      for (const a of chosen2) {
-        for (const b of chosen2) {
-          if (a >= b) continue;
-          if ((pairCounts.get(pairKey(a, b)) ?? 0) >= 1) pairBad = true;
-        }
-      }
-      for (const a of chosen1) {
-        for (const b of chosen2) {
-          if ((pairCounts.get(pairKey(a, b)) ?? 0) >= 1) pairBad = true;
         }
       }
       if (pairBad && attempt < 60) {
@@ -546,7 +647,6 @@ function fillPrimarySundays(
       for (const p of chosen2) rem2.set(p, rem2.get(p)! - 1);
       recordPairs(chosen1, pairCounts);
       recordPairs(chosen2, pairCounts);
-      // Also count cross-service same Sunday as "serving together"? User said same or different sunday service — co-appearance on same Sunday different services still "together" that day? They said never SS1+SS2 same sunday for one choir (already enforced). Pairing is about serving with another choir — typically same service. I'll only count within-service pairs.
 
       ss1Pick[di] = chosen1;
       ss2Pick[di] = chosen2;
@@ -555,24 +655,6 @@ function fillPrimarySundays(
     if (failed) continue;
     if ([...rem1.values()].some((v) => v !== 0)) continue;
     if ([...rem2.values()].some((v) => v !== 0)) continue;
-
-    // 5-Sunday: no 3 consecutive Sundays for a choir with 3 assignments
-    if (n === 5) {
-      let streakBad = false;
-      for (const p of primaries) {
-        const days: number[] = [];
-        for (let di = 0; di < n; di++) {
-          if (ss1Pick[di].includes(p) || ss2Pick[di].includes(p)) days.push(di);
-        }
-        if (days.length === 3) {
-          days.sort((a, b) => a - b);
-          if (days[2] - days[0] === 2 && days[1] - days[0] === 1) {
-            streakBad = true;
-          }
-        }
-      }
-      if (streakBad) continue;
-    }
 
     // Commit
     for (let di = 0; di < sundays.length; di++) {
@@ -592,8 +674,9 @@ function pickIgaburoPair(
   rnd: Rng,
   hist: MusicEngineHistory,
   warnings: string[],
+  primaryIds: string[],
 ): [string, string] | null {
-  const primaries = shuffle([...PRIMARY_UNIT_IDS], rnd);
+  const primaries = shuffle([...primaryIds], rnd);
   const recentPairs = hist.igaburoPairs.slice(-2);
   const streakCount = (u: string) => {
     const dates = hist.igaburoByUnit[u] ?? [];
@@ -638,60 +721,73 @@ export function validateSchedule(
   services: MusicServiceSlot[],
   assignments: MusicAssignment[],
   mode: 'strict' | 'manual' = 'strict',
+  units: readonly MusicScheduleUnit[] = getMusicUnits(),
 ): { ok: boolean; warnings: string[]; reason?: string } {
   const warnings: string[] = [];
   const byService = groupBy(assignments, (a) => a.serviceId);
   const serviceById = new Map(services.map((s) => [s.id, s]));
   const soft = mode === 'manual';
+  const unitById = new Map(units.map((u) => [u.id, u]));
+  const nameOf = (id: string) => unitById.get(id)?.name ?? id;
+  const isPrimary = (id: string) => unitById.get(id)?.kind === 'PRIMARY';
+  const activeWorship = activeMusicUnits('WORSHIP', units);
+
+  // Every assigned choir must exist in the catalog (active or retired).
+  for (const a of assignments) {
+    if (!unitById.has(a.unitId)) {
+      return { ok: false, warnings, reason: `Unknown choir ${a.unitId}` };
+    }
+  }
 
   // Max 3 choirs on main
   for (const s of services) {
     const units = byService[s.id] ?? [];
     if (s.kind === 'SS1' || s.kind === 'SS2') {
-      if (units.length > 3) {
+      if (units.length > MAX_CHOIRS_PER_MAIN_SERVICE) {
         return {
           ok: false,
           warnings,
-          reason: `${s.label} has more than 3 choirs`,
+          reason: `${s.label} has more than ${MAX_CHOIRS_PER_MAIN_SERVICE} choirs`,
         };
       }
     }
     if (s.kind === 'TUESDAY') {
-      const choirs = units.filter((u) => u.unitId !== 'mu-worship');
-      const hasWorship = units.some((u) => u.unitId === 'mu-worship');
+      const choirs = units.filter(
+        (u) => unitById.get(u.unitId)?.kind !== 'WORSHIP',
+      );
+      const worshipOnSvc = new Set(
+        units
+          .filter((u) => unitById.get(u.unitId)?.kind === 'WORSHIP')
+          .map((u) => u.unitId),
+      );
+      const missingWorship = activeWorship.some((w) => !worshipOnSvc.has(w.id));
       if (
-        !hasWorship ||
+        missingWorship ||
         choirs.length !== 1 ||
-        !PRIMARY_UNIT_IDS.includes(choirs[0]!.unitId as (typeof PRIMARY_UNIT_IDS)[number])
+        !isPrimary(choirs[0]!.unitId)
       ) {
-        const msg = 'Tuesday should have Worship + exactly 1 primary';
+        const msg =
+          activeWorship.length > 0
+            ? 'Tuesday should have Worship + exactly 1 primary'
+            : 'Tuesday should have exactly 1 primary';
         if (soft) warnings.push(`${s.date}: ${msg}`);
         else
           return {
             ok: false,
             warnings,
-            reason: hasWorship ? msg : 'Tuesday missing Worship team',
+            reason: missingWorship && choirs.length === 1 ? 'Tuesday missing Worship team' : msg,
           };
       }
     }
     if (s.kind === 'FRIDAY') {
-      if (
-        units.length !== 1 ||
-        !PRIMARY_UNIT_IDS.includes(units[0]!.unitId as (typeof PRIMARY_UNIT_IDS)[number])
-      ) {
+      if (units.length !== 1 || !isPrimary(units[0]!.unitId)) {
         const msg = 'Friday should have exactly 1 primary';
         if (soft) warnings.push(`${s.date}: ${msg}`);
         else return { ok: false, warnings, reason: msg };
       }
     }
     if (s.kind === 'IGABURO') {
-      if (
-        units.length !== 2 ||
-        units.some(
-          (u) =>
-            !PRIMARY_UNIT_IDS.includes(u.unitId as (typeof PRIMARY_UNIT_IDS)[number]),
-        )
-      ) {
+      if (units.length !== 2 || units.some((u) => !isPrimary(u.unitId))) {
         const msg = 'Igaburo should have exactly 2 primaries';
         if (soft) warnings.push(`${s.date}: ${msg}`);
         else return { ok: false, warnings, reason: msg };
@@ -699,15 +795,23 @@ export function validateSchedule(
     }
   }
 
-  // Hope only SS1
-  for (const a of assignments.filter((x) => x.unitId === 'mu-hope')) {
+  // Children choirs only SS1
+  for (const a of assignments.filter(
+    (x) => unitById.get(x.unitId)?.kind === 'CHILDREN',
+  )) {
     const s = serviceById.get(a.serviceId);
     if (!s || s.kind !== 'SS1') {
-      return { ok: false, warnings, reason: 'Hope must only serve SS1' };
+      return {
+        ok: false,
+        warnings,
+        reason: `${nameOf(a.unitId)} must only serve SS1`,
+      };
     }
   }
   // Worship only Tuesday
-  for (const a of assignments.filter((x) => x.unitId === 'mu-worship')) {
+  for (const a of assignments.filter(
+    (x) => unitById.get(x.unitId)?.kind === 'WORSHIP',
+  )) {
     const s = serviceById.get(a.serviceId);
     if (!s || s.kind !== 'TUESDAY') {
       return { ok: false, warnings, reason: 'Worship must only serve Tuesday' };
@@ -733,39 +837,43 @@ export function validateSchedule(
     }
   }
 
-  // Beulah / Yerusalemu — soft count in manual; hard same-Sunday
+  // Secondary choirs: each active one once per month (soft in manual mode);
+  // two secondaries never on the same Sunday (hard).
+  const activeSecondaries = activeMusicUnits('SECONDARY', units).map(
+    (u) => u.id,
+  );
   const periods = unique(services.map((s) => s.periodKey));
   for (const periodKey of periods) {
     const monthServices = new Set(
       services.filter((s) => s.periodKey === periodKey).map((s) => s.id),
     );
-    for (const sec of ['mu-beulah', 'mu-yerusalemu'] as const) {
-      const dates = assignments
-        .filter((a) => a.unitId === sec && monthServices.has(a.serviceId))
-        .map((a) => serviceById.get(a.serviceId)?.date)
-        .filter(Boolean) as string[];
-      if (dates.length !== 1) {
-        const msg = `${sec} should appear once in ${periodKey} (got ${dates.length})`;
+    const secondaryDates = new Map<string, string[]>(); // date -> unit ids
+    for (const a of assignments) {
+      if (unitById.get(a.unitId)?.kind !== 'SECONDARY') continue;
+      if (!monthServices.has(a.serviceId)) continue;
+      const d = serviceById.get(a.serviceId)?.date;
+      if (!d) continue;
+      secondaryDates.set(d, [...(secondaryDates.get(d) ?? []), a.unitId]);
+    }
+    for (const sec of activeSecondaries) {
+      const count = [...secondaryDates.values()].filter((ids) =>
+        ids.includes(sec),
+      ).length;
+      if (count !== 1) {
+        const msg = `${nameOf(sec)} should appear once in ${periodKey} (got ${count})`;
         if (soft) warnings.push(msg);
         else return { ok: false, warnings, reason: msg };
       }
     }
-    const bDate = assignments
-      .filter(
-        (a) => a.unitId === 'mu-beulah' && monthServices.has(a.serviceId),
-      )
-      .map((a) => serviceById.get(a.serviceId)?.date)[0];
-    const yDate = assignments
-      .filter(
-        (a) => a.unitId === 'mu-yerusalemu' && monthServices.has(a.serviceId),
-      )
-      .map((a) => serviceById.get(a.serviceId)?.date)[0];
-    if (bDate && yDate && bDate === yDate) {
-      return {
-        ok: false,
-        warnings,
-        reason: `Beulah and Yerusalemu on the same Sunday in ${periodKey}`,
-      };
+    for (const ids of secondaryDates.values()) {
+      const distinct = unique(ids);
+      if (distinct.length > 1) {
+        return {
+          ok: false,
+          warnings,
+          reason: `${distinct.map(nameOf).join(' and ')} on the same Sunday in ${periodKey}`,
+        };
+      }
     }
   }
 
@@ -783,4 +891,43 @@ function groupBy<T>(items: T[], key: (t: T) => string): Record<string, T[]> {
 
 function unique<T>(arr: T[]): T[] {
   return [...new Set(arr)];
+}
+
+export type PeriodOption = { value: string; label: string };
+
+const MONTH_NAMES = [
+  'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+  'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+];
+
+/**
+ * Spans a user can pick for a horizon, from the live month onward.
+ * Month: any month. Quarter / half year / year follow the calendar
+ * (Q1 = Jan–Mar, H2 = Jul–Dec, a year = Jan–Dec). The value is the first
+ * month of the span, which is what the calendar builder takes.
+ */
+export function periodOptionsForHorizon(
+  horizon: MusicHorizon,
+  liveMonthKey: string,
+  monthsAhead = 24,
+): PeriodOption[] {
+  const [ly, lm] = liveMonthKey.split('-').map(Number);
+  const step = horizon === 'MONTH' ? 1 : horizon === 'QUARTER' ? 3 : horizon === 'HALF' ? 6 : 12;
+  const out: PeriodOption[] = [];
+  for (let i = 0; i < monthsAhead; i++) {
+    const d = new Date(Date.UTC(ly, lm - 1 + i, 1));
+    const y = d.getUTCFullYear();
+    const m0 = d.getUTCMonth(); // 0-based
+    if (m0 % step !== 0) continue; // only calendar-aligned starts
+    const last = m0 + step - 1;
+    const value = `${y}-${pad2(m0 + 1)}`;
+    const range = `${MONTH_NAMES[m0]}${step > 1 ? `–${MONTH_NAMES[last]}` : ` ${y}`}`;
+    let label: string;
+    if (horizon === 'MONTH') label = `${MONTH_NAMES[m0]} ${y}`;
+    else if (horizon === 'QUARTER') label = `Q${m0 / 3 + 1} ${y} · ${range}`;
+    else if (horizon === 'HALF') label = `H${m0 / 6 + 1} ${y} · ${range}`;
+    else label = `${y} · ${range}`;
+    out.push({ value, label });
+  }
+  return out;
 }

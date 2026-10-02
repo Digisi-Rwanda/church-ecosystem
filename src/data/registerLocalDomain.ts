@@ -100,6 +100,7 @@ import {
   PROTOCOL_HISTORY,
   PROTOCOL_MONTH_PLANS,
   PROTOCOL_NOTIFICATIONS,
+  PROTOCOL_ROSTER,
   PROTOCOL_SERVICE_REPORTS,
   PROTOCOL_SERVICES,
   PROTOCOL_SWAP_PROPOSALS,
@@ -201,6 +202,7 @@ export function registerAllLocalDomain() {
   regReplace('churchAssistanceReports', () => CHURCH_ASSISTANCE_REPORTS);
 
   // Protocol
+  regReplace('protocolRoster', () => PROTOCOL_ROSTER);
   regReplace('protocolServices', () => PROTOCOL_SERVICES);
   regReplace('protocolMonthPlans', () => PROTOCOL_MONTH_PLANS);
   regReplace('protocolTeamSlots', () => PROTOCOL_TEAM_SLOTS);

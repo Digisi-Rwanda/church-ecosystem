@@ -16,7 +16,11 @@ import {
   TextAreaField,
   TextField,
 } from '../components/ui/Field';
+import { PersonAvatar } from '../components/people/PersonAvatar';
+import { PhotoEditor } from '../components/people/PhotoEditor';
 import { useToast } from '../components/ui/Toast';
+import { fileToSourceDataUrl } from '../lib/photo';
+import { deleteSource, loadSource, saveSource } from '../lib/photoStore';
 
 type Tab =
   | 'identity'
@@ -49,6 +53,13 @@ export function PersonFormPage() {
   const [preferredName, setPreferredName] = useState(
     existing?.preferredName ?? '',
   );
+  const [photoUrl, setPhotoUrl] = useState<string | undefined>(
+    existing?.photoUrl,
+  );
+  // Full-quality copy picked/edited in this session; saved to IndexedDB on Save.
+  const [photoSource, setPhotoSource] = useState<string | undefined>();
+  const [photoRemoved, setPhotoRemoved] = useState(false);
+  const [photoEditing, setPhotoEditing] = useState<string | null>(null);
   const [phone, setPhone] = useState(existing?.phone ?? '');
   const [email, setEmail] = useState(existing?.email ?? '');
   const [dateOfBirth, setDateOfBirth] = useState(existing?.dateOfBirth ?? '');
@@ -179,6 +190,34 @@ export function PersonFormPage() {
     return true;
   }
 
+  async function openPhotoEditor() {
+    setPhotoEditing(
+      photoSource ??
+        (id ? await loadSource(id) : null) ??
+        existing?.photoSource ??
+        photoUrl ??
+        null,
+    );
+  }
+
+  /** Store (or clear) the full-quality copy once the person has an id. */
+  function persistPhotoSource(personId: string) {
+    if (photoSource) void saveSource(personId, photoSource);
+    else if (photoRemoved || !photoUrl) void deleteSource(personId);
+  }
+
+  async function onPickPhoto(file: File | undefined) {
+    if (!file) return;
+    try {
+      setPhotoEditing(await fileToSourceDataUrl(file));
+    } catch (err) {
+      toast({
+        title: err instanceof Error ? err.message : 'Could not use that image',
+        tone: 'danger',
+      });
+    }
+  }
+
   function onSaveIdentity(e: FormEvent) {
     e.preventDefault();
     if (!gate()) return;
@@ -198,15 +237,19 @@ export function PersonFormPage() {
         nationalId: nationalId || undefined,
         joinedChurchOn: joinedChurchOn || undefined,
         pastoralNotes: pastoralNotes || undefined,
+        photoUrl,
+        photoSource: undefined,
         status,
       };
       if (isEdit && id) {
         peopleService.update(id, payload);
+        persistPhotoSource(id);
         toast({ title: 'Identity saved', tone: 'success' });
         refresh();
         return;
       }
       const created = peopleService.create(payload);
+      persistPhotoSource(created.id);
       toast({ title: 'Person created', tone: 'success' });
       window.setTimeout(() => navigate(`/people/${created.id}/edit`), 600);
     } catch (err) {
@@ -647,6 +690,79 @@ export function PersonFormPage() {
 
       {tab === 'identity' && (
         <form className="panel stack" onSubmit={onSaveIdentity}>
+          <div className="photo-field">
+            <button
+              type="button"
+              className="photo-trigger"
+              aria-label={photoUrl ? 'Edit photo' : 'Choose photo'}
+              title={photoUrl ? 'Edit photo' : 'Choose photo'}
+              onClick={() =>
+                photoUrl
+                  ? void openPhotoEditor()
+                  : document.getElementById('photo-input')?.click()
+              }
+            >
+              <PersonAvatar
+                person={{ fullName: fullName || '?', preferredName, photoUrl }}
+                size={72}
+              />
+            </button>
+            <div className="stack" style={{ gap: '0.35rem' }}>
+              <strong>Profile picture</strong>
+              <div className="row">
+                <label className="btn secondary sm" htmlFor="photo-input">
+                  {photoUrl ? 'Change photo' : 'Choose photo'}
+                </label>
+                {photoUrl ? (
+                  <>
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      onClick={() => void openPhotoEditor()}
+                    >
+                      Edit
+                    </button>
+                    <button
+                      type="button"
+                      className="btn ghost sm"
+                      onClick={() => {
+                        setPhotoUrl(undefined);
+                        setPhotoSource(undefined);
+                        setPhotoRemoved(true);
+                      }}
+                    >
+                      Remove
+                    </button>
+                  </>
+                ) : null}
+              </div>
+              <input
+                id="photo-input"
+                type="file"
+                accept="image/*"
+                className="visually-hidden"
+                onChange={(e) => {
+                  void onPickPhoto(e.target.files?.[0]);
+                  e.target.value = '';
+                }}
+              />
+              <span className="muted" style={{ fontSize: '0.8rem' }}>
+                Saved with the person when you press Save.
+              </span>
+            </div>
+          </div>
+          {photoEditing ? (
+            <PhotoEditor
+              source={photoEditing}
+              onCancel={() => setPhotoEditing(null)}
+              onApply={(r) => {
+                setPhotoUrl(r.photoUrl);
+                setPhotoSource(r.photoSource);
+                setPhotoRemoved(false);
+                setPhotoEditing(null);
+              }}
+            />
+          ) : null}
           <TextField
             label="Full name"
             name="fullName"

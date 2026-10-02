@@ -11,6 +11,27 @@ export function setApiToken(token: string | null): void {
   else localStorage.removeItem(TOKEN_KEY);
 }
 
+/**
+ * Token used only to share Music/Protocol data. A demo login that the server
+ * knows as a bare account (no roles there) keeps its local demo permissions,
+ * but still needs an identity to read and write the shared documents.
+ */
+const SYNC_TOKEN_KEY = 'adepr.syncToken';
+
+export function getSyncToken(): string | null {
+  return localStorage.getItem(SYNC_TOKEN_KEY);
+}
+
+export function setSyncToken(token: string | null): void {
+  if (token) localStorage.setItem(SYNC_TOKEN_KEY, token);
+  else localStorage.removeItem(SYNC_TOKEN_KEY);
+}
+
+/** The token the shared-document sync should use. */
+export function getScheduleSyncToken(): string | null {
+  return getApiToken() ?? getSyncToken();
+}
+
 export class ApiError extends Error {
   status: number;
   body: unknown;

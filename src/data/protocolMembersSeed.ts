@@ -451,6 +451,9 @@ const CHOIR_ORG_UNIT: Record<string, string> = {
 };
 
 export const PROTOCOL_COORDINATOR_PERSON_ID = 'p-proto-coord';
+/** Protocol President: Niyigena Claudine, from the Protocol roster. */
+export const PROTOCOL_PRESIDENT_PERSON_ID = 'p-proto-n-claudine';
+/** The Vice President has no Protocol office holder yet; see protocolService.reviewerPersonIds. */
 
 function personIdForRow(row: (typeof ROSTER_ROWS)[number]): string {
   if (row.role === 'Coordinator') return PROTOCOL_COORDINATOR_PERSON_ID;
@@ -499,11 +502,22 @@ function rosterNotes(row: (typeof ROSTER_ROWS)[number]): string | undefined {
   return bits.length ? bits.join(' · ') : undefined;
 }
 
+/**
+ * Demo roster (names for a fresh install). A real deployment sets
+ * VITE_DEMO_SEED=false and builds the roster from the church directory.
+ */
+const DEMO_SEED = import.meta.env.VITE_DEMO_SEED !== 'false';
+
 function buildRoster(): ProtocolRosterMember[] {
+  if (!DEMO_SEED) return [];
   return ROSTER_ROWS.map((row, index) => {
     const personId = personIdForRow(row);
     const office: ProtocolOffice =
-      row.role === 'Coordinator' ? 'COORDINATOR' : 'MEMBER';
+      row.role === 'Coordinator'
+        ? 'COORDINATOR'
+        : personId === PROTOCOL_PRESIDENT_PERSON_ID
+          ? 'PRESIDENT'
+          : 'MEMBER';
     const { serveDays, allowedServiceKinds } = serveCapability(row);
     const rosterId =
       row.role === 'Coordinator'
@@ -523,6 +537,7 @@ function buildRoster(): ProtocolRosterMember[] {
 }
 
 function buildPeople(): Person[] {
+  if (!DEMO_SEED) return [];
   return ROSTER_ROWS.map((row) => {
     const { fullName, preferredName } = parseDisplayName(row.name);
     return {
@@ -538,6 +553,7 @@ function buildPeople(): Person[] {
 
 function buildMemberships(): Membership[] {
   const out: Membership[] = [];
+  if (!DEMO_SEED) return out;
   for (const row of ROSTER_ROWS) {
     const personId = personIdForRow(row);
     out.push(

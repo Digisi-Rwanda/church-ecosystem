@@ -1,0 +1,782 @@
+[
+  {
+    "accountId": "acc-pastor",
+    "username": "pastor",
+    "password": "pastor123",
+    "person": {
+      "id": "p-pastor",
+      "fullName": "Rev. Jean Bosco Habimana",
+      "preferredName": "Pastor Habimana",
+      "phone": "+250788000001",
+      "email": "pastor@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-pastor-2",
+    "username": "pastor2",
+    "password": "pastor2123",
+    "person": {
+      "id": "p-pastor-2",
+      "fullName": "Rev. Claire Mukamana",
+      "preferredName": "Pastor Claire",
+      "phone": "+250788000006",
+      "email": "pastor2@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-catechist",
+    "username": "catechist",
+    "password": "catechist123",
+    "person": {
+      "id": "p-catechist",
+      "fullName": "Emmanuel Habimana",
+      "preferredName": "Umwarimu Emmanuel",
+      "phone": "+250788000021",
+      "email": "catechist@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-secretary",
+    "username": "secretary",
+    "password": "secret123",
+    "person": {
+      "id": "p-secretary",
+      "fullName": "Grace Uwase",
+      "preferredName": "Grace",
+      "phone": "+250788000002",
+      "email": "secretary@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-church-treas",
+    "username": "treasurer",
+    "password": "treas123",
+    "person": {
+      "id": "p-church-treas",
+      "fullName": "Daniel Nkurunziza",
+      "preferredName": "Daniel",
+      "phone": "+250788000020",
+      "email": "treasurer@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-choir",
+    "username": "choir",
+    "password": "choir123",
+    "person": {
+      "id": "p-choir-leader",
+      "fullName": "Eric Mugisha",
+      "preferredName": "Eric",
+      "phone": "+250788000003",
+      "email": "choir@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-choir-pres",
+    "username": "choirpres",
+    "password": "choir123",
+    "person": {
+      "id": "p-choir-pres",
+      "fullName": "Martha Uwimana",
+      "preferredName": "Martha",
+      "phone": "+250788000020",
+      "email": "choir.pres@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-choir-treas",
+    "username": "choirtreas",
+    "password": "choir123",
+    "person": {
+      "id": "p-choir-treas",
+      "fullName": "Daniel Habimana",
+      "preferredName": "Daniel",
+      "phone": "+250788000021",
+      "email": "choir.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-choir-vp",
+    "username": "choirvp",
+    "password": "choir123",
+    "person": {
+      "id": "p-choir-vp",
+      "fullName": "Jeanne Mukeshimana",
+      "preferredName": "Jeanne",
+      "phone": "+250788000022",
+      "email": "choir.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-choir-coord",
+    "username": "choircoord",
+    "password": "choir123",
+    "person": {
+      "id": "p-choir-coord",
+      "fullName": "Kevin Bizimana",
+      "preferredName": "Kevin",
+      "phone": "+250788000023",
+      "email": "choir.coord@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-choir-adv-spirit",
+    "username": "choirspirit",
+    "password": "choir123",
+    "person": {
+      "id": "p-choir-adv-spirit",
+      "fullName": "Pastorette Alice Uwera",
+      "preferredName": "Alice",
+      "phone": "+250788000024",
+      "email": "choir.spirit@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-choir-adv-social",
+    "username": "choirsocial",
+    "password": "choir123",
+    "person": {
+      "id": "p-choir-adv-social",
+      "fullName": "Frank Habineza",
+      "preferredName": "Frank",
+      "phone": "+250788000025",
+      "email": "choir.social@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-hope",
+    "username": "hope",
+    "password": "hope123",
+    "person": {
+      "id": "p-hope-leader",
+      "fullName": "Samuel Nkurunziza",
+      "preferredName": "Samuel",
+      "phone": "+250788000099",
+      "email": "hope@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-worship",
+    "username": "worship",
+    "password": "worship123",
+    "person": {
+      "id": "p-worship-leader",
+      "fullName": "Jean Bosco Nkurunziza",
+      "preferredName": "Bosco",
+      "phone": "+250788000030",
+      "email": "worship@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-worship-pres",
+    "username": "worshippres",
+    "password": "worship123",
+    "person": {
+      "id": "p-worship-pres",
+      "fullName": "Claire Mukamana",
+      "preferredName": "Claire",
+      "phone": "+250788000031",
+      "email": "worship.pres@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-worship-treas",
+    "username": "worshiptreas",
+    "password": "worship123",
+    "person": {
+      "id": "p-worship-treas",
+      "fullName": "Ivan Mugisha",
+      "preferredName": "Ivan",
+      "phone": "+250788000032",
+      "email": "worship.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-worship-vp",
+    "username": "worshipvp",
+    "password": "worship123",
+    "person": {
+      "id": "p-worship-vp",
+      "fullName": "Ange Uwimana",
+      "preferredName": "Ange",
+      "phone": "+250788000033",
+      "email": "worship.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-worship-sec",
+    "username": "worshipsec",
+    "password": "worship123",
+    "person": {
+      "id": "p-worship-sec",
+      "fullName": "Brian Habimana",
+      "preferredName": "Brian",
+      "phone": "+250788000034",
+      "email": "worship.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-deacon-vp",
+    "username": "deaconvp",
+    "password": "deacon123",
+    "person": {
+      "id": "p-deacon-vp",
+      "fullName": "Patrick Uwera",
+      "preferredName": "Patrick U.",
+      "phone": "+250788000042",
+      "email": "deacon.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-deacon-sec",
+    "username": "deaconsec",
+    "password": "deacon123",
+    "person": {
+      "id": "p-deacon-sec",
+      "fullName": "Chantal Mukamana",
+      "preferredName": "Chantal M.",
+      "phone": "+250788000043",
+      "email": "deacon.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-youth-vp",
+    "username": "youthvp",
+    "password": "youth123",
+    "person": {
+      "id": "p-youth-vp",
+      "fullName": "Kevin Ingabire",
+      "preferredName": "Kevin I.",
+      "phone": "+250788000044",
+      "email": "youth.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-youth-sec",
+    "username": "youthsec",
+    "password": "youth123",
+    "person": {
+      "id": "p-youth-sec",
+      "fullName": "Sandra Uwase",
+      "preferredName": "Sandra",
+      "phone": "+250788000045",
+      "email": "youth.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-youth-treas",
+    "username": "youthtreas",
+    "password": "youth123",
+    "person": {
+      "id": "p-youth-treas",
+      "fullName": "Bruno Habimana",
+      "preferredName": "Bruno",
+      "phone": "+250788000046",
+      "email": "youth.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-deacon",
+    "username": "deacon",
+    "password": "deacon123",
+    "person": {
+      "id": "p-deacon-coord",
+      "fullName": "Emmanuel Nsengimana",
+      "preferredName": "Emmanuel",
+      "phone": "+250788000040",
+      "email": "deacon@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-deacon-treas",
+    "username": "deacontreas",
+    "password": "deacon123",
+    "person": {
+      "id": "p-deacon-treas",
+      "fullName": "Louise Uwase",
+      "preferredName": "Louise",
+      "phone": "+250788000041",
+      "email": "deacon.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-youth",
+    "username": "youth",
+    "password": "youth123",
+    "person": {
+      "id": "p-youth-leader",
+      "fullName": "Aline Ingabire",
+      "preferredName": "Aline",
+      "phone": "+250788000004",
+      "email": "youth@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-member",
+    "username": "patrick",
+    "password": "member123",
+    "person": {
+      "id": "p-member",
+      "fullName": "Patrick Niyonzima",
+      "preferredName": "Patrick",
+      "phone": "+250788000005",
+      "email": "patrick@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-proto-coord",
+    "username": "protocol",
+    "password": "proto123",
+    "person": {
+      "id": "p-proto-coord",
+      "fullName": "Iryayo Jean Wiclef",
+      "preferredName": "Wiclef",
+      "phone": null,
+      "email": "i.wiclef@church.internal"
+    }
+  },
+  {
+    "accountId": "acc-proto-president",
+    "username": "protocolpres",
+    "password": "proto123",
+    "person": {
+      "id": "p-proto-n-claudine",
+      "fullName": "Niyigena Claudine",
+      "preferredName": "Claudine",
+      "phone": null,
+      "email": "n.claudine@church.internal"
+    }
+  },
+  {
+    "accountId": "acc-music-pres",
+    "username": "music",
+    "password": "music123",
+    "person": {
+      "id": "p-music-leader",
+      "fullName": "Samuel Habimana",
+      "preferredName": "Samuel",
+      "phone": null,
+      "email": "music@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-music-vp",
+    "username": "musicvp",
+    "password": "board123",
+    "person": {
+      "id": "p-music-vp",
+      "fullName": "Grace Mukamana",
+      "preferredName": "Grace M.",
+      "phone": null,
+      "email": "music.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-music-treas",
+    "username": "musictreas",
+    "password": "board123",
+    "person": {
+      "id": "p-music-treas",
+      "fullName": "David Nkurunziza",
+      "preferredName": "David N.",
+      "phone": null,
+      "email": "music.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-music-sec",
+    "username": "musicsec",
+    "password": "board123",
+    "person": {
+      "id": "p-music-sec",
+      "fullName": "Linda Uwera",
+      "preferredName": "Linda",
+      "phone": null,
+      "email": "music.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-media-pres",
+    "username": "media",
+    "password": "media123",
+    "person": {
+      "id": "p-media-leader",
+      "fullName": "Kevin Niyonzima",
+      "preferredName": "Kevin",
+      "phone": null,
+      "email": "media@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-media-vp",
+    "username": "mediavp",
+    "password": "board123",
+    "person": {
+      "id": "p-media-vp",
+      "fullName": "Eric Twagirumukiza",
+      "preferredName": "Eric T.",
+      "phone": null,
+      "email": "media.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-media-treas",
+    "username": "mediatreas",
+    "password": "board123",
+    "person": {
+      "id": "p-media-treas",
+      "fullName": "Solange Uwimana",
+      "preferredName": "Solange",
+      "phone": null,
+      "email": "media.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-media-sec",
+    "username": "mediasec",
+    "password": "board123",
+    "person": {
+      "id": "p-media-sec",
+      "fullName": "Chris Habimana",
+      "preferredName": "Chris H.",
+      "phone": null,
+      "email": "media.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-men-pres",
+    "username": "men",
+    "password": "men123",
+    "person": {
+      "id": "p-men-leader",
+      "fullName": "Joseph Mugisha",
+      "preferredName": "Joseph",
+      "phone": null,
+      "email": "men@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-men-vp",
+    "username": "menvp",
+    "password": "board123",
+    "person": {
+      "id": "p-men-vp",
+      "fullName": "Alain Habimana",
+      "preferredName": "Alain",
+      "phone": null,
+      "email": "men.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-men-treas",
+    "username": "mentreas",
+    "password": "board123",
+    "person": {
+      "id": "p-men-treas",
+      "fullName": "Bernard Habineza",
+      "preferredName": "Bernard",
+      "phone": null,
+      "email": "men.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-men-sec",
+    "username": "mensec",
+    "password": "board123",
+    "person": {
+      "id": "p-men-sec",
+      "fullName": "Olivier Nsengimana",
+      "preferredName": "Olivier",
+      "phone": null,
+      "email": "men.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-women-pres",
+    "username": "women",
+    "password": "women123",
+    "person": {
+      "id": "p-women-leader",
+      "fullName": "Diane Uwimana",
+      "preferredName": "Diane",
+      "phone": null,
+      "email": "women@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-women-vp",
+    "username": "womenvp",
+    "password": "board123",
+    "person": {
+      "id": "p-women-vp",
+      "fullName": "Immaculée Uwase",
+      "preferredName": "Immaculée",
+      "phone": null,
+      "email": "women.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-women-treas",
+    "username": "womentreas",
+    "password": "board123",
+    "person": {
+      "id": "p-women-treas",
+      "fullName": "Alice Mukamana",
+      "preferredName": "Alice M.",
+      "phone": null,
+      "email": "women.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-women-sec",
+    "username": "womensec",
+    "password": "board123",
+    "person": {
+      "id": "p-women-sec",
+      "fullName": "Beatrice Mukeshimana",
+      "preferredName": "Beatrice",
+      "phone": null,
+      "email": "women.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-couples-pres",
+    "username": "couples",
+    "password": "couples123",
+    "person": {
+      "id": "p-couples-leader",
+      "fullName": "Paul & Ruth Kayitesi",
+      "preferredName": "Paul & Ruth",
+      "phone": null,
+      "email": "couples@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-couples-vp",
+    "username": "couplesvp",
+    "password": "board123",
+    "person": {
+      "id": "p-couples-vp",
+      "fullName": "Jean & Anne Bizimana",
+      "preferredName": "Jean & Anne",
+      "phone": null,
+      "email": "couples.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-couples-treas",
+    "username": "couplestreas",
+    "password": "board123",
+    "person": {
+      "id": "p-couples-treas",
+      "fullName": "Roger Mugisha",
+      "preferredName": "Roger",
+      "phone": null,
+      "email": "couples.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-couples-sec",
+    "username": "couplessec",
+    "password": "board123",
+    "person": {
+      "id": "p-couples-sec",
+      "fullName": "Helen Kayitesi",
+      "preferredName": "Helen",
+      "phone": null,
+      "email": "couples.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-children-pres",
+    "username": "children",
+    "password": "children123",
+    "person": {
+      "id": "p-children-leader",
+      "fullName": "Jeanne Mukamana",
+      "preferredName": "Jeanne",
+      "phone": null,
+      "email": "children@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-children-vp",
+    "username": "childrenvp",
+    "password": "board123",
+    "person": {
+      "id": "p-children-vp",
+      "fullName": "Claudine Ingabire",
+      "preferredName": "Claudine",
+      "phone": null,
+      "email": "children.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-children-treas",
+    "username": "childrentreas",
+    "password": "board123",
+    "person": {
+      "id": "p-children-treas",
+      "fullName": "Patricia Uwase",
+      "preferredName": "Patricia",
+      "phone": null,
+      "email": "children.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-children-sec",
+    "username": "childrensec",
+    "password": "board123",
+    "person": {
+      "id": "p-children-sec",
+      "fullName": "Sandrine Uwimana",
+      "preferredName": "Sandrine",
+      "phone": null,
+      "email": "children.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-elderly-pres",
+    "username": "elderly",
+    "password": "elderly123",
+    "person": {
+      "id": "p-elderly-leader",
+      "fullName": "Emmanuel Nsengiyumva",
+      "preferredName": "Emmanuel",
+      "phone": null,
+      "email": "elderly@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-elderly-vp",
+    "username": "elderlyvp",
+    "password": "board123",
+    "person": {
+      "id": "p-elderly-vp",
+      "fullName": "Pierre Ndayisaba",
+      "preferredName": "Pierre",
+      "phone": null,
+      "email": "elderly.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-elderly-treas",
+    "username": "elderlytreas",
+    "password": "board123",
+    "person": {
+      "id": "p-elderly-treas",
+      "fullName": "François Habimana",
+      "preferredName": "François",
+      "phone": null,
+      "email": "elderly.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-elderly-sec",
+    "username": "elderlysec",
+    "password": "board123",
+    "person": {
+      "id": "p-elderly-sec",
+      "fullName": "Marie Claire Uwase",
+      "preferredName": "Marie Claire",
+      "phone": null,
+      "email": "elderly.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-evangelism-pres",
+    "username": "evangelism",
+    "password": "evangel123",
+    "person": {
+      "id": "p-evangelism-leader",
+      "fullName": "Patrick Habineza",
+      "preferredName": "Patrick H.",
+      "phone": null,
+      "email": "evangelism@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-evangelism-vp",
+    "username": "evangelismvp",
+    "password": "board123",
+    "person": {
+      "id": "p-evangelism-vp",
+      "fullName": "Divine Uwera",
+      "preferredName": "Divine",
+      "phone": null,
+      "email": "evangelism.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-evangelism-treas",
+    "username": "evangelismtreas",
+    "password": "board123",
+    "person": {
+      "id": "p-evangelism-treas",
+      "fullName": "Yves Niyonzima",
+      "preferredName": "Yves",
+      "phone": null,
+      "email": "evangelism.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-evangelism-sec",
+    "username": "evangelismsec",
+    "password": "board123",
+    "person": {
+      "id": "p-evangelism-sec",
+      "fullName": "Thierry Mugisha",
+      "preferredName": "Thierry",
+      "phone": null,
+      "email": "evangelism.sec@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-intercessors-pres",
+    "username": "intercessors",
+    "password": "pray123",
+    "person": {
+      "id": "p-intercessors-leader",
+      "fullName": "Chantal Uwase",
+      "preferredName": "Chantal",
+      "phone": null,
+      "email": "prayer@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-intercessors-vp",
+    "username": "intercessorsvp",
+    "password": "board123",
+    "person": {
+      "id": "p-intercessors-vp",
+      "fullName": "Pastorate Esther Mukeshimana",
+      "preferredName": "Esther",
+      "phone": null,
+      "email": "intercessors.vp@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-intercessors-treas",
+    "username": "intercessorstreas",
+    "password": "board123",
+    "person": {
+      "id": "p-intercessors-treas",
+      "fullName": "Naomi Ingabire",
+      "preferredName": "Naomi",
+      "phone": null,
+      "email": "intercessors.treas@adepr-kacyiru.rw"
+    }
+  },
+  {
+    "accountId": "acc-intercessors-sec",
+    "username": "intercessorssec",
+    "password": "board123",
+    "person": {
+      "id": "p-intercessors-sec",
+      "fullName": "Josiane Habimana",
+      "preferredName": "Josiane",
+      "phone": null,
+      "email": "intercessors.sec@adepr-kacyiru.rw"
+    }
+  }
+]

@@ -1,4 +1,5 @@
 import { Navigate, Outlet, Route, Routes, useLocation } from 'react-router-dom';
+import { ScheduleSyncGate } from './components/ScheduleSyncGate';
 import { AuthProvider, useAuth } from './auth/AuthContext';
 import { AppShell } from './components/layout/AppShell';
 import { RequireAdminTools } from './components/RequireAdminTools';
@@ -104,6 +105,8 @@ import {
   ProtocolFaithfulPage,
   ProtocolTeamsPage,
 } from './pages/ministry/ProtocolSchedulingPages';
+import { ProtocolMusicFeedPage } from './pages/ministry/ProtocolMusicFeedPage';
+import { ProtocolAvailabilityPage } from './pages/ministry/ProtocolAvailabilityPage';
 import {
   ProtocolExportPage,
   ProtocolFinancePage,
@@ -147,6 +150,7 @@ import { OrganizationDetailPage } from './pages/OrganizationDetailPage';
 import { OrganizationPage } from './pages/OrganizationPage';
 import { ParticipationPage } from './pages/ParticipationPage';
 import { PeoplePage } from './pages/PeoplePage';
+import { PeopleTablePage } from './pages/PeopleTablePage';
 import { PersonFormPage } from './pages/PersonFormPage';
 import { PersonProfilePage } from './pages/PersonProfilePage';
 import { ProgramsPage } from './pages/ProgramsPage';
@@ -199,6 +203,9 @@ function ShellWithTitle() {
   } else if (location.pathname.startsWith('/system-admin')) {
     title = 'System admin';
     subtitle = 'Configure tools for systems you are appointed to — not church ledgers.';
+  } else if (location.pathname.startsWith('/people/tables')) {
+    title = 'People tables';
+    subtitle = 'Personal, church and other details for everyone.';
   } else if (location.pathname.startsWith('/people/new')) {
     title = 'Add person';
     subtitle = 'Register someone in the church directory.';
@@ -331,11 +338,13 @@ const PROTOCOL_NAV = [
   { to: '/systems/protocol', label: 'Home', end: true },
   { to: '/systems/protocol/mission', label: 'Mission' },
   { to: '/systems/protocol/members', label: 'Members' },
+  { to: '/systems/protocol/availability', label: 'Availability' },
+  { to: '/systems/protocol/music', label: 'Music schedule' },
   { to: '/systems/protocol/calendar', label: 'Calendar' },
   { to: '/systems/protocol/teams', label: 'Service teams' },
   { to: '/systems/protocol/review', label: 'Review' },
   { to: '/systems/protocol/attendance', label: 'Attendance' },
-  { to: '/systems/protocol/faithful', label: 'Faithful Servant' },
+  { to: '/systems/protocol/faithful', label: 'Member performance' },
   { to: '/systems/protocol/mine', label: 'My schedule' },
   { to: '/systems/protocol/finance', label: 'Finance' },
   { to: '/systems/protocol/inbox', label: 'Inbox' },
@@ -369,6 +378,7 @@ export default function App() {
     <AuthProvider>
       <ToastProvider>
       <SystemScopeGuard>
+      <ScheduleSyncGate>
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/sso/handoff" element={<SsoHandoffPage />} />
@@ -931,6 +941,8 @@ export default function App() {
               }
             />
             <Route path="members" element={<ProtocolMembersPage />} />
+            <Route path="availability" element={<ProtocolAvailabilityPage />} />
+            <Route path="music" element={<ProtocolMusicFeedPage />} />
             <Route path="calendar" element={<ProtocolCalendarPage />} />
             <Route path="teams" element={<ProtocolTeamsPage />} />
             <Route path="review" element={<ProtocolReviewPage />} />
@@ -1025,6 +1037,7 @@ export default function App() {
               element={<FinanceFundLedgerPage />}
             />
             <Route path="people" element={<PeoplePage />} />
+            <Route path="people/tables/:table" element={<PeopleTablePage />} />
             <Route path="people/new" element={<PersonFormPage />} />
             <Route path="people/:id" element={<PersonProfilePage />} />
             <Route path="people/:id/edit" element={<PersonFormPage />} />
@@ -1079,6 +1092,7 @@ export default function App() {
         </Route>
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </ScheduleSyncGate>
       </SystemScopeGuard>
       </ToastProvider>
     </AuthProvider>

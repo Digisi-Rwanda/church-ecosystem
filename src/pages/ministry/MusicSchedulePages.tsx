@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import { periodOptionsForHorizon } from '../../domain/musicScheduleEngine';
 import { useAuth } from '../../auth/AuthContext';
 import { Drawer } from '../../components/ui/Drawer';
 import { PageHead } from '../../components/ui/FilterBar';
 import { StatusPill } from '../../components/ui/StatusPill';
-import type { MusicHorizon, MusicScheduleDraft, MusicServiceKind } from '../../domain/musicSchedule';
+import type { MusicHorizon, MusicScheduleDraft, MusicScheduleUnit, MusicServiceKind } from '../../domain/musicSchedule';
 import { MUSIC_SERVICE_LABELS } from '../../domain/musicSchedule';
 import {
   ministryModulesForOffice,
   resolveMinistryBoardOffice,
 } from '../../domain/ministryNavAccess';
-import { MUSIC_UNITS, musicUnitName } from '../../domain/musicUnits';
+import { activeMusicUnits, musicUnitName } from '../../domain/musicUnits';
 import {
   financeService,
   ministryFinanceService,
@@ -18,6 +19,7 @@ import {
 } from '../../services';
 import { downloadMusicSchedulePdf } from '../../services/musicSchedulePdf';
 import { musicScheduleService } from '../../services/musicScheduleService';
+import { MusicLineupPanel } from './MusicLineupPanel';
 import { MinistryMissionBoard } from './MinistryMissionBoard';
 
 const SYS = 'sys-music' as const;
@@ -40,11 +42,11 @@ function unitsEligibleForService(
   kind: MusicServiceKind,
   scheduled: string[],
   opts?: { forReplaceOf?: string },
-): typeof MUSIC_UNITS {
-  return MUSIC_UNITS.filter((u) => {
-    if (u.id === 'mu-hope' && kind !== 'SS1') return false;
-    if (u.id === 'mu-worship' && kind !== 'TUESDAY') return false;
-    if (kind !== 'TUESDAY' && u.id === 'mu-worship') return false;
+): MusicScheduleUnit[] {
+  return activeMusicUnits().filter((u) => {
+    // Role rules come from the unit's kind, not from hard-coded choir ids.
+    if (u.kind === 'CHILDREN' && kind !== 'SS1') return false;
+    if (u.kind === 'WORSHIP' && kind !== 'TUESDAY') return false;
     if (opts?.forReplaceOf && u.id === opts.forReplaceOf) return false;
     if (scheduled.includes(u.id) && u.id !== opts?.forReplaceOf) return false;
     return true;
@@ -310,7 +312,7 @@ function musicNotifyRecipients(): string[] {
     'p-worship-pres',
     'p-worship-leader',
     'p-pastor',
-    'p-assistant',
+    'p-pastor-2',
     'p-secretary',
   ];
 }
@@ -439,7 +441,7 @@ export function MusicHomePage() {
           </div>
           <div className="overview-tile">
             <div className="label">Units</div>
-            <div className="value">{MUSIC_UNITS.length}</div>
+            <div className="value">{activeMusicUnits().length}</div>
           </div>
           {showFinance && finance ? (
             <div className="overview-tile">
@@ -571,7 +573,11 @@ export function MusicHomePage() {
         >
           <h3 style={{ margin: 0 }}>Next on choir schedule</h3>
           <span className="badge">
-            {published ? `Published v${published.version}` : 'Not published'}
+            {published
+              ? `Published v${published.version}`
+              : musicScheduleService.monthState(month) === 'CONFIRMED'
+                ? 'Confirmed, not yet published'
+                : 'Not published'}
           </span>
         </div>
         {!published ? (
@@ -639,6 +645,17 @@ export function MusicScheduleWorkspacePage() {
     musicScheduleService.liveMonthKey(),
   );
   const [horizon, setHorizon] = useState<MusicHorizon>('MONTH');
+  const periodOptions = useMemo(
+    () => periodOptionsForHorizon(horizon, musicScheduleService.liveMonthKey()),
+    [horizon],
+  );
+  function onHorizonChange(h: MusicHorizon) {
+    setHorizon(h);
+    // The period list depends on the horizon: start on its first option.
+    setPeriodKey(
+      periodOptionsForHorizon(h, musicScheduleService.liveMonthKey())[0].value,
+    );
+  }
   const [msg, setMsg] = useState('');
   const [edit, setEdit] = useState<ScheduleEditState | null>(null);
   const canvas = useMemo(
@@ -715,32 +732,32 @@ export function MusicScheduleWorkspacePage() {
       <div className="panel">
         <PageHead
           title="Choir schedule workspace"
-          subtitle="Build calendar → generate choir schedule → edit manually → save draft. Identical schedules cannot be saved twice — rebuild or change a choir first. Publish from Open drafts."
+          subtitle="Build calendar → generate choir schedule → edit manually → save draft. Identical schedules cannot be saved twice — rebuild or change a choir first. Confirm a draft in Open drafts, then publish it month by month."
         />
         <div className="row" style={{ marginTop: '0.75rem', flexWrap: 'wrap' }}>
-          <label className="field" style={{ margin: 0 }}>
-            Period
-            <select
-              value={periodKey}
-              onChange={(e) => setPeriodKey(e.target.value)}
-            >
-              {musicScheduleService.allowedMonths().map((m) => (
-                <option key={m} value={m}>
-                  {m}
-                </option>
-              ))}
-            </select>
-          </label>
           <label className="field" style={{ margin: 0 }}>
             Horizon
             <select
               value={horizon}
-              onChange={(e) => setHorizon(e.target.value as MusicHorizon)}
+              onChange={(e) => onHorizonChange(e.target.value as MusicHorizon)}
             >
               <option value="MONTH">Month</option>
               <option value="QUARTER">Quarter</option>
               <option value="HALF">Half year</option>
               <option value="YEAR">Year</option>
+            </select>
+          </label>
+          <label className="field" style={{ margin: 0 }}>
+            {HORIZON_PERIOD_LABEL[horizon]}
+            <select
+              value={periodKey}
+              onChange={(e) => setPeriodKey(e.target.value)}
+            >
+              {periodOptions.map((o) => (
+                <option key={o.value} value={o.value}>
+                  {o.label}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -787,6 +804,8 @@ export function MusicScheduleWorkspacePage() {
           </ul>
         ) : null}
       </div>
+
+      <MusicLineupPanel canManage={canManage} onChange={refresh} />
 
       <div className="panel">
         <h3 style={{ marginTop: 0 }}>
@@ -902,6 +921,20 @@ export function MusicScheduleWorkspacePage() {
   );
 }
 
+const HORIZON_PERIOD_LABEL: Record<MusicHorizon, string> = {
+  MONTH: 'Month',
+  QUARTER: 'Quarter',
+  HALF: 'Half year',
+  YEAR: 'Year',
+};
+
+const HORIZON_WORD: Record<MusicHorizon, string> = {
+  MONTH: 'month',
+  QUARTER: 'quarter',
+  HALF: 'half year',
+  YEAR: 'year',
+};
+
 export function MusicScheduleDraftsPage() {
   const { account, positions } = useAuth();
   const canManage = missionService.canManageBoard(positions, SYS);
@@ -915,24 +948,66 @@ export function MusicScheduleDraftsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [tick],
   );
+  const batches = useMemo(
+    () => musicScheduleService.listBatches(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tick],
+  );
 
   if (!account) return null;
 
-  function onPublish(id: string) {
+  function openDraft(id: string) {
+    setViewId(id);
+  }
+
+  function onConfirm(id: string, months: string[], alsoPublish: boolean) {
     if (!canManage) return;
-    const r = musicScheduleService.publishDraft(
+    const c = musicScheduleService.confirmDraftMonths(
       id,
+      account!.personId,
+      months,
+    );
+    if (!c.ok) {
+      setMsg(c.reason ?? 'Confirm failed');
+      return;
+    }
+    if (alsoPublish) {
+      const p = musicScheduleService.publishMonths(
+        months,
+        account!.personId,
+        musicNotifyRecipients(),
+      );
+      setMsg(
+        p.ok
+          ? `Confirmed and published ${months.join(', ')}`
+          : p.reason ?? 'Publish failed',
+      );
+    } else {
+      setMsg(
+        `Confirmed ${months.join(', ')} — Protocol can plan against it; choirs will not see it until you publish.`,
+      );
+    }
+    const left = musicScheduleService.draftMonths(id);
+    if (left.length === 0) setViewId(null);
+    refresh();
+  }
+
+  function onPublishMonth(month: string) {
+    if (!canManage) return;
+    const r = musicScheduleService.publishMonths(
+      [month],
       account!.personId,
       musicNotifyRecipients(),
     );
-    setMsg(
-      r.ok
-        ? `Published choir schedule ${r.schedule?.periodKey} v${r.schedule?.version}`
-        : r.reason ?? 'Publish failed',
-    );
-    setViewId(null);
-    setCompareOpen(false);
+    setMsg(r.ok ? `Published ${month} to the choirs` : r.reason ?? 'Publish failed');
     refresh();
+  }
+
+  /** Choose this draft: all of its months become confirmed (loaded). */
+  function onConfirmDraft(id: string) {
+    onConfirm(id, musicScheduleService.draftMonths(id), false);
+    setCompareOpen(false);
+    setCompareIds([]);
   }
 
   function onDelete(id: string) {
@@ -962,7 +1037,7 @@ export function MusicScheduleDraftsPage() {
       <div className="panel">
         <PageHead
           title="Schedule drafts"
-          subtitle="Open drafts to review, compare two side by side, then publish one. Publishing clears other drafts for that period."
+          subtitle="Make as many drafts as you like. Confirm the one you choose: it is loaded and Protocol can plan against it, and the other drafts for those months are discarded. Then publish each month to the choirs when it is due."
           actions={
             <Link className="btn secondary" to={`${BASE}/schedule`}>
               Workspace
@@ -1038,7 +1113,7 @@ export function MusicScheduleDraftsPage() {
                       <button
                         type="button"
                         className="btn secondary"
-                        onClick={() => setViewId(d.id)}
+                        onClick={() => openDraft(d.id)}
                       >
                         View
                       </button>
@@ -1047,9 +1122,9 @@ export function MusicScheduleDraftsPage() {
                           <button
                             type="button"
                             className="btn"
-                            onClick={() => onPublish(d.id)}
+                            onClick={() => onConfirmDraft(d.id)}
                           >
-                            Publish
+                            Confirm
                           </button>
                           <button
                             type="button"
@@ -1066,6 +1141,76 @@ export function MusicScheduleDraftsPage() {
               ))}
             </tbody>
           </table>
+        )}
+      </div>
+
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Confirmed — ready to publish</h3>
+        <p className="muted">
+          Each confirmed draft is released one month at a time. Confirmed months
+          are visible to the Protocol coordinator; the choirs only see a month
+          once you publish it.
+        </p>
+        {batches.length === 0 ? (
+          <p className="muted">Nothing confirmed.</p>
+        ) : (
+          batches.map((b) => {
+            const first = b.months[0].month;
+            const last = b.months[b.months.length - 1].month;
+            return (
+              <div key={b.batchId} className="stack" style={{ gap: '0.4rem', marginBottom: '1rem' }}>
+                <strong>
+                  Confirmed {HORIZON_WORD[b.horizon]} · {first}
+                  {last !== first ? ` → ${last}` : ''} · {b.publishedCount} of{' '}
+                  {b.total} published
+                </strong>
+                <table className="table">
+                  <thead>
+                    <tr>
+                      <th>Month</th>
+                      <th>State</th>
+                      <th>Version</th>
+                      <th>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {b.months.map((m) => (
+                      <tr key={m.month}>
+                        <td>{m.month}</td>
+                        <td>
+                          <StatusPill
+                            status={m.state === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'}
+                          >
+                            {m.state}
+                          </StatusPill>
+                        </td>
+                        <td>v{m.version}</td>
+                        <td>
+                          <div className="row" style={{ flexWrap: 'wrap' }}>
+                            <Link
+                              className="btn secondary"
+                              to={`${BASE}/schedule-published?month=${m.month}`}
+                            >
+                              View / edit
+                            </Link>
+                            {canManage && m.state === 'CONFIRMED' && (
+                              <button
+                                type="button"
+                                className="btn"
+                                onClick={() => onPublishMonth(m.month)}
+                              >
+                                Publish to choirs
+                              </button>
+                            )}
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            );
+          })
         )}
       </div>
 
@@ -1091,13 +1236,20 @@ export function MusicScheduleDraftsPage() {
             ) : null}
             <DraftScheduleTable draft={viewing} />
             {canManage && (
-              <div className="row">
+              <p className="muted" style={{ margin: 0 }}>
+                Confirming this draft chooses it over the other drafts for the
+                same months: it is loaded, Protocol can plan against it, and the
+                choirs see nothing until you publish each month.
+              </p>
+            )}
+            {canManage && (
+              <div className="row" style={{ flexWrap: 'wrap' }}>
                 <button
                   type="button"
                   className="btn"
-                  onClick={() => onPublish(viewing.id)}
+                  onClick={() => onConfirmDraft(viewing.id)}
                 >
-                  Publish this draft
+                  Confirm this draft
                 </button>
                 <button
                   type="button"
@@ -1141,9 +1293,9 @@ export function MusicScheduleDraftsPage() {
                     <button
                       type="button"
                       className="btn"
-                      onClick={() => onPublish(d.id)}
+                      onClick={() => onConfirmDraft(d.id)}
                     >
-                      Publish this one
+                      Confirm this one
                     </button>
                   )}
                 </div>
@@ -1197,13 +1349,14 @@ export function MusicSchedulePublishedPage() {
   const { account, positions } = useAuth();
   const canManage = missionService.canManageBoard(positions, SYS);
   const { refresh, tick } = useTick();
+  const [params] = useSearchParams();
   const [periodKey, setPeriodKey] = useState(
-    musicScheduleService.liveMonthKey(),
+    params.get('month') || musicScheduleService.liveMonthKey(),
   );
   const [msg, setMsg] = useState('');
   const [edit, setEdit] = useState<ScheduleEditState | null>(null);
   const published = useMemo(
-    () => musicScheduleService.getPublished(periodKey),
+    () => musicScheduleService.getPlannedForMonth(periodKey),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [periodKey, tick],
   );
@@ -1221,6 +1374,17 @@ export function MusicSchedulePublishedPage() {
     const notes = r.warnings?.length ? ` · ${r.warnings.length} note(s)` : '';
     setMsg(`${okMsg}${ver}${notes}`);
     if (opts?.closeDrawer !== false) setEdit(null);
+    refresh();
+  }
+
+  function onPublishThisMonth() {
+    if (!canManage || !account) return;
+    const r = musicScheduleService.publishMonths(
+      [periodKey],
+      account.personId,
+      musicNotifyRecipients(),
+    );
+    setMsg(r.ok ? `Published ${periodKey} to the choirs` : r.reason ?? 'Publish failed');
     refresh();
   }
 
@@ -1251,8 +1415,8 @@ export function MusicSchedulePublishedPage() {
     <div className="stack">
       <div className="panel">
         <PageHead
-          title="Published choir schedule"
-          subtitle="Published schedule can be edited; viewers always see the latest version."
+          title="Choir schedule by month"
+          subtitle="Published months are what the choirs see; confirmed months are planned with Protocol but not released yet. Either can be edited."
         />
         <label className="field">
           Period
@@ -1271,7 +1435,7 @@ export function MusicSchedulePublishedPage() {
       </div>
       {!published ? (
         <div className="panel">
-          <p className="muted">No published choir schedule for {periodKey}.</p>
+          <p className="muted">No confirmed or published choir schedule for {periodKey}.</p>
         </div>
       ) : (
         <div className="panel">
@@ -1279,8 +1443,30 @@ export function MusicSchedulePublishedPage() {
             <h3 style={{ margin: 0 }}>
               Choir schedule · {published.periodKey} · v{published.version}
             </h3>
-            <StatusPill status="PUBLISHED">PUBLISHED</StatusPill>
+            <StatusPill
+              status={published.musicState === 'PUBLISHED' ? 'PUBLISHED' : 'DRAFT'}
+            >
+              {published.musicState}
+            </StatusPill>
           </div>
+          {published.musicState === 'CONFIRMED' && (
+            <p className="badge">
+              Confirmed, not yet visible to the choirs. Protocol can already plan
+              against it.
+              {canManage && (
+                <>
+                  {' '}
+                  <button
+                    type="button"
+                    className="btn"
+                    onClick={onPublishThisMonth}
+                  >
+                    Publish to choirs
+                  </button>
+                </>
+              )}
+            </p>
+          )}
           <p className="muted">
             Updated {new Date(published.updatedAt).toLocaleString()}
           </p>

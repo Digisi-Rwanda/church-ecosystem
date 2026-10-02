@@ -137,3 +137,120 @@ DATABASE_URL="file:./dev.db"
 JWT_SECRET="dev-only-change-me-in-production"
 CORS_ORIGIN="http://localhost:5173"
 ```
+
+
+## Real launch settings (Protocol and Music)
+
+The demo setup (seed logins, demo roster) is for showing the app. For real use:
+
+| Where | Setting | Value |
+| --- | --- | --- |
+| Web (Vercel) | `VITE_API_FALLBACK` | `false`, so nobody can sign in with the demo passwords bundled in the app |
+| Web (Vercel) | `VITE_DEMO_SEED` | `false`, so the Protocol roster starts empty and is built from the church directory |
+| API (Render) | `SEED_DEMO_ACCOUNTS` | unset, so the demo role accounts are not created |
+| API (Render) | `SCHEDULE_GUARD` | `warn` while setting up, then `enforce` once the real office holders are recorded as Positions |
+| API (Render) | `SCHEDULE_READ_FILTER` | `on` for a real launch, where everyone has their own account (default off, so the demo role logins keep sharing everything). Unpublished Music drafts and other people's notifications/contributions are then not sent to the browser. |
+
+Who is Protocol Coordinator, President, Vice President, Secretary or Treasurer is read from the server's
+Positions (system `sys-protocol`, field `protocolOffice`) through `GET /api/protocol/offices`, so create those
+positions on the server for the real people first. The Coordinator then adds roster members from the church
+directory on the Protocol "Members" page.
+
+## Importing the Protocol team
+
+Prepare a CSV with the columns `Full name, Phone number, Email, Office, Choir`
+(see `docs/protocol-import-sample.csv`). Office is President, Vice President,
+Coordinator, Secretary, Treasurer or Member (empty means Member). Choir is the
+choir name or `none`. Choir names are not listed in the code: they are matched
+against the choirs already in the data (Music's choir lineup and the server's
+choir units), by name ignoring capitals and accents, or by a start of the name
+that is unique. Any number of choirs works, and renamed choirs just match their
+new name.
+
+```
+cd server
+npx tsx scripts/import-protocol.ts team.csv            # dry run: lists what would happen and any problems
+npx tsx scripts/import-protocol.ts team.csv --apply    # imports
+```
+
+A choir name found nowhere is reported together with the list of known choirs;
+add `--create-choirs` to create it (a choir unit on the server and an entry on
+Music's list). A choir that exists on the server but not yet on Music's list is
+added to Music's list automatically.
+
+It creates each person (matching by email, then phone, then name, so running it
+again does not duplicate), a church and Protocol membership, a choir membership
+where the choir exists on the server, the office position for the five office
+holders, and the Protocol roster with each member's choir. Rows with a problem
+are listed with their line number and skipped; warnings (unknown choir, bad
+phone) import the person without that detail. An office already held on the
+server is never taken over silently. The columns are defined in
+`server/src/lib/importProtocol.ts`, so one can be added or dropped later.
+
+---
+
+## Staging: rehearse with real (or close to real) data
+
+Run a second, separate copy (own Neon database, own Render service, own Vercel
+project) so nothing here touches the live church data. When the rehearsal is
+good, the same steps become the real launch.
+
+### 1. Settings
+
+**Render (API)** — set these by hand in the Render dashboard (they are deliberately not in `render.yaml`), in addition to `DATABASE_URL`, `JWT_SECRET`, `CORS_ORIGIN`:
+
+| Name | Value |
+| --- | --- |
+| `NODE_ENV` | `production` (already in `render.yaml`) |
+| `BOOTSTRAP_PASTOR_PASSWORD` | a password you choose, 10+ characters. Creates the `pastor` sign-in (church leader; can manage Music and everything else). Without it no `pastor` sign-in is made |
+| `BOOTSTRAP_TREASURER_PASSWORD` | same, for the `treasurer` sign-in. Optional |
+| `SCHEDULE_GUARD` | `warn` at first, `enforce` for the second half of the rehearsal |
+| `SCHEDULE_READ_FILTER` | `on` (it is off by default so the demo logins keep sharing everything) |
+| `SEED_DEFAULT_CHOIRS` | leave unset. The built-in demo choirs are then not created; your choirs come from the import |
+
+Never set `SEED_DEMO_ACCOUNTS` here.
+
+**Vercel (web)**
+
+| Name | Value |
+| --- | --- |
+| `VITE_API_URL` | the Render URL |
+| `VITE_API_FALLBACK` | `false` |
+| `VITE_DEMO_SEED` | `false` (no demo roster, no demo choirs: everything comes from the server) |
+
+### 2. Load the people
+
+On your own computer, with the Neon **staging** connection string (never the
+live one by accident):
+
+```powershell
+cd server
+npm run db:generate:pg
+$env:DATABASE_URL = "postgresql://...staging...?sslmode=require"
+npx tsx scripts/import-protocol.ts team.csv --create-choirs                      # dry run: read the report
+npx tsx scripts/import-protocol.ts team.csv --create-choirs --apply --accounts   # import + sign-ins
+```
+
+(macOS/Linux: `DATABASE_URL="..." npx tsx scripts/...`.) Afterwards run
+`npx prisma generate` to point your local tools back at SQLite.
+
+`--accounts` writes `protocol-accounts-<date>.csv` with each person's username
+and a temporary password. Give them out privately and delete the file; the
+passwords are stored only as hashes. People change their own password with
+`POST /api/auth/change-password` (a screen for it is still to do).
+
+### 3. Run it as if you had started
+
+Use real sign-ins for the real roles. Use `pastor` for the Music steps unless
+you have added a Music director position.
+
+1. **Music** builds a quarter, confirms it. The **Coordinator** has an inbox alert, and the month shows on the Music schedule page.
+2. **Coordinator**: Availability — put someone on leave, make someone Tuesday-only, pick particular services for another. Build the months (all at once). Check the Teams page: no one is placed against their settings, every team has a Team Leader and Vice Leader.
+3. **Second browser, a Protocol member**: they see the same plan, see only their own inbox and contributions, and their own duties on My schedule.
+4. **Coordinator** submits for review. **President** reviews. Try to publish: it is refused until Music releases the month. Release it in Music, then publish.
+5. **Music** edits the released month (swap a choir). The Coordinator gets an alert saying what changed; the Music schedule page lists it; the Protocol month is flagged until reviewed.
+6. Set `SCHEDULE_GUARD=enforce` and repeat the Protocol steps as a plain member: building, reviewing and publishing must be refused.
+7. Two people edit at once (two browsers, different parts): both changes survive.
+
+Write down anything that surprises you, with the page and the person. Fix, then
+repeat on fresh data (a new Neon branch makes this quick).

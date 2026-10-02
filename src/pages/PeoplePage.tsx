@@ -1,24 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link, Navigate } from 'react-router-dom';
-import { roleLabel } from '../domain/access';
 import { useAuth } from '../auth/AuthContext';
 import { FilterBar, PageHead } from '../components/ui/FilterBar';
 import { SelectField, TextField } from '../components/ui/Field';
+import { PeopleTables } from '../components/people/PeopleTables';
 import { Icon } from '../components/ui/Icon';
-import { MasterDetail } from '../components/ui/MasterDetail';
-import {
-  EmptyState,
-  ForbiddenState,
-  StatusPill,
-} from '../components/ui/StatusPill';
-import { useListSelection } from '../hooks/useListSelection';
-import type { Person } from '../domain/types';
+import { EmptyState, ForbiddenState } from '../components/ui/StatusPill';
 import type { PeopleSearchFacet, PeopleSearchScope } from '../services';
-import {
-  buildPersonParticipationPlaces,
-  participationService,
-  peopleService,
-} from '../services';
+import { peopleService } from '../services';
 import { pastoralOpsService } from '../services/pastoralOpsService';
 
 type StatusFilter = 'all' | 'ACTIVE' | 'INACTIVE' | 'VISITOR' | 'pathway';
@@ -126,7 +115,19 @@ export function PeoplePage() {
     };
   }, [searched, pathwayPersonIds]);
 
-  const { selectedId, selected, setSelectedId } = useListSelection(people);
+  // Carry this page's search and status filter into the full-page tables.
+  const fullPageQuery = (() => {
+    const sp = new URLSearchParams();
+    if (q) sp.set('q', q);
+    if (searchScope !== 'all') {
+      sp.set('scope', searchScope);
+      sp.set('facet', searchFacet);
+      if (searchCategory) sp.set('category', searchCategory);
+    }
+    if (statusFilter !== 'all') sp.set('status', statusFilter);
+    const text = sp.toString();
+    return text ? `?${text}` : '';
+  })();
 
   if (!canViewPeople) {
     if (account?.personId) {
@@ -145,24 +146,6 @@ export function PeoplePage() {
       />
     );
   }
-
-  const memberships = selected
-    ? participationService.activeMemberships(selected.id)
-    : [];
-  const positions = selected
-    ? participationService.activePositions(selected.id)
-    : [];
-  const assignments = selected
-    ? participationService.activeAssignments(selected.id)
-    : [];
-  const roles = selected ? participationService.rolesFor(selected.id) : [];
-  const places = selected
-    ? buildPersonParticipationPlaces({
-        memberships,
-        positions,
-        assignments,
-      })
-    : [];
 
   return (
     <div className="list-page people-page">
@@ -343,167 +326,8 @@ export function PeoplePage() {
           />
         </div>
       ) : (
-        <div className="list-surface">
-          <MasterDetail
-            listWidth="minmax(18rem, 1.1fr)"
-            list={
-              <ul
-                className="people-master-list"
-                role="listbox"
-                aria-label="People"
-              >
-                {people.map((p) => (
-                  <PersonRow
-                    key={p.id}
-                    person={p}
-                    selected={selectedId === p.id}
-                    onSelect={() => setSelectedId(p.id)}
-                    subtitle={
-                      searchScope === 'all'
-                        ? p.phone || p.email || 'No contact on file'
-                        : peopleService.searchMatchSummary(p.id, searchScope)
-                    }
-                  />
-                ))}
-              </ul>
-            }
-            detail={
-              selected ? (
-                <PersonDetail
-                  person={selected}
-                  memberships={memberships}
-                  positions={positions}
-                  roles={roles}
-                  places={places}
-                  canManagePeople={canManagePeople}
-                />
-              ) : null
-            }
-            emptyDetail={
-              <EmptyState
-                variant="no-results"
-                title="Select someone"
-                detail="Choose a person from the list to preview their profile."
-              />
-            }
-          />
-        </div>
+        <PeopleTables people={people} fullPageQuery={fullPageQuery} />
       )}
-    </div>
-  );
-}
-
-function PersonRow({
-  person: p,
-  selected,
-  onSelect,
-  subtitle,
-}: {
-  person: Person;
-  selected: boolean;
-  onSelect: () => void;
-  subtitle: string;
-}) {
-  return (
-    <li>
-      <button
-        type="button"
-        role="option"
-        aria-selected={selected}
-        className={`people-master-item${selected ? ' selected' : ''}`}
-        onClick={onSelect}
-      >
-        <span className="people-avatar" aria-hidden>
-          {(p.preferredName || p.fullName).slice(0, 1).toUpperCase()}
-        </span>
-        <span className="people-master-body">
-          <strong>{p.preferredName || p.fullName}</strong>
-          <span className="muted">{subtitle}</span>
-        </span>
-        <StatusPill status={p.status} />
-      </button>
-    </li>
-  );
-}
-
-function PersonDetail({
-  person: selected,
-  memberships,
-  positions,
-  roles,
-  places,
-  canManagePeople,
-}: {
-  person: Person;
-  memberships: ReturnType<typeof participationService.activeMemberships>;
-  positions: ReturnType<typeof participationService.activePositions>;
-  roles: ReturnType<typeof participationService.rolesFor>;
-  places: ReturnType<typeof buildPersonParticipationPlaces>;
-  canManagePeople: boolean;
-}) {
-  return (
-    <div className="people-detail">
-      <p className="hero-kicker" style={{ marginTop: 0 }}>
-        Preview
-      </p>
-      <h3 className="people-detail-name">{selected.fullName}</h3>
-      <p className="muted" style={{ marginTop: 0 }}>
-        {selected.preferredName &&
-        selected.preferredName !== selected.fullName
-          ? `${selected.preferredName} · `
-          : ''}
-        {selected.email ?? selected.phone ?? 'No contact on file'}
-      </p>
-      <div className="row" style={{ marginBottom: '0.85rem', flexWrap: 'wrap' }}>
-        <StatusPill status={selected.status} />
-        {roles.map((r) => (
-          <span key={r} className="badge">
-            {roleLabel(r)}
-          </span>
-        ))}
-      </div>
-
-      <h4 className="people-detail-section">Where they participate</h4>
-      {places.length === 0 ? (
-        <p className="muted" style={{ margin: 0 }}>
-          No memberships, positions, or assignments on file
-        </p>
-      ) : (
-        <ul className="rail-list people-place-list">
-          {places.map((place) => (
-            <li key={place.key}>
-              <strong>{place.placeName}</strong>
-              {place.roles.length > 0 && (
-                <div className="muted">
-                  Role · {place.roles.join(' · ')}
-                </div>
-              )}
-              {place.lines.slice(0, 3).map((line) => (
-                <div key={line} className="muted" style={{ fontSize: '0.85rem' }}>
-                  {line}
-                </div>
-              ))}
-            </li>
-          ))}
-        </ul>
-      )}
-
-      {(memberships.length > 0 || positions.length > 0) && (
-        <p className="muted" style={{ margin: '0.75rem 0 0', fontSize: '0.85rem' }}>
-          Full membership and position lists are on the profile.
-        </p>
-      )}
-
-      <div className="row" style={{ marginTop: '1.1rem' }}>
-        <Link to={`/people/${selected.id}`} className="btn">
-          Open full profile
-        </Link>
-        {canManagePeople && (
-          <Link to={`/people/${selected.id}/edit`} className="btn ghost">
-            Edit
-          </Link>
-        )}
-      </div>
     </div>
   );
 }

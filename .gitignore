@@ -73,3 +73,6 @@ Desktop.ini
 *.tgz
 .eslintcache
 .oxlintcache
+
+# Temporary sign-in passwords from the Protocol import
+protocol-accounts-*.csv

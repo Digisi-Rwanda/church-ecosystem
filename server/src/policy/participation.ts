@@ -11,7 +11,6 @@ import type {
 const GOVERNANCE_ROLES: SystemRole[] = [
   'CHURCH_LEADER',
   'PASTOR',
-  'ASSISTANT_PASTOR',
   'CATECHIST',
 ];
 
@@ -73,8 +72,12 @@ export function resolveSystemEntitlements(
   }
   for (const p of input.positions) {
     if (p.personId !== personId || !isPositionActive(p, now)) continue;
-    if (p.grantsAllSystems || (p.systemRole && GOVERNANCE_ROLES.includes(p.systemRole))) {
-      // resolved at authorize time for all systems
+    if (
+      p.systemRole
+        ? GOVERNANCE_ROLES.includes(p.systemRole)
+        : Boolean(p.grantsAllSystems)
+    ) {
+      // resolved at authorize time from governance scope
       continue;
     }
     if (p.systemId) add(p.systemId, 'POSITION', p.title);

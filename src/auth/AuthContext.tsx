@@ -193,9 +193,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const value = useMemo<AuthContextValue>(() => {
     const person = account ? peopleService.getById(account.personId) : null;
-    const roles = account
+    const mainRoles = account
       ? participationService.rolesFor(account.personId)
       : [];
+    // Anyone without one of the five main-church roles is simply a Member.
+    const roles: SystemRole[] =
+      account && mainRoles.length === 0 ? ['MEMBER'] : mainRoles;
     const entitlements = account
       ? participationService.entitlementsFor(account.personId)
       : [];

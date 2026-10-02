@@ -15,7 +15,6 @@ export type AttentionItemDto = {
 const LEADERSHIP: SystemRole[] = [
   'CHURCH_LEADER',
   'PASTOR',
-  'ASSISTANT_PASTOR',
   'CATECHIST',
 ];
 

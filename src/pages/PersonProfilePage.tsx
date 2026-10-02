@@ -1,5 +1,5 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   allowedOwnProfileSections,
   membershipTypeLabel,
@@ -11,8 +11,11 @@ import {
   ForbiddenState,
   StatusPill,
 } from '../components/ui/StatusPill';
+import { ProfilePhoto } from '../components/people/ProfilePhoto';
+import { SectionCards } from '../components/people/SectionCards';
+import { usePersonRecord } from '../hooks/usePersonRecord';
 import { SelectField, TextField } from '../components/ui/Field';
-import type { CorrespondenceLetterType } from '../domain/types';
+import type { CorrespondenceLetterType, Person } from '../domain/types';
 import {
   buildPersonParticipationPlaces,
   correspondenceService,
@@ -56,6 +59,20 @@ function SectionPanel({
   );
 }
 
+/** Cards for every record section, at the bottom of the profile. */
+function ProfileSectionCards({
+  person,
+  activeKey,
+  onOpen,
+}: {
+  person: Person;
+  activeKey: string;
+  onOpen: (key: string) => void;
+}) {
+  const { rows } = usePersonRecord(person);
+  return <SectionCards rows={rows} activeKey={activeKey} onOpen={onOpen} />;
+}
+
 export function PersonProfilePage() {
   const { id } = useParams();
   const {
@@ -67,7 +84,11 @@ export function PersonProfilePage() {
     allowedSections,
   } = useAuth();
   const person = id ? peopleService.getById(id) : null;
-  const [section, setSection] = useState('overview');
+  const [searchParams] = useSearchParams();
+  // `?section=` lets the People table deep-link into one profile section.
+  const [section, setSection] = useState(
+    () => searchParams.get('section') ?? 'overview',
+  );
   const [letterMsg, setLetterMsg] = useState('');
   const [reqType, setReqType] =
     useState<CorrespondenceLetterType>('MEMBERSHIP_CONFIRMATION');
@@ -698,7 +719,7 @@ export function PersonProfilePage() {
           <ForbiddenState
             resource="PERSON"
             action="VIEW_FULL"
-            detail="Full history requires Pastor, Assistant Pastor, or Secretary."
+            detail="Full history requires Pastor or Secretary."
           />
         ) : timeline.length === 0 ? (
           <EmptyState title="No history events" />
@@ -838,64 +859,35 @@ export function PersonProfilePage() {
         )}
       </p>
 
-      <div className="detail-hero">
-        <p className="hero-kicker">
-          {isSelf
-            ? 'My 360° profile'
-            : canViewFullRecord
-              ? '360° pastoral record'
-              : 'Limited profile'}
-        </p>
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <h2>{person.fullName}</h2>
-            {person.preferredName &&
-              person.preferredName !== person.fullName && (
-                <p className="muted" style={{ margin: '0.25rem 0 0' }}>
-                  Preferred: {person.preferredName}
-                </p>
-              )}
-          </div>
-          <div className="row">
-            <StatusPill status={person.status}>{person.status}</StatusPill>
-            {canManagePeople && (
-              <Link to={`/people/${person.id}/edit`} className="btn secondary">
-                Edit
-              </Link>
-            )}
-          </div>
-        </div>
-        <div className="row" style={{ marginTop: '0.65rem' }}>
-          {roles.map((r) => (
-            <span key={r} className="badge">
-              {roleLabel(r)}
-            </span>
-          ))}
-          {!canViewFullRecord && !isSelf && (
-            <span className="badge planned">Limited scope</span>
+      <div className="detail-hero profile-hero">
+        <ProfilePhoto
+          person={person}
+          canEdit={canManagePeople}
+          onChange={(change) => {
+            // photoSource cleared: older saves kept a copy on the record.
+            peopleService.update(person.id, {
+              photoUrl: change.photoUrl,
+              photoSource: undefined,
+            });
+            setDocTick((t) => t + 1);
+          }}
+        />
+        <div className="profile-hero-names">
+          <h2>{person.fullName}</h2>
+          {person.preferredName && person.preferredName !== person.fullName && (
+            <p className="muted" style={{ margin: '0.25rem 0 0' }}>
+              Preferred: {person.preferredName}
+            </p>
           )}
         </div>
-        <div className="overview-strip">
-          <div className="overview-tile">
-            <div className="label">Memberships</div>
-            <div className="value">{memberships.length}</div>
-          </div>
-          <div className="overview-tile">
-            <div className="label">Positions</div>
-            <div className="value">{positions.length}</div>
-          </div>
-          <div className="overview-tile">
-            <div className="label">Assignments</div>
-            <div className="value">{assignments.length}</div>
-          </div>
-          <div className="overview-tile">
-            <div className="label">Places</div>
-            <div className="value">{places.length}</div>
-          </div>
-        </div>
+        {canManagePeople && (
+          <Link to={`/people/${person.id}/edit`} className="btn secondary">
+            Edit
+          </Link>
+        )}
       </div>
 
-      <div className="profile-layout">
+      <div className="profile-layout" id="profile-body">
         <nav className="profile-nav" aria-label="Profile sections">
           {visibleSections.map((s) => (
             <button
@@ -910,6 +902,21 @@ export function PersonProfilePage() {
         </nav>
         <div className="profile-main">{body}</div>
       </div>
+
+      <ProfileSectionCards
+        person={person}
+        activeKey={activeSection}
+        onOpen={(key) => {
+          setSection(key);
+          window.setTimeout(
+            () =>
+              document
+                .getElementById('profile-body')
+                ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+            50,
+          );
+        }}
+      />
     </div>
   );
 }

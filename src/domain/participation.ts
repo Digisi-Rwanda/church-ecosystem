@@ -8,10 +8,11 @@ import type {
   UserAccount,
 } from './types';
 
+import { governanceSystemsFor } from './governanceScope';
+
 const GOVERNANCE_ROLES: SystemRole[] = [
   'CHURCH_LEADER',
   'PASTOR',
-  'ASSISTANT_PASTOR',
   'CATECHIST',
 ];
 
@@ -41,6 +42,14 @@ export function isAssignmentActive(a: Assignment, now = new Date()): boolean {
 }
 
 /** SystemRoles currently held via active Positions. */
+export const MAIN_CHURCH_ROLES: SystemRole[] = [
+  'CHURCH_LEADER',
+  'PASTOR',
+  'CATECHIST',
+  'CHURCH_SECRETARY',
+  'CHURCH_TREASURER',
+];
+
 export function rolesFromPositions(
   positions: Position[],
   now = new Date(),
@@ -48,6 +57,8 @@ export function rolesFromPositions(
   const roles = new Set<SystemRole>();
   for (const p of positions) {
     if (!isPositionActive(p, now) || !p.systemRole) continue;
+    // Only the five main-church roles count here; ministry officers are plain members in Main.
+    if (!MAIN_CHURCH_ROLES.includes(p.systemRole)) continue;
     roles.add(p.systemRole);
   }
   return [...roles];
@@ -111,11 +122,11 @@ export function resolveSystemEntitlements(
 
   for (const p of mine.positions) {
     if (!isPositionActive(p, now)) continue;
-    const grantsAll =
-      p.grantsAllSystems ||
-      (p.systemRole ? GOVERNANCE_ROLES.includes(p.systemRole) : false);
+    const grantsAll = p.systemRole
+      ? GOVERNANCE_ROLES.includes(p.systemRole)
+      : Boolean(p.grantsAllSystems);
     if (grantsAll) {
-      for (const systemId of input.allSystemIds) {
+      for (const systemId of governanceSystemsFor(p, input.allSystemIds)) {
         addEntitlement(map, systemId, 'GOVERNANCE', `${p.title} (all systems)`);
       }
     } else if (p.systemId) {

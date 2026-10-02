@@ -11,27 +11,16 @@ import { personCanEnterSystem } from './participation';
 const ROLE_SCOPE: Record<SystemRole, AccessScope> = {
   CHURCH_LEADER: 'FULL',
   PASTOR: 'FULL',
-  ASSISTANT_PASTOR: 'FULL',
   CATECHIST: 'FULL',
   CHURCH_SECRETARY: 'FULL',
   CHURCH_TREASURER: 'FINANCE',
-  CHOIR_LEADER: 'CHOIR',
-  WORSHIP_LEADER: 'WORSHIP',
-  YOUTH_LEADER: 'YOUTH',
-  PROTOCOL_LEADER: 'PROTOCOL',
-  DEACON_LEADER: 'DEACON',
-  LIMITED_STAFF: 'LIMITED',
+  MEMBER: 'MEMBER',
 };
 
 export function getEffectiveScope(roles: SystemRole[]): AccessScope {
   if (roles.some((r) => ROLE_SCOPE[r] === 'FULL')) return 'FULL';
   if (roles.includes('CHURCH_TREASURER')) return 'FINANCE';
-  if (roles.includes('CHOIR_LEADER')) return 'CHOIR';
-  if (roles.includes('WORSHIP_LEADER')) return 'WORSHIP';
-  if (roles.includes('YOUTH_LEADER')) return 'YOUTH';
-  if (roles.includes('PROTOCOL_LEADER')) return 'PROTOCOL';
-  if (roles.includes('DEACON_LEADER')) return 'DEACON';
-  return 'LIMITED';
+  return 'MEMBER';
 }
 
 const PASTORAL_360 = [
@@ -59,15 +48,6 @@ export function allowedProfileSections(scope: AccessScope): string[] {
       ...PASTORAL_360,
       'account',
     ];
-  }
-  if (scope === 'CHOIR' || scope === 'WORSHIP' || scope === 'YOUTH') {
-    return [...common, 'teams'];
-  }
-  if (scope === 'PROTOCOL') {
-    return [...common, 'teams'];
-  }
-  if (scope === 'DEACON') {
-    return [...common, 'teams', 'family'];
   }
   if (scope === 'FINANCE') {
     return [...common, 'membership'];
@@ -98,16 +78,10 @@ export function roleLabel(role: SystemRole): string {
   const map: Record<SystemRole, string> = {
     CHURCH_LEADER: 'Church Leader',
     PASTOR: 'Pastor',
-    ASSISTANT_PASTOR: 'Pastor',
     CATECHIST: 'Catechist (Umwarimu)',
     CHURCH_SECRETARY: 'Church Secretary',
     CHURCH_TREASURER: 'Church Treasurer',
-    CHOIR_LEADER: 'Choir Leader',
-    WORSHIP_LEADER: 'Worship Leader',
-    YOUTH_LEADER: 'Youth Leader',
-    PROTOCOL_LEADER: 'Protocol Leader',
-    DEACON_LEADER: 'Deacon Leader',
-    LIMITED_STAFF: 'Limited Staff',
+    MEMBER: 'Member',
   };
   return map[role];
 }

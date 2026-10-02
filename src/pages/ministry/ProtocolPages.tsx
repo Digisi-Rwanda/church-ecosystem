@@ -2,14 +2,19 @@
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { ProtocolAttendanceStatus } from '../../domain/types';
+import { periodOptionsForHorizon } from '../../domain/musicScheduleEngine';
+import type { MusicHorizon } from '../../domain/musicSchedule';
 import { useListSelection } from '../../hooks/useListSelection';
-import { financeService, peopleService, protocolService } from '../../services';
+import { financeService, protocolService } from '../../services';
+import { ProtocolMusicSyncPanel } from './ProtocolMusicSync';
+import { ProtocolRosterManager } from './ProtocolRosterManager';
 
 const SYS = 'sys-protocol' as const;
 
-function useProtocolMonth() {
-  const initial = protocolService.liveMonthKey();
-  const [monthKey, setMonthKey] = useState(initial);
+function useProtocolMonth(startAt?: () => string) {
+  const [monthKey, setMonthKey] = useState(
+    () => startAt?.() ?? protocolService.liveMonthKey(),
+  );
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
   return { monthKey, setMonthKey, refresh, tick };
@@ -26,7 +31,7 @@ function MonthPicker({
     <select value={monthKey} onChange={(e) => onChange(e.target.value)}>
       {protocolService.allowedMonths().map((m) => (
         <option key={m} value={m}>
-          {m}
+          {protocolService.monthLabel(m)}
         </option>
       ))}
     </select>
@@ -46,7 +51,9 @@ export function ProtocolHomePage() {
   );
   const plan = protocolService.getMonthPlan(monthKey);
   const canManage = can('PROTOCOL_SCHEDULE', 'MANAGE', SYS);
-  const canApprove = can('PROTOCOL_SCHEDULE', 'APPROVE', SYS);
+  // MANAGE implies APPROVE in the access engine, so review/publish is decided
+  // by Protocol office (President/VP) — the same rule the service enforces.
+  const canApprove = !!account && protocolService.isReviewer(account.personId);
   const myCount = account
     ? protocolService.mySchedule(account.personId).length
     : 0;
@@ -78,7 +85,7 @@ export function ProtocolHomePage() {
     needs.push({
       id: 'submit',
       title: 'Submit for review',
-      reason: 'Teams drafted — send to President/VP',
+      reason: 'Teams drafted — send to the President',
       to: '/systems/protocol/review',
     });
   }
@@ -90,11 +97,11 @@ export function ProtocolHomePage() {
       to: '/systems/protocol/review',
     });
   }
-  if (canManage && plan?.status === 'REVIEW') {
+  if (canApprove && plan?.status === 'REVIEW') {
     needs.push({
       id: 'publish',
       title: 'Publish after review',
-      reason: 'Leadership can publish once marked reviewed',
+      reason: 'The President publishes once the month is checked',
       to: '/systems/protocol/review',
     });
   }
@@ -179,7 +186,7 @@ export function ProtocolHomePage() {
               type="button"
               className="btn"
               onClick={() => {
-                protocolService.generateTeams(monthKey);
+                if (account) protocolService.generateTeams(monthKey, account.personId);
                 refresh();
               }}
             >
@@ -235,7 +242,7 @@ export function ProtocolHomePage() {
               <Link to="/systems/protocol/export">CSV / bulletin export</Link>
             </li>
             <li>
-              <Link to="/systems/protocol/attendance">Attendance</Link> · <Link to="/systems/protocol/faithful">Faithful Servant</Link> ·{' '}
+              <Link to="/systems/protocol/attendance">Attendance</Link> · <Link to="/systems/protocol/faithful">Member performance</Link> ·{' '}
               <Link to="/systems/protocol/history">History</Link>
             </li>
             <li>
@@ -265,10 +272,9 @@ export function ProtocolHomePage() {
 }
 
 export function ProtocolMembersPage() {
-  const { can } = useAuth();
+  const { account, can } = useAuth();
   const canView = can('PROTOCOL_ROSTER', 'VIEW', SYS);
   const canManage = can('PROTOCOL_ROSTER', 'MANAGE', SYS);
-  const roster = protocolService.rosterWithNames();
 
   if (!canView) {
     return (
@@ -281,70 +287,58 @@ export function ProtocolMembersPage() {
 
   return (
     <div className="stack">
-      <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Protocol roster</h2>
-            <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              Office, serve days, leave — inputs for teamEngine
-            </p>
-          </div>
-          {canManage && <span className="badge">Can manage roster</span>}
-        </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Name</th>
-              <th>Email</th>
-              <th>Office</th>
-              <th>Serve days</th>
-              <th>Status</th>
-              <th>Unavailable</th>
-              <th>Notes</th>
-            </tr>
-          </thead>
-          <tbody>
-            {roster.map((m) => (
-              <tr key={m.id}>
-                <td>{m.name}</td>
-                <td className="muted">
-                  {peopleService.getById(m.personId)?.email ?? '—'}
-                </td>
-                <td>{protocolService.officeLabel(m.office)}</td>
-                <td>{m.serveDays}</td>
-                <td>
-                  <span
-                    className={
-                      m.status === 'LEAVE' ? 'badge planned' : 'badge'
-                    }
-                  >
-                    {m.status}
-                  </span>
-                </td>
-                <td className="muted">
-                  {m.unavailableDates.length
-                    ? m.unavailableDates.join(', ')
-                    : '—'}
-                </td>
-                <td className="muted">{m.notes ?? '—'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <ProtocolRosterManager canManage={canManage} actorPersonId={account?.personId} />
     </div>
   );
+}
+
+const CAL_HORIZONS: { value: MusicHorizon; label: string; step: number }[] = [
+  { value: 'MONTH', label: 'Month', step: 1 },
+  { value: 'QUARTER', label: 'Quarter', step: 3 },
+  { value: 'HALF', label: 'Half year', step: 6 },
+  { value: 'YEAR', label: 'Year', step: 12 },
+];
+
+function monthsInSpan(start: string, step: number): string[] {
+  const [y, m] = start.split('-').map(Number);
+  return Array.from({ length: step }, (_, i) => {
+    const d = new Date(Date.UTC(y!, m! - 1 + i, 1));
+    return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+  });
 }
 
 export function ProtocolCalendarPage() {
   const { can } = useAuth();
   const canView = can('PROTOCOL_SCHEDULE', 'VIEW', SYS);
-  const { monthKey, setMonthKey, tick } = useProtocolMonth();
-  const services = useMemo(
-    () => protocolService.servicesForMonth(monthKey),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [monthKey, tick],
+  const live = protocolService.liveMonthKey();
+  const [horizon, setHorizon] = useState<MusicHorizon>('MONTH');
+  const [start, setStart] = useState(() => protocolService.firstActionMonth());
+  const step = CAL_HORIZONS.find((h) => h.value === horizon)!.step;
+  const options = useMemo(
+    () => periodOptionsForHorizon(horizon, live),
+    [horizon, live],
   );
+  const months = useMemo(() => monthsInSpan(start, step), [start, step]);
+  const sections = months.map((m) => ({
+    monthKey: m,
+    label: protocolService.monthLabel(m),
+    services: protocolService.servicesForMonth(m),
+  }));
+  const all = sections.flatMap((x) => x.services);
+  const target = all.reduce((n, s) => n + s.targetTeamSize, 0);
+  const placed = all.reduce(
+    (n, s) => n + protocolService.teamForService(s.id).length,
+    0,
+  );
+
+  function onHorizonChange(h: MusicHorizon) {
+    setHorizon(h);
+    const opts = periodOptionsForHorizon(h, live);
+    // keep the span that contains the month being looked at, if there is one
+    const hs = CAL_HORIZONS.find((x) => x.value === h)!.step;
+    const keep = opts.find((o) => monthsInSpan(o.value, hs).includes(start));
+    setStart((keep ?? opts[0]!).value);
+  }
 
   if (!canView) {
     return (
@@ -358,49 +352,95 @@ export function ProtocolCalendarPage() {
   return (
     <div className="stack">
       <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Service calendar</h2>
-            <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              SS1, SS2, and Tuesday services for the month
-            </p>
+        <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <h2 style={{ margin: 0 }}>Service calendar</h2>
+          <div className="row" style={{ gap: '0.75rem', flexWrap: 'wrap' }}>
+            <label className="row" style={{ gap: '0.35rem' }}>
+              <span className="muted">Horizon</span>
+              <select
+                value={horizon}
+                onChange={(e) => onHorizonChange(e.target.value as MusicHorizon)}
+              >
+                {CAL_HORIZONS.map((h) => (
+                  <option key={h.value} value={h.value}>
+                    {h.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="row" style={{ gap: '0.35rem' }}>
+              <span className="muted">Period</span>
+              <select value={start} onChange={(e) => setStart(e.target.value)}>
+                {!options.some((o) => o.value === start) && (
+                  <option value={start}>{start}</option>
+                )}
+                {options.map((o) => (
+                  <option key={o.value} value={o.value}>
+                    {o.label}
+                  </option>
+                ))}
+              </select>
+            </label>
           </div>
-          <MonthPicker monthKey={monthKey} onChange={setMonthKey} />
         </div>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>Date</th>
-              <th>Service</th>
-              <th>Target team</th>
-              <th>Assigned</th>
-            </tr>
-          </thead>
-          <tbody>
-            {services.map((s) => (
-              <tr key={s.id}>
-                <td>{s.date}</td>
-                <td>
-                  <strong>{s.kind}</strong>
-                </td>
-                <td>{s.targetTeamSize}</td>
-                <td>{protocolService.teamForService(s.id).length}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        <p className="muted" style={{ margin: '0.5rem 0 0' }}>
+          {all.length} service{all.length === 1 ? '' : 's'} · {placed} of {target} places filled
+        </p>
       </div>
+
+      {sections.map((sec) => (
+        <div className="panel" key={sec.monthKey}>
+          <div className="row" style={{ justifyContent: 'space-between' }}>
+            <h3 style={{ margin: 0 }}>{sec.label.split(' · ')[0]}</h3>
+            <span className="muted">{sec.label.split(' · ')[1]}</span>
+          </div>
+          {sec.services.length === 0 ? (
+            <p className="muted" style={{ marginBottom: 0 }}>
+              Music has not confirmed this month yet.
+            </p>
+          ) : (
+            <table className="table">
+              <thead>
+                <tr>
+                  <th>Date</th>
+                  <th>Service</th>
+                  <th>Target team</th>
+                  <th>Assigned</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sec.services.map((s) => (
+                  <tr key={s.id}>
+                    <td>{s.date}</td>
+                    <td>
+                      <strong>{s.kind}</strong>
+                    </td>
+                    <td>{s.targetTeamSize}</td>
+                    <td>{protocolService.teamForService(s.id).length}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      ))}
     </div>
   );
 }
-
 
 export function ProtocolReviewPage() {
   const { account, can } = useAuth();
   const canView = can('PROTOCOL_SCHEDULE', 'VIEW', SYS);
   const canManage = can('PROTOCOL_SCHEDULE', 'MANAGE', SYS);
-  const canApprove = can('PROTOCOL_SCHEDULE', 'APPROVE', SYS);
-  const { monthKey, setMonthKey, refresh, tick } = useProtocolMonth();
+  // MANAGE implies APPROVE in the access engine, so review/publish is decided
+  // by Protocol office (President/VP) — the same rule the service enforces.
+  const canApprove = !!account && protocolService.isReviewer(account.personId);
+  // Open on the first month waiting for the President, else the live month.
+  const { monthKey, setMonthKey, refresh, tick } = useProtocolMonth(
+    () =>
+      protocolService.monthsOverview().find((r) => r.next === 'WAIT_PRESIDENT')
+        ?.monthKey ?? protocolService.liveMonthKey(),
+  );
   const [message, setMessage] = useState('');
 
   const plan = useMemo(
@@ -477,7 +517,7 @@ export function ProtocolReviewPage() {
               Submit for review
             </button>
           )}
-          {(canApprove || canManage) &&
+          {canApprove &&
             plan?.status === 'REVIEW' &&
             !plan.reviewedByPersonId && (
               <button
@@ -494,10 +534,19 @@ export function ProtocolReviewPage() {
                 Mark reviewed
               </button>
             )}
-          {canManage && plan?.status === 'REVIEW' && (
+          {canApprove &&
+            plan?.status === 'REVIEW' &&
+            protocolService.publishBlockReason(monthKey) && (
+              <span className="badge planned">
+                {protocolService.publishBlockReason(monthKey)}
+              </span>
+            )}
+          {canApprove && plan?.status === 'REVIEW' && (
             <button
               type="button"
               className="btn"
+              disabled={!!protocolService.publishBlockReason(monthKey)}
+              title={protocolService.publishBlockReason(monthKey)}
               onClick={() =>
                 run(() => {
                   const r = protocolService.publish(
@@ -531,14 +580,16 @@ export function ProtocolReviewPage() {
                 Submit for review
               </button>
             )}
-          {canManage &&
-            (plan?.status === 'REVIEW' || plan?.status === 'PUBLISHED') && (
+          {((canManage && plan?.status === 'REVIEW') ||
+            (canApprove &&
+              (plan?.status === 'REVIEW' || plan?.status === 'PUBLISHED'))) && (
               <button
                 type="button"
                 className="btn secondary"
                 onClick={() =>
                   run(
-                    () => protocolService.returnToDraft(monthKey),
+                    () =>
+                      protocolService.returnToDraft(monthKey, account!.personId),
                     'Returned to DRAFT',
                   )
                 }
@@ -551,7 +602,7 @@ export function ProtocolReviewPage() {
 
         {canManage && plan?.status === 'DRAFT' && (
           <p className="muted" style={{ fontSize: '0.9rem' }}>
-            Submit when teams are ready, then publish (Mark reviewed is optional).
+            Submit when teams are ready. The Protocol President or Vice President then reviews and publishes.
           </p>
         )}
 
@@ -580,6 +631,13 @@ export function ProtocolReviewPage() {
           </p>
         )}
       </div>
+
+      <ProtocolMusicSyncPanel
+        monthKey={monthKey}
+        tick={tick}
+        onChange={refresh}
+        canManage={canManage || canApprove}
+      />
 
       <div className="grid-2">
         <div className="panel">
@@ -1171,11 +1229,11 @@ export function ProtocolMySchedulePage() {
         <h2 style={{ marginTop: 0 }}>My schedule</h2>
         <p className="muted">
           Request absence, propose swaps, and respond to fill-in / swap offers.
-          Faithful Servant counts update when attendance is recorded.
+          Member performance updates when attendance is recorded.
         </p>
         {message && <p className="muted">{message}</p>}
         <div className="row">
-          <Link to="/systems/protocol/faithful">Faithful Servant →</Link>
+          <Link to="/systems/protocol/faithful">Member performance →</Link>
           <Link to="/systems/protocol/attendance">Attendance desk →</Link>
         </div>
       </div>

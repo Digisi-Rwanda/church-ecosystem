@@ -37,11 +37,14 @@ import {
   upsertMarriage,
 } from '../data/personProfileSeed';
 import {
+  apiFetchGrants,
   apiLogin,
   ApiError,
+  getApiToken,
   isApiEnabled,
   isApiFallbackEnabled,
   setApiToken,
+  setSyncToken,
 } from '../api';
 import {
   clearSession,
@@ -722,6 +725,22 @@ export const authService = {
     if (isApiEnabled()) {
       try {
         const result = await apiLogin(username, password, targetSystemId);
+        // A demo role account that exists on the server only as a bare account
+        // (no roles there) keeps its local demo permissions; the token is kept
+        // just to share Music/Protocol data.
+        const token = getApiToken();
+        const grants = await apiFetchGrants().catch(() => null);
+        if (
+          grants &&
+          grants.grants.length > 0 &&
+          grants.grants.every((g) => g.source === 'ACCOUNT')
+        ) {
+          const local = loginLocal(username, password, targetSystemId);
+          if (local) {
+            setSyncToken(token);
+            return local;
+          }
+        }
         ensurePersonMirror(result.person);
         const account: UserAccount = {
           id: result.account.id,
@@ -753,6 +772,7 @@ export const authService = {
   },
 
   logout() {
+    setSyncToken(null);
     localStorage.removeItem(ACCOUNT_KEY);
     clearApiAuth();
     clearSession();
@@ -938,6 +958,7 @@ export const peopleService = {
       nationalId: input.nationalId,
       joinedChurchOn: input.joinedChurchOn,
       pastoralNotes: input.pastoralNotes,
+      photoUrl: input.photoUrl,
       status: input.status,
       createdAt: new Date().toISOString().slice(0, 10),
     };

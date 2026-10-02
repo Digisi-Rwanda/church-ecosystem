@@ -879,12 +879,6 @@ export function ParticipationPage() {
                     'CATECHIST',
                     'CHURCH_SECRETARY',
                     'CHURCH_TREASURER',
-                    'CHOIR_LEADER',
-                    'WORSHIP_LEADER',
-                    'YOUTH_LEADER',
-                    'PROTOCOL_LEADER',
-                    'DEACON_LEADER',
-                    'LIMITED_STAFF',
                   ] as SystemRole[]
                 ).map((r) => (
                   <option key={r} value={r}>

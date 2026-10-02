@@ -21,7 +21,6 @@ const BOARD_VIEW_ROLES: SystemRole[] = [
   ...ITORERO_OVERSIGHT_ROLES,
   'CHURCH_SECRETARY',
   'CHURCH_TREASURER',
-  'DEACON_LEADER',
 ];
 
 /** Who may see Board meetings (high leaders, secretary, treasurer, deacon leaders, ministry presidents). */

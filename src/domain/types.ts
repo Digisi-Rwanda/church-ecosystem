@@ -59,6 +59,10 @@ export interface Person {
   /** Date joined this local church. */
   joinedChurchOn?: string;
   pastoralNotes?: string;
+  /** Small profile picture as a data URL (see lib/photo). */
+  photoUrl?: string;
+  /** @deprecated Full-quality copies now live in IndexedDB (lib/photoStore). */
+  photoSource?: string;
   status: 'ACTIVE' | 'INACTIVE' | 'VISITOR';
   createdAt: string;
 }
@@ -190,28 +194,14 @@ export interface UserAccount {
 export type SystemRole =
   | 'CHURCH_LEADER'
   | 'PASTOR'
-  /** @deprecated Prefer PASTOR — kept for older seed / DB rows. */
-  | 'ASSISTANT_PASTOR'
   | 'CATECHIST'
   | 'CHURCH_SECRETARY'
   | 'CHURCH_TREASURER'
-  | 'CHOIR_LEADER'
-  | 'WORSHIP_LEADER'
-  | 'YOUTH_LEADER'
-  | 'PROTOCOL_LEADER'
-  | 'DEACON_LEADER'
-  | 'LIMITED_STAFF';
+  /** Everyone else in the main system: visitor, attendee, official member, ministry officer… */
+  | 'MEMBER';
 
 /** Stage-1 coarse scopes; Phase 2 will be per-system + resource. */
-export type AccessScope =
-  | 'FULL'
-  | 'FINANCE'
-  | 'CHOIR'
-  | 'WORSHIP'
-  | 'YOUTH'
-  | 'PROTOCOL'
-  | 'DEACON'
-  | 'LIMITED';
+export type AccessScope = 'FULL' | 'FINANCE' | 'MEMBER';
 
 export type SystemId =
   | 'sys-main'
@@ -1377,7 +1367,18 @@ export interface ProtocolRosterMember {
   status: 'ACTIVE' | 'INACTIVE' | 'LEAVE';
   /** ISO dates this person must not be scheduled. */
   unavailableDates: string[];
+  /**
+   * Particular services this person can do (e.g. 4 Oct SS1, 11 Oct SS2).
+   * In any month where at least one is listed, only the listed services are
+   * used for them; months with none follow the usual rule.
+   */
+  onlyServices?: { date: string; kind: ProtocolServiceKind }[];
+  /** The member's choir (a Music unit id), or none. Shared with every browser. */
+  choirUnitId?: string;
   notes?: string;
+  /** Name/email as of when they were added, so every browser can show them. */
+  displayName?: string;
+  email?: string;
 }
 
 /** Protocol never staffs Friday — Music may still schedule choirs there. */
@@ -1409,6 +1410,52 @@ export interface ProtocolMonthPlan {
   reviewedByPersonId?: string;
   publishedAt?: string;
   publishedByPersonId?: string;
+  /** Music schedule version these teams were built against. */
+  musicVersionBuiltOn?: number;
+  /** date|kind → sorted Music unit ids at build time (for change diffs). */
+  musicSnapshot?: Record<string, string[]>;
+  /** Stale-Music notification already sent for the current baseline. */
+  musicStaleNotified?: boolean;
+  /** Coordinator-approved exceptions to blocking issues. */
+  overrides?: ProtocolIssueOverride[];
+  /**
+   * Coordinator relaxed the choir/Worship-on-service rule for Tuesdays this
+   * month (so more people can fill the team). Always recorded with a reason.
+   */
+  relaxTuesdayChoirRule?: boolean;
+  relaxReason?: string;
+  relaxedByPersonId?: string;
+  relaxedAt?: string;
+}
+
+export type ProtocolIssueSeverity = 'BLOCKING' | 'WARNING';
+
+export type ProtocolIssueCode =
+  | 'DOUBLE_SUNDAY'
+  | 'CHOIR_NOT_SCHEDULED'
+  | 'WORSHIP_NOT_SCHEDULED'
+  | 'NOT_ACTIVE'
+  | 'CANNOT_SERVE'
+  | 'UNKNOWN_PERSON'
+  | 'OVER_MAX'
+  | 'TEAM_SHORT'
+  | 'TEAM_OVER';
+
+export interface ProtocolIssue {
+  /** Stable identity: survives re-validation, used to attach overrides. */
+  key: string;
+  code: ProtocolIssueCode;
+  severity: ProtocolIssueSeverity;
+  message: string;
+  serviceId?: string;
+  personId?: string;
+}
+
+export interface ProtocolIssueOverride {
+  issueKey: string;
+  reason: string;
+  byPersonId: string;
+  at: string;
 }
 
 /** Temporary per-service leadership — expires when that service ends. */
@@ -1462,7 +1509,7 @@ export interface ProtocolAttendanceRecord {
   recordedByPersonId: string;
   recordedAt: string;
   notes?: string;
-  /** Snapshot of slot kind at record time (for Faithful Servant scoring). */
+  /** Snapshot of slot kind at record time (for member performance scoring). */
   slotKind?: ProtocolSlotKind;
 }
 
@@ -1566,6 +1613,10 @@ export type ProtocolNotificationKind =
   | 'ABSENCE_REQUEST'
   | 'FILL_IN_OFFER'
   | 'SWAP_PROPOSAL'
+  | 'MUSIC_CHANGED'
+  | 'MUSIC_CONFIRMED'
+  | 'MUSIC_PUBLISHED'
+  | 'MUSIC_EDITED'
   | 'GENERAL';
 
 export interface ProtocolNotification {
@@ -1600,6 +1651,16 @@ export interface ProtocolSchedulingRules {
    * scheduled their choir (hard block, not soft deprioritize).
    */
   requireChoirOnService: boolean;
+  /**
+   * Same rule for the Worship team: a member of it may only be placed on
+   * services where Worship is scheduled (Tuesdays). Defaults to on.
+   */
+  requireWorshipOnService?: boolean;
+  /**
+   * Service kinds on which the choir/Worship-on-service rule is not applied
+   * (set per month by the Coordinator — e.g. ['TUESDAY']).
+   */
+  relaxChoirOnKinds?: ProtocolServiceKind[];
 }
 
 /** President/vice publish for Itorero oversight — not live ledger access. */

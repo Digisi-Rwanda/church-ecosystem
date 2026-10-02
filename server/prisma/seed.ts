@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { readFileSync } from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { MINISTRY_KIT_FUNDS, SPECIAL_MINISTRY_FUNDS, CHOIR_FUNDS, CHOIR_PARENT_ORG } from '../src/lib/ministryFunds.js';
@@ -217,30 +218,45 @@ async function main() {
     update: {},
   });
 
-  const hash = await bcrypt.hash('pastor123', 10);
-  const treasHash = await bcrypt.hash('treas123', 10);
+  // Bootstrap sign-ins for the church leader and treasurer. Locally they keep
+  // the well-known demo passwords. On a real deployment (NODE_ENV=production)
+  // they are created only when you choose the passwords, and never reset.
+  const isProd = process.env.NODE_ENV === 'production';
+  const pastorPassword = process.env.BOOTSTRAP_PASTOR_PASSWORD ?? (isProd ? '' : 'pastor123');
+  const treasPassword = process.env.BOOTSTRAP_TREASURER_PASSWORD ?? (isProd ? '' : 'treas123');
+  for (const [pw, name] of [[pastorPassword, 'BOOTSTRAP_PASTOR_PASSWORD'], [treasPassword, 'BOOTSTRAP_TREASURER_PASSWORD']] as const) {
+    if (pw && pw.length < 10 && isProd) throw new Error(`${name} must be at least 10 characters`);
+  }
 
-  await prisma.account.upsert({
-    where: { username: 'pastor' },
-    create: {
-      id: 'acc-pastor',
-      personId: pastor.id,
-      username: 'pastor',
-      passwordHash: hash,
-    },
-    update: {},
-  });
+  if (pastorPassword) {
+    await prisma.account.upsert({
+      where: { username: 'pastor' },
+      create: {
+        id: 'acc-pastor',
+        personId: pastor.id,
+        username: 'pastor',
+        passwordHash: await bcrypt.hash(pastorPassword, 10),
+      },
+      update: {},
+    });
+  } else {
+    console.log('  no "pastor" sign-in created: set BOOTSTRAP_PASTOR_PASSWORD (10+ characters) to create it');
+  }
 
-  await prisma.account.upsert({
-    where: { username: 'treasurer' },
-    create: {
-      id: 'acc-church-treas',
-      personId: treasurer.id,
-      username: 'treasurer',
-      passwordHash: treasHash,
-    },
-    update: {},
-  });
+  if (treasPassword) {
+    await prisma.account.upsert({
+      where: { username: 'treasurer' },
+      create: {
+        id: 'acc-church-treas',
+        personId: treasurer.id,
+        username: 'treasurer',
+        passwordHash: await bcrypt.hash(treasPassword, 10),
+      },
+      update: {},
+    });
+  } else {
+    console.log('  no "treasurer" sign-in created: set BOOTSTRAP_TREASURER_PASSWORD (10+ characters) to create it');
+  }
 
   await prisma.position.deleteMany({
     where: { personId: { in: [pastor.id, treasurer.id] } },
@@ -428,7 +444,10 @@ async function main() {
     where: { id: 'sys-choir' },
     data: { orgUnitId: ouChoirParent.id },
   });
-  for (const choir of CHOIR_FUNDS) {
+  // The built-in choirs are demo data: on a real deployment the choirs come from
+  // the church (the Protocol import with --create-choirs, or Music's lineup).
+  const seedChoirs = process.env.NODE_ENV !== 'production' || process.env.SEED_DEFAULT_CHOIRS === 'true';
+  for (const choir of seedChoirs ? CHOIR_FUNDS : []) {
     const ou = await prisma.orgUnit.upsert({
       where: { id: choir.orgId },
       create: {
@@ -506,9 +525,55 @@ async function main() {
     where: { id: { in: ['proj-sanctuary-sound'] } },
   });
 
+
+  // Demo role accounts (music, protocol, protocolpres, …). They have known
+  // passwords, so they are created only when asked for — never on a real
+  // deployment. With them on the server, each demo login signs in through the
+  // API and can share Music / Protocol data across browsers.
+  if (process.env.SEED_DEMO_ACCOUNTS === 'true') {
+    const demo = JSON.parse(
+      readFileSync(new URL('./demoAccounts.json', import.meta.url), 'utf8'),
+    ) as {
+      accountId: string;
+      username: string;
+      password: string;
+      person: {
+        id: string;
+        fullName: string;
+        preferredName: string | null;
+        phone: string | null;
+        email: string | null;
+      };
+    }[];
+    let added = 0;
+    for (const d of demo) {
+      const taken = await prisma.account.findFirst({
+        where: { OR: [{ username: d.username }, { personId: d.person.id }] },
+      });
+      if (taken) continue;
+      await prisma.person.upsert({
+        where: { id: d.person.id },
+        create: { ...d.person, status: 'ACTIVE' },
+        update: {},
+      });
+      await prisma.account.create({
+        data: {
+          id: d.accountId,
+          personId: d.person.id,
+          username: d.username,
+          passwordHash: await bcrypt.hash(d.password, 10),
+        },
+      });
+      added++;
+    }
+    console.log(`  demo accounts: ${added} added (SEED_DEMO_ACCOUNTS=true)`);
+  }
+
   console.log('Seed OK (bootstrap — no demo mission data)');
-  console.log('  pastor / pastor123  (CHURCH_LEADER)');
-  console.log('  treasurer / treas123  (CHURCH_TREASURER + General + all kit funds MANAGE)');
+  if (!isProd) {
+    console.log('  pastor / pastor123  (CHURCH_LEADER)');
+    console.log('  treasurer / treas123  (CHURCH_TREASURER + General + all kit funds MANAGE)');
+  }
   console.log(`  finance: fund-general + ${MINISTRY_KIT_FUNDS.length} kit + ${SPECIAL_MINISTRY_FUNDS.length} special + ${CHOIR_FUNDS.length} choir vaults`);
 }
 

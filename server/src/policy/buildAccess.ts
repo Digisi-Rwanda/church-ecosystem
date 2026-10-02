@@ -25,10 +25,11 @@ import type {
   WorkTask,
 } from './types.js';
 
+import { governanceSystemsFor } from './governanceScope.js';
+
 const GOVERNANCE_ROLES: SystemRole[] = [
   'CHURCH_LEADER',
   'PASTOR',
-  'ASSISTANT_PASTOR',
   'CATECHIST',
 ];
 
@@ -49,7 +50,7 @@ function canonicalGovRole(
   role: SystemRole | undefined,
 ): 'CHURCH_LEADER' | 'PASTOR' | 'CATECHIST' {
   if (role === 'CATECHIST') return 'CATECHIST';
-  if (role === 'PASTOR' || role === 'ASSISTANT_PASTOR') return 'PASTOR';
+  if (role === 'PASTOR') return 'PASTOR';
   return 'CHURCH_LEADER';
 }
 
@@ -75,6 +76,7 @@ function mainChurchGovernanceSpecs(
       { resource: 'EVENT', action: 'MANAGE' },
       { resource: 'TASK', action: 'MANAGE' },
       { resource: 'PROJECT', action: 'MANAGE' },
+      { resource: 'CORRESPONDENCE', action: 'MANAGE' },
     ];
   }
   if (kind === 'CATECHIST') {
@@ -89,6 +91,8 @@ function mainChurchGovernanceSpecs(
       { resource: 'EVENT', action: 'MANAGE' },
       { resource: 'TASK', action: 'MANAGE' },
       { resource: 'PROJECT', action: 'MANAGE' },
+      { resource: 'CORRESPONDENCE', action: 'CREATE' },
+      { resource: 'CORRESPONDENCE', action: 'UPDATE' },
     ];
   }
   return [
@@ -102,6 +106,7 @@ function mainChurchGovernanceSpecs(
     { resource: 'EVENT', action: 'VIEW' },
     { resource: 'TASK', action: 'VIEW' },
     { resource: 'PROJECT', action: 'VIEW' },
+    { resource: 'CORRESPONDENCE', action: 'VIEW' },
   ];
 }
 
@@ -170,6 +175,18 @@ function grantGovernanceBundle(
       action: s.action,
       source: 'GOVERNANCE',
       reason: `${reason} — peer oversight`,
+    });
+  }
+
+  // Church Leader may create temporary assignments into peer systems.
+  const peerKind = canonicalGovRole(systemRole) ?? systemRole;
+  if (peerKind === 'CHURCH_LEADER') {
+    pushGrant(grants, {
+      systemId,
+      resource: 'ASSIGNMENT',
+      action: 'MANAGE',
+      source: 'GOVERNANCE',
+      reason: `${reason} — assign into peer system`,
     });
   }
 }
@@ -363,7 +380,7 @@ export function buildEffectiveAccess(
       const govRole =
         p.systemRole ??
         (p.grantsAllSystems ? ('CHURCH_LEADER' as SystemRole) : undefined);
-      for (const systemId of input.allSystemIds) {
+      for (const systemId of governanceSystemsFor(p, input.allSystemIds)) {
         grantGovernanceBundle(
           grants,
           systemId,
@@ -388,6 +405,24 @@ export function buildEffectiveAccess(
         reason: `${p.title} — Board seat`,
       });
       continue;
+    }
+
+    if (p.systemRole === 'CHURCH_SECRETARY') {
+      pushGrant(grants, {
+        systemId: 'sys-main',
+        resource: 'CORRESPONDENCE',
+        action: 'MANAGE',
+        source: 'POSITION',
+        reason: `${p.title} — letters desk`,
+      });
+      pushGrant(grants, {
+        systemId: 'sys-main',
+        resource: 'PERSON',
+        action: 'VIEW_FULL',
+        source: 'POSITION',
+        reason: `${p.title} — prepare member letters`,
+      });
+      grantPeopleDirectoryView(grants, p.title);
     }
 
     if (p.systemId) {
@@ -492,6 +527,7 @@ export function buildEffectiveAccess(
           'EVENT',
           'TASK',
           'PROJECT',
+          'ASSIGNMENT',
         ] as const) {
           pushGrant(grants, {
             systemId: p.systemId,
@@ -537,7 +573,7 @@ export function buildEffectiveAccess(
     }
 
     // Choir leadership is granted only via choirOffice matrix (choirAccess.ts).
-    // Do not use CHOIR_LEADER systemRole for broad MEMBERSHIP/PERSON grants.
+    // Ministry heads are identified by their office in that system, never by a main-church role.
 
     if (p.systemId === 'sys-choir' && p.choirOffice) {
       const office = p.choirOffice as ChoirOffice;
@@ -566,7 +602,12 @@ export function buildEffectiveAccess(
       }
     }
 
-    if (p.systemRole === 'WORSHIP_LEADER' && p.systemId === 'sys-worship') {
+    if (
+      p.systemId === 'sys-worship' &&
+      (p.worshipOffice === 'MUSIC_DIRECTOR' ||
+        p.worshipOffice === 'PRESIDENT' ||
+        p.ministryOffice === 'PRESIDENT')
+    ) {
       pushGrant(grants, {
         systemId: 'sys-worship',
         resource: 'WORSHIP_REPERTOIRE',
@@ -669,7 +710,10 @@ export function buildEffectiveAccess(
       }
     }
 
-    if (p.systemRole === 'DEACON_LEADER' && p.systemId === 'sys-deacon') {
+    if (
+      p.systemId === 'sys-deacon' &&
+      (p.deaconOffice === 'COORDINATOR' || p.ministryOffice === 'PRESIDENT')
+    ) {
       pushGrant(grants, {
         systemId: 'sys-deacon',
         resource: 'DEACON_ROSTER',
@@ -776,7 +820,7 @@ export function buildEffectiveAccess(
       }
     }
 
-    if (p.systemRole === 'YOUTH_LEADER' && p.systemId === 'sys-youth') {
+    if (p.systemId === 'sys-youth' && p.ministryOffice === 'PRESIDENT') {
       pushGrant(grants, {
         systemId: 'sys-youth',
         resource: 'YOUTH_GROUP',
@@ -852,6 +896,13 @@ export function buildEffectiveAccess(
           action: 'MANAGE',
           source: 'POSITION',
           reason: p.title,
+        });
+        pushGrant(grants, {
+          systemId: 'sys-protocol',
+          resource: 'ASSIGNMENT',
+          action: 'MANAGE',
+          source: 'POSITION',
+          reason: `${p.title} · assign within Protocol`,
         });
         grantPeopleDirectoryView(grants, p.title);
       }

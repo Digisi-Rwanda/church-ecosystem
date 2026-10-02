@@ -372,7 +372,7 @@ function PulpitPrepareForm({
   const [date, setDate] = useState('2026-10-12');
   const [kinds, setKinds] = useState<PulpitServiceKind[]>(['SS1', 'SS2']);
   const [mode, setMode] = useState<'church' | 'guest'>('church');
-  const [preacherId, setPreacherId] = useState('p-assistant');
+  const [preacherId, setPreacherId] = useState('p-pastor-2');
   const [guestName, setGuestName] = useState('');
   const [guestFrom, setGuestFrom] = useState('');
   const [guestPhone, setGuestPhone] = useState('');

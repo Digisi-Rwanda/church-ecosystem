@@ -11,9 +11,7 @@ export function isChurchLeader(roles: SystemRole[]): boolean {
 }
 
 export function isOrdainedPastor(roles: SystemRole[]): boolean {
-  return (
-    roles.includes('PASTOR') || roles.includes('ASSISTANT_PASTOR')
-  );
+  return roles.includes('PASTOR');
 }
 
 export function isCatechist(roles: SystemRole[]): boolean {
@@ -32,7 +30,7 @@ export function canonicalGovernanceRole(
 ): 'CHURCH_LEADER' | 'PASTOR' | 'CATECHIST' | null {
   if (!role) return null;
   if (role === 'CHURCH_LEADER') return 'CHURCH_LEADER';
-  if (role === 'PASTOR' || role === 'ASSISTANT_PASTOR') return 'PASTOR';
+  if (role === 'PASTOR') return 'PASTOR';
   if (role === 'CATECHIST') return 'CATECHIST';
   return null;
 }

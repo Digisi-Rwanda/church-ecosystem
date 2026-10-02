@@ -11,6 +11,8 @@ import { fundsRouter } from './routes/funds.js';
 import { healthRouter } from './routes/health.js';
 import { missionRouter } from './routes/mission.js';
 import { peopleRouter } from './routes/people.js';
+import { protocolOfficesRouter } from './routes/protocolOffices.js';
+import { scheduleStateRouter } from './routes/scheduleState.js';
 import { ssoRouter } from './routes/sso.js';
 import { systemsRouter } from './routes/systems.js';
 
@@ -22,6 +24,8 @@ export function createApp() {
       credentials: true,
     }),
   );
+  // Bigger bodies for the module documents; mounted before the 1 MB parser.
+  app.use('/api/schedule-state', scheduleStateRouter);
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/', (_req, res) => {
@@ -42,6 +46,8 @@ export function createApp() {
         contributions:
           'GET/POST /api/contributions, POST /api/contributions/:id/verify',
         assignments: 'GET/POST /api/assignments',
+        scheduleState: 'GET/PUT /api/schedule-state/{music|protocol}',
+        protocolOffices: 'GET /api/protocol/offices',
         ssoIssue: 'POST /api/sso/issue',
         ssoRedeem: 'POST /api/sso/redeem',
       },
@@ -58,6 +64,7 @@ export function createApp() {
   app.use('/api/attention', attentionRouter);
   app.use('/api/contributions', contributionsRouter);
   app.use('/api/assignments', assignmentsRouter);
+  app.use('/api/protocol/offices', protocolOfficesRouter);
   app.use('/api/sso', ssoRouter);
 
   app.use(errorHandler);

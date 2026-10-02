@@ -45,7 +45,6 @@ describe('choirTenancy', () => {
         personId: 'p-choir-leader',
         title: 'Choir Music Director',
         orgUnitId: 'ou-choir-ijwi',
-        systemRole: 'CHOIR_LEADER',
         choirOffice: 'MUSIC_DIRECTOR',
         systemId: 'sys-choir',
         status: 'ACTIVE',

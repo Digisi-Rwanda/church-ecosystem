@@ -17,7 +17,9 @@ import {
   SYSTEMS,
   TASKS,
 } from '../data/seed';
-import type { SystemId } from './types';
+import { getEffectiveScope } from './access';
+import { rolesFromPositions } from './participation';
+import type { Position, SystemId } from './types';
 
 function participation() {
   return {
@@ -131,13 +133,18 @@ describe('peer oversight entry', () => {
     expect(oversightMayAccessModule('sys-youth', 'tasks', 'ops')).toBe(true);
   });
 
-  it('ordained pastor (Claire) gets light oversight nav', () => {
-    const entry = resolvePeerEntry('p-assistant', 'sys-youth', POSITIONS);
+  it('ordained pastor gets light oversight on Evangelism only', () => {
+    const entry = resolvePeerEntry('p-pastor-2', 'sys-evangelism', POSITIONS);
     expect(entry.kind).toBe('oversight');
-    expect(oversightMayAccessModule('sys-youth', 'tasks', 'light')).toBe(false);
-    expect(oversightMayAccessModule('sys-youth', 'programs', 'light')).toBe(
-      true,
+    expect(oversightMayAccessModule('sys-evangelism', 'tasks', 'light')).toBe(
+      false,
     );
+  });
+
+  it('ordained pastor is just a member in other ministries (no oversight)', () => {
+    for (const sys of ['sys-youth', 'sys-choir', 'sys-deacon', 'sys-music'] as const) {
+      expect(resolvePeerEntry('p-pastor-2', sys, POSITIONS).kind).toBe('member');
+    }
   });
 
   it('secretary is not peer oversight by role alone', () => {
@@ -235,11 +242,11 @@ describe('peer oversight entry', () => {
   });
 
   it('ordained pastor cannot MANAGE programs on main (less institutional power)', () => {
-    const grants = grantsFor('p-assistant');
+    const grants = grantsFor('p-pastor-2');
     expect(
       authorize(
         {
-          personId: 'p-assistant',
+          personId: 'p-pastor-2',
           systemId: 'sys-main',
           resource: 'PROGRAM',
           action: 'MANAGE',
@@ -250,7 +257,7 @@ describe('peer oversight entry', () => {
     expect(
       authorize(
         {
-          personId: 'p-assistant',
+          personId: 'p-pastor-2',
           systemId: 'sys-main',
           resource: 'PROGRAM',
           action: 'VIEW',
@@ -261,7 +268,7 @@ describe('peer oversight entry', () => {
     expect(
       authorize(
         {
-          personId: 'p-assistant',
+          personId: 'p-pastor-2',
           systemId: 'sys-main',
           resource: 'BOARD',
           action: 'MANAGE',
@@ -384,5 +391,92 @@ describe('membership does not grant ministry finance VIEW', () => {
       action: 'VIEW',
     }, grants);
     expect(fin.allowed).toBe(false);
+  });
+});
+
+
+describe('main church roles — system reach', () => {
+  const enterable = (personId: string) =>
+    SYSTEMS.map((x) => x.id).filter(
+      (sys) =>
+        authorize(
+          { personId, systemId: sys, resource: 'SYSTEM', action: 'ENTER' },
+          grantsFor(personId),
+        ).allowed,
+    );
+
+  it('Pastor enters only Main Church and Evangelism', () => {
+    expect(enterable('p-pastor-2').sort()).toEqual(['sys-evangelism', 'sys-main']);
+  });
+
+  it('Pastor keeps full governance inside Evangelism, none in Youth', () => {
+    const grants = grantsFor('p-pastor-2');
+    expect(
+      authorize(
+        { personId: 'p-pastor-2', systemId: 'sys-evangelism', resource: 'PROGRAM', action: 'VIEW' },
+        grants,
+      ).allowed,
+    ).toBe(true);
+    expect(
+      authorize(
+        { personId: 'p-pastor-2', systemId: 'sys-youth', resource: 'PROGRAM', action: 'VIEW' },
+        grants,
+      ).allowed,
+    ).toBe(false);
+  });
+
+  it('Church Leader enters every system', () => {
+    expect(enterable('p-pastor').length).toBe(SYSTEMS.length);
+  });
+
+  it('Catechist enters every system', () => {
+    expect(enterable('p-catechist').length).toBe(SYSTEMS.length);
+  });
+
+  it('no role called assistant pastor exists any more', () => {
+    const roles = new Set(POSITIONS.map((p) => p.systemRole));
+    expect(roles.has('ASSISTANT_PASTOR' as never)).toBe(false);
+  });
+});
+
+
+describe('main church roles — five roles plus Member', () => {
+  const officerPositions = (personId: string) =>
+    POSITIONS.filter((p) => p.personId === personId);
+
+  it('ministry officers hold no main-church role (they are plain Members)', () => {
+    for (const pid of ['p-choir-leader', 'p-worship-leader', 'p-youth-leader', 'p-deacon-coord']) {
+      expect(rolesFromPositions(officerPositions(pid))).toEqual([]);
+      expect(getEffectiveScope([])).toBe('MEMBER');
+    }
+  });
+
+  it('stale ministry role values saved in old data are ignored', () => {
+    const stale = [
+      { id: 'x', personId: 'p', title: 'Old', systemRole: 'CHOIR_LEADER', status: 'ACTIVE', startDate: '2020-01-01' },
+      { id: 'y', personId: 'p', title: 'Old2', systemRole: 'LIMITED_STAFF', status: 'ACTIVE', startDate: '2020-01-01' },
+    ] as unknown as Position[];
+    expect(rolesFromPositions(stale)).toEqual([]);
+  });
+
+  it('exactly the five main-church roles are recognised', () => {
+    const roles = new Set(
+      rolesFromPositions(
+        (['CHURCH_LEADER', 'PASTOR', 'CATECHIST', 'CHURCH_SECRETARY', 'CHURCH_TREASURER'] as const).map(
+          (r, i) => ({ id: `r${i}`, personId: 'p', title: r, systemRole: r, status: 'ACTIVE', startDate: '2020-01-01' }) as Position,
+        ),
+      ),
+    );
+    expect([...roles].sort()).toEqual(['CATECHIST', 'CHURCH_LEADER', 'CHURCH_SECRETARY', 'CHURCH_TREASURER', 'PASTOR']);
+  });
+
+  it('ministry heads keep full rights inside their own ministry', () => {
+    const grants = grantsFor('p-youth-leader');
+    expect(
+      authorize({ personId: 'p-youth-leader', systemId: 'sys-youth', resource: 'YOUTH_GROUP', action: 'MANAGE' }, grants).allowed,
+    ).toBe(true);
+    expect(
+      authorize({ personId: 'p-youth-leader', systemId: 'sys-main', resource: 'PROGRAM', action: 'MANAGE' }, grants).allowed,
+    ).toBe(false);
   });
 });

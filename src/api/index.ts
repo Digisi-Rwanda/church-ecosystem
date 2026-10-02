@@ -1,5 +1,14 @@
 export { isApiEnabled, isApiFallbackEnabled, apiBaseUrl } from './config';
-export { apiFetch, apiHealth, getApiToken, setApiToken, ApiError } from './client';
+export {
+  apiFetch,
+  apiHealth,
+  getApiToken,
+  setApiToken,
+  getSyncToken,
+  setSyncToken,
+  getScheduleSyncToken,
+  ApiError,
+} from './client';
 export { apiLogin, apiMe, apiAuthorizeProbe, apiFetchGrants } from './authApi';
 export type { ApiGrant } from './authApi';
 export {
@@ -63,3 +72,9 @@ export {
   loadAttentionPreferApi,
 } from './attentionApi';
 export type { AttentionItem } from './attentionApi';
+export {
+  apiGetScheduleDoc,
+  apiGetProtocolOffices,
+  apiGetScheduleDocVersion,
+  apiPutScheduleDoc,
+} from './scheduleStateApi';

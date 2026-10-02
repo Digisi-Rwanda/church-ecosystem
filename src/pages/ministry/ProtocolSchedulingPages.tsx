@@ -1,18 +1,20 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
-import type {
-  ProtocolAttendanceStatus,
-  ProtocolTeamRole,
-} from '../../domain/types';
+import type { ProtocolAttendanceStatus } from '../../domain/types';
 import { PROTOCOL_SCORE_POINTS } from '../../domain/teamEngine';
 import { musicScheduleService, protocolService } from '../../services';
+import type { ProtocolMonthRow } from '../../services/protocolService';
+import { ProtocolCoveragePanel } from './ProtocolCoveragePanel';
+import { ProtocolTeamsBoard } from './ProtocolTeamsBoard';
+import { ProtocolMusicSyncPanel } from './ProtocolMusicSync';
 
 const SYS = 'sys-protocol' as const;
 
-function useProtocolMonth() {
-  const initial = protocolService.liveMonthKey();
-  const [monthKey, setMonthKey] = useState(initial);
+function useProtocolMonth(startAt?: () => string) {
+  const [monthKey, setMonthKey] = useState(
+    () => startAt?.() ?? protocolService.liveMonthKey(),
+  );
   const [tick, setTick] = useState(0);
   const refresh = () => setTick((t) => t + 1);
   return { monthKey, setMonthKey, refresh, tick };
@@ -29,17 +31,163 @@ function MonthPicker({
     <select value={monthKey} onChange={(e) => onChange(e.target.value)}>
       {protocolService.allowedMonths().map((m) => (
         <option key={m} value={m}>
-          {m}
+          {protocolService.monthLabel(m)}
         </option>
       ))}
     </select>
   );
 }
 
-function roleLabel(role: ProtocolTeamRole) {
-  if (role === 'TEAM_LEADER') return 'TL';
-  if (role === 'VICE_LEADER') return 'VTL';
-  return 'Member';
+
+function MonthsOverview({
+  tick,
+  canManage,
+  personId,
+  selected,
+  onOpen,
+  onChange,
+}: {
+  tick: number;
+  canManage: boolean;
+  personId?: string;
+  selected: string;
+  onOpen: (monthKey: string) => void;
+  onChange: () => void;
+}) {
+  const [note, setNote] = useState('');
+  const rows = useMemo(
+    () => protocolService.monthsOverview(),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [tick],
+  );
+  const toBuild = rows.filter((r) => r.next === 'BUILD');
+  if (rows.length === 0) {
+    return (
+      <div className="panel">
+        <h3 style={{ marginTop: 0 }}>Months</h3>
+        <p className="muted" style={{ marginBottom: 0 }}>
+          Nothing to plan yet. Music has not confirmed any month. You will be
+          notified when it does.
+        </p>
+      </div>
+    );
+  }
+  const music = (r: ProtocolMonthRow) =>
+    r.musicState === 'PUBLISHED'
+      ? `Published v${r.musicVersion}`
+      : r.musicState === 'CONFIRMED'
+        ? `Confirmed v${r.musicVersion}`
+        : 'Not yet';
+  const review = (r: ProtocolMonthRow) =>
+    r.planStatus === 'PUBLISHED'
+      ? 'Approved'
+      : r.planStatus === 'REVIEW'
+        ? 'With the President'
+        : r.places > 0
+          ? 'Not sent'
+          : '—';
+  const publish = (r: ProtocolMonthRow) =>
+    r.planStatus === 'PUBLISHED'
+      ? 'Published'
+      : r.musicState === 'NONE'
+        ? '—'
+        : r.publishBlockReason
+          ? 'After Music publishes'
+          : 'Ready when approved';
+  return (
+    <div className="panel">
+      <div className="row" style={{ justifyContent: 'space-between', flexWrap: 'wrap' }}>
+        <div>
+          <h3 style={{ margin: 0 }}>Months</h3>
+          <p className="muted" style={{ margin: '0.25rem 0 0', fontSize: '0.85rem' }}>
+            Every month Music has confirmed or published, and where it stands.
+          </p>
+        </div>
+        {canManage && (
+          <button
+            type="button"
+            className="btn"
+            disabled={toBuild.length === 0}
+            onClick={() => {
+              if (!personId) return;
+              const r = protocolService.buildAllReady(personId);
+              setNote(
+                !r.ok
+                  ? (r.reason ?? 'Could not build')
+                  : r.failed.length
+                    ? `Built ${r.built.length} month${r.built.length === 1 ? '' : 's'}; ${r.failed.length} could not be built (${r.failed.map((f) => `${f.monthKey}: ${f.reason}`).join('; ')})`
+                    : `Built teams for ${r.built.length} month${r.built.length === 1 ? '' : 's'}`,
+              );
+              onChange();
+            }}
+          >
+            {toBuild.length > 0
+              ? `Build all (${toBuild.length} month${toBuild.length === 1 ? '' : 's'})`
+              : 'Nothing to build'}
+          </button>
+        )}
+      </div>
+      {note && <p className="muted" style={{ marginBottom: 0 }}>{note}</p>}
+      <div style={{ overflowX: 'auto' }}>
+        <table className="table" style={{ marginTop: '0.6rem' }}>
+          <thead>
+            <tr>
+              <th>Month</th>
+              <th>Music</th>
+              <th>Teams</th>
+              <th>President review</th>
+              <th>Publish</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map((r) => (
+              <tr
+                key={r.monthKey}
+                className={r.monthKey === selected ? 'row-selected' : undefined}
+              >
+                <td>
+                  <strong>{r.label}</strong>
+                  {r.batchLabel && (
+                    <div className="muted" style={{ fontSize: '0.75rem' }}>
+                      {r.batchLabel}
+                    </div>
+                  )}
+                </td>
+                <td>{music(r)}</td>
+                <td>
+                  {r.places > 0
+                    ? `${r.places} places · ${r.services} services`
+                    : r.musicState === 'NONE'
+                      ? '—'
+                      : 'Not built'}
+                </td>
+                <td>{review(r)}</td>
+                <td>{publish(r)}</td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  {r.next === 'WAIT_MUSIC' ? (
+                    <span className="muted">Waiting for Music</span>
+                  ) : (
+                    <button
+                      type="button"
+                      className={`btn sm${r.next === 'BUILD' || r.next === 'SEND' ? '' : ' ghost'}`}
+                      onClick={() => onOpen(r.monthKey)}
+                    >
+                      {r.next === 'BUILD' && canManage
+                        ? 'Build teams'
+                        : r.next === 'SEND' && canManage
+                          ? 'Check & send'
+                          : 'Open'}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 /**
@@ -50,30 +198,14 @@ export function ProtocolTeamsPage() {
   const { account, can } = useAuth();
   const canView = can('PROTOCOL_SCHEDULE', 'VIEW', SYS);
   const canManage = can('PROTOCOL_SCHEDULE', 'MANAGE', SYS);
-  const { monthKey, setMonthKey, refresh, tick } = useProtocolMonth();
+  const { monthKey, setMonthKey, refresh, tick } = useProtocolMonth(() =>
+    protocolService.firstActionMonth(),
+  );
   const [message, setMessage] = useState('');
-  const [focusServiceId, setFocusServiceId] = useState<string | null>(null);
-  const [staffPick, setStaffPick] = useState<
-    Record<string, { from: string; to: string; add: string }>
-  >({});
-
-  function staffPicks(serviceId: string) {
-    return staffPick[serviceId] ?? { from: '', to: '', add: '' };
-  }
-
-  function setStaffPickField(
-    serviceId: string,
-    field: 'from' | 'to' | 'add',
-    value: string,
-  ) {
-    setStaffPick((prev) => ({
-      ...prev,
-      [serviceId]: { ...staffPicks(serviceId), [field]: value },
-    }));
-  }
+  const workspaceRef = useRef<HTMLDivElement>(null);
 
   const musicPublished = useMemo(
-    () => musicScheduleService.getPublished(monthKey),
+    () => musicScheduleService.getPlannedForMonth(monthKey),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [monthKey, tick],
   );
@@ -95,6 +227,60 @@ export function ProtocolTeamsPage() {
     [monthKey, tick],
   );
   const rules = protocolService.rules();
+  const totalPlaces = services.reduce(
+    (n, svc) => n + protocolService.teamForService(svc.id).length,
+    0,
+  );
+  const buildBlocked =
+    plan?.status === 'REVIEW'
+      ? 'This month is with the President. Withdraw it from review to rebuild.'
+      : plan?.status === 'PUBLISHED'
+        ? 'This month is published. Reopen it to rebuild.'
+        : !musicPublished && services.length === 0
+          ? 'Music has not confirmed this month yet.'
+          : undefined;
+  const publishBlock = protocolService.publishBlockReason(monthKey);
+  type Tone = 'done' | 'todo' | 'warn';
+  const steps: { label: string; value: string; tone: Tone }[] = [
+    {
+      label: '1 · Music schedule',
+      value: musicPublished
+        ? musicPublished.musicState === 'CONFIRMED'
+          ? `Confirmed v${musicPublished.version}`
+          : `Published v${musicPublished.version}`
+        : 'Missing',
+      tone: !musicPublished ? 'warn' : musicPublished.musicState === 'CONFIRMED' ? 'todo' : 'done',
+    },
+    {
+      label: '2 · Teams',
+      value:
+        totalPlaces > 0
+          ? `${totalPlaces} places · ${services.length} services`
+          : 'Not built',
+      tone: totalPlaces > 0 ? 'done' : 'todo',
+    },
+    {
+      label: '3 · President review',
+      value:
+        plan?.status === 'PUBLISHED'
+          ? 'Approved'
+          : plan?.status === 'REVIEW'
+            ? 'Waiting for the President'
+            : 'Not sent yet',
+      tone:
+        plan?.status === 'PUBLISHED' ? 'done' : plan?.status === 'REVIEW' ? 'warn' : 'todo',
+    },
+    {
+      label: '4 · Published',
+      value:
+        plan?.status === 'PUBLISHED'
+          ? 'Published to the team'
+          : publishBlock
+            ? 'Waiting for Music to publish'
+            : 'Not yet',
+      tone: plan?.status === 'PUBLISHED' ? 'done' : 'todo',
+    },
+  ];
 
   if (!canView) {
     return (
@@ -107,67 +293,138 @@ export function ProtocolTeamsPage() {
 
   return (
     <div className="stack">
-      <div className="panel">
+      <MonthsOverview
+        tick={tick}
+        canManage={canManage}
+        personId={account?.personId}
+        selected={monthKey}
+        onOpen={(m) => {
+          setMonthKey(m);
+          setTimeout(
+            () => workspaceRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+            0,
+          );
+        }}
+        onChange={refresh}
+      />
+
+      <div className="panel" ref={workspaceRef}>
         <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Service teams</h2>
-            <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              Built from published Music schedule · team of {rules.defaultTeamSize}{' '}
-              · target {rules.preferTarget}/month · Extra when all at target · no
-              Friday
-            </p>
-          </div>
+          <h2 style={{ margin: 0 }}>Service teams</h2>
           <MonthPicker monthKey={monthKey} onChange={setMonthKey} />
         </div>
 
+        <ol className="flow-steps" aria-label="Progress for this month">
+          {steps.map((st) => (
+            <li key={st.label} className={`flow-step ${st.tone}`}>
+              <span className="flow-step-label">{st.label}</span>
+              <span className="flow-step-value">{st.value}</span>
+            </li>
+          ))}
+        </ol>
+
         <div className="row" style={{ marginTop: '0.75rem', flexWrap: 'wrap' }}>
-          <span className="badge">{plan?.status ?? 'OPEN'}</span>
-          {musicPublished ? (
-            <span className="badge">
-              Music published v{musicPublished.version}
-            </span>
-          ) : (
-            <span className="badge planned">Music schedule missing</span>
-          )}
-          {!musicPublished && (
-            <Link className="btn secondary sm" to="/systems/music/schedule">
-              Open Music schedule
-            </Link>
-          )}
           {canManage && (
             <button
               type="button"
               className="btn"
-              disabled={!musicPublished && services.length === 0}
+              disabled={!!buildBlocked}
+              title={buildBlocked}
               onClick={() => {
-                const result = protocolService.generateTeams(monthKey);
+                if (!account) return;
+                if (
+                  totalPlaces > 0 &&
+                  !window.confirm(
+                    'Rebuilding replaces the current teams, including any manual changes. Continue?',
+                  )
+                ) {
+                  return;
+                }
+                const result = protocolService.generateTeams(
+                  monthKey,
+                  account.personId,
+                );
                 setMessage(
                   result.ok
-                    ? `Built ${result.slotCount} slots` +
+                    ? `Teams built: ${result.slotCount} places` +
                         (result.warnings.length
-                          ? ` · ${result.warnings.length} notes`
+                          ? ` · ${result.warnings.length} note${result.warnings.length === 1 ? '' : 's'} to check`
                           : '')
-                    : (result.reason ?? 'Failed'),
+                    : (result.reason ?? 'Could not build the teams'),
                 );
                 refresh();
               }}
             >
-              Generate / rebuild
+              {totalPlaces > 0 ? 'Rebuild teams' : 'Build teams'}
             </button>
           )}
-          <Link to="/systems/protocol/review">Review & publish →</Link>
-          <Link to="/systems/protocol/faithful">Faithful Servant →</Link>
+          {canManage && plan?.status === 'DRAFT' && totalPlaces > 0 && (
+            <Link className="btn secondary" to="/systems/protocol/review">
+              Check &amp; send to the President →
+            </Link>
+          )}
+          {!canManage && plan?.status === 'REVIEW' && (
+            <Link className="btn secondary" to="/systems/protocol/review">
+              Review &amp; publish →
+            </Link>
+          )}
+          {!musicPublished && (
+            <Link className="btn secondary" to="/systems/music/schedule">
+              Open Music schedule
+            </Link>
+          )}
         </div>
-        {message && <p className="muted">{message}</p>}
+        {message && <p className="muted" style={{ marginBottom: 0 }}>{message}</p>}
         {!musicPublished && (
-          <p className="muted" style={{ marginTop: '0.5rem' }}>
-            Protocol cannot staff teams until Music publishes this month&apos;s
-            choir schedule (SS1, SS2, Tuesday, Igaburo — not Friday).
+          <p className="muted" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+            Teams can be built once Music has confirmed or published this
+            month&apos;s choir schedule.
           </p>
         )}
+        {musicPublished?.musicState === 'CONFIRMED' && (
+          <p className="muted" style={{ marginTop: '0.5rem', marginBottom: 0 }}>
+            Music has confirmed this month but not yet released it to the
+            choirs. You can build now; the month can be published only after
+            Music publishes it.
+          </p>
+        )}
+        <details style={{ marginTop: '0.75rem' }}>
+          <summary className="muted">How teams are built</summary>
+          <p className="muted" style={{ margin: '0.35rem 0 0' }}>
+            Team of {rules.defaultTeamSize} per service · each member serves
+            about {rules.preferTarget} times a month · a fourth (extra) duty is
+            given only when everyone is at target · no Friday services.
+          </p>
+        </details>
       </div>
 
-      <div className="grid-2">
+      {plan?.status !== 'REVIEW' && plan?.status !== 'PUBLISHED' && (
+        <ProtocolCoveragePanel
+          monthKey={monthKey}
+          tick={tick}
+          onChange={refresh}
+          editable={teamsEditable}
+        />
+      )}
+
+      <ProtocolMusicSyncPanel
+        monthKey={monthKey}
+        tick={tick}
+        onChange={refresh}
+        canManage={canManage}
+      />
+
+      <ProtocolTeamsBoard
+        services={services}
+        monthKey={monthKey}
+        tick={tick}
+        refresh={refresh}
+        canManage={canManage}
+        teamsEditable={teamsEditable}
+        actorPersonId={account?.personId}
+      />
+
+      <div>
         <div className="panel">
           <h3>Official duty load ({monthKey})</h3>
           <p className="muted" style={{ fontSize: '0.85rem' }}>
@@ -209,331 +466,12 @@ export function ProtocolTeamsPage() {
             </tbody>
           </table>
         </div>
-
-        <div className="panel">
-          <h3>Teams by service</h3>
-          <ul className="stack" style={{ listStyle: 'none', padding: 0, margin: 0 }}>
-            {services.map((svc) => {
-              const team = protocolService.teamForService(svc.id);
-              const staffTeam = team.filter((s) => s.slotKind !== 'FILL_IN');
-              const picks = staffPicks(svc.id);
-              const eligible = protocolService.eligibleForServiceTeam(svc.id);
-              return (
-                <li key={svc.id} className="panel" style={{ padding: '0.65rem' }}>
-                  <div className="row" style={{ justifyContent: 'space-between' }}>
-                    <strong>
-                      {svc.kind} · {svc.date}
-                    </strong>
-                    <span className="muted">
-                      {team.length}/{svc.targetTeamSize}
-                    </span>
-                  </div>
-                  {team.length === 0 ? (
-                    <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-                      No team yet — generate
-                    </p>
-                  ) : (
-                    <ul
-                      style={{
-                        margin: '0.35rem 0 0',
-                        paddingLeft: '1.1rem',
-                        fontSize: '0.9rem',
-                      }}
-                    >
-                      {team.map((slot) => (
-                        <li key={slot.id}>
-                          {protocolService.personLabel(slot.personId)}
-                          {slot.recommendedRole &&
-                          slot.recommendedRole !== 'MEMBER' &&
-                          slot.roleStatus === 'RECOMMENDED' ? (
-                            <span className="badge planned">
-                              rec. {roleLabel(slot.recommendedRole)}
-                            </span>
-                          ) : null}{' '}
-                          {slot.role !== 'MEMBER' ? (
-                            <span className="badge">{roleLabel(slot.role)}</span>
-                          ) : null}{' '}
-                          {slot.slotKind === 'EXTRA' ? (
-                            <span className="badge planned">Extra</span>
-                          ) : null}
-                          {slot.slotKind === 'FILL_IN' ? (
-                            <span className="badge">Fill-in</span>
-                          ) : null}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                  <div
-                    className="row"
-                    style={{
-                      marginTop: '0.5rem',
-                      flexWrap: 'wrap',
-                      gap: '0.35rem',
-                      alignItems: 'center',
-                    }}
-                  >
-                    {canManage && team.length > 0 && (
-                      <button
-                        type="button"
-                        className="btn ghost sm"
-                        onClick={() =>
-                          setFocusServiceId(
-                            focusServiceId === svc.id ? null : svc.id,
-                          )
-                        }
-                      >
-                        {focusServiceId === svc.id
-                          ? 'Hide TL/VTL'
-                          : 'Approve TL / VTL'}
-                      </button>
-                    )}
-                    {teamsEditable && staffTeam.length > 0 && (
-                      <>
-                        <select
-                          className="sm"
-                          value={picks.from}
-                          aria-label="Member to change"
-                          onChange={(e) =>
-                            setStaffPickField(svc.id, 'from', e.target.value)
-                          }
-                        >
-                          <option value="">On team…</option>
-                          {staffTeam.map((s) => (
-                            <option key={s.id} value={s.personId}>
-                              {protocolService.personLabel(s.personId)}
-                            </option>
-                          ))}
-                        </select>
-                        <select
-                          className="sm"
-                          value={picks.to}
-                          aria-label="Replacement"
-                          onChange={(e) =>
-                            setStaffPickField(svc.id, 'to', e.target.value)
-                          }
-                        >
-                          <option value="">Replace with…</option>
-                          {eligible.map((m) => (
-                            <option key={m.id} value={m.personId}>
-                              {protocolService.personLabel(m.personId)}
-                            </option>
-                          ))}
-                        </select>
-                        <button
-                          type="button"
-                          className="btn secondary sm"
-                          disabled={!picks.from || !picks.to || !account}
-                          onClick={() => {
-                            if (!account || !picks.from || !picks.to) return;
-                            const r = protocolService.replaceTeamMember(
-                              svc.id,
-                              picks.from,
-                              picks.to,
-                              account.personId,
-                            );
-                            setMessage(
-                              r.ok ? 'Member replaced' : (r.reason ?? 'Failed'),
-                            );
-                            setStaffPickField(svc.id, 'from', '');
-                            setStaffPickField(svc.id, 'to', '');
-                            refresh();
-                          }}
-                        >
-                          Replace
-                        </button>
-                        <button
-                          type="button"
-                          className="btn ghost sm"
-                          disabled={!picks.from || !account}
-                          onClick={() => {
-                            if (!account || !picks.from) return;
-                            const r = protocolService.removeTeamMember(
-                              svc.id,
-                              picks.from,
-                              account.personId,
-                            );
-                            setMessage(
-                              r.ok ? 'Member removed' : (r.reason ?? 'Failed'),
-                            );
-                            setStaffPickField(svc.id, 'from', '');
-                            refresh();
-                          }}
-                        >
-                          Remove
-                        </button>
-                      </>
-                    )}
-                    {teamsEditable &&
-                      staffTeam.length < svc.targetTeamSize && (
-                        <>
-                          <select
-                            className="sm"
-                            value={picks.add}
-                            aria-label="Add member"
-                            onChange={(e) =>
-                              setStaffPickField(svc.id, 'add', e.target.value)
-                            }
-                          >
-                            <option value="">Add member…</option>
-                            {eligible.map((m) => (
-                              <option key={m.id} value={m.personId}>
-                                {protocolService.personLabel(m.personId)}
-                              </option>
-                            ))}
-                          </select>
-                          <button
-                            type="button"
-                            className="btn secondary sm"
-                            disabled={!picks.add || !account}
-                            onClick={() => {
-                              if (!account || !picks.add) return;
-                              const r = protocolService.addTeamMember(
-                                svc.id,
-                                picks.add,
-                                account.personId,
-                              );
-                              setMessage(
-                                r.ok ? 'Member added' : (r.reason ?? 'Failed'),
-                              );
-                              setStaffPickField(svc.id, 'add', '');
-                              refresh();
-                            }}
-                          >
-                            Add
-                          </button>
-                        </>
-                      )}
-                  </div>
-                  {canManage && focusServiceId === svc.id && (
-                    <div className="stack" style={{ marginTop: '0.5rem' }}>
-                      {team
-                        .filter(
-                          (s) =>
-                            s.recommendedRole === 'TEAM_LEADER' ||
-                            s.recommendedRole === 'VICE_LEADER' ||
-                            s.role === 'TEAM_LEADER' ||
-                            s.role === 'VICE_LEADER',
-                        )
-                        .map((s) => (
-                          <div key={s.id} className="row">
-                            <span>
-                              {protocolService.personLabel(s.personId)} ·{' '}
-                              {s.roleStatus ?? '—'}
-                            </span>
-                            {s.roleStatus === 'RECOMMENDED' &&
-                              account &&
-                              s.recommendedRole &&
-                              s.recommendedRole !== 'MEMBER' && (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="btn sm"
-                                    onClick={() => {
-                                      const r = protocolService.approveTeamRole(
-                                        svc.id,
-                                        s.personId,
-                                        account.personId,
-                                      );
-                                      setMessage(
-                                        r.ok
-                                          ? 'Role approved'
-                                          : (r.reason ?? 'Failed'),
-                                      );
-                                      refresh();
-                                    }}
-                                  >
-                                    Approve
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn secondary sm"
-                                    onClick={() => {
-                                      protocolService.setTeamRole(
-                                        svc.id,
-                                        s.personId,
-                                        'MEMBER',
-                                        account.personId,
-                                      );
-                                      setMessage('Recommendation cleared');
-                                      refresh();
-                                    }}
-                                  >
-                                    Decline
-                                  </button>
-                                </>
-                              )}
-                          </div>
-                        ))}
-                      <label className="muted" style={{ fontSize: '0.85rem' }}>
-                        Manual TL
-                        <select
-                          defaultValue=""
-                          onChange={(e) => {
-                            const pid = e.target.value;
-                            if (!pid || !account) return;
-                            protocolService.setTeamRole(
-                              svc.id,
-                              pid,
-                              'TEAM_LEADER',
-                              account.personId,
-                            );
-                            setMessage('Team Leader set');
-                            refresh();
-                            e.target.value = '';
-                          }}
-                        >
-                          <option value="">Choose…</option>
-                          {team.map((s) => (
-                            <option key={s.id} value={s.personId}>
-                              {protocolService.personLabel(s.personId)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                      <label className="muted" style={{ fontSize: '0.85rem' }}>
-                        Manual VTL
-                        <select
-                          defaultValue=""
-                          onChange={(e) => {
-                            const pid = e.target.value;
-                            if (!pid || !account) return;
-                            protocolService.setTeamRole(
-                              svc.id,
-                              pid,
-                              'VICE_LEADER',
-                              account.personId,
-                            );
-                            setMessage('Vice Team Leader set');
-                            refresh();
-                            e.target.value = '';
-                          }}
-                        >
-                          <option value="">Choose…</option>
-                          {team.map((s) => (
-                            <option key={s.id} value={s.personId}>
-                              {protocolService.personLabel(s.personId)}
-                            </option>
-                          ))}
-                        </select>
-                      </label>
-                    </div>
-                  )}
-                </li>
-              );
-            })}
-            {services.length === 0 && (
-              <li className="muted">
-                No Protocol services yet — publish Music, then generate.
-              </li>
-            )}
-          </ul>
-        </div>
       </div>
     </div>
   );
 }
 
-/** Faithful Servant — served counts, extras, fill-ins, score, ranking. */
+/** Member performance — served counts, extras, fill-ins, score, ranking. */
 export function ProtocolFaithfulPage() {
   const { can } = useAuth();
   const canView = can('PROTOCOL_SCHEDULE', 'VIEW', SYS);
@@ -552,7 +490,7 @@ export function ProtocolFaithfulPage() {
   if (!canView) {
     return (
       <div className="panel">
-        <h2>Faithful Servant</h2>
+        <h2>Member performance</h2>
         <p className="muted">No access</p>
       </div>
     );
@@ -563,7 +501,7 @@ export function ProtocolFaithfulPage() {
       <div className="panel">
         <div className="row" style={{ justifyContent: 'space-between' }}>
           <div>
-            <h2 style={{ margin: 0 }}>Faithful Servant</h2>
+            <h2 style={{ margin: 0 }}>Member performance</h2>
             <p className="muted" style={{ margin: '0.35rem 0 0' }}>
               Counts from submitted attendance (Present / Half-present). Updates
               when attendance is recorded.

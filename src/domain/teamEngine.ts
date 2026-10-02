@@ -7,7 +7,10 @@
  * choir members only on services where Music scheduled their choir;
  * engine recommends TL + VTL for coordinator approval.
  */
+import { musicUnitKind } from './musicUnits';
 import type {
+  ProtocolIssue,
+  ProtocolIssueCode,
   ProtocolRosterMember,
   ProtocolSchedulingRules,
   ProtocolService,
@@ -24,7 +27,14 @@ export type UnitsOnService = Map<string, Set<string>>;
 export function canServeKind(
   member: ProtocolRosterMember,
   kind: ProtocolServiceKind,
+  date?: string,
 ): boolean {
+  // Picked services for that month beat the general rule.
+  if (date && member.onlyServices?.length) {
+    const month = date.slice(0, 7);
+    const inMonth = member.onlyServices.filter((x) => x.date.slice(0, 7) === month);
+    if (inMonth.length) return inMonth.some((x) => x.date === date && x.kind === kind);
+  }
   if (member.allowedServiceKinds?.length) {
     return member.allowedServiceKinds.includes(kind);
   }
@@ -53,64 +63,119 @@ function officialLoad(
   }).length;
 }
 
+/**
+ * Which kind of Music scheduling blocks this member from this service, if any.
+ * A member is allowed when ANY of the units they belong to (choirs, and the
+ * Worship team when `requireWorship` is on) is scheduled on the service.
+ */
+export function musicConflictCode(
+  member: ProtocolRosterMember,
+  service: ProtocolService,
+  choirUnits: ChoirUnitsByPerson,
+  unitsOnService: UnitsOnService,
+  requireChoir: boolean,
+  requireWorship: boolean = requireChoir,
+): 'CHOIR_NOT_SCHEDULED' | 'WORSHIP_NOT_SCHEDULED' | undefined {
+  const mine = [...(choirUnits.get(member.personId) ?? [])].filter((u) =>
+    musicUnitKind(u) === 'WORSHIP' ? requireWorship : requireChoir,
+  );
+  if (mine.length === 0) return undefined;
+  const musicId = service.musicServiceId ?? service.id;
+  const onSvc = unitsOnService.get(musicId);
+  if (onSvc && mine.some((u) => onSvc.has(u))) return undefined;
+  return mine.every((u) => musicUnitKind(u) === 'WORSHIP')
+    ? 'WORSHIP_NOT_SCHEDULED'
+    : 'CHOIR_NOT_SCHEDULED';
+}
+
+/**
+ * Whether the choir / Worship-on-service rules apply to a service kind, after
+ * any per-month relaxation by the Coordinator.
+ */
+export function musicRequirements(
+  rules: ProtocolSchedulingRules,
+  kind: ProtocolServiceKind,
+): { choir: boolean; worship: boolean } {
+  const relaxed = rules.relaxChoirOnKinds?.includes(kind) ?? false;
+  return {
+    choir: rules.requireChoirOnService && !relaxed,
+    worship:
+      (rules.requireWorshipOnService ?? rules.requireChoirOnService) && !relaxed,
+  };
+}
+
 export function choirAllows(
   member: ProtocolRosterMember,
   service: ProtocolService,
   choirUnits: ChoirUnitsByPerson,
   unitsOnService: UnitsOnService,
   requireChoir: boolean,
+  requireWorship: boolean = requireChoir,
 ): boolean {
-  if (!requireChoir) return true;
-  const mine = choirUnits.get(member.personId);
-  if (!mine || mine.size === 0) return true;
-  const musicId = service.musicServiceId ?? service.id;
-  const onSvc = unitsOnService.get(musicId);
-  if (!onSvc || onSvc.size === 0) return false;
-  for (const u of mine) {
-    if (onSvc.has(u)) return true;
-  }
-  return false;
+  return (
+    musicConflictCode(
+      member,
+      service,
+      choirUnits,
+      unitsOnService,
+      requireChoir,
+      requireWorship,
+    ) === undefined
+  );
 }
 
+const OFFICE_RANK = (o: string) =>
+  o === 'COORDINATOR'
+    ? 0
+    : o === 'PRESIDENT'
+      ? 1
+      : o === 'VP'
+        ? 2
+        : o === 'SECRETARY'
+          ? 3
+          : 4;
+
+/**
+ * Best candidates for Team Leader then Vice Team Leader, in order: office
+ * first, then whoever has led least so far (so leading rotates), then name.
+ */
+export function rankLeaderCandidates(
+  personIds: string[],
+  rosterByPerson: Map<string, ProtocolRosterMember>,
+  leadCount: Map<string, number> = new Map(),
+): string[] {
+  return [...personIds].sort((a, b) => {
+    const d =
+      OFFICE_RANK(rosterByPerson.get(a)?.office ?? 'MEMBER') -
+      OFFICE_RANK(rosterByPerson.get(b)?.office ?? 'MEMBER');
+    if (d !== 0) return d;
+    const l = (leadCount.get(a) ?? 0) - (leadCount.get(b) ?? 0);
+    if (l !== 0) return l;
+    return a.localeCompare(b);
+  });
+}
+
+/** Marks a recommended TL and VTL on a team; keeps the team's order. */
 function pickLeaders(
   team: ProtocolTeamSlot[],
   rosterByPerson: Map<string, ProtocolRosterMember>,
+  leadCount: Map<string, number>,
 ): ProtocolTeamSlot[] {
   if (team.length === 0) return team;
-  const ranked = [...team].sort((a, b) => {
-    const oa = rosterByPerson.get(a.personId)?.office ?? 'MEMBER';
-    const ob = rosterByPerson.get(b.personId)?.office ?? 'MEMBER';
-    const rank = (o: string) =>
-      o === 'COORDINATOR'
-        ? 0
-        : o === 'PRESIDENT'
-          ? 1
-          : o === 'VP'
-            ? 2
-            : o === 'SECRETARY'
-              ? 3
-              : 4;
-    const d = rank(oa) - rank(ob);
-    if (d !== 0) return d;
-    return a.personId.localeCompare(b.personId);
-  });
-  return ranked.map((slot, i) => {
-    if (i === 0) {
-      return {
-        ...slot,
-        recommendedRole: 'TEAM_LEADER' as const,
-        roleStatus: 'RECOMMENDED' as const,
-      };
-    }
-    if (i === 1) {
-      return {
-        ...slot,
-        recommendedRole: 'VICE_LEADER' as const,
-        roleStatus: 'RECOMMENDED' as const,
-      };
-    }
-    return slot;
-  });
+  const [tl, vtl] = rankLeaderCandidates(
+    team.map((s) => s.personId),
+    rosterByPerson,
+    leadCount,
+  );
+  if (tl) leadCount.set(tl, (leadCount.get(tl) ?? 0) + 1);
+  if (vtl) leadCount.set(vtl, (leadCount.get(vtl) ?? 0) + 1);
+  return team.map((slot) =>
+    slot.personId === tl
+      ? { ...slot, recommendedRole: 'TEAM_LEADER' as const, roleStatus: 'RECOMMENDED' as const }
+      : slot.personId === vtl
+        ? { ...slot, recommendedRole: 'VICE_LEADER' as const, roleStatus: 'RECOMMENDED' as const }
+        : slot,
+  );
 }
 
 export function buildProtocolTeams(input: {
@@ -132,6 +197,7 @@ export function buildProtocolTeams(input: {
   );
 
   let slotSeq = 0;
+  const leadCount = new Map<string, number>();
 
   for (const service of ordered) {
     const sameDaySs1 = new Set(
@@ -162,7 +228,7 @@ export function buildProtocolTeams(input: {
 
     const eligible = roster.filter((m) => {
       if (m.status !== 'ACTIVE') return false;
-      if (!canServeKind(m, service.kind)) return false;
+      if (!canServeKind(m, service.kind, service.date)) return false;
       if (isUnavailable(m, service.date)) return false;
       if (alreadyOnThisService.has(m.personId)) return false;
       if (service.kind === 'SS2' && sameDaySs1.has(m.personId)) return false;
@@ -172,7 +238,8 @@ export function buildProtocolTeams(input: {
           service,
           choirUnits,
           unitsOnService,
-          rules.requireChoirOnService,
+          musicRequirements(rules, service.kind).choir,
+          musicRequirements(rules, service.kind).worship,
         )
       ) {
         return false;
@@ -242,7 +309,7 @@ export function buildProtocolTeams(input: {
       alreadyOnThisService.add(m.personId);
     }
 
-    const withLeaders = pickLeaders(teamSlots, rosterByPerson);
+    const withLeaders = pickLeaders(teamSlots, rosterByPerson, leadCount);
     for (let i = 0; i < teamSlots.length; i++) {
       const idx = slots.findIndex((s) => s.id === teamSlots[i]!.id);
       if (idx >= 0) slots[idx] = withLeaders[i]!;
@@ -252,15 +319,36 @@ export function buildProtocolTeams(input: {
   return { slots, warnings };
 }
 
-export function validateProtocolTeams(input: {
+function issue(
+  code: ProtocolIssueCode,
+  severity: ProtocolIssue['severity'],
+  message: string,
+  ids: { serviceId?: string; personId?: string; monthKey?: string },
+): ProtocolIssue {
+  return {
+    key: `${code}|${ids.serviceId ?? ids.monthKey ?? ''}|${ids.personId ?? ''}`,
+    code,
+    severity,
+    message,
+    serviceId: ids.serviceId,
+    personId: ids.personId,
+  };
+}
+
+/**
+ * Structured validation. BLOCKING issues are rule violations (they stop
+ * submit/publish unless a coordinator overrides them); WARNING issues are
+ * quality notes (short teams, etc.).
+ */
+export function validateProtocolTeamsDetailed(input: {
   services: ProtocolService[];
   roster: ProtocolRosterMember[];
   slots: ProtocolTeamSlot[];
   rules: ProtocolSchedulingRules;
   choirUnits: ChoirUnitsByPerson;
   unitsOnService: UnitsOnService;
-}): string[] {
-  const issues: string[] = [];
+}): ProtocolIssue[] {
+  const issues: ProtocolIssue[] = [];
   const serviceById = new Map(input.services.map((s) => [s.id, s]));
   const rosterByPerson = new Map(input.roster.map((m) => [m.personId, m]));
 
@@ -268,42 +356,78 @@ export function validateProtocolTeams(input: {
     const team = input.slots.filter(
       (s) => s.serviceId === service.id && s.slotKind !== 'FILL_IN',
     );
-    // Count unique people after fill-in replacements roughly by personId
     if (team.length < service.targetTeamSize) {
       issues.push(
-        `${service.label}: team size ${team.length} < target ${service.targetTeamSize}`,
+        issue(
+          'TEAM_SHORT',
+          'WARNING',
+          `${service.label}: team size ${team.length} < target ${service.targetTeamSize}`,
+          { serviceId: service.id },
+        ),
       );
     }
     if (team.length > service.targetTeamSize) {
       issues.push(
-        `${service.label}: team size ${team.length} > target ${service.targetTeamSize}`,
+        issue(
+          'TEAM_OVER',
+          'WARNING',
+          `${service.label}: team size ${team.length} > target ${service.targetTeamSize}`,
+          { serviceId: service.id },
+        ),
       );
     }
     for (const slot of team) {
+      const ids = { serviceId: service.id, personId: slot.personId };
       const member = rosterByPerson.get(slot.personId);
       if (!member) {
-        issues.push(`${service.label}: unknown person ${slot.personId}`);
+        issues.push(
+          issue(
+            'UNKNOWN_PERSON',
+            'BLOCKING',
+            `${service.label}: unknown person ${slot.personId}`,
+            ids,
+          ),
+        );
         continue;
       }
       if (member.status !== 'ACTIVE') {
-        issues.push(`${service.label}: ${slot.personId} not ACTIVE`);
-      }
-      if (!canServeKind(member, service.kind)) {
         issues.push(
-          `${service.label}: ${slot.personId} cannot serve ${service.kind}`,
+          issue(
+            'NOT_ACTIVE',
+            'BLOCKING',
+            `${service.label}: ${slot.personId} not ACTIVE`,
+            ids,
+          ),
         );
       }
-      if (
-        !choirAllows(
-          member,
-          service,
-          input.choirUnits,
-          input.unitsOnService,
-          input.rules.requireChoirOnService,
-        )
-      ) {
+      if (!canServeKind(member, service.kind, service.date)) {
         issues.push(
-          `${service.label}: ${slot.personId} choir not scheduled (Music)`,
+          issue(
+            'CANNOT_SERVE',
+            'BLOCKING',
+            `${service.label}: ${slot.personId} cannot serve ${service.kind}`,
+            ids,
+          ),
+        );
+      }
+      const conflict = musicConflictCode(
+        member,
+        service,
+        input.choirUnits,
+        input.unitsOnService,
+        musicRequirements(input.rules, service.kind).choir,
+        musicRequirements(input.rules, service.kind).worship,
+      );
+      if (conflict) {
+        issues.push(
+          issue(
+            conflict,
+            'BLOCKING',
+            conflict === 'WORSHIP_NOT_SCHEDULED'
+              ? `${service.label}: ${slot.personId} Worship team not scheduled (Music)`
+              : `${service.label}: ${slot.personId} choir not scheduled (Music)`,
+            ids,
+          ),
         );
       }
     }
@@ -323,7 +447,14 @@ export function validateProtocolTeams(input: {
       (s) => s.serviceId === svc.id && s.slotKind !== 'FILL_IN',
     )) {
       if (a.has(slot.personId)) {
-        issues.push(`${svc.date}: ${slot.personId} on both SS1 and SS2`);
+        issues.push(
+          issue(
+            'DOUBLE_SUNDAY',
+            'BLOCKING',
+            `${svc.date}: ${slot.personId} on both SS1 and SS2`,
+            { serviceId: svc.id, personId: slot.personId },
+          ),
+        );
       }
     }
   }
@@ -338,7 +469,6 @@ export function validateProtocolTeams(input: {
         monthKey,
       );
       if (load > input.rules.preferTarget) {
-        // Extra beyond hardMax is invalid
         const totalOfficial = input.slots.filter((s) => {
           if (s.personId !== member.personId) return false;
           if (s.slotKind === 'FILL_IN') return false;
@@ -346,7 +476,12 @@ export function validateProtocolTeams(input: {
         }).length;
         if (totalOfficial > input.rules.hardMax) {
           issues.push(
-            `${monthKey}: ${member.personId} has ${totalOfficial} official duties (max ${input.rules.hardMax})`,
+            issue(
+              'OVER_MAX',
+              'BLOCKING',
+              `${monthKey}: ${member.personId} has ${totalOfficial} official duties (max ${input.rules.hardMax})`,
+              { monthKey, personId: member.personId },
+            ),
           );
         }
       }
@@ -356,7 +491,14 @@ export function validateProtocolTeams(input: {
   return issues;
 }
 
-/** Faithful Servant scoring. */
+/** Message-only view, kept for existing callers. */
+export function validateProtocolTeams(
+  input: Parameters<typeof validateProtocolTeamsDetailed>[0],
+): string[] {
+  return validateProtocolTeamsDetailed(input).map((i) => i.message);
+}
+
+/** Member performance scoring. */
 export const PROTOCOL_SCORE_POINTS = {
   PRESENT: 5,
   HALF_PRESENT: 3,

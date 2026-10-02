@@ -28,7 +28,7 @@ export async function personIsChurchLeadership(
       status: 'ACTIVE',
       startDate: { lte: now },
       OR: [{ endDate: null }, { endDate: { gte: now } }],
-      systemRole: { in: ['CHURCH_LEADER', 'PASTOR', 'ASSISTANT_PASTOR', 'CATECHIST'] },
+      systemRole: { in: ['CHURCH_LEADER', 'PASTOR', 'CATECHIST'] },
     },
   });
   return n > 0;
@@ -66,7 +66,7 @@ export async function approveProgram(id: string, approverPersonId: string) {
     return {
       ok: false as const,
       status: 403,
-      error: 'Church Leader (or Assistant Pastor) must approve',
+      error: 'Church Leader (or Pastor) must approve',
     };
   }
   const program = await prisma.program.findUnique({ where: { id } });
@@ -315,7 +315,7 @@ export async function approveProjectSimple(
     return {
       ok: false as const,
       status: 403,
-      error: 'Church Leader (or Assistant Pastor) must approve',
+      error: 'Church Leader (or Pastor) must approve',
     };
   }
   const project = await prisma.churchProject.findUnique({ where: { id } });

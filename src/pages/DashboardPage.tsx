@@ -23,28 +23,16 @@ type HomePersona =
   | 'leader'
   | 'secretary'
   | 'treasurer'
-  | 'ministry'
   | 'member';
 
 type TaskTab = 'all' | 'todo' | 'progress' | 'done';
 
-const MINISTRY_ROLES: SystemRole[] = [
-  'CHOIR_LEADER',
-  'WORSHIP_LEADER',
-  'YOUTH_LEADER',
-  'PROTOCOL_LEADER',
-  'DEACON_LEADER',
-];
-
 function resolvePersona(roles: SystemRole[]): HomePersona {
   if (roles.includes('CHURCH_LEADER')) return 'leader';
   if (roles.includes('CATECHIST')) return 'leader';
-  if (roles.includes('PASTOR') || roles.includes('ASSISTANT_PASTOR')) {
-    return 'leader';
-  }
+  if (roles.includes('PASTOR')) return 'leader';
   if (roles.includes('CHURCH_SECRETARY')) return 'secretary';
   if (roles.includes('CHURCH_TREASURER')) return 'treasurer';
-  if (roles.some((r) => MINISTRY_ROLES.includes(r))) return 'ministry';
   return 'member';
 }
 
@@ -591,7 +579,7 @@ export function DashboardPage() {
           </section>
         )}
 
-        {(persona === 'ministry' || persona === 'member') && (
+        {persona === 'member' && (
           <section className="dash-card">
             <div className="dash-card-head">
               <CardTitle icon="folder" tone="accent">
