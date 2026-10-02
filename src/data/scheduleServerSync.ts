@@ -218,6 +218,16 @@ async function syncOne(key: ScheduleDocKey) {
   }
 }
 
+/**
+ * Sync both documents once, right now (the periodic poll does the same every
+ * few seconds). Used after sign-in and by the integration test.
+ */
+export async function syncNow() {
+  if (!isApiEnabled() || !getScheduleSyncToken()) return;
+  await syncOne('music');
+  await syncOne('protocol');
+}
+
 let timer: number | null = null;
 
 /** Forget what we know (sign-out), so the next sign-in pulls afresh. */
