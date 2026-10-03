@@ -1,5 +1,5 @@
 {
- "note": "Generated from src/data/seed by src/data/demoRoster.test.ts. Demo data only — never loaded when APP_ENV=production.",
+ "note": "Generated from src/data/seed by server/tests/demoRosterExport.test.ts. Demo data only — never loaded when APP_ENV=production.",
  "orgUnits": [
   {
    "id": "ou-leadership",

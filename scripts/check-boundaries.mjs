@@ -67,6 +67,30 @@ for (const file of walk(src)) {
   }
 }
 
+// The app is built for the browser (tsc -b on Vercel has no Node types): nothing under src/,
+// tests included, may import Node modules or read `process`. Put Node-only code in server/tests.
+function walkAll(dir, out = []) {
+  for (const name of readdirSync(dir)) {
+    const p = join(dir, name);
+    if (statSync(p).isDirectory()) walkAll(p, out);
+    else if (/\.(ts|tsx)$/.test(name)) out.push(p);
+  }
+  return out;
+}
+const nodeUse = [];
+for (const file of walkAll(src)) {
+  const text = readFileSync(file, 'utf8');
+  if (/from\s+['"]node:|require\(\s*['"]|\bprocess\.(env|argv|cwd)\b/.test(text)) {
+    nodeUse.push(relative(root, file).split(sep).join('/'));
+  }
+}
+if (nodeUse.length) {
+  console.error('\nNode-only code inside src/ (the browser build cannot compile it):');
+  for (const f of nodeUse) console.error('  ' + f);
+  console.error('Move it to server/tests (it runs under Node there).');
+  process.exit(1);
+}
+
 const current = [...found].sort();
 if (process.argv.includes('--update')) {
   writeFileSync(baselinePath, JSON.stringify(current, null, 2) + '\n');
