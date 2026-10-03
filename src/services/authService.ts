@@ -666,6 +666,9 @@ function ensurePersonMirror(person: {
   persistPeopleLocalStore();
 }
 
+/** Why the last attempt to enter a system was refused (shown on the sign-in screen). */
+let lastEntryDenial = '';
+
 function establishSession(
   account: UserAccount,
   targetSystemId: SystemId,
@@ -678,7 +681,11 @@ function establishSession(
     'ENTER',
     { audit: true, entryMode },
   );
-  if (!enter.allowed) return null;
+  if (!enter.allowed) {
+    lastEntryDenial = `${enter.reason ?? 'no reason given'} (person ${account.personId}, system ${targetSystemId})`;
+    return null;
+  }
+  lastEntryDenial = '';
 
   localStorage.setItem(ACCOUNT_KEY, account.id);
   preserveChoirSession({
@@ -762,9 +769,26 @@ export const authService = {
         );
         if (sessionAccount) return sessionAccount;
         clearApiAuth();
+        setLoginNote(
+          `The server accepted your password, but this app would not let you in: ${lastEntryDenial}`,
+        );
         return null;
       } catch (e) {
-        if (!isApiFallbackEnabled()) return null;
+        if (!isApiFallbackEnabled()) {
+          // Say why, so "wrong password" and "server down" are not confused.
+          setLoginNote(
+            e instanceof ApiError && e.status === 0
+              ? `The server could not be reached (${apiBaseUrl() ?? 'no API address set'}). If it was idle it may be waking up: wait 30 seconds and try again.`
+              : e instanceof ApiError && e.status === 401
+                ? 'The server does not accept this username and password.'
+                : e instanceof ApiError && e.status >= 500
+                  ? `The server had a problem (HTTP ${e.status}). Check the API logs.`
+                  : e instanceof Error
+                    ? e.message
+                    : 'Sign-in failed.',
+          );
+          return null;
+        }
         if (e instanceof ApiError && (e.status === 0 || e.status === 401)) {
           // API down or unknown user → local demo accounts
           setLoginNote(
