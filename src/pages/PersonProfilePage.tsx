@@ -13,6 +13,7 @@ import {
 } from '../components/ui/StatusPill';
 import { ProfilePhoto } from '../components/people/ProfilePhoto';
 import { SectionCards } from '../components/people/SectionCards';
+import { downloadLocalBackup } from '../lib/backupDownload';
 import { usePersonRecord } from '../hooks/usePersonRecord';
 import { SelectField, TextField } from '../components/ui/Field';
 import type { CorrespondenceLetterType, Person } from '../domain/types';
@@ -74,6 +75,7 @@ function ProfileSectionCards({
 }
 
 export function PersonProfilePage() {
+  const [backupName, setBackupName] = useState('');
   const { id } = useParams();
   const {
     account,
@@ -229,6 +231,26 @@ export function PersonProfilePage() {
             {seeFullFields && <p>Address: {person.address ?? '—'}</p>}
           </SectionPanel>
         </div>
+        {isSelf && (
+          <SectionPanel title="Safety copy of this browser">
+            <p className="muted" style={{ marginTop: 0 }}>
+              Saves everything this browser holds as one file. Keep it if you
+              work on this device before data moves to the server.
+            </p>
+            <button
+              type="button"
+              className="btn"
+              onClick={() => setBackupName(downloadLocalBackup())}
+            >
+              Download my browser data
+            </button>
+            {backupName && (
+              <p className="muted" style={{ marginBottom: 0 }}>
+                Saved as {backupName}
+              </p>
+            )}
+          </SectionPanel>
+        )}
         <div className="panel stack">
           <div>
             <h3 style={{ margin: 0 }}>Where they participate</h3>
