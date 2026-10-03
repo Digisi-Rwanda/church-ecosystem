@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import { Navigate, useNavigate, useSearchParams } from 'react-router-dom';
+import { getLoginNote } from '../api/loginNote';
 import { useAuth } from '../auth/AuthContext';
 import { isChoirOrgUnitId, choirName } from '../domain/choirCatalog';
 import type { SystemId } from '../domain/types';
@@ -134,7 +135,8 @@ export function LoginPage() {
       const ok = await login(username, password, targetSystemId);
       if (!ok) {
         setError(
-          'Invalid credentials or you are not entitled to this system.',
+          getLoginNote() ||
+            'Invalid credentials or you are not entitled to this system.',
         );
         return;
       }
