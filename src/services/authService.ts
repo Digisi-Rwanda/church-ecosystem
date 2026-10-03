@@ -1,4 +1,5 @@
 import { ACCOUNTS, PEOPLE } from '../data/seed';
+import { pushPersonCreate, pushPersonUpdate } from './peopleServerSync';
 import {
   markSeedPersonOverride,
   persistPeopleLocalStore,
@@ -974,6 +975,7 @@ export const peopleService = {
     };
     PEOPLE.push(person);
     persistPeopleLocalStore();
+    void pushPersonCreate(person);
     return person;
   },
 
@@ -986,6 +988,7 @@ export const peopleService = {
     Object.assign(p, patch);
     markSeedPersonOverride(personId);
     persistPeopleLocalStore();
+    void pushPersonUpdate(personId, patch);
     return p;
   },
 

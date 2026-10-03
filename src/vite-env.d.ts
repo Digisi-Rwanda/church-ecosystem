@@ -9,6 +9,7 @@ interface ImportMetaEnv {
   readonly VITE_APP_ENV?: string;
   /** When "false", no demo roster or demo choirs are built into the site. */
   readonly VITE_DEMO_SEED?: string;
+  readonly VITE_SERVER_MODULES?: string;
 }
 
 interface ImportMeta {

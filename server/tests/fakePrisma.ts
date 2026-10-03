@@ -42,6 +42,7 @@ function model(store: Row[]) {
   const api: Record<string, any> = {
     findMany: async (a: Row = {}) => {
       let out = store.filter((r) => matches(r, a.where));
+      if (a.skip) out = out.slice(a.skip);
       if (a.take) out = out.slice(0, a.take);
       return out.map((r) => ({ ...r }));
     },

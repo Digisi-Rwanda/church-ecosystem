@@ -60,12 +60,14 @@ function mainChurchGovernanceSpecs(
   const kind = canonicalGovRole(role);
   const enter: Array<Pick<PermissionGrant, 'resource' | 'action'>> = [
     { resource: 'SYSTEM', action: 'ENTER' },
-    { resource: 'PERSON', action: 'VIEW_FULL' },
     { resource: 'AUDIT', action: 'VIEW' },
   ];
+  // People module: Leader sees everything (VIEW_FULL via MANAGE); Catechist gets the
+  // basic tier (PERSON VIEW → limited fields); Pastor has no People module, only own profile.
   if (kind === 'CHURCH_LEADER') {
     return [
       ...enter,
+      { resource: 'PERSON', action: 'VIEW_FULL' },
       { resource: 'PERSON', action: 'MANAGE' },
       { resource: 'ORG_UNIT', action: 'MANAGE' },
       { resource: 'MEMBERSHIP', action: 'MANAGE' },
@@ -82,6 +84,7 @@ function mainChurchGovernanceSpecs(
   if (kind === 'CATECHIST') {
     return [
       ...enter,
+      { resource: 'PERSON', action: 'VIEW' },
       { resource: 'ORG_UNIT', action: 'VIEW' },
       { resource: 'MEMBERSHIP', action: 'MANAGE' },
       { resource: 'POSITION', action: 'VIEW' },

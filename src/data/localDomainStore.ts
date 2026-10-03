@@ -384,3 +384,25 @@ export function importCollections(
   }
   persistLocalDomain();
 }
+
+// ---- Backup of everything this browser holds ---------------------------
+
+/** Names of every registered browser-local collection. */
+export function registeredCollectionNames(): string[] {
+  return collections.map((c) => c.name);
+}
+
+/** Whole browser-local dataset as one JSON-able object (for "download my data"). */
+export function exportAllLocalData(): {
+  format: 'church-ecosystem-local-backup';
+  version: 1;
+  exportedAt: string;
+  collections: Record<string, unknown>;
+} {
+  return {
+    format: 'church-ecosystem-local-backup',
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    collections: exportCollections(registeredCollectionNames()),
+  };
+}

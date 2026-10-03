@@ -17,6 +17,14 @@ model Person {
   phone           String?
   email           String?
   status          String   @default("ACTIVE") // ACTIVE | INACTIVE | VISITOR
+  // Identity details — visible only to FULL viewers (Church Leader) and the person themself.
+  dateOfBirth     String?  // YYYY-MM-DD
+  gender          String?
+  address         String?
+  nationalId      String?
+  joinedChurchOn  String?  // YYYY-MM-DD
+  pastoralNotes   String?
+  photoUrl        String?  // small thumbnail data URL only (<= ~30 KB)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
