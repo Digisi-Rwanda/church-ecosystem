@@ -5,11 +5,13 @@ import App from './App.tsx';
 import { bootLocalDomainPersistence } from './data/registerLocalDomain';
 import { startScheduleServerSync } from './data/scheduleServerSync';
 import { startPeopleServerSync } from './services/peopleServerSync';
+import { startParticipationServerSync } from './services/participationServerSync';
 import './styles/app.css';
 
 bootLocalDomainPersistence();
 startScheduleServerSync();
 startPeopleServerSync();
+startParticipationServerSync();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

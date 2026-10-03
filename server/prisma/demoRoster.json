@@ -1,0 +1,4283 @@
+{
+ "note": "Generated from src/data/seed by src/data/demoRoster.test.ts. Demo data only — never loaded when APP_ENV=production.",
+ "orgUnits": [
+  {
+   "id": "ou-leadership",
+   "name": "Church Leadership",
+   "type": "COMMITTEE",
+   "description": "Pastoral and governance leadership",
+   "leaderPersonId": "p-pastor"
+  },
+  {
+   "id": "ou-music",
+   "name": "Music Ministry",
+   "type": "MINISTRY",
+   "description": "Oversees Choir, Worship team, and artists — does not bypass their private systems",
+   "systemId": "sys-music",
+   "leaderPersonId": "p-music-leader"
+  },
+  {
+   "id": "ou-choir",
+   "name": "Choirs",
+   "type": "ORGANISATION",
+   "parentId": "ou-music",
+   "description": "Umbrella for seven named choirs — shared Choir System (repertoire, roster, finance per choir)",
+   "systemId": "sys-choir",
+   "leaderPersonId": "p-choir-leader"
+  },
+  {
+   "id": "ou-choir-ijwi",
+   "name": "Ijwi ry' umwami Yesu",
+   "type": "ORGANISATION",
+   "parentId": "ou-choir",
+   "description": "Named choir under Music — Ijwi ry' umwami Yesu"
+  },
+  {
+   "id": "ou-choir-elbethel",
+   "name": "El bethel",
+   "type": "ORGANISATION",
+   "parentId": "ou-choir",
+   "description": "Named choir under Music — El bethel"
+  },
+  {
+   "id": "ou-choir-integuza",
+   "name": "Integuza",
+   "type": "ORGANISATION",
+   "parentId": "ou-choir",
+   "description": "Named choir under Music — Integuza"
+  },
+  {
+   "id": "ou-choir-elim",
+   "name": "Elim",
+   "type": "ORGANISATION",
+   "parentId": "ou-choir",
+   "description": "Named choir under Music — Elim"
+  },
+  {
+   "id": "ou-choir-beulah",
+   "name": "Beulah",
+   "type": "ORGANISATION",
+   "parentId": "ou-choir",
+   "description": "Named choir under Music — Beulah"
+  },
+  {
+   "id": "ou-choir-yerusalemu",
+   "name": "Yerusalemu",
+   "type": "ORGANISATION",
+   "parentId": "ou-choir",
+   "description": "Named choir under Music — Yerusalemu"
+  },
+  {
+   "id": "ou-choir-hope",
+   "name": "Hope",
+   "type": "ORGANISATION",
+   "parentId": "ou-choir",
+   "description": "Named choir under Music — Hope",
+   "leaderPersonId": "p-hope-leader"
+  },
+  {
+   "id": "ou-worship",
+   "name": "Worship Team",
+   "type": "TEAM",
+   "parentId": "ou-music",
+   "description": "Independent peer Worship System — private like Choir",
+   "systemId": "sys-worship",
+   "leaderPersonId": "p-worship-leader"
+  },
+  {
+   "id": "ou-deacon",
+   "name": "Deacon Ministry",
+   "type": "MINISTRY",
+   "description": "Oversees Deacon team and Protocol — peer systems stay private"
+  },
+  {
+   "id": "ou-deacon-team",
+   "name": "Deacon Team",
+   "type": "TEAM",
+   "parentId": "ou-deacon",
+   "description": "Care, visits, benevolence — independent peer system",
+   "systemId": "sys-deacon",
+   "leaderPersonId": "p-deacon-coord"
+  },
+  {
+   "id": "ou-protocol",
+   "name": "Protocol Team",
+   "type": "TEAM",
+   "parentId": "ou-deacon",
+   "description": "Independent peer Protocol System — private under Deacon",
+   "systemId": "sys-protocol",
+   "leaderPersonId": "p-proto-coord"
+  },
+  {
+   "id": "ou-youth",
+   "name": "Youth Ministry",
+   "type": "MINISTRY",
+   "description": "Youth discipleship and programs",
+   "systemId": "sys-youth",
+   "leaderPersonId": "p-youth-leader"
+  },
+  {
+   "id": "ou-men",
+   "name": "Men Ministry",
+   "type": "MINISTRY",
+   "description": "Men fellowship",
+   "systemId": "sys-men",
+   "leaderPersonId": "p-men-leader"
+  },
+  {
+   "id": "ou-women",
+   "name": "Women Ministry",
+   "type": "MINISTRY",
+   "description": "Women fellowship",
+   "systemId": "sys-women",
+   "leaderPersonId": "p-women-leader"
+  },
+  {
+   "id": "ou-couples",
+   "name": "Couples Ministry",
+   "type": "MINISTRY",
+   "description": "Couples fellowship",
+   "systemId": "sys-couples",
+   "leaderPersonId": "p-couples-leader"
+  },
+  {
+   "id": "ou-children",
+   "name": "Children Ministry",
+   "type": "MINISTRY",
+   "description": "Children discipleship including Sunday School",
+   "systemId": "sys-children",
+   "leaderPersonId": "p-children-leader"
+  },
+  {
+   "id": "ou-elderly",
+   "name": "Elderly Ministry",
+   "type": "MINISTRY",
+   "description": "Elderly care & fellowship",
+   "systemId": "sys-elderly",
+   "leaderPersonId": "p-elderly-leader"
+  },
+  {
+   "id": "ou-evangelism",
+   "name": "Evangelism Ministry",
+   "type": "MINISTRY",
+   "description": "Outreach & evangelism",
+   "systemId": "sys-evangelism",
+   "leaderPersonId": "p-evangelism-leader"
+  },
+  {
+   "id": "ou-intercessors",
+   "name": "Intercessors Ministry",
+   "type": "MINISTRY",
+   "description": "Prayer & intercession",
+   "systemId": "sys-intercessors",
+   "leaderPersonId": "p-intercessors-leader"
+  },
+  {
+   "id": "ou-media",
+   "name": "Media Team",
+   "type": "TEAM",
+   "description": "Independent Media Team — sound, livestream, assets",
+   "systemId": "sys-media",
+   "leaderPersonId": "p-media-leader"
+  },
+  {
+   "id": "ou-admin",
+   "name": "Administration Office",
+   "type": "OFFICE",
+   "description": "Church administration and records",
+   "leaderPersonId": "p-secretary"
+  },
+  {
+   "id": "ou-finance",
+   "name": "Finance Office",
+   "type": "OFFICE",
+   "description": "Shared Finance system — org-private fund vaults",
+   "systemId": "sys-finance",
+   "leaderPersonId": "p-church-treas"
+  }
+ ],
+ "people": [
+  {
+   "id": "p-pastor",
+   "fullName": "Rev. Jean Bosco Habimana",
+   "preferredName": "Pastor Habimana",
+   "phone": "+250788000001",
+   "email": "pastor@adepr-kacyiru.rw",
+   "dateOfBirth": "1972-03-18",
+   "gender": "MALE",
+   "address": "Kacyiru, Kigali",
+   "joinedChurchOn": "2018-01-01",
+   "pastoralNotes": "Lead pastor — full pastoral oversight",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-pastor-2",
+   "fullName": "Rev. Claire Mukamana",
+   "preferredName": "Pastor Claire",
+   "phone": "+250788000006",
+   "email": "pastor2@adepr-kacyiru.rw",
+   "dateOfBirth": "1980-07-22",
+   "gender": "FEMALE",
+   "address": "Kimihurura, Kigali",
+   "joinedChurchOn": "2020-06-01",
+   "pastoralNotes": "Ordained pastor — counseling, sacraments, membership care",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-catechist",
+   "fullName": "Emmanuel Habimana",
+   "preferredName": "Umwarimu Emmanuel",
+   "phone": "+250788000021",
+   "email": "catechist@adepr-kacyiru.rw",
+   "dateOfBirth": "1975-03-18",
+   "gender": "MALE",
+   "address": "Kacyiru, Kigali",
+   "joinedChurchOn": "2015-01-01",
+   "pastoralNotes": "Catechist (Umwarimu) — day-to-day Itorero operations, discipline, visitations",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-secretary",
+   "fullName": "Grace Uwase",
+   "preferredName": "Grace",
+   "phone": "+250788000002",
+   "email": "secretary@adepr-kacyiru.rw",
+   "dateOfBirth": "1988-11-02",
+   "gender": "FEMALE",
+   "address": "Kacyiru, Kigali",
+   "joinedChurchOn": "2019-03-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-church-treas",
+   "fullName": "Daniel Nkurunziza",
+   "preferredName": "Daniel",
+   "phone": "+250788000020",
+   "email": "treasurer@adepr-kacyiru.rw",
+   "dateOfBirth": "1985-04-12",
+   "gender": "MALE",
+   "address": "Kacyiru, Kigali",
+   "joinedChurchOn": "2019-06-01",
+   "pastoralNotes": "Church Treasurer — General Fund, collections, budgets, balance sheet",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-choir-leader",
+   "fullName": "Eric Mugisha",
+   "preferredName": "Eric",
+   "phone": "+250788000003",
+   "email": "choir@adepr-kacyiru.rw",
+   "dateOfBirth": "1992-05-09",
+   "gender": "MALE",
+   "joinedChurchOn": "2020-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-youth-leader",
+   "fullName": "Aline Ingabire",
+   "preferredName": "Aline",
+   "phone": "+250788000004",
+   "email": "youth@adepr-kacyiru.rw",
+   "dateOfBirth": "1995-09-30",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-member",
+   "fullName": "Patrick Niyonzima",
+   "preferredName": "Patrick",
+   "phone": "+250788000005",
+   "email": "patrick@adepr-kacyiru.rw",
+   "dateOfBirth": "1998-12-12",
+   "gender": "MALE",
+   "address": "Remera, Kigali",
+   "nationalId": "1199880XXXXXXX",
+   "joinedChurchOn": "2024-05-01",
+   "pastoralNotes": "Active in Choir Alpha; baptism 2024",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-choir-pres",
+   "fullName": "Martha Uwimana",
+   "preferredName": "Martha",
+   "phone": "+250788000020",
+   "email": "choir.pres@adepr-kacyiru.rw",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-choir-treas",
+   "fullName": "Daniel Habimana",
+   "preferredName": "Daniel",
+   "phone": "+250788000021",
+   "email": "choir.treas@adepr-kacyiru.rw",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-choir-vp",
+   "fullName": "Jeanne Mukeshimana",
+   "preferredName": "Jeanne",
+   "phone": "+250788000022",
+   "email": "choir.vp@adepr-kacyiru.rw",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-choir-coord",
+   "fullName": "Kevin Bizimana",
+   "preferredName": "Kevin",
+   "phone": "+250788000023",
+   "email": "choir.coord@adepr-kacyiru.rw",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-choir-adv-spirit",
+   "fullName": "Pastorette Alice Uwera",
+   "preferredName": "Alice",
+   "phone": "+250788000024",
+   "email": "choir.spirit@adepr-kacyiru.rw",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-choir-adv-social",
+   "fullName": "Frank Habineza",
+   "preferredName": "Frank",
+   "phone": "+250788000025",
+   "email": "choir.social@adepr-kacyiru.rw",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-hope-leader",
+   "fullName": "Samuel Nkurunziza",
+   "preferredName": "Samuel",
+   "phone": "+250788000099",
+   "email": "hope@adepr-kacyiru.rw",
+   "joinedChurchOn": "2023-06-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-worship-leader",
+   "fullName": "Jean Bosco Nkurunziza",
+   "preferredName": "Bosco",
+   "phone": "+250788000030",
+   "email": "worship@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2020-06-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-worship-pres",
+   "fullName": "Claire Mukamana",
+   "preferredName": "Claire",
+   "phone": "+250788000031",
+   "email": "worship.pres@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-worship-treas",
+   "fullName": "Ivan Mugisha",
+   "preferredName": "Ivan",
+   "phone": "+250788000032",
+   "email": "worship.treas@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-worship-vp",
+   "fullName": "Ange Uwimana",
+   "preferredName": "Ange",
+   "phone": "+250788000033",
+   "email": "worship.vp@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-worship-sec",
+   "fullName": "Brian Habimana",
+   "preferredName": "Brian",
+   "phone": "+250788000034",
+   "email": "worship.sec@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-deacon-coord",
+   "fullName": "Emmanuel Nsengimana",
+   "preferredName": "Emmanuel",
+   "phone": "+250788000040",
+   "email": "deacon@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2018-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-deacon-treas",
+   "fullName": "Louise Uwase",
+   "preferredName": "Louise",
+   "phone": "+250788000041",
+   "email": "deacon.treas@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-deacon-vp",
+   "fullName": "Patrick Uwera",
+   "preferredName": "Patrick U.",
+   "phone": "+250788000042",
+   "email": "deacon.vp@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-deacon-sec",
+   "fullName": "Chantal Mukamana",
+   "preferredName": "Chantal M.",
+   "phone": "+250788000043",
+   "email": "deacon.sec@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-youth-vp",
+   "fullName": "Kevin Ingabire",
+   "preferredName": "Kevin I.",
+   "phone": "+250788000044",
+   "email": "youth.vp@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-youth-sec",
+   "fullName": "Sandra Uwase",
+   "preferredName": "Sandra",
+   "phone": "+250788000045",
+   "email": "youth.sec@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-youth-sysadmin",
+   "fullName": "Eric Nshimiyimana",
+   "preferredName": "Eric N.",
+   "phone": "+250788000047",
+   "email": "youth.admin@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-youth-treas",
+   "fullName": "Bruno Habimana",
+   "preferredName": "Bruno",
+   "phone": "+250788000046",
+   "email": "youth.treas@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-a-florence",
+   "fullName": "Ayinkamiye Florence",
+   "preferredName": "Florence",
+   "email": "a.florence@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-b-eslon",
+   "fullName": "Bagorwa Eslon",
+   "preferredName": "Eslon",
+   "email": "b.eslon@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-b-pascal",
+   "fullName": "Bugirimfura Pascal",
+   "preferredName": "Pascal",
+   "email": "b.pascal@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-d-jolie",
+   "fullName": "Dusabimana Jeanne",
+   "preferredName": "Jolie",
+   "email": "d.jolie@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-d-mathias",
+   "fullName": "Dushime Remy Mathias",
+   "preferredName": "Mathias",
+   "email": "d.mathias@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-d-eric",
+   "fullName": "Dushimiyimana Eric",
+   "preferredName": "Eric",
+   "email": "d.eric@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-h-niyibizi",
+   "fullName": "Habibu Niyibizi",
+   "preferredName": "Niyibizi",
+   "email": "h.niyibizi@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-h-damour",
+   "fullName": "Hakizimana Jean D'Amour",
+   "preferredName": "D'Amour",
+   "email": "h.damour@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-i-athanasie",
+   "fullName": "Ihumure Ester Athanasie",
+   "preferredName": "Athanasie",
+   "email": "i.athanasie@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-i-sylvestre",
+   "fullName": "Imanishimwe Sylvestre",
+   "preferredName": "Sylvestre",
+   "email": "i.sylvestre@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-i-cynthia",
+   "fullName": "Ingabire Cynthia",
+   "preferredName": "Cynthia",
+   "email": "i.cynthia@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-i-georgette",
+   "fullName": "Ingabire Georgette",
+   "preferredName": "Georgette",
+   "email": "i.georgette@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-coord",
+   "fullName": "Iryayo Jean Wiclef",
+   "preferredName": "Wiclef",
+   "email": "i.wiclef@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-i-jimmy",
+   "fullName": "Ishimwe Jimmy",
+   "preferredName": "Jimmy",
+   "email": "i.jimmy@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-k-said",
+   "fullName": "Kwizera Saïd",
+   "preferredName": "Saïd",
+   "email": "k.said@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-emmanuel",
+   "fullName": "Macumi Emmanuel",
+   "preferredName": "Emmanuel",
+   "email": "m.emmanuel@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-damascene",
+   "fullName": "Manirakiza Jean Damascene",
+   "preferredName": "Damascene",
+   "email": "m.damascene@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-marie",
+   "fullName": "Mukadive Anne Marie",
+   "preferredName": "Marie",
+   "email": "m.marie@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-elevanie",
+   "fullName": "Mukakarisa Elevanie",
+   "preferredName": "Elevanie",
+   "email": "m.elevanie@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-therese",
+   "fullName": "Mukamunana Marie Therese",
+   "preferredName": "Therese",
+   "email": "m.therese@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-immaculee",
+   "fullName": "Mukasekuru Immaculée",
+   "preferredName": "Immaculée",
+   "email": "m.immaculee@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-joseline",
+   "fullName": "Mukashyaka Joseline",
+   "preferredName": "Joseline",
+   "email": "m.joseline@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-jeanne",
+   "fullName": "Mukesharugo Jeanne",
+   "preferredName": "Jeanne",
+   "email": "m.jeanne@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-dorothee",
+   "fullName": "Munyana Dorothee",
+   "preferredName": "Dorothee",
+   "email": "m.dorothee@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-jacqueline",
+   "fullName": "Mushimiyimana Jacqueline",
+   "preferredName": "Jacqueline",
+   "email": "m.jacqueline@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-m-louange",
+   "fullName": "Mutesi Louange",
+   "preferredName": "Louange",
+   "email": "m.louange@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-croix",
+   "fullName": "Ndahunga Jean De La Croix",
+   "preferredName": "Croix",
+   "email": "n.croix@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-athanase",
+   "fullName": "Ngabonziza Athanase",
+   "preferredName": "Athanase",
+   "email": "n.athanase@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-monique",
+   "fullName": "Nirere Monique",
+   "preferredName": "Monique",
+   "email": "n.monique@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-jeannette",
+   "fullName": "Niwemutoni Jeannette",
+   "preferredName": "Jeannette",
+   "email": "n.jeannette@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-claudine",
+   "fullName": "Niyigena Claudine",
+   "preferredName": "Claudine",
+   "email": "n.claudine@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-baptiste",
+   "fullName": "Niyikiza Baptiste",
+   "preferredName": "Baptiste",
+   "email": "n.baptiste@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-obed",
+   "fullName": "Niyokwizerwa Obed",
+   "preferredName": "Obed",
+   "email": "n.obed@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-aimable",
+   "fullName": "Niyompuhwe Aimable",
+   "preferredName": "Aimable",
+   "email": "n.aimable@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-anabella",
+   "fullName": "Niyomuco Anabella",
+   "preferredName": "Anabella",
+   "email": "n.anabella@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-modeste",
+   "fullName": "Ntahobavukira Modeste",
+   "preferredName": "Modeste",
+   "email": "n.modeste@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-emmanuel",
+   "fullName": "Ntirenganya Emmanuel",
+   "preferredName": "Emmanuel",
+   "email": "n.emmanuel@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-paul",
+   "fullName": "Ntivuguruzwa Jean Paul",
+   "preferredName": "Paul",
+   "email": "n.paul@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-betty",
+   "fullName": "Nyirahabimana Betty",
+   "preferredName": "Betty",
+   "email": "n.betty@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-chantal",
+   "fullName": "Nyirandorimana Chantal",
+   "preferredName": "Chantal",
+   "email": "n.chantal@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-n-henriette",
+   "fullName": "Nyiruburanga Henriette",
+   "preferredName": "Henriette",
+   "email": "n.henriette@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-r-reverien",
+   "fullName": "Ruberanzira Reverien",
+   "preferredName": "Reverien",
+   "email": "r.reverien@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-r-julie",
+   "fullName": "Ruhanga Julie",
+   "preferredName": "Julie",
+   "email": "r.julie@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-r-patience",
+   "fullName": "Rwumbuguza Patience",
+   "preferredName": "Patience",
+   "email": "r.patience@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-s-evariste",
+   "fullName": "Sibomana Evariste",
+   "preferredName": "Evariste",
+   "email": "s.evariste@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-u-rose",
+   "fullName": "Ufiteyezu Marie Rose",
+   "preferredName": "Rose",
+   "email": "u.rose@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-u-christine",
+   "fullName": "Ufituwe Christine",
+   "preferredName": "Christine",
+   "email": "u.christine@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-u-wivine",
+   "fullName": "Ujeneza Wivine",
+   "preferredName": "Wivine",
+   "email": "u.wivine@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-u-eric",
+   "fullName": "Ukundwaniwabo Eric",
+   "preferredName": "Eric",
+   "email": "u.eric@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-u-hodari",
+   "fullName": "Umugwaneza Hodari",
+   "preferredName": "Hodari",
+   "email": "u.hodari@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-u-alice",
+   "fullName": "Uwera Alice",
+   "preferredName": "Alice",
+   "email": "u.alice@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-u-marie",
+   "fullName": "Uwimana Jean Marie",
+   "preferredName": "Marie",
+   "email": "u.marie@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-proto-z-jacqueline",
+   "fullName": "Zaninka Jacqueline",
+   "preferredName": "Jacqueline",
+   "email": "z.jacqueline@church.internal",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-music-leader",
+   "fullName": "Samuel Habimana",
+   "preferredName": "Samuel",
+   "email": "music@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-music-vp",
+   "fullName": "Grace Mukamana",
+   "preferredName": "Grace M.",
+   "email": "music.vp@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-music-treas",
+   "fullName": "David Nkurunziza",
+   "preferredName": "David N.",
+   "email": "music.treas@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-music-sec",
+   "fullName": "Linda Uwera",
+   "preferredName": "Linda",
+   "email": "music.sec@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-media-leader",
+   "fullName": "Kevin Niyonzima",
+   "preferredName": "Kevin",
+   "email": "media@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-media-vp",
+   "fullName": "Eric Twagirumukiza",
+   "preferredName": "Eric T.",
+   "email": "media.vp@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-media-treas",
+   "fullName": "Solange Uwimana",
+   "preferredName": "Solange",
+   "email": "media.treas@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-media-sec",
+   "fullName": "Chris Habimana",
+   "preferredName": "Chris H.",
+   "email": "media.sec@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-men-leader",
+   "fullName": "Joseph Mugisha",
+   "preferredName": "Joseph",
+   "email": "men@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-men-vp",
+   "fullName": "Alain Habimana",
+   "preferredName": "Alain",
+   "email": "men.vp@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-men-treas",
+   "fullName": "Bernard Habineza",
+   "preferredName": "Bernard",
+   "email": "men.treas@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-men-sec",
+   "fullName": "Olivier Nsengimana",
+   "preferredName": "Olivier",
+   "email": "men.sec@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-women-leader",
+   "fullName": "Diane Uwimana",
+   "preferredName": "Diane",
+   "email": "women@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-women-vp",
+   "fullName": "Immaculée Uwase",
+   "preferredName": "Immaculée",
+   "email": "women.vp@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-women-treas",
+   "fullName": "Alice Mukamana",
+   "preferredName": "Alice M.",
+   "email": "women.treas@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-women-sec",
+   "fullName": "Beatrice Mukeshimana",
+   "preferredName": "Beatrice",
+   "email": "women.sec@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-couples-leader",
+   "fullName": "Paul & Ruth Kayitesi",
+   "preferredName": "Paul & Ruth",
+   "email": "couples@adepr-kacyiru.rw",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-couples-vp",
+   "fullName": "Jean & Anne Bizimana",
+   "preferredName": "Jean & Anne",
+   "email": "couples.vp@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-couples-treas",
+   "fullName": "Roger Mugisha",
+   "preferredName": "Roger",
+   "email": "couples.treas@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-couples-sec",
+   "fullName": "Helen Kayitesi",
+   "preferredName": "Helen",
+   "email": "couples.sec@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-children-leader",
+   "fullName": "Jeanne Mukamana",
+   "preferredName": "Jeanne",
+   "email": "children@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-children-vp",
+   "fullName": "Claudine Ingabire",
+   "preferredName": "Claudine",
+   "email": "children.vp@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-children-treas",
+   "fullName": "Patricia Uwase",
+   "preferredName": "Patricia",
+   "email": "children.treas@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-children-sec",
+   "fullName": "Sandrine Uwimana",
+   "preferredName": "Sandrine",
+   "email": "children.sec@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-elderly-leader",
+   "fullName": "Emmanuel Nsengiyumva",
+   "preferredName": "Emmanuel",
+   "email": "elderly@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-elderly-vp",
+   "fullName": "Pierre Ndayisaba",
+   "preferredName": "Pierre",
+   "email": "elderly.vp@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-elderly-treas",
+   "fullName": "François Habimana",
+   "preferredName": "François",
+   "email": "elderly.treas@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-elderly-sec",
+   "fullName": "Marie Claire Uwase",
+   "preferredName": "Marie Claire",
+   "email": "elderly.sec@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-evangelism-leader",
+   "fullName": "Patrick Habineza",
+   "preferredName": "Patrick H.",
+   "email": "evangelism@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-evangelism-vp",
+   "fullName": "Divine Uwera",
+   "preferredName": "Divine",
+   "email": "evangelism.vp@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-evangelism-treas",
+   "fullName": "Yves Niyonzima",
+   "preferredName": "Yves",
+   "email": "evangelism.treas@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-evangelism-sec",
+   "fullName": "Thierry Mugisha",
+   "preferredName": "Thierry",
+   "email": "evangelism.sec@adepr-kacyiru.rw",
+   "gender": "MALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-intercessors-leader",
+   "fullName": "Chantal Uwase",
+   "preferredName": "Chantal",
+   "email": "prayer@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2019-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-intercessors-vp",
+   "fullName": "Pastorate Esther Mukeshimana",
+   "preferredName": "Esther",
+   "email": "intercessors.vp@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-intercessors-treas",
+   "fullName": "Naomi Ingabire",
+   "preferredName": "Naomi",
+   "email": "intercessors.treas@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  },
+  {
+   "id": "p-intercessors-sec",
+   "fullName": "Josiane Habimana",
+   "preferredName": "Josiane",
+   "email": "intercessors.sec@adepr-kacyiru.rw",
+   "gender": "FEMALE",
+   "joinedChurchOn": "2021-01-01",
+   "status": "ACTIVE"
+  }
+ ],
+ "memberships": [
+  {
+   "id": "mem-pastor-church",
+   "personId": "p-pastor",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2018-01-01"
+  },
+  {
+   "id": "mem-pastor-2-church",
+   "personId": "p-pastor-2",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-06-01"
+  },
+  {
+   "id": "mem-catechist-church",
+   "personId": "p-catechist",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2015-01-01"
+  },
+  {
+   "id": "mem-secretary-church",
+   "personId": "p-secretary",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2019-03-01"
+  },
+  {
+   "id": "mem-church-treas-church",
+   "personId": "p-church-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2019-06-01"
+  },
+  {
+   "id": "mem-church-treas-office",
+   "personId": "p-church-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Finance Office staff",
+   "orgUnitId": "ou-finance",
+   "systemId": "sys-finance",
+   "status": "ACTIVE",
+   "startDate": "2019-06-01"
+  },
+  {
+   "id": "mem-choir-leader-church",
+   "personId": "p-choir-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-choir-leader-choir",
+   "personId": "p-choir-leader",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2020-02-01"
+  },
+  {
+   "id": "mem-choir-pres-church",
+   "personId": "p-choir-pres",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2021-01-01"
+  },
+  {
+   "id": "mem-choir-pres",
+   "personId": "p-choir-pres",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2021-02-01"
+  },
+  {
+   "id": "mem-choir-treas-church",
+   "personId": "p-choir-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2021-01-01"
+  },
+  {
+   "id": "mem-choir-treas",
+   "personId": "p-choir-treas",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2021-02-01"
+  },
+  {
+   "id": "mem-choir-vp-church",
+   "personId": "p-choir-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2021-01-01"
+  },
+  {
+   "id": "mem-choir-vp",
+   "personId": "p-choir-vp",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2021-02-01"
+  },
+  {
+   "id": "mem-choir-coord-church",
+   "personId": "p-choir-coord",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2021-01-01"
+  },
+  {
+   "id": "mem-choir-coord",
+   "personId": "p-choir-coord",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2021-02-01"
+  },
+  {
+   "id": "mem-choir-adv-spirit-church",
+   "personId": "p-choir-adv-spirit",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-choir-adv-spirit",
+   "personId": "p-choir-adv-spirit",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-choir-adv-social-church",
+   "personId": "p-choir-adv-social",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-choir-adv-social",
+   "personId": "p-choir-adv-social",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-choir-secretary",
+   "personId": "p-secretary",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2021-02-01"
+  },
+  {
+   "id": "mem-hope-leader-church",
+   "personId": "p-hope-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2023-06-01"
+  },
+  {
+   "id": "mem-hope-leader-choir",
+   "personId": "p-hope-leader",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-hope",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2025-06-01"
+  },
+  {
+   "id": "mem-worship-leader-church",
+   "personId": "p-worship-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-06-01"
+  },
+  {
+   "id": "mem-worship-leader",
+   "personId": "p-worship-leader",
+   "type": "WORSHIP_MEMBER",
+   "label": "Worship team member",
+   "orgUnitId": "ou-worship",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2020-07-01"
+  },
+  {
+   "id": "mem-worship-pres-church",
+   "personId": "p-worship-pres",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2021-01-01"
+  },
+  {
+   "id": "mem-worship-pres",
+   "personId": "p-worship-pres",
+   "type": "WORSHIP_MEMBER",
+   "label": "Worship team member",
+   "orgUnitId": "ou-worship",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2021-02-01"
+  },
+  {
+   "id": "mem-worship-treas-church",
+   "personId": "p-worship-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-worship-treas",
+   "personId": "p-worship-treas",
+   "type": "WORSHIP_MEMBER",
+   "label": "Worship team member",
+   "orgUnitId": "ou-worship",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-worship-vp-church",
+   "personId": "p-worship-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-worship-vp",
+   "personId": "p-worship-vp",
+   "type": "WORSHIP_MEMBER",
+   "label": "Worship team member",
+   "orgUnitId": "ou-worship",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-worship-sec-church",
+   "personId": "p-worship-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-worship-sec",
+   "personId": "p-worship-sec",
+   "type": "WORSHIP_MEMBER",
+   "label": "Worship team member",
+   "orgUnitId": "ou-worship",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-deacon-coord-church",
+   "personId": "p-deacon-coord",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2018-01-01"
+  },
+  {
+   "id": "mem-deacon-coord",
+   "personId": "p-deacon-coord",
+   "type": "DEACON_MEMBER",
+   "label": "Deacon team member",
+   "orgUnitId": "ou-deacon-team",
+   "systemId": "sys-deacon",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-deacon-treas-church",
+   "personId": "p-deacon-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2019-01-01"
+  },
+  {
+   "id": "mem-deacon-treas",
+   "personId": "p-deacon-treas",
+   "type": "DEACON_MEMBER",
+   "label": "Deacon team member",
+   "orgUnitId": "ou-deacon-team",
+   "systemId": "sys-deacon",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-deacon-vp-church",
+   "personId": "p-deacon-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2019-01-01"
+  },
+  {
+   "id": "mem-deacon-vp",
+   "personId": "p-deacon-vp",
+   "type": "DEACON_MEMBER",
+   "label": "Deacon team member",
+   "orgUnitId": "ou-deacon-team",
+   "systemId": "sys-deacon",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-deacon-sec-church",
+   "personId": "p-deacon-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2019-01-01"
+  },
+  {
+   "id": "mem-deacon-sec",
+   "personId": "p-deacon-sec",
+   "type": "DEACON_MEMBER",
+   "label": "Deacon team member",
+   "orgUnitId": "ou-deacon-team",
+   "systemId": "sys-deacon",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-youth-leader-church",
+   "personId": "p-youth-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2021-01-01"
+  },
+  {
+   "id": "mem-youth-leader-youth",
+   "personId": "p-youth-leader",
+   "type": "YOUTH_MEMBER",
+   "label": "Youth member",
+   "orgUnitId": "ou-youth",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2021-02-01"
+  },
+  {
+   "id": "mem-youth-vp-church",
+   "personId": "p-youth-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-youth-vp",
+   "personId": "p-youth-vp",
+   "type": "YOUTH_MEMBER",
+   "label": "Youth member",
+   "orgUnitId": "ou-youth",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-youth-sec-church",
+   "personId": "p-youth-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-youth-sec",
+   "personId": "p-youth-sec",
+   "type": "YOUTH_MEMBER",
+   "label": "Youth member",
+   "orgUnitId": "ou-youth",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-youth-sysadmin-church",
+   "personId": "p-youth-sysadmin",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-youth-sysadmin",
+   "personId": "p-youth-sysadmin",
+   "type": "YOUTH_MEMBER",
+   "label": "Youth member",
+   "orgUnitId": "ou-youth",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-youth-treas-church",
+   "personId": "p-youth-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "mem-youth-treas",
+   "personId": "p-youth-treas",
+   "type": "YOUTH_MEMBER",
+   "label": "Youth member",
+   "orgUnitId": "ou-youth",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2022-02-01"
+  },
+  {
+   "id": "mem-patrick-church",
+   "personId": "p-member",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-05-01"
+  },
+  {
+   "id": "mem-patrick-choir",
+   "personId": "p-member",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-06-01"
+  },
+  {
+   "id": "mem-p-proto-a-florence-church",
+   "personId": "p-proto-a-florence",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-a-florence-protocol",
+   "personId": "p-proto-a-florence",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-a-florence-choir",
+   "personId": "p-proto-a-florence",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elim",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-b-eslon-church",
+   "personId": "p-proto-b-eslon",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-b-eslon-protocol",
+   "personId": "p-proto-b-eslon",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-b-pascal-church",
+   "personId": "p-proto-b-pascal",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-b-pascal-protocol",
+   "personId": "p-proto-b-pascal",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-b-pascal-choir",
+   "personId": "p-proto-b-pascal",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-jolie-church",
+   "personId": "p-proto-d-jolie",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-jolie-protocol",
+   "personId": "p-proto-d-jolie",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-jolie-choir",
+   "personId": "p-proto-d-jolie",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-mathias-church",
+   "personId": "p-proto-d-mathias",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-mathias-protocol",
+   "personId": "p-proto-d-mathias",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-mathias-choir",
+   "personId": "p-proto-d-mathias",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-eric-church",
+   "personId": "p-proto-d-eric",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-eric-protocol",
+   "personId": "p-proto-d-eric",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-d-eric-choir",
+   "personId": "p-proto-d-eric",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-h-niyibizi-church",
+   "personId": "p-proto-h-niyibizi",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-h-niyibizi-protocol",
+   "personId": "p-proto-h-niyibizi",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-h-damour-church",
+   "personId": "p-proto-h-damour",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-h-damour-protocol",
+   "personId": "p-proto-h-damour",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-athanasie-church",
+   "personId": "p-proto-i-athanasie",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-athanasie-protocol",
+   "personId": "p-proto-i-athanasie",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-athanasie-choir",
+   "personId": "p-proto-i-athanasie",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-sylvestre-church",
+   "personId": "p-proto-i-sylvestre",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-sylvestre-protocol",
+   "personId": "p-proto-i-sylvestre",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-cynthia-church",
+   "personId": "p-proto-i-cynthia",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-cynthia-protocol",
+   "personId": "p-proto-i-cynthia",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-cynthia-choir",
+   "personId": "p-proto-i-cynthia",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-georgette-church",
+   "personId": "p-proto-i-georgette",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-georgette-protocol",
+   "personId": "p-proto-i-georgette",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-georgette-choir",
+   "personId": "p-proto-i-georgette",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-beulah",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-coord-church",
+   "personId": "p-proto-coord",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-coord-protocol",
+   "personId": "p-proto-coord",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-jimmy-church",
+   "personId": "p-proto-i-jimmy",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-i-jimmy-protocol",
+   "personId": "p-proto-i-jimmy",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-k-said-church",
+   "personId": "p-proto-k-said",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-k-said-protocol",
+   "personId": "p-proto-k-said",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-k-said-choir",
+   "personId": "p-proto-k-said",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-emmanuel-church",
+   "personId": "p-proto-m-emmanuel",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-emmanuel-protocol",
+   "personId": "p-proto-m-emmanuel",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-emmanuel-choir",
+   "personId": "p-proto-m-emmanuel",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elbethel",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-damascene-church",
+   "personId": "p-proto-m-damascene",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-damascene-protocol",
+   "personId": "p-proto-m-damascene",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-damascene-choir",
+   "personId": "p-proto-m-damascene",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-marie-church",
+   "personId": "p-proto-m-marie",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-marie-protocol",
+   "personId": "p-proto-m-marie",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-marie-choir",
+   "personId": "p-proto-m-marie",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-beulah",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-elevanie-church",
+   "personId": "p-proto-m-elevanie",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-elevanie-protocol",
+   "personId": "p-proto-m-elevanie",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-elevanie-choir",
+   "personId": "p-proto-m-elevanie",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-therese-church",
+   "personId": "p-proto-m-therese",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-therese-protocol",
+   "personId": "p-proto-m-therese",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-immaculee-church",
+   "personId": "p-proto-m-immaculee",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-immaculee-protocol",
+   "personId": "p-proto-m-immaculee",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-joseline-church",
+   "personId": "p-proto-m-joseline",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-joseline-protocol",
+   "personId": "p-proto-m-joseline",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-joseline-choir",
+   "personId": "p-proto-m-joseline",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-jeanne-church",
+   "personId": "p-proto-m-jeanne",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-jeanne-protocol",
+   "personId": "p-proto-m-jeanne",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-dorothee-church",
+   "personId": "p-proto-m-dorothee",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-dorothee-protocol",
+   "personId": "p-proto-m-dorothee",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-jacqueline-church",
+   "personId": "p-proto-m-jacqueline",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-jacqueline-protocol",
+   "personId": "p-proto-m-jacqueline",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-jacqueline-choir",
+   "personId": "p-proto-m-jacqueline",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-beulah",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-louange-church",
+   "personId": "p-proto-m-louange",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-m-louange-protocol",
+   "personId": "p-proto-m-louange",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-croix-church",
+   "personId": "p-proto-n-croix",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-croix-protocol",
+   "personId": "p-proto-n-croix",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-croix-choir",
+   "personId": "p-proto-n-croix",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elbethel",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-athanase-church",
+   "personId": "p-proto-n-athanase",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-athanase-protocol",
+   "personId": "p-proto-n-athanase",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-athanase-choir",
+   "personId": "p-proto-n-athanase",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-monique-church",
+   "personId": "p-proto-n-monique",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-monique-protocol",
+   "personId": "p-proto-n-monique",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-monique-choir",
+   "personId": "p-proto-n-monique",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elbethel",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-jeannette-church",
+   "personId": "p-proto-n-jeannette",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-jeannette-protocol",
+   "personId": "p-proto-n-jeannette",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-jeannette-choir",
+   "personId": "p-proto-n-jeannette",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-claudine-church",
+   "personId": "p-proto-n-claudine",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-claudine-protocol",
+   "personId": "p-proto-n-claudine",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-baptiste-church",
+   "personId": "p-proto-n-baptiste",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-baptiste-protocol",
+   "personId": "p-proto-n-baptiste",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-obed-church",
+   "personId": "p-proto-n-obed",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-obed-protocol",
+   "personId": "p-proto-n-obed",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-obed-choir",
+   "personId": "p-proto-n-obed",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-aimable-church",
+   "personId": "p-proto-n-aimable",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-aimable-protocol",
+   "personId": "p-proto-n-aimable",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-aimable-choir",
+   "personId": "p-proto-n-aimable",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-anabella-church",
+   "personId": "p-proto-n-anabella",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-anabella-protocol",
+   "personId": "p-proto-n-anabella",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-anabella-choir",
+   "personId": "p-proto-n-anabella",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-modeste-church",
+   "personId": "p-proto-n-modeste",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-modeste-protocol",
+   "personId": "p-proto-n-modeste",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-emmanuel-church",
+   "personId": "p-proto-n-emmanuel",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-emmanuel-protocol",
+   "personId": "p-proto-n-emmanuel",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-paul-church",
+   "personId": "p-proto-n-paul",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-paul-protocol",
+   "personId": "p-proto-n-paul",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-paul-choir",
+   "personId": "p-proto-n-paul",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elbethel",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-betty-church",
+   "personId": "p-proto-n-betty",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-betty-protocol",
+   "personId": "p-proto-n-betty",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-betty-choir",
+   "personId": "p-proto-n-betty",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elim",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-chantal-church",
+   "personId": "p-proto-n-chantal",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-chantal-protocol",
+   "personId": "p-proto-n-chantal",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-henriette-church",
+   "personId": "p-proto-n-henriette",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-henriette-protocol",
+   "personId": "p-proto-n-henriette",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-n-henriette-choir",
+   "personId": "p-proto-n-henriette",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-r-reverien-church",
+   "personId": "p-proto-r-reverien",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-r-reverien-protocol",
+   "personId": "p-proto-r-reverien",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-r-julie-church",
+   "personId": "p-proto-r-julie",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-r-julie-protocol",
+   "personId": "p-proto-r-julie",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-r-julie-choir",
+   "personId": "p-proto-r-julie",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-r-patience-church",
+   "personId": "p-proto-r-patience",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-r-patience-protocol",
+   "personId": "p-proto-r-patience",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-r-patience-choir",
+   "personId": "p-proto-r-patience",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-s-evariste-church",
+   "personId": "p-proto-s-evariste",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-s-evariste-protocol",
+   "personId": "p-proto-s-evariste",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-rose-church",
+   "personId": "p-proto-u-rose",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-rose-protocol",
+   "personId": "p-proto-u-rose",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-rose-choir",
+   "personId": "p-proto-u-rose",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elbethel",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-christine-church",
+   "personId": "p-proto-u-christine",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-christine-protocol",
+   "personId": "p-proto-u-christine",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-christine-choir",
+   "personId": "p-proto-u-christine",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-wivine-church",
+   "personId": "p-proto-u-wivine",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-wivine-protocol",
+   "personId": "p-proto-u-wivine",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-wivine-choir",
+   "personId": "p-proto-u-wivine",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-eric-church",
+   "personId": "p-proto-u-eric",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-eric-protocol",
+   "personId": "p-proto-u-eric",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-eric-choir",
+   "personId": "p-proto-u-eric",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-integuza",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-hodari-church",
+   "personId": "p-proto-u-hodari",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-hodari-protocol",
+   "personId": "p-proto-u-hodari",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-hodari-choir",
+   "personId": "p-proto-u-hodari",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elbethel",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-alice-church",
+   "personId": "p-proto-u-alice",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-alice-protocol",
+   "personId": "p-proto-u-alice",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-alice-choir",
+   "personId": "p-proto-u-alice",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-ijwi",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-marie-church",
+   "personId": "p-proto-u-marie",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-marie-protocol",
+   "personId": "p-proto-u-marie",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-u-marie-choir",
+   "personId": "p-proto-u-marie",
+   "type": "CHOIR_MEMBER",
+   "label": "Choir member",
+   "orgUnitId": "ou-choir-elbethel",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-z-jacqueline-church",
+   "personId": "p-proto-z-jacqueline",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-p-proto-z-jacqueline-protocol",
+   "personId": "p-proto-z-jacqueline",
+   "type": "PROTOCOL_MEMBER",
+   "label": "Protocol member",
+   "orgUnitId": "ou-protocol",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "mem-music-pres-church",
+   "personId": "p-music-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-music-pres-peer",
+   "personId": "p-music-leader",
+   "type": "MUSIC_MEMBER",
+   "label": "Music member",
+   "orgUnitId": "ou-music",
+   "systemId": "sys-music",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-music-vp-church",
+   "personId": "p-music-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-music-vp-peer",
+   "personId": "p-music-vp",
+   "type": "MUSIC_MEMBER",
+   "label": "Music member",
+   "orgUnitId": "ou-music",
+   "systemId": "sys-music",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-music-treas-church",
+   "personId": "p-music-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-music-treas-peer",
+   "personId": "p-music-treas",
+   "type": "MUSIC_MEMBER",
+   "label": "Music member",
+   "orgUnitId": "ou-music",
+   "systemId": "sys-music",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-music-sec-church",
+   "personId": "p-music-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-music-sec-peer",
+   "personId": "p-music-sec",
+   "type": "MUSIC_MEMBER",
+   "label": "Music member",
+   "orgUnitId": "ou-music",
+   "systemId": "sys-music",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-media-pres-church",
+   "personId": "p-media-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-media-pres-peer",
+   "personId": "p-media-leader",
+   "type": "MEDIA_MEMBER",
+   "label": "Media member",
+   "orgUnitId": "ou-media",
+   "systemId": "sys-media",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-media-vp-church",
+   "personId": "p-media-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-media-vp-peer",
+   "personId": "p-media-vp",
+   "type": "MEDIA_MEMBER",
+   "label": "Media member",
+   "orgUnitId": "ou-media",
+   "systemId": "sys-media",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-media-treas-church",
+   "personId": "p-media-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-media-treas-peer",
+   "personId": "p-media-treas",
+   "type": "MEDIA_MEMBER",
+   "label": "Media member",
+   "orgUnitId": "ou-media",
+   "systemId": "sys-media",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-media-sec-church",
+   "personId": "p-media-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-media-sec-peer",
+   "personId": "p-media-sec",
+   "type": "MEDIA_MEMBER",
+   "label": "Media member",
+   "orgUnitId": "ou-media",
+   "systemId": "sys-media",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-men-pres-church",
+   "personId": "p-men-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-men-pres-peer",
+   "personId": "p-men-leader",
+   "type": "MEN_MEMBER",
+   "label": "Men member",
+   "orgUnitId": "ou-men",
+   "systemId": "sys-men",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-men-vp-church",
+   "personId": "p-men-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-men-vp-peer",
+   "personId": "p-men-vp",
+   "type": "MEN_MEMBER",
+   "label": "Men member",
+   "orgUnitId": "ou-men",
+   "systemId": "sys-men",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-men-treas-church",
+   "personId": "p-men-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-men-treas-peer",
+   "personId": "p-men-treas",
+   "type": "MEN_MEMBER",
+   "label": "Men member",
+   "orgUnitId": "ou-men",
+   "systemId": "sys-men",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-men-sec-church",
+   "personId": "p-men-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-men-sec-peer",
+   "personId": "p-men-sec",
+   "type": "MEN_MEMBER",
+   "label": "Men member",
+   "orgUnitId": "ou-men",
+   "systemId": "sys-men",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-women-pres-church",
+   "personId": "p-women-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-women-pres-peer",
+   "personId": "p-women-leader",
+   "type": "WOMEN_MEMBER",
+   "label": "Women member",
+   "orgUnitId": "ou-women",
+   "systemId": "sys-women",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-women-vp-church",
+   "personId": "p-women-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-women-vp-peer",
+   "personId": "p-women-vp",
+   "type": "WOMEN_MEMBER",
+   "label": "Women member",
+   "orgUnitId": "ou-women",
+   "systemId": "sys-women",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-women-treas-church",
+   "personId": "p-women-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-women-treas-peer",
+   "personId": "p-women-treas",
+   "type": "WOMEN_MEMBER",
+   "label": "Women member",
+   "orgUnitId": "ou-women",
+   "systemId": "sys-women",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-women-sec-church",
+   "personId": "p-women-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-women-sec-peer",
+   "personId": "p-women-sec",
+   "type": "WOMEN_MEMBER",
+   "label": "Women member",
+   "orgUnitId": "ou-women",
+   "systemId": "sys-women",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-couples-pres-church",
+   "personId": "p-couples-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-couples-pres-peer",
+   "personId": "p-couples-leader",
+   "type": "COUPLES_MEMBER",
+   "label": "Couples member",
+   "orgUnitId": "ou-couples",
+   "systemId": "sys-couples",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-couples-vp-church",
+   "personId": "p-couples-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-couples-vp-peer",
+   "personId": "p-couples-vp",
+   "type": "COUPLES_MEMBER",
+   "label": "Couples member",
+   "orgUnitId": "ou-couples",
+   "systemId": "sys-couples",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-couples-treas-church",
+   "personId": "p-couples-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-couples-treas-peer",
+   "personId": "p-couples-treas",
+   "type": "COUPLES_MEMBER",
+   "label": "Couples member",
+   "orgUnitId": "ou-couples",
+   "systemId": "sys-couples",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-couples-sec-church",
+   "personId": "p-couples-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-couples-sec-peer",
+   "personId": "p-couples-sec",
+   "type": "COUPLES_MEMBER",
+   "label": "Couples member",
+   "orgUnitId": "ou-couples",
+   "systemId": "sys-couples",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-children-pres-church",
+   "personId": "p-children-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-children-pres-peer",
+   "personId": "p-children-leader",
+   "type": "CHILDREN_MEMBER",
+   "label": "Children ministry member",
+   "orgUnitId": "ou-children",
+   "systemId": "sys-children",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-children-vp-church",
+   "personId": "p-children-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-children-vp-peer",
+   "personId": "p-children-vp",
+   "type": "CHILDREN_MEMBER",
+   "label": "Children ministry member",
+   "orgUnitId": "ou-children",
+   "systemId": "sys-children",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-children-treas-church",
+   "personId": "p-children-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-children-treas-peer",
+   "personId": "p-children-treas",
+   "type": "CHILDREN_MEMBER",
+   "label": "Children ministry member",
+   "orgUnitId": "ou-children",
+   "systemId": "sys-children",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-children-sec-church",
+   "personId": "p-children-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-children-sec-peer",
+   "personId": "p-children-sec",
+   "type": "CHILDREN_MEMBER",
+   "label": "Children ministry member",
+   "orgUnitId": "ou-children",
+   "systemId": "sys-children",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-elderly-pres-church",
+   "personId": "p-elderly-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-elderly-pres-peer",
+   "personId": "p-elderly-leader",
+   "type": "ELDERLY_MEMBER",
+   "label": "Elderly member",
+   "orgUnitId": "ou-elderly",
+   "systemId": "sys-elderly",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-elderly-vp-church",
+   "personId": "p-elderly-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-elderly-vp-peer",
+   "personId": "p-elderly-vp",
+   "type": "ELDERLY_MEMBER",
+   "label": "Elderly member",
+   "orgUnitId": "ou-elderly",
+   "systemId": "sys-elderly",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-elderly-treas-church",
+   "personId": "p-elderly-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-elderly-treas-peer",
+   "personId": "p-elderly-treas",
+   "type": "ELDERLY_MEMBER",
+   "label": "Elderly member",
+   "orgUnitId": "ou-elderly",
+   "systemId": "sys-elderly",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-elderly-sec-church",
+   "personId": "p-elderly-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-elderly-sec-peer",
+   "personId": "p-elderly-sec",
+   "type": "ELDERLY_MEMBER",
+   "label": "Elderly member",
+   "orgUnitId": "ou-elderly",
+   "systemId": "sys-elderly",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-evangelism-pres-church",
+   "personId": "p-evangelism-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-evangelism-pres-peer",
+   "personId": "p-evangelism-leader",
+   "type": "EVANGELISM_MEMBER",
+   "label": "Evangelism member",
+   "orgUnitId": "ou-evangelism",
+   "systemId": "sys-evangelism",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-evangelism-vp-church",
+   "personId": "p-evangelism-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-evangelism-vp-peer",
+   "personId": "p-evangelism-vp",
+   "type": "EVANGELISM_MEMBER",
+   "label": "Evangelism member",
+   "orgUnitId": "ou-evangelism",
+   "systemId": "sys-evangelism",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-evangelism-treas-church",
+   "personId": "p-evangelism-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-evangelism-treas-peer",
+   "personId": "p-evangelism-treas",
+   "type": "EVANGELISM_MEMBER",
+   "label": "Evangelism member",
+   "orgUnitId": "ou-evangelism",
+   "systemId": "sys-evangelism",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-evangelism-sec-church",
+   "personId": "p-evangelism-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-evangelism-sec-peer",
+   "personId": "p-evangelism-sec",
+   "type": "EVANGELISM_MEMBER",
+   "label": "Evangelism member",
+   "orgUnitId": "ou-evangelism",
+   "systemId": "sys-evangelism",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-intercessors-pres-church",
+   "personId": "p-intercessors-leader",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-intercessors-pres-peer",
+   "personId": "p-intercessors-leader",
+   "type": "INTERCESSORS_MEMBER",
+   "label": "Intercessors member",
+   "orgUnitId": "ou-intercessors",
+   "systemId": "sys-intercessors",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-intercessors-vp-church",
+   "personId": "p-intercessors-vp",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-intercessors-vp-peer",
+   "personId": "p-intercessors-vp",
+   "type": "INTERCESSORS_MEMBER",
+   "label": "Intercessors member",
+   "orgUnitId": "ou-intercessors",
+   "systemId": "sys-intercessors",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-intercessors-treas-church",
+   "personId": "p-intercessors-treas",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-intercessors-treas-peer",
+   "personId": "p-intercessors-treas",
+   "type": "INTERCESSORS_MEMBER",
+   "label": "Intercessors member",
+   "orgUnitId": "ou-intercessors",
+   "systemId": "sys-intercessors",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "mem-intercessors-sec-church",
+   "personId": "p-intercessors-sec",
+   "type": "CHURCH_MEMBER",
+   "label": "Church member",
+   "status": "ACTIVE",
+   "startDate": "2020-01-01"
+  },
+  {
+   "id": "mem-intercessors-sec-peer",
+   "personId": "p-intercessors-sec",
+   "type": "INTERCESSORS_MEMBER",
+   "label": "Intercessors member",
+   "orgUnitId": "ou-intercessors",
+   "systemId": "sys-intercessors",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  }
+ ],
+ "positions": [
+  {
+   "id": "pos-pastor",
+   "personId": "p-pastor",
+   "title": "Church Leader",
+   "orgUnitId": "ou-leadership",
+   "systemRole": "CHURCH_LEADER",
+   "grantsAllSystems": true,
+   "status": "ACTIVE",
+   "startDate": "2018-01-01"
+  },
+  {
+   "id": "pos-pastor-2",
+   "personId": "p-pastor-2",
+   "title": "Pastor",
+   "orgUnitId": "ou-leadership",
+   "systemRole": "PASTOR",
+   "grantsAllSystems": false,
+   "status": "ACTIVE",
+   "startDate": "2020-06-01"
+  },
+  {
+   "id": "pos-catechist",
+   "personId": "p-catechist",
+   "title": "Catechist (Umwarimu)",
+   "orgUnitId": "ou-leadership",
+   "systemRole": "CATECHIST",
+   "grantsAllSystems": true,
+   "status": "ACTIVE",
+   "startDate": "2015-01-01"
+  },
+  {
+   "id": "pos-secretary",
+   "personId": "p-secretary",
+   "title": "Church Secretary",
+   "orgUnitId": "ou-admin",
+   "systemRole": "CHURCH_SECRETARY",
+   "status": "ACTIVE",
+   "startDate": "2019-03-01"
+  },
+  {
+   "id": "pos-church-treas",
+   "personId": "p-church-treas",
+   "title": "Church Treasurer",
+   "orgUnitId": "ou-finance",
+   "systemRole": "CHURCH_TREASURER",
+   "systemId": "sys-finance",
+   "status": "ACTIVE",
+   "startDate": "2019-06-01"
+  },
+  {
+   "id": "pos-choir-leader",
+   "personId": "p-choir-leader",
+   "title": "Choir Music Director",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "MUSIC_DIRECTOR",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-choir-pres",
+   "personId": "p-choir-pres",
+   "title": "Choir President",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "PRESIDENT",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-choir-vp",
+   "personId": "p-choir-vp",
+   "title": "Choir Vice President",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "VP",
+   "ministryOffice": "VP",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-choir-treas",
+   "personId": "p-choir-treas",
+   "title": "Choir Treasurer",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "TREASURER",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-choir-secretary",
+   "personId": "p-secretary",
+   "title": "Choir Secretary",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "SECRETARY",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-choir-coord",
+   "personId": "p-choir-coord",
+   "title": "Choir Coordinator (families)",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "COORDINATOR",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-choir-adv-spirit",
+   "personId": "p-choir-adv-spirit",
+   "title": "Choir Advisor",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "ADVISOR",
+   "choirAdvisorRole": "Spiritual leader",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-choir-adv-social",
+   "personId": "p-choir-adv-social",
+   "title": "Choir Advisor",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "ADVISOR",
+   "choirAdvisorRole": "Social & outreach",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-choir-fam-lead",
+   "personId": "p-member",
+   "title": "Choir Family Leader (Alpha)",
+   "orgUnitId": "ou-choir-ijwi",
+   "choirOffice": "FAMILY_LEADER",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2025-01-01"
+  },
+  {
+   "id": "pos-hope-leader",
+   "personId": "p-hope-leader",
+   "title": "Hope Music Director",
+   "orgUnitId": "ou-choir-hope",
+   "choirOffice": "MUSIC_DIRECTOR",
+   "systemId": "sys-choir",
+   "status": "ACTIVE",
+   "startDate": "2025-06-01"
+  },
+  {
+   "id": "pos-worship-leader",
+   "personId": "p-worship-leader",
+   "title": "Worship Leader",
+   "orgUnitId": "ou-worship",
+   "worshipOffice": "MUSIC_DIRECTOR",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-worship-pres",
+   "personId": "p-worship-pres",
+   "title": "Worship President",
+   "orgUnitId": "ou-worship",
+   "worshipOffice": "PRESIDENT",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-worship-vp",
+   "personId": "p-worship-vp",
+   "title": "Worship Vice President",
+   "orgUnitId": "ou-worship",
+   "worshipOffice": "VP",
+   "ministryOffice": "VP",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-worship-treas",
+   "personId": "p-worship-treas",
+   "title": "Worship Treasurer",
+   "orgUnitId": "ou-worship",
+   "worshipOffice": "TREASURER",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-worship-sec",
+   "personId": "p-worship-sec",
+   "title": "Worship Secretary",
+   "orgUnitId": "ou-worship",
+   "worshipOffice": "SECRETARY",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-worship",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-deacon-coord",
+   "personId": "p-deacon-coord",
+   "title": "Deacon Coordinator / President",
+   "orgUnitId": "ou-deacon-team",
+   "deaconOffice": "COORDINATOR",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-deacon",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-deacon-vp",
+   "personId": "p-deacon-vp",
+   "title": "Deacon Vice President",
+   "orgUnitId": "ou-deacon-team",
+   "ministryOffice": "VP",
+   "systemId": "sys-deacon",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-deacon-treas",
+   "personId": "p-deacon-treas",
+   "title": "Deacon Treasurer",
+   "orgUnitId": "ou-deacon-team",
+   "deaconOffice": "TREASURER",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-deacon",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-deacon-sec",
+   "personId": "p-deacon-sec",
+   "title": "Deacon Secretary",
+   "orgUnitId": "ou-deacon-team",
+   "deaconOffice": "SECRETARY",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-deacon",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-youth-leader",
+   "personId": "p-youth-leader",
+   "title": "Youth President",
+   "orgUnitId": "ou-youth",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-youth-vp",
+   "personId": "p-youth-vp",
+   "title": "Youth Vice President",
+   "orgUnitId": "ou-youth",
+   "ministryOffice": "VP",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "pos-youth-treas",
+   "personId": "p-youth-treas",
+   "title": "Youth Treasurer",
+   "orgUnitId": "ou-youth",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "pos-youth-sec",
+   "personId": "p-youth-sec",
+   "title": "Youth Secretary",
+   "orgUnitId": "ou-youth",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "pos-youth-sysadmin",
+   "personId": "p-youth-sysadmin",
+   "title": "Youth System Admin",
+   "orgUnitId": "ou-youth",
+   "systemId": "sys-youth",
+   "systemAdmin": true,
+   "status": "ACTIVE",
+   "startDate": "2024-01-01"
+  },
+  {
+   "id": "pos-proto-coord",
+   "personId": "p-proto-coord",
+   "title": "Protocol Coordinator",
+   "orgUnitId": "ou-protocol",
+   "protocolOffice": "COORDINATOR",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-proto-president",
+   "personId": "p-proto-n-claudine",
+   "title": "Protocol President",
+   "orgUnitId": "ou-protocol",
+   "protocolOffice": "PRESIDENT",
+   "systemId": "sys-protocol",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-youth-pres",
+   "personId": "p-youth-leader",
+   "title": "Youth President",
+   "orgUnitId": "ou-youth",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-youth",
+   "status": "ACTIVE",
+   "startDate": "2022-01-01"
+  },
+  {
+   "id": "pos-music-pres",
+   "personId": "p-music-leader",
+   "title": "Music Ministry President",
+   "orgUnitId": "ou-music",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-music",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-music-vp",
+   "personId": "p-music-vp",
+   "title": "Music Vice President",
+   "orgUnitId": "ou-music",
+   "ministryOffice": "VP",
+   "systemId": "sys-music",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-music-treas",
+   "personId": "p-music-treas",
+   "title": "Music Treasurer",
+   "orgUnitId": "ou-music",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-music",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-music-sec",
+   "personId": "p-music-sec",
+   "title": "Music Secretary",
+   "orgUnitId": "ou-music",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-music",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-media-pres",
+   "personId": "p-media-leader",
+   "title": "Media Team President",
+   "orgUnitId": "ou-media",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-media",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-media-vp",
+   "personId": "p-media-vp",
+   "title": "Media Vice President",
+   "orgUnitId": "ou-media",
+   "ministryOffice": "VP",
+   "systemId": "sys-media",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-media-treas",
+   "personId": "p-media-treas",
+   "title": "Media Treasurer",
+   "orgUnitId": "ou-media",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-media",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-media-sec",
+   "personId": "p-media-sec",
+   "title": "Media Secretary",
+   "orgUnitId": "ou-media",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-media",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-men-pres",
+   "personId": "p-men-leader",
+   "title": "Men Ministry President",
+   "orgUnitId": "ou-men",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-men",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-men-vp",
+   "personId": "p-men-vp",
+   "title": "Men Vice President",
+   "orgUnitId": "ou-men",
+   "ministryOffice": "VP",
+   "systemId": "sys-men",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-men-treas",
+   "personId": "p-men-treas",
+   "title": "Men Treasurer",
+   "orgUnitId": "ou-men",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-men",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-men-sec",
+   "personId": "p-men-sec",
+   "title": "Men Secretary",
+   "orgUnitId": "ou-men",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-men",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-women-pres",
+   "personId": "p-women-leader",
+   "title": "Women Ministry President",
+   "orgUnitId": "ou-women",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-women",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-women-vp",
+   "personId": "p-women-vp",
+   "title": "Women Vice President",
+   "orgUnitId": "ou-women",
+   "ministryOffice": "VP",
+   "systemId": "sys-women",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-women-treas",
+   "personId": "p-women-treas",
+   "title": "Women Treasurer",
+   "orgUnitId": "ou-women",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-women",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-women-sec",
+   "personId": "p-women-sec",
+   "title": "Women Secretary",
+   "orgUnitId": "ou-women",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-women",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-couples-pres",
+   "personId": "p-couples-leader",
+   "title": "Couples Ministry President",
+   "orgUnitId": "ou-couples",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-couples",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-couples-vp",
+   "personId": "p-couples-vp",
+   "title": "Couples Vice President",
+   "orgUnitId": "ou-couples",
+   "ministryOffice": "VP",
+   "systemId": "sys-couples",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-couples-treas",
+   "personId": "p-couples-treas",
+   "title": "Couples Treasurer",
+   "orgUnitId": "ou-couples",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-couples",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-couples-sec",
+   "personId": "p-couples-sec",
+   "title": "Couples Secretary",
+   "orgUnitId": "ou-couples",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-couples",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-children-pres",
+   "personId": "p-children-leader",
+   "title": "Children Ministry President",
+   "orgUnitId": "ou-children",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-children",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-children-vp",
+   "personId": "p-children-vp",
+   "title": "Children Vice President",
+   "orgUnitId": "ou-children",
+   "ministryOffice": "VP",
+   "systemId": "sys-children",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-children-treas",
+   "personId": "p-children-treas",
+   "title": "Children Treasurer",
+   "orgUnitId": "ou-children",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-children",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-children-sec",
+   "personId": "p-children-sec",
+   "title": "Children Secretary",
+   "orgUnitId": "ou-children",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-children",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-elderly-pres",
+   "personId": "p-elderly-leader",
+   "title": "Elderly Ministry President",
+   "orgUnitId": "ou-elderly",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-elderly",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-elderly-vp",
+   "personId": "p-elderly-vp",
+   "title": "Elderly Vice President",
+   "orgUnitId": "ou-elderly",
+   "ministryOffice": "VP",
+   "systemId": "sys-elderly",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-elderly-treas",
+   "personId": "p-elderly-treas",
+   "title": "Elderly Treasurer",
+   "orgUnitId": "ou-elderly",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-elderly",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-elderly-sec",
+   "personId": "p-elderly-sec",
+   "title": "Elderly Secretary",
+   "orgUnitId": "ou-elderly",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-elderly",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-evangelism-pres",
+   "personId": "p-evangelism-leader",
+   "title": "Evangelism Ministry President",
+   "orgUnitId": "ou-evangelism",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-evangelism",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-evangelism-vp",
+   "personId": "p-evangelism-vp",
+   "title": "Evangelism Vice President",
+   "orgUnitId": "ou-evangelism",
+   "ministryOffice": "VP",
+   "systemId": "sys-evangelism",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-evangelism-treas",
+   "personId": "p-evangelism-treas",
+   "title": "Evangelism Treasurer",
+   "orgUnitId": "ou-evangelism",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-evangelism",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-evangelism-sec",
+   "personId": "p-evangelism-sec",
+   "title": "Evangelism Secretary",
+   "orgUnitId": "ou-evangelism",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-evangelism",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-intercessors-pres",
+   "personId": "p-intercessors-leader",
+   "title": "Intercessors Ministry President",
+   "orgUnitId": "ou-intercessors",
+   "ministryOffice": "PRESIDENT",
+   "systemId": "sys-intercessors",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-intercessors-vp",
+   "personId": "p-intercessors-vp",
+   "title": "Intercessors Vice President",
+   "orgUnitId": "ou-intercessors",
+   "ministryOffice": "VP",
+   "systemId": "sys-intercessors",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-intercessors-treas",
+   "personId": "p-intercessors-treas",
+   "title": "Intercessors Treasurer",
+   "orgUnitId": "ou-intercessors",
+   "ministryOffice": "TREASURER",
+   "systemId": "sys-intercessors",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  },
+  {
+   "id": "pos-intercessors-sec",
+   "personId": "p-intercessors-sec",
+   "title": "Intercessors Secretary",
+   "orgUnitId": "ou-intercessors",
+   "ministryOffice": "SECRETARY",
+   "systemId": "sys-intercessors",
+   "status": "ACTIVE",
+   "startDate": "2023-01-01"
+  }
+ ]
+}

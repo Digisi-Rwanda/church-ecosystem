@@ -114,3 +114,12 @@ Slice 0 and Slice 1 together: migrations, the people endpoints with field-level 
 - Backup: `exportAllLocalData()` and `downloadLocalBackup()` (no button yet).
 - Tests: `server/tests/people.privacy.test.ts` (16), `server/tests/integration/people.int.test.ts` (7), `src/data/localBackup.test.ts`.
 - Not yet: versioned migrations baseline (needs a machine that can run Prisma), backup button, memberships/positions/org units (slice 2).
+
+**3 October 2026 — slice 2 (memberships, positions, org units), built.**
+- Schema: `Membership.systemId` now optional (as in the app); `Position` gained `choirAdvisorRole` and `systemAdmin` (the server rules already read `systemAdmin`, it was never stored); `OrgUnit` gained `description`.
+- Routes `/api/participation`: `GET /records`, `POST|PATCH /memberships`, `/positions`, `/org-units`. Every write is audited and needs the matching MANAGE grant in the record's own system; church leadership (POSITION MANAGE in the main church) covers all systems; nobody else can set `systemRole`, `grantsAllSystems` or `systemAdmin`, create or end church-wide positions.
+- Reads: everyone sees the org structure and their own memberships; Church Leader and Catechist see everyone's; others see who holds which office but not the authority flags.
+- New person tier DIRECTORY (names and status only) for ministry leaders and other role holders; the directory search no longer returns phone or email except to Church Leader and Catechist.
+- App: `participationServerSync.ts` (same pattern as people), switch `VITE_SERVER_MODULES=participation` (comma-separate with people), collections cleared at sign-out.
+- Tests: `server/tests/participation.test.ts` (13), `server/tests/integration/participation.int.test.ts` (7), extended `people.privacy.test.ts`.
+- Caution before switching on in staging: the staging database seed must contain the same demo memberships and positions as the app's demo data, otherwise leaders will see the server's smaller set.

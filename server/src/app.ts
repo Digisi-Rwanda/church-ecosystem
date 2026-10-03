@@ -11,6 +11,7 @@ import { contributionsRouter } from './routes/contributions.js';
 import { fundsRouter } from './routes/funds.js';
 import { healthRouter } from './routes/health.js';
 import { missionRouter } from './routes/mission.js';
+import { participationRouter } from './routes/participation.js';
 import { peopleRouter } from './routes/people.js';
 import { protocolOfficesRouter } from './routes/protocolOffices.js';
 import { scheduleStateRouter } from './routes/scheduleState.js';
@@ -69,6 +70,7 @@ export function createApp() {
   app.use('/api/auth', authRouter);
   app.use('/api/systems', systemsRouter);
   app.use('/api/people', peopleRouter);
+  app.use('/api/participation', participationRouter);
   app.use('/api/authorize', authorizeRouter);
   app.use('/api/funds', fundsRouter);
   app.use('/api/mission', missionRouter);

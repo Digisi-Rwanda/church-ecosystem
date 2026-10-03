@@ -15,6 +15,7 @@ export type DataHome = 'SERVER' | 'SERVER_DOC' | 'MOVE_S2' | 'MOVE_S3' | 'MOVE_S
 /** Collections that move to the server behind a module switch (see lib/serverModules). */
 export const MODULE_COLLECTIONS: Record<string, string[]> = {
   people: ['people'],
+  participation: ['memberships', 'positions', 'orgUnits'],
 };
 
 const S = (home: DataHome, names: string) =>
@@ -29,8 +30,8 @@ export const STORAGE_POLICY: Record<string, DataHome> = {
   ...S('SERVER_DOC', `musicSchedule protocolRoster protocolServices protocolMonthPlans protocolTeamSlots
     protocolHistory protocolAttendance protocolAbsenceRequests protocolFillInOffers protocolSwapProposals
     protocolServiceReports protocolContributions protocolNotifications protocolActivity`),
-  // Slice 2 — belonging and structure
-  ...S('MOVE_S2', 'memberships positions orgUnits'),
+  // Slice 2 — belonging and structure (server tables, switch: VITE_SERVER_MODULES=participation)
+  ...S('SERVER', 'memberships positions orgUnits'),
   // Slice 3 — person records
   ...S('MOVE_S3', `personFamilyLinks personBaptisms personMarriages personTimeline personDocuments
     personEmployment personEducation personTalents personSpiritualGifts personPathways disciplineCases

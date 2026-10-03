@@ -1,5 +1,6 @@
 import { ORG_UNITS, SYSTEMS } from '../data/seed';
 import { scheduleLocalDomainPersist } from '../data/localDomainStore';
+import { pushOrgUnitCreate, pushOrgUnitUpdate } from './participationServerSync';
 import type { ChurchSystem, OrgUnit, SystemId } from '../domain/types';
 
 export const systemsService = {
@@ -66,6 +67,7 @@ export const orgService = {
     };
     ORG_UNITS.push(unit);
     scheduleLocalDomainPersist();
+    void pushOrgUnitCreate(unit);
     return unit;
   },
 
@@ -74,6 +76,7 @@ export const orgService = {
     if (i < 0) return null;
     ORG_UNITS[i] = { ...ORG_UNITS[i], ...patch, id };
     scheduleLocalDomainPersist();
+    void pushOrgUnitUpdate(id, patch);
     return ORG_UNITS[i];
   },
 };

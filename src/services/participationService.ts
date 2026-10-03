@@ -7,6 +7,9 @@ import {
 } from '../data/seed';
 import { persistPeopleLocalStore } from '../data/peopleLocalStore';
 import {
+  pushMembershipCreate, pushMembershipUpdate, pushPositionCreate, pushPositionUpdate,
+} from './participationServerSync';
+import {
   isAssignmentActive,
   isMembershipActive,
   isPositionActive,
@@ -167,6 +170,7 @@ export const participationService = {
     };
     MEMBERSHIPS.unshift(m);
     persistPeopleLocalStore();
+    void pushMembershipCreate(m);
     return m;
   },
 
@@ -179,6 +183,7 @@ export const participationService = {
       endDate: new Date().toISOString().slice(0, 10),
     };
     persistPeopleLocalStore();
+    void pushMembershipUpdate(id, { status: 'ENDED', endDate: MEMBERSHIPS[i].endDate });
     return MEMBERSHIPS[i];
   },
 
@@ -208,6 +213,7 @@ export const participationService = {
     };
     POSITIONS.unshift(p);
     persistPeopleLocalStore();
+    void pushPositionCreate(p);
     return p;
   },
 
@@ -220,6 +226,7 @@ export const participationService = {
       endDate: new Date().toISOString().slice(0, 10),
     };
     persistPeopleLocalStore();
+    void pushPositionUpdate(id, { status: 'ENDED', endDate: POSITIONS[i].endDate });
     return POSITIONS[i];
   },
 

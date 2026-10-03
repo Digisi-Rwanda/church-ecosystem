@@ -1,6 +1,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
-import { filterPerson, SELF_EDITABLE, tierFor, type PersonTier } from '../policy/personFields.js';
+import { filterPerson, SELF_EDITABLE } from '../policy/personFields.js';
+import { personTier } from '../policy/personAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { authorizePerson, grantsForPerson } from '../policy/index.js';
 import {
@@ -17,18 +18,7 @@ async function isInvolved(personId: string): Promise<boolean> {
   return grants.some((g) => g.source !== 'ACCOUNT');
 }
 
-async function tierOf(viewerId: string, targetId: string): Promise<PersonTier> {
-  const [full, basic] = await Promise.all([
-    authorizePerson({ personId: viewerId, systemId: 'sys-main', resource: 'PERSON', action: 'VIEW_FULL' }),
-    authorizePerson({ personId: viewerId, systemId: 'sys-main', resource: 'PERSON', action: 'VIEW' }),
-  ]);
-  return tierFor({
-    viewerId,
-    targetId,
-    canViewFull: full.allowed,
-    canViewBasic: basic.allowed,
-  });
-}
+const tierOf = personTier;
 
 peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   if (!(await isInvolved(req.auth!.personId))) {
@@ -50,8 +40,11 @@ peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     orderBy: { fullName: 'asc' },
     take: 100,
   });
-  // The list is a directory: identity details never travel here, whoever asks.
-  res.json({ people: people.map((p) => filterPerson(p as Record<string, unknown>, 'BASIC')) });
+  // The list is a directory: identity details never travel here; contact details only for the people module.
+  const viewer = req.auth!.personId;
+  const tier = await tierOf(viewer, '\u0000');
+  const shown = tier === 'FULL' || tier === 'BASIC' ? 'BASIC' : 'DIRECTORY';
+  res.json({ people: people.map((p) => filterPerson(p as Record<string, unknown>, shown)) });
 });
 
 /**

@@ -34,7 +34,7 @@ export type ServerPerson = {
 };
 
 export type PeopleRecordsPage = {
-  tier: 'FULL' | 'BASIC' | 'SELF';
+  tier: 'FULL' | 'BASIC' | 'DIRECTORY' | 'SELF';
   total: number;
   offset: number;
   people: ServerPerson[];
@@ -59,3 +59,27 @@ export function apiUpdatePerson(id: string, body: Record<string, unknown>) {
     { method: 'PATCH', body },
   );
 }
+
+/* ───────────── memberships, positions, org units (slice 2) ───────────── */
+
+export type ParticipationRecords = {
+  orgUnits: Record<string, unknown>[];
+  memberships: Record<string, unknown>[];
+  positions: Record<string, unknown>[];
+};
+
+export const apiParticipationRecords = () =>
+  apiFetch<ParticipationRecords>('/api/participation/records');
+
+const send = (path: string, method: 'POST' | 'PATCH', body: Record<string, unknown>) =>
+  apiFetch<Record<string, unknown>>(path, { method, body });
+
+export const apiCreateMembership = (b: Record<string, unknown>) => send('/api/participation/memberships', 'POST', b);
+export const apiUpdateMembership = (id: string, b: Record<string, unknown>) =>
+  send(`/api/participation/memberships/${encodeURIComponent(id)}`, 'PATCH', b);
+export const apiCreatePosition = (b: Record<string, unknown>) => send('/api/participation/positions', 'POST', b);
+export const apiUpdatePosition = (id: string, b: Record<string, unknown>) =>
+  send(`/api/participation/positions/${encodeURIComponent(id)}`, 'PATCH', b);
+export const apiCreateOrgUnit = (b: Record<string, unknown>) => send('/api/participation/org-units', 'POST', b);
+export const apiUpdateOrgUnit = (id: string, b: Record<string, unknown>) =>
+  send(`/api/participation/org-units/${encodeURIComponent(id)}`, 'PATCH', b);

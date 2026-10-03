@@ -3,7 +3,7 @@
  * Default OFF so nothing changes until a module is proven on staging:
  *   VITE_SERVER_MODULES=people,memberships   (comma separated, or "all")
  */
-export type ServerModule = 'people';
+export type ServerModule = 'people' | 'participation';
 
 const raw = (): string => String(import.meta.env.VITE_SERVER_MODULES ?? '');
 

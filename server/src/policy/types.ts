@@ -36,6 +36,7 @@ export type Position = {
   ministryOffice?: string;
   choirOffice?: string;
   choirAdvisorRole?: string;
+  systemAdmin?: boolean;
   worshipOffice?: string;
   protocolOffice?: string;
   deaconOffice?: string;

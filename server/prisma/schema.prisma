@@ -71,6 +71,7 @@ model OrgUnit {
   name           String
   type           String // MINISTRY | TEAM | ORGANISATION | OFFICE | COMMITTEE
   parentId       String?
+  description    String?
   systemId       String? // owning system when ministry-scoped
   leaderPersonId String?
 
@@ -85,7 +86,7 @@ model OrgUnit {
 model Membership {
   id        String    @id @default(cuid())
   personId  String
-  systemId  String
+  systemId  String? // when set, active membership entitles entry to this system
   orgUnitId String?
   type      String // CHURCH_MEMBER | CHOIR_MEMBER | …
   label     String?
@@ -94,7 +95,7 @@ model Membership {
   endDate   DateTime?
 
   person  Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
-  system  ChurchSystem @relation(fields: [systemId], references: [id])
+  system  ChurchSystem? @relation(fields: [systemId], references: [id])
   orgUnit OrgUnit?     @relation(fields: [orgUnitId], references: [id])
 
   @@index([personId, systemId])
@@ -109,6 +110,8 @@ model Position {
   systemRole     String? // CHURCH_LEADER | CHURCH_TREASURER | …
   ministryOffice String? // PRESIDENT | VP | TREASURER | SECRETARY
   choirOffice    String?
+  choirAdvisorRole String?
+  systemAdmin    Boolean   @default(false)
   worshipOffice  String?
   protocolOffice String?
   deaconOffice   String?

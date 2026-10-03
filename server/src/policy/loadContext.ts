@@ -43,7 +43,7 @@ export async function loadPolicyContext(): Promise<PolicyContext> {
       (m): Membership => ({
         id: m.id,
         personId: m.personId,
-        systemId: m.systemId,
+        systemId: m.systemId ?? undefined,
         orgUnitId: m.orgUnitId ?? undefined,
         type: m.type,
         label: m.label ?? m.type,
@@ -62,6 +62,8 @@ export async function loadPolicyContext(): Promise<PolicyContext> {
         systemRole: p.systemRole ?? undefined,
         ministryOffice: p.ministryOffice ?? undefined,
         choirOffice: p.choirOffice ?? undefined,
+        choirAdvisorRole: p.choirAdvisorRole ?? undefined,
+        systemAdmin: p.systemAdmin || undefined,
         worshipOffice: p.worshipOffice ?? undefined,
         protocolOffice: p.protocolOffice ?? undefined,
         deaconOffice: p.deaconOffice ?? undefined,

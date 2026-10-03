@@ -143,3 +143,15 @@ describe('GET /api/people/records', () => {
     expect((await request(app).get('/api/people/records')).status).toBe(401);
   });
 });
+
+describe('ministry leaders get names only', () => {
+  it('records and directory carry no phone or email for a ministry president', async () => {
+    const rec = await request(app).get('/api/people/records').set(bearer('p-choir-leader'));
+    expect(rec.body.tier).toBe('DIRECTORY');
+    const other = rec.body.people.find((p: any) => p.id === 'p-member');
+    expect(Object.keys(other).sort()).toEqual(['fullName', 'id', 'status']);
+    const list = await request(app).get('/api/people').set(bearer('p-choir-leader'));
+    expect(Object.keys(list.body.people[0]).every((k) => ['id', 'fullName', 'preferredName', 'status'].includes(k))).toBe(true);
+    expect((await request(app).patch('/api/people/p-member').set(bearer('p-choir-leader')).send({ phone: '1' })).status).toBe(403);
+  });
+});

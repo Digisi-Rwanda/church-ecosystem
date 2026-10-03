@@ -3,10 +3,14 @@
  *
  *  FULL  — Church Leader: every field.
  *  BASIC — Catechist: name, contact, status. No identity or pastoral data.
+ *  DIRECTORY — ministry leaders and other role holders: names and status only,
+ *              enough to pick people for a team, no contact details.
  *  SELF  — the person's own record: everything.
  *  NONE  — nothing.
  */
-export type PersonTier = 'FULL' | 'BASIC' | 'SELF' | 'NONE';
+export type PersonTier = 'FULL' | 'BASIC' | 'DIRECTORY' | 'SELF' | 'NONE';
+
+export const DIRECTORY_FIELDS = ['id', 'fullName', 'preferredName', 'status'] as const;
 
 export const BASIC_FIELDS = [
   'id',
@@ -26,11 +30,15 @@ export function tierFor(opts: {
   viewerId: string;
   targetId: string;
   canViewFull: boolean;
+  /** People-module access: Church Leader / Catechist level. */
   canViewBasic: boolean;
+  /** Any role holder with the plain PERSON VIEW grant. */
+  canViewDirectory?: boolean;
 }): PersonTier {
   if (opts.canViewFull) return 'FULL';
   if (opts.viewerId === opts.targetId) return 'SELF';
   if (opts.canViewBasic) return 'BASIC';
+  if (opts.canViewDirectory) return 'DIRECTORY';
   return 'NONE';
 }
 
@@ -41,6 +49,7 @@ export function filterPerson<T extends Record<string, unknown>>(
   if (tier === 'NONE') return null;
   if (tier === 'FULL' || tier === 'SELF') return { ...person };
   const out: Record<string, unknown> = {};
-  for (const k of BASIC_FIELDS) if (k in person) out[k] = person[k];
+  const fields = tier === 'DIRECTORY' ? DIRECTORY_FIELDS : BASIC_FIELDS;
+  for (const k of fields) if (k in (person as object)) out[k] = (person as Record<string, unknown>)[k];
   return out as Partial<T>;
 }

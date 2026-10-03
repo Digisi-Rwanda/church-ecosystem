@@ -37,6 +37,10 @@ export function onPeopleSyncError(fn: (msg: string | null) => void) {
   listeners.add(fn);
   return () => listeners.delete(fn);
 }
+/** Shared by the other server-backed modules so one banner can show any failure. */
+export function reportSyncError(msg: string | null) {
+  setError(msg);
+}
 function setError(msg: string | null) {
   lastError = msg;
   listeners.forEach((fn) => fn(msg));
@@ -89,7 +93,7 @@ export function refreshPeopleFromServer(): Promise<boolean> {
   refreshing = (async () => {
     try {
       const rows: ServerPerson[] = [];
-      let tier: 'FULL' | 'BASIC' | 'SELF' = 'SELF';
+      let tier: 'FULL' | 'BASIC' | 'DIRECTORY' | 'SELF' = 'SELF';
       let offset = 0;
       for (let guard = 0; guard < 100; guard++) {
         const page = await apiPeopleRecords(offset, 200);
