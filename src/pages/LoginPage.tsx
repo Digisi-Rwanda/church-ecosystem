@@ -129,10 +129,15 @@ export function LoginPage() {
 
   async function onSubmit(e: FormEvent) {
     e.preventDefault();
+    // Browser autofill can fill the boxes without telling React, so read what
+    // is really in the form (before the inputs are disabled while signing in).
+    const fd = new FormData(e.currentTarget as HTMLFormElement);
+    const typedUser = String(fd.get('username') ?? username).trim();
+    const typedPass = String(fd.get('password') ?? password);
     setError('');
     setBusy(true);
     try {
-      const ok = await login(username, password, targetSystemId);
+      const ok = await login(typedUser, typedPass, targetSystemId);
       if (!ok) {
         setError(
           getLoginNote() ||

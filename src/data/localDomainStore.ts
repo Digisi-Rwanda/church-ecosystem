@@ -406,3 +406,27 @@ export function exportAllLocalData(): {
     collections: exportCollections(registeredCollectionNames()),
   };
 }
+
+/**
+ * Remove named collections from this browser: empties them in memory and
+ * deletes them from the saved copy. Used for data whose home is the server,
+ * so a shared computer never keeps someone else's records after sign-out.
+ */
+export function clearLocalCollections(names: string[]) {
+  for (const col of collections) {
+    if (!names.includes(col.name)) continue;
+    if (col.kind === 'blob') {
+      try { col.set(null); } catch { /* blob refuses null: leave it */ }
+    } else {
+      col.get().splice(0);
+    }
+  }
+  const bundle = readBundle();
+  if (bundle) {
+    for (const n of names) {
+      delete bundle.arrays[n];
+      delete bundle.blobs[n];
+    }
+    writeBundle(bundle);
+  }
+}

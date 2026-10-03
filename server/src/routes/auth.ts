@@ -38,16 +38,24 @@ authRouter.post('/login', async (req, res) => {
     res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
     return;
   }
-  const { username, password, systemId } = parsed.data;
-  const throttleKey = username.toLowerCase();
+  const { password, systemId } = parsed.data;
+  // Saved-password prompts and phone keyboards add capitals and stray spaces.
+  const typed = parsed.data.username.trim();
+  const throttleKey = typed.toLowerCase();
   if (throttled(throttleKey)) {
     res.status(429).json({ error: 'Too many failed attempts — try again later' });
     return;
   }
-  const account = await prisma.account.findUnique({
-    where: { username },
+  let account = await prisma.account.findUnique({
+    where: { username: typed },
     include: { person: true },
   });
+  if (!account && typed !== throttleKey) {
+    account = await prisma.account.findUnique({
+      where: { username: throttleKey },
+      include: { person: true },
+    });
+  }
   if (
     !account ||
     !(await verifyPassword(password, account.passwordHash)) ||

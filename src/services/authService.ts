@@ -1,4 +1,7 @@
 import { ACCOUNTS, PEOPLE } from '../data/seed';
+import { clearLocalCollections } from '../data/localDomainStore';
+import { MODULE_COLLECTIONS } from '../data/storagePolicy';
+import { serverModuleEnabled, type ServerModule } from '../lib/serverModules';
 import { pushPersonCreate, pushPersonUpdate } from './peopleServerSync';
 import {
   markSeedPersonOverride,
@@ -669,6 +672,15 @@ function ensurePersonMirror(person: {
 /** Why the last attempt to enter a system was refused (shown on the sign-in screen). */
 let lastEntryDenial = '';
 
+/** Server-owned data must not stay on a shared computer after sign-out. */
+function clearServerOwnedData() {
+  const names: string[] = [];
+  for (const [mod, cols] of Object.entries(MODULE_COLLECTIONS)) {
+    if (serverModuleEnabled(mod as ServerModule)) names.push(...cols);
+  }
+  if (names.length) clearLocalCollections(names);
+}
+
 function establishSession(
   account: UserAccount,
   targetSystemId: SystemId,
@@ -807,6 +819,7 @@ export const authService = {
   },
 
   logout() {
+    clearServerOwnedData();
     setSyncToken(null);
     localStorage.removeItem(ACCOUNT_KEY);
     clearApiAuth();

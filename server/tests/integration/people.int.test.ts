@@ -53,6 +53,7 @@ beforeAll(async () => {
   sync = await import('../../../src/services/peopleServerSync');
   seed = await import('../../../src/data/seed');
   auth = await import('../../../src/services/authService');
+  (await import('../../../src/data/registerLocalDomain')).registerAllLocalDomain(); // as the app does at start
 });
 afterAll(async () => {
   vi.unstubAllEnvs();
@@ -124,5 +125,15 @@ describe('people on the server', () => {
     await until(() => sync.peopleSyncError() !== null);
     expect(db().person.find((x) => x.id === 'p-member')!.status).toBe('ACTIVE');
     expect(auth.peopleService.getById('p-member')!.status).toBe('ACTIVE');
+  });
+
+  it('signing out removes people from this browser (shared computers)', async () => {
+    signIn('p-pastor');
+    await sync.refreshPeopleFromServer();
+    expect(seed.PEOPLE.length).toBeGreaterThan(0);
+    auth.authService.logout();
+    expect(seed.PEOPLE.length).toBe(0);
+    const saved = JSON.parse(store.get('adepr.kacyiru.domain.local.v1') ?? '{"arrays":{}}');
+    expect(saved.arrays.people ?? []).toEqual([]);
   });
 });
