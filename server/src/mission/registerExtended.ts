@@ -59,34 +59,6 @@ function serializeProgram(p: {
   };
 }
 
-type MissionKind = 'PROGRAM' | 'EVENT' | 'TASK' | 'PROJECT';
-
-/** Owning system of a mission resource, or null if it does not exist. */
-async function ownerSystemOf(kind: MissionKind, id: string): Promise<string | null> {
-  if (kind === 'PROGRAM') return (await prisma.program.findUnique({ where: { id } }))?.ownerSystemId ?? null;
-  if (kind === 'EVENT') return (await prisma.churchEvent.findUnique({ where: { id } }))?.ownerSystemId ?? null;
-  if (kind === 'PROJECT') return (await prisma.churchProject.findUnique({ where: { id } }))?.ownerSystemId ?? null;
-  const t = await prisma.workTask.findUnique({ where: { id } });
-  return t ? (t.systemId ?? 'sys-main') : null;
-}
-
-async function requireAuthz(
-  req: AuthedRequest,
-  kind: MissionKind,
-  id: string,
-  action: 'VIEW' | 'MANAGE',
-): Promise<{ ok: true } | { ok: false; status: number; error: string }> {
-  const systemId = await ownerSystemOf(kind, id);
-  if (!systemId) return { ok: false, status: 404, error: `${kind} not found` };
-  const d = await authorizePerson({
-    personId: req.auth!.personId,
-    systemId,
-    resource: kind,
-    action,
-  });
-  return d.allowed ? { ok: true } : { ok: false, status: 403, error: d.reason };
-}
-
 async function requireProgramManage(
   req: AuthedRequest,
   programId: string,
@@ -111,7 +83,7 @@ export function registerMissionExtendedRoutes(router: Router) {
 
   const transitions: Array<{
     path: string;
-    run: (id: string, req: AuthedRequest) => Promise<life.TransitionResult<unknown> | { ok: true; entity: unknown; gap?: number; openRequired?: number } | { ok: false; status: number; error: string }>;
+    run: (id: string, req: AuthedRequest) => Promise<life.TransitionResult<unknown> | { ok: true; entity: unknown; openRequired?: number } | { ok: false; status: number; error: string }>;
   }> = [
     {
       path: '/programs/:id/submit',
@@ -178,7 +150,6 @@ export function registerMissionExtendedRoutes(router: Router) {
       const entity = result.entity as Parameters<typeof serializeProgram>[0];
       res.json({
         program: serializeProgram(entity),
-        ...('gap' in result && result.gap !== undefined ? { gap: result.gap } : {}),
         ...('openRequired' in result && result.openRequired !== undefined
           ? { openRequired: result.openRequired }
           : {}),
@@ -188,13 +159,9 @@ export function registerMissionExtendedRoutes(router: Router) {
 
   const endSchema = z.object({
     workSummary: z.string().min(1),
-    moneySummary: z.string().min(1),
-    leftoverDecision: z.string().min(1),
-    leftoverNote: z.string().optional(),
     narrative: z.string().optional(),
     forceClose: z.boolean().optional(),
     forceReason: z.string().optional(),
-    usedCost: z.number().optional(),
   });
 
   router.post(
@@ -228,9 +195,15 @@ export function registerMissionExtendedRoutes(router: Router) {
     },
   );
 
+  /** Only delivery, blockers and health live here. Money is not kept on a mission. */
+  const STEWARD_KEYS = ['deliveryItems', 'blockers', 'healthSnapshots'];
   const stewardSchema = z.object({
     expectedVersion: z.number().int().optional(),
-    patch: z.record(z.string(), z.unknown()),
+    patch: z
+      .record(z.string(), z.unknown())
+      .refine((p) => Object.keys(p).every((k) => STEWARD_KEYS.includes(k)), {
+        message: 'Only delivery items, blockers and health can be patched',
+      }),
   });
 
   router.patch(
@@ -627,25 +600,13 @@ export function registerMissionExtendedRoutes(router: Router) {
         res.status(403).json({ error: decision.reason });
         return;
       }
-      const forceSpendGap = req.body?.forceSpendGap === true;
-      const forceReason =
-        typeof req.body?.forceReason === 'string'
-          ? req.body.forceReason
-          : undefined;
-      const result = await life.startProject(id, {
-        forceSpendGap,
-        forceReason,
-      });
+      const result = await life.startProject(id);
       if (!result.ok) {
-        res.status(result.status).json({
-          error: result.error,
-          gap: 'gap' in result ? result.gap : undefined,
-        });
+        res.status(result.status).json({ error: result.error });
         return;
       }
       res.json({
         project: result.entity,
-        gap: result.gap,
         openRequired: result.openRequired,
       });
     },
@@ -725,17 +686,6 @@ export function registerMissionExtendedRoutes(router: Router) {
       const parsed = eventPatchSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
-        return;
-      }
-      if (
-        parsed.data.status &&
-        event.status === 'PENDING_APPROVAL' &&
-        parsed.data.status !== 'PENDING_APPROVAL' &&
-        parsed.data.status !== 'CANCELLED'
-      ) {
-        res.status(409).json({
-          error: 'Awaiting approval — use the approval chain, not a status edit',
-        });
         return;
       }
       const result = await life.setEventStatus(id, parsed.data);
@@ -865,29 +815,12 @@ export function registerMissionExtendedRoutes(router: Router) {
         res.status(403).json({ error: decision.reason });
         return;
       }
-      if (!decision.allowed) {
-        // Self-registration: only for events the person may actually see.
-        const publicEvent = ['GENERAL', 'CHURCH'].includes(String(event.visibility));
-        const canSee = publicEvent
-          ? { allowed: true }
-          : await authorizePerson({
-              personId: req.auth!.personId,
-              systemId: event.ownerSystemId,
-              resource: 'EVENT',
-              action: 'VIEW',
-            });
-        if (!canSee.allowed) {
-          res.status(403).json({ error: 'You cannot register for this event' });
-          return;
-        }
-      }
       const parsed = regSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
         return;
       }
-      // Only event managers may set a status; self-registration is always REGISTERED.
-      let status = decision.allowed ? (parsed.data.status ?? 'REGISTERED') : 'REGISTERED';
+      let status = parsed.data.status ?? 'REGISTERED';
       const { expireAndPromote, mapRegistration } = await import(
         '../mission/eventRegistrations.js'
       );
@@ -974,11 +907,6 @@ export function registerMissionExtendedRoutes(router: Router) {
       res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
       return;
     }
-    const gate = await requireAuthz(req, parsed.data.kind, parsed.data.resourceId, 'MANAGE');
-    if (!gate.ok) {
-      res.status(gate.status).json({ error: gate.error });
-      return;
-    }
     const share = await prisma.missionShare.create({
       data: {
         kind: parsed.data.kind,
@@ -1013,18 +941,6 @@ export function registerMissionExtendedRoutes(router: Router) {
       typeof req.query.resourceId === 'string' ? req.query.resourceId : undefined;
     const personId =
       typeof req.query.personId === 'string' ? req.query.personId : undefined;
-    const me = req.auth!.personId;
-    if (kind && resourceId) {
-      const gate = await requireAuthz(req, kind as MissionKind, resourceId, 'MANAGE');
-      if (!gate.ok) {
-        res.status(gate.status).json({ error: gate.error });
-        return;
-      }
-    } else if (personId !== me) {
-      // Without a specific resource you may only list your own shares.
-      res.status(403).json({ error: 'Specify kind + resourceId you manage, or list your own shares' });
-      return;
-    }
     const shares = await prisma.missionShare.findMany({
       where: {
         ...(kind ? { kind } : {}),
@@ -1059,11 +975,6 @@ export function registerMissionExtendedRoutes(router: Router) {
       const id = pathParam(req, 'id');
       if (!id) {
         res.status(400).json({ error: 'Missing id' });
-        return;
-      }
-      const gate = await requireAuthz(req, 'PROJECT', id, 'VIEW');
-      if (!gate.ok) {
-        res.status(gate.status).json({ error: gate.error });
         return;
       }
       const result = await life.getApprovalChainFor('PROJECT', id);
@@ -1252,11 +1163,6 @@ export function registerMissionExtendedRoutes(router: Router) {
       const id = pathParam(req, 'id');
       if (!id) {
         res.status(400).json({ error: 'Missing id' });
-        return;
-      }
-      const gate = await requireAuthz(req, 'EVENT', id, 'VIEW');
-      if (!gate.ok) {
-        res.status(gate.status).json({ error: gate.error });
         return;
       }
       const result = await life.getApprovalChainFor('EVENT', id);
@@ -1830,7 +1736,7 @@ export function registerMissionExtendedRoutes(router: Router) {
         res.status(gate.status).json({ error: gate.error });
         return;
       }
-      const { closeActivitySession } = await import('../mission/moneyHooks.js');
+      const { closeActivitySession } = await import('../mission/sessionHooks.js');
       const result = await closeActivitySession(id, {
         completeLinkedDelivery: req.body?.completeLinkedDelivery !== false,
       });
@@ -1849,146 +1755,6 @@ export function registerMissionExtendedRoutes(router: Router) {
         alreadyClosed: result.alreadyClosed,
         deliveryCompleted: result.deliveryCompleted,
       });
-    },
-  );
-
-  const giftSchema = z.object({
-    amount: z.number().positive(),
-    label: z.string().min(1),
-    fundId: z.string().min(1),
-    donationId: z.string().min(1),
-    programId: z.string().optional(),
-    projectId: z.string().optional(),
-    note: z.string().optional(),
-  });
-
-  router.post(
-    '/stewardship/designated-gift',
-    requireAuth,
-    async (req: AuthedRequest, res) => {
-      const parsed = giftSchema.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
-        return;
-      }
-      if (!parsed.data.programId && !parsed.data.projectId) {
-        res.status(400).json({ error: 'programId or projectId required' });
-        return;
-      }
-      for (const [kind, rid] of [
-        ['PROGRAM', parsed.data.programId],
-        ['PROJECT', parsed.data.projectId],
-      ] as const) {
-        if (!rid) continue;
-        const gate = await requireAuthz(req, kind, rid, 'MANAGE');
-        if (!gate.ok) {
-          res.status(gate.status).json({ error: gate.error });
-          return;
-        }
-      }
-      const giftFund = await prisma.fund.findUnique({ where: { id: parsed.data.fundId } });
-      if (!giftFund) {
-        res.status(404).json({ error: 'Fund not found' });
-        return;
-      }
-      const { applyDesignatedGiftToStewardship } = await import(
-        '../mission/moneyHooks.js'
-      );
-      const results = [];
-      if (parsed.data.programId) {
-        const r = await applyDesignatedGiftToStewardship({
-          kind: 'PROGRAM',
-          id: parsed.data.programId,
-          amount: parsed.data.amount,
-          label: parsed.data.label,
-          fundId: parsed.data.fundId,
-          donationId: parsed.data.donationId,
-          personId: req.auth!.personId,
-          note: parsed.data.note,
-        });
-        results.push({ kind: 'PROGRAM', ...r });
-      }
-      if (parsed.data.projectId) {
-        const r = await applyDesignatedGiftToStewardship({
-          kind: 'PROJECT',
-          id: parsed.data.projectId,
-          amount: parsed.data.amount,
-          label: parsed.data.label,
-          fundId: parsed.data.fundId,
-          donationId: parsed.data.donationId,
-          personId: req.auth!.personId,
-          note: parsed.data.note,
-        });
-        results.push({ kind: 'PROJECT', ...r });
-      }
-      const failed = results.find((r) => !r.ok);
-      if (failed && 'error' in failed) {
-        res.status(failed.status ?? 400).json({ error: failed.error, results });
-        return;
-      }
-      res.json({ ok: true, results });
-    },
-  );
-
-  const usedCostSchema = z.object({
-    amount: z.number().positive(),
-    programId: z.string().optional(),
-    projectId: z.string().optional(),
-    expenseId: z.string().optional(),
-  });
-
-  router.post(
-    '/stewardship/used-cost',
-    requireAuth,
-    async (req: AuthedRequest, res) => {
-      const parsed = usedCostSchema.safeParse(req.body);
-      if (!parsed.success) {
-        res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
-        return;
-      }
-      if (!parsed.data.programId && !parsed.data.projectId) {
-        res.status(400).json({ error: 'programId or projectId required' });
-        return;
-      }
-      for (const [kind, rid] of [
-        ['PROGRAM', parsed.data.programId],
-        ['PROJECT', parsed.data.projectId],
-      ] as const) {
-        if (!rid) continue;
-        const gate = await requireAuthz(req, kind, rid, 'MANAGE');
-        if (!gate.ok) {
-          res.status(gate.status).json({ error: gate.error });
-          return;
-        }
-      }
-      const { incrementUsedCost } = await import('../mission/moneyHooks.js');
-      const results = [];
-      if (parsed.data.programId) {
-        results.push(
-          await incrementUsedCost({
-            kind: 'PROGRAM',
-            id: parsed.data.programId,
-            amount: parsed.data.amount,
-            expenseId: parsed.data.expenseId,
-          }),
-        );
-      }
-      if (parsed.data.projectId) {
-        results.push(
-          await incrementUsedCost({
-            kind: 'PROJECT',
-            id: parsed.data.projectId,
-            amount: parsed.data.amount,
-            expenseId: parsed.data.expenseId,
-          }),
-        );
-      }
-      const failed = results.find((r) => !r.ok);
-      if (failed && 'error' in failed) {
-        res.status(failed.status ?? 400).json({ error: failed.error });
-        return;
-      }
-      res.json({ ok: true, results });
     },
   );
 }

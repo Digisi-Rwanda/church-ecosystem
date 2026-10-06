@@ -162,7 +162,6 @@ export async function writeStartProgram(id: string) {
       return {
         ok: true as const,
         program: r.program,
-        gap: r.gap,
         openRequired: r.openRequired,
       };
     } catch (e) {
@@ -266,8 +265,6 @@ export async function writeCreateProject(input: {
   visibility?: MissionVisibility;
   leadPersonId?: string;
   beyondOwnerScope?: boolean;
-  willSpend?: boolean;
-  fundId?: string;
   collaboratorSystemIds?: SystemId[];
   programId?: string;
   orgUnitId?: string;
@@ -283,8 +280,6 @@ export async function writeCreateProject(input: {
         ownerSystemId: input.ownerSystemId,
         visibility: input.visibility,
         status: startActive ? 'ACTIVE' : 'DRAFT',
-        willSpend: input.willSpend,
-        fundId: input.fundId,
         programId: input.programId,
         beyondOwnerScope: input.beyondOwnerScope,
         leadPersonId: input.leadPersonId,
@@ -331,8 +326,6 @@ export async function writeCreateEvent(input: {
   beyondOwnerScope?: boolean;
   projectId?: string;
   programId?: string;
-  willSpend?: boolean;
-  plannedCost?: number;
   orgUnitId?: string;
   createdByPersonId: string;
 }) {
@@ -352,8 +345,6 @@ export async function writeCreateEvent(input: {
         beyondOwnerScope: input.beyondOwnerScope,
         projectId: input.projectId,
         programId: input.programId,
-        willSpend: input.willSpend,
-        plannedCost: input.plannedCost,
         status: input.beyondOwnerScope ? 'PENDING_APPROVAL' : 'CONFIRMED',
       });
       const merged: ChurchEvent = {
@@ -652,37 +643,24 @@ export async function writeApproveProjectLevel(input: {
   return missionService.approveProjectLevel(input);
 }
 
-export async function writeStartProject(
-  id: string,
-  opts?: { forceSpendGap?: boolean; forceReason?: string },
-) {
+export async function writeStartProject(id: string) {
   if (isApiEnabled()) {
     try {
-      const r = await apiStartProject(id, opts);
+      const r = await apiStartProject(id);
       syncProject(r.project);
       return {
         ok: true as const,
         project: r.project,
-        gap: r.gap,
         openRequired: r.openRequired,
       };
     } catch (e) {
-      const gap =
-        e instanceof ApiError &&
-        e.body &&
-        typeof e.body === 'object' &&
-        e.body !== null &&
-        'gap' in e.body
-          ? Number((e.body as { gap?: number }).gap)
-          : undefined;
       return {
         ok: false as const,
         reason: e instanceof ApiError ? e.message : 'API start failed',
-        gap: Number.isFinite(gap) ? gap : undefined,
       };
     }
   }
-  return missionService.startProject(id, opts);
+  return missionService.startProject(id);
 }
 
 export async function writeBeginCloseProject(id: string) {

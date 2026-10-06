@@ -11,7 +11,6 @@ export type PermissionGrant = {
   action: Action;
   source: string;
   reason: string;
-  fundId?: string;
 };
 
 export type Membership = {
@@ -70,24 +69,11 @@ export type WorkTask = {
   endDate?: string;
 };
 
-export type FundAccessGrant = {
-  id: string;
-  fundId: string;
-  personId: string;
-  action: 'VIEW' | 'MANAGE' | 'APPROVE' | string;
-  grantedByPersonId: string;
-  reason: string;
-  status: string;
-  startDate: string;
-  endDate?: string;
-};
-
 export type AuthzRequest = {
   personId: string;
   systemId: SystemId;
   resource: Resource;
   action: Action;
-  fundId?: string;
   now?: Date;
 };
 
@@ -97,7 +83,6 @@ export type AuthzDecision = {
   systemId: SystemId;
   resource: Resource;
   action: Action;
-  fundId?: string;
   matchedGrant?: PermissionGrant;
   reason: string;
   evaluatedAt: string;

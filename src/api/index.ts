@@ -50,8 +50,6 @@ export {
   apiCloseActivity,
   apiGetProgramPulse,
   apiGetProjectPulse,
-  apiApplyDesignatedGift,
-  apiIncrementUsedCost,
   loadActivitiesPreferApi,
   loadEnrollmentsPreferApi,
   loadEventRegistrationsPreferApi,

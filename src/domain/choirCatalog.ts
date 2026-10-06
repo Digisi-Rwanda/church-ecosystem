@@ -30,12 +30,3 @@ export function choirName(orgUnitId: string): string {
 export function listChoirOrgUnits(): ChoirOrgUnitEntry[] {
   return [...CHOIR_ORG_UNITS];
 }
-
-/** Per-choir fund vault, e.g. ou-choir-ijwi → fund-choir-ijwi */
-export function fundIdForChoirOrgUnit(orgUnitId: string): string {
-  if (!isChoirOrgUnitId(orgUnitId)) {
-    throw new Error(`Not a choir org unit: ${orgUnitId}`);
-  }
-  const suffix = orgUnitId.slice('ou-choir-'.length);
-  return `fund-choir-${suffix}`;
-}

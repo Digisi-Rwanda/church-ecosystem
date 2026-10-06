@@ -19,7 +19,6 @@ import {
   systemsInAudiencePool,
   type ProgramEligibility,
 } from '../domain/audiencePool';
-import { eventSpendPolicyOk } from '../domain/eventOps';
 import {
   isChurchLeader,
   isItoreroHighLeader,
@@ -81,28 +80,17 @@ import type {
 } from '../domain/types';
 import {
   deliveryReadyToClose,
-  openAdvances,
   requiredDeliveryOpen,
   type DeliveryItemKind,
   type DeliveryItemStatus,
   type DeliveryItemTier,
-  type FundingSourceStatus,
-  type FundingSourceType,
-  type LeftoverDecision,
-  type MissionAdvance,
-  type MissionBudgetLine,
   type MissionCloseout,
   type MissionDeliveryItem,
-  type MissionFundingSource,
-  type MissionInKind,
-  type MissionPhaseRenewal,
   type MissionStewardship,
 } from '../domain/stewardship';
 import { peopleService } from './authService';
-import { financeService } from './financeService';
 import { participationService } from './participationService';
 import { systemsService } from './orgService';
-import { FUNDS } from '../data/financeSeed';
 
 export type MissionStewardKind = 'PROGRAM' | 'PROJECT';
 
@@ -459,11 +447,11 @@ export const missionService = {
   },
 
   /**
-   * SETUP → ACTIVE after calendar/money prep. Soft-warns on funding gap.
+   * SETUP → ACTIVE after the calendar is ready. Money is not part of a programme.
    */
   startProgram(
     id: string,
-  ): { ok: boolean; reason?: string; program?: Program; gap?: number; openRequired?: number } {
+  ): { ok: boolean; reason?: string; program?: Program; openRequired?: number } {
     const p = this.getProgram(id);
     if (!p) return { ok: false, reason: 'Program not found' };
     if (p.status !== 'SETUP') {
@@ -471,16 +459,10 @@ export const missionService = {
     }
     const program = this.updateProgram(id, { status: 'ACTIVE' });
     if (!program) return { ok: false, reason: 'Update failed' };
-    const gap =
-      (Number(p.plannedCost) || 0) -
-      (p.fundingPlan ?? [])
-        .filter((f) => f.status === 'CONFIRMED')
-        .reduce((s, f) => s + (Number(f.amount) || 0), 0);
     const openReq = requiredDeliveryOpen(p).length;
     return {
       ok: true,
       program,
-      gap: gap > 0 ? gap : undefined,
       openRequired: openReq > 0 ? openReq : undefined,
     };
   },
@@ -527,7 +509,7 @@ export const missionService = {
   },
 
   /**
-   * End program with P0 close-out gates (required delivery + money leftover).
+   * End program with close-out gates (required delivery items).
    * Must be in CLOSING (or ACTIVE — auto-enters CLOSING then finishes).
    * Pass `forceClose` only to skip open required delivery (still needs closeout).
    */
@@ -539,7 +521,6 @@ export const missionService = {
       };
       forceClose?: boolean;
       forceReason?: string;
-      usedCost?: number;
     },
   ): { ok: boolean; reason?: string; program?: Program } {
     const p = this.getProgram(id);
@@ -559,22 +540,15 @@ export const missionService = {
     if (!opts?.closeout) {
       return {
         ok: false,
-        reason: 'Close-out required (work + money summary and leftover)',
+        reason: 'Close-out required (a summary of the work)',
       };
     }
-    const openAdv = openAdvances(live);
-    const needsForce = !deliveryReadyToClose(live) || openAdv.length > 0;
+    const needsForce = !deliveryReadyToClose(live);
     if (needsForce && !opts.forceClose) {
-      if (!deliveryReadyToClose(live)) {
-        const open = requiredDeliveryOpen(live);
-        return {
-          ok: false,
-          reason: `${open.length} required delivery item(s) still open — finish, waive, or force`,
-        };
-      }
+      const open = requiredDeliveryOpen(live);
       return {
         ok: false,
-        reason: `${openAdv.length} open advance(s) must be retired — or force close`,
+        reason: `${open.length} required delivery item(s) still open — finish, waive, or force`,
       };
     }
     if (opts.forceClose && needsForce) {
@@ -586,12 +560,6 @@ export const missionService = {
         };
       }
     }
-    const used =
-      opts.usedCost !== undefined
-        ? opts.usedCost
-        : live.usedCost !== undefined
-          ? live.usedCost
-          : 0;
     const forceReason =
       opts.forceClose && needsForce
         ? (opts.forceReason ?? opts.closeout.forceReason ?? '').trim()
@@ -600,11 +568,6 @@ export const missionService = {
       ...opts.closeout,
       forceReason,
       closedAt: new Date().toISOString(),
-      plannedCostSnapshot: live.plannedCost,
-      usedCostSnapshot: used,
-      confirmedFundingSnapshot: (live.fundingPlan ?? [])
-        .filter((f) => f.status === 'CONFIRMED')
-        .reduce((s, f) => s + (Number(f.amount) || 0), 0),
       participantsServedSnapshot: this.listEnrollments(id).filter(
         (e) =>
           e.status === 'ACTIVE' ||
@@ -621,7 +584,6 @@ export const missionService = {
     }
     const program = this.updateProgram(id, {
       status: 'ENDED',
-      usedCost: used,
       closeout,
     });
     return program
@@ -982,20 +944,8 @@ export const missionService = {
     projectId?: string;
     collaboratorSystemIds?: SystemId[];
     collaboratorPersonIds?: string[];
-    willSpend?: boolean;
-    plannedCost?: number;
   }): ChurchEvent {
     const beyond = input.beyondOwnerScope === true;
-    if (input.willSpend) {
-      const gate = eventSpendPolicyOk({
-        willSpend: true,
-        projectId: input.projectId,
-        plannedCost: input.plannedCost,
-      });
-      if (!gate.ok) {
-        throw new Error(gate.reason ?? 'Spend policy failed');
-      }
-    }
     const ownerOrg =
       input.orgUnitId ??
       systemsService.getById(input.ownerSystemId)?.orgUnitId;
@@ -1025,8 +975,6 @@ export const missionService = {
       seriesLabel: input.seriesLabel,
       programId: input.programId,
       projectId: input.projectId,
-      willSpend: input.willSpend,
-      plannedCost: input.plannedCost,
       collaboratorSystemIds: collabSys.length ? collabSys : undefined,
       collaboratorPersonIds: collabPeople.length ? collabPeople : undefined,
       lifecyclePhase: 'PREPARE',
@@ -1461,22 +1409,10 @@ export const missionService = {
     collaboratorSystemIds?: SystemId[];
     collaboratorPersonIds?: string[];
     beyondOwnerScope?: boolean;
-    willSpend?: boolean;
-    fundId?: string;
     createdByPersonId?: string;
     /** Church leadership may skip draft → ACTIVE (fast-track). */
     startActive?: boolean;
   }): { ok: boolean; reason?: string; project?: ChurchProject } {
-    const willSpend = input.willSpend === true;
-    if (willSpend && !input.fundId) {
-      return {
-        ok: false,
-        reason: 'Fund required when project will spend (M1+M3+M4)',
-      };
-    }
-    if (input.fundId && !FUNDS.find((f) => f.id === input.fundId)) {
-      return { ok: false, reason: 'Unknown fund' };
-    }
     if (input.programId && !this.getProgram(input.programId)) {
       return { ok: false, reason: 'Unknown parent programme' };
     }
@@ -1507,8 +1443,6 @@ export const missionService = {
       collaboratorPersonIds: collabPeople.length ? collabPeople : undefined,
       beyondOwnerScope: beyond,
       approvals: [],
-      willSpend,
-      fundId: willSpend ? input.fundId : input.fundId || undefined,
       createdByPersonId: input.createdByPersonId,
     };
     PROJECTS.unshift(p);
@@ -1563,17 +1497,14 @@ export const missionService = {
   },
 
   /**
-   * PLANNED (setup) → ACTIVE when ready to run.
-   * Spend gate: willSpend && fundingGap > 0 requires forceSpendGap + reason.
+   * PLANNED (setup) → ACTIVE when ready to run. Money is not part of a project.
    */
   startProject(
     id: string,
-    opts?: { forceSpendGap?: boolean; forceReason?: string },
   ): {
     ok: boolean;
     reason?: string;
     project?: ChurchProject;
-    gap?: number;
     openRequired?: number;
   } {
     const p = this.getProject(id);
@@ -1581,48 +1512,15 @@ export const missionService = {
     if (p.status !== 'PLANNED') {
       return { ok: false, reason: 'Only PLANNED projects can start running' };
     }
-    const gap =
-      (Number(p.plannedCost) || 0) -
-      (p.fundingPlan ?? [])
-        .filter((f) => f.status === 'CONFIRMED')
-        .reduce((s, f) => s + (Number(f.amount) || 0), 0);
-    if (p.willSpend && gap > 0) {
-      if (!opts?.forceSpendGap) {
-        return {
-          ok: false,
-          reason: `Funding gap ${Math.round(gap)} RWF — confirm funding or force start with a reason`,
-          gap,
-        };
-      }
-      const reason = (opts.forceReason ?? '').trim();
-      if (reason.length < 8) {
-        return {
-          ok: false,
-          reason: 'Force start requires a reason (at least 8 characters)',
-          gap,
-        };
-      }
-    }
     const project = this.updateProject(id, {
       status: 'ACTIVE',
       startDate: p.startDate ?? new Date().toISOString().slice(0, 10),
-      ...(opts?.forceSpendGap && gap > 0
-        ? {
-            outcomeNote: [
-              p.outcomeNote,
-              `Spend-gap override: ${opts.forceReason!.trim()}`,
-            ]
-              .filter(Boolean)
-              .join(' · '),
-          }
-        : {}),
     });
     if (!project) return { ok: false, reason: 'Update failed' };
     const openReq = requiredDeliveryOpen(p).length;
     return {
       ok: true,
       project,
-      gap: gap > 0 ? gap : undefined,
       openRequired: openReq > 0 ? openReq : undefined,
     };
   },
@@ -1635,57 +1533,6 @@ export const missionService = {
     return EVENTS.filter((e) => e.projectId === projectId);
   },
 
-  /**
-   * Confirmed gift/donation → fundingPlan CONFIRMED on tagged programme/project.
-   */
-  applyDesignatedGift(input: {
-    amount: number;
-    label: string;
-    fundId: string;
-    donationId: string;
-    personId: string;
-    programId?: string;
-    projectId?: string;
-    note?: string;
-  }): { ok: boolean; reason?: string; warnings?: string[] } {
-    if (!input.programId && !input.projectId) {
-      return { ok: true };
-    }
-    if (!FUNDS.find((f) => f.id === input.fundId)) {
-      return { ok: false, reason: 'Unknown fund' };
-    }
-    const warnings: string[] = [];
-    const apply = (kind: MissionStewardKind, id: string) => {
-      const obj =
-        kind === 'PROGRAM' ? this.getProgram(id) : this.getProject(id);
-      if (!obj) {
-        warnings.push(`${kind} ${id} not found`);
-        return;
-      }
-      if (
-        kind === 'PROJECT' &&
-        'fundId' in obj &&
-        obj.fundId &&
-        obj.fundId !== input.fundId
-      ) {
-        warnings.push(
-          `Gift fund differs from project vault (${obj.fundId}) — tagged anyway`,
-        );
-      }
-      this.recordConfirmedAllocation(kind, id, {
-        sourceType: 'DESIGNATED_GIFT',
-        label: input.label,
-        amount: input.amount,
-        fundId: input.fundId,
-        personId: input.personId,
-        donationId: input.donationId,
-        note: input.note,
-      });
-    };
-    if (input.projectId) apply('PROJECT', input.projectId);
-    if (input.programId) apply('PROGRAM', input.programId);
-    return { ok: true, warnings: warnings.length ? warnings : undefined };
-  },
 
   updateProject(
     id: string,
@@ -1824,7 +1671,7 @@ export const missionService = {
   },
 
   /**
-   * Close project with P0 stewardship gates + open-task soft-block.
+   * Close project with delivery gates + open-task soft-block.
    * Must be CLOSING (ACTIVE auto-enters CLOSING first).
    */
   completeProject(
@@ -1833,7 +1680,6 @@ export const missionService = {
       outcomeNote?: string;
       forceClose?: boolean;
       forceReason?: string;
-      usedCost?: number;
       closeout?: Omit<MissionCloseout, 'closedAt' | 'closedByPersonId'> & {
         closedByPersonId: string;
       };
@@ -1872,25 +1718,17 @@ export const missionService = {
     if (!opts?.closeout) {
       return {
         ok: false,
-        reason: 'Close-out required (work + money summary and leftover)',
+        reason: 'Close-out required (a summary of the work)',
       };
     }
-    const openAdv = openAdvances(live);
     const open = this.openTasksForProject(id);
-    const needsForce =
-      !deliveryReadyToClose(live) || openAdv.length > 0 || open.length > 0;
+    const needsForce = !deliveryReadyToClose(live) || open.length > 0;
     if (needsForce && !opts.forceClose) {
       if (!deliveryReadyToClose(live)) {
         const openDel = requiredDeliveryOpen(live);
         return {
           ok: false,
           reason: `${openDel.length} required delivery item(s) still open — finish, waive, or force`,
-        };
-      }
-      if (openAdv.length > 0) {
-        return {
-          ok: false,
-          reason: `${openAdv.length} open advance(s) must be retired — or force close`,
         };
       }
       return {
@@ -1908,12 +1746,6 @@ export const missionService = {
         };
       }
     }
-    const used =
-      opts.usedCost !== undefined
-        ? opts.usedCost
-        : live.usedCost !== undefined
-          ? live.usedCost
-          : 0;
     const forceReason =
       opts.forceClose && needsForce
         ? (opts.forceReason ?? opts.closeout.forceReason ?? '').trim()
@@ -1922,17 +1754,11 @@ export const missionService = {
       ...opts.closeout,
       forceReason,
       closedAt: new Date().toISOString(),
-      plannedCostSnapshot: live.plannedCost,
-      usedCostSnapshot: used,
-      confirmedFundingSnapshot: (live.fundingPlan ?? [])
-        .filter((f) => f.status === 'CONFIRMED')
-        .reduce((s, f) => s + (Number(f.amount) || 0), 0),
     };
     const project = this.updateProject(id, {
       status: 'DONE',
       endDate: new Date().toISOString().slice(0, 10),
       outcomeNote: opts?.outcomeNote?.trim() || undefined,
-      usedCost: used,
       closeout,
     });
     return project
@@ -2270,16 +2096,8 @@ export const missionService = {
       kind === 'PROGRAM' ? this.getProgram(id) : this.getProject(id);
     if (!obj) return null;
     return {
-      plannedCost: obj.plannedCost,
-      budgetLines: obj.budgetLines,
-      fundingPlan: obj.fundingPlan,
-      usedCost: obj.usedCost,
       deliveryItems: obj.deliveryItems,
       closeout: obj.closeout,
-      advances: obj.advances,
-      inKind: obj.inKind,
-      envelopePeriod: obj.envelopePeriod,
-      phaseRenewals: obj.phaseRenewals,
     };
   },
 
@@ -2306,126 +2124,6 @@ export const missionService = {
     return p ? { ok: true } : { ok: false, reason: 'Project not found' };
   },
 
-  setPlannedCost(
-    kind: MissionStewardKind,
-    id: string,
-    plannedCost: number,
-    budgetLines?: MissionBudgetLine[],
-  ) {
-    const lines = budgetLines?.slice(0, 8);
-    return this.patchStewardship(kind, id, {
-      plannedCost: Math.max(0, Math.round(plannedCost)),
-      ...(lines ? { budgetLines: lines } : {}),
-    });
-  },
-
-  setUsedCost(kind: MissionStewardKind, id: string, usedCost: number) {
-    return this.patchStewardship(kind, id, {
-      usedCost: Math.max(0, Math.round(usedCost)),
-    });
-  },
-
-  addFundingSource(
-    kind: MissionStewardKind,
-    id: string,
-    input: {
-      sourceType: FundingSourceType;
-      label: string;
-      amount: number;
-      status?: FundingSourceStatus;
-      fundId?: string;
-      note?: string;
-    },
-  ): { ok: boolean; reason?: string; source?: MissionFundingSource } {
-    const s = this.stewardshipOf(kind, id);
-    if (!s) return { ok: false, reason: 'Not found' };
-    const status = input.status ?? 'INTENDED';
-    if (status === 'CONFIRMED' && !input.fundId) {
-      return { ok: false, reason: 'Confirmed funding needs a fund' };
-    }
-    if (input.fundId && !FUNDS.find((f) => f.id === input.fundId)) {
-      return { ok: false, reason: 'Unknown fund' };
-    }
-    const source: MissionFundingSource = {
-      id: nid('fs'),
-      sourceType: input.sourceType,
-      label: input.label.trim() || input.sourceType,
-      amount: Math.max(0, Math.round(input.amount)),
-      status,
-      fundId: input.fundId,
-      note: input.note?.trim() || undefined,
-      confirmedAt:
-        status === 'CONFIRMED' ? new Date().toISOString() : undefined,
-    };
-    const fundingPlan = [...(s.fundingPlan ?? []), source];
-    const r = this.patchStewardship(kind, id, { fundingPlan });
-    return r.ok ? { ok: true, source } : r;
-  },
-
-  /** Manual confirm allocation (P0 S5) — intended → confirmed with fund. */
-  confirmFundingSource(
-    kind: MissionStewardKind,
-    id: string,
-    sourceId: string,
-    input: { fundId: string; personId: string; note?: string },
-  ): { ok: boolean; reason?: string } {
-    const s = this.stewardshipOf(kind, id);
-    if (!s) return { ok: false, reason: 'Not found' };
-    if (!FUNDS.find((f) => f.id === input.fundId)) {
-      return { ok: false, reason: 'Unknown fund' };
-    }
-    const fundingPlan = (s.fundingPlan ?? []).map((f) => {
-      if (f.id !== sourceId) return f;
-      return {
-        ...f,
-        status: 'CONFIRMED' as const,
-        fundId: input.fundId,
-        confirmedAt: new Date().toISOString(),
-        confirmedByPersonId: input.personId,
-        note: input.note?.trim() || f.note,
-      };
-    });
-    if (!(s.fundingPlan ?? []).some((f) => f.id === sourceId)) {
-      return { ok: false, reason: 'Source not found' };
-    }
-    return this.patchStewardship(kind, id, { fundingPlan });
-  },
-
-  /** Record a confirmed allocation in one step (no prior intended row). */
-  recordConfirmedAllocation(
-    kind: MissionStewardKind,
-    id: string,
-    input: {
-      sourceType: FundingSourceType;
-      label: string;
-      amount: number;
-      fundId: string;
-      personId: string;
-      note?: string;
-      donationId?: string;
-    },
-  ): { ok: boolean; reason?: string; source?: MissionFundingSource } {
-    const s = this.stewardshipOf(kind, id);
-    if (!s) return { ok: false, reason: 'Not found' };
-    if (!FUNDS.find((f) => f.id === input.fundId)) {
-      return { ok: false, reason: 'Unknown fund' };
-    }
-    const source: MissionFundingSource = {
-      id: nid('fs'),
-      sourceType: input.sourceType,
-      label: input.label.trim() || 'Confirmed allocation',
-      amount: Math.max(0, Math.round(input.amount)),
-      status: 'CONFIRMED',
-      fundId: input.fundId,
-      donationId: input.donationId,
-      note: input.note?.trim() || undefined,
-      confirmedAt: new Date().toISOString(),
-      confirmedByPersonId: input.personId,
-    };
-    const fundingPlan = [...(s.fundingPlan ?? []), source];
-    const r = this.patchStewardship(kind, id, { fundingPlan });
-    return r.ok ? { ok: true, source } : r;
-  },
 
   addDeliveryItem(
     kind: MissionStewardKind,
@@ -2509,7 +2207,7 @@ export const missionService = {
     return this.patchStewardship(kind, id, { deliveryItems: next });
   },
 
-  /* ─── P2: advances, budget lines, in-kind, renew, pause, transfer tag ─── */
+  /* ─── pause / resume ─── */
 
   pauseProject(id: string): { ok: boolean; reason?: string; project?: ChurchProject } {
     const p = this.getProject(id);
@@ -2531,76 +2229,7 @@ export const missionService = {
     return project ? { ok: true, project } : { ok: false, reason: 'Update failed' };
   },
 
-  upsertBudgetLine(
-    kind: MissionStewardKind,
-    id: string,
-    input: { id?: string; label: string; plannedAmount: number; personId: string },
-  ): { ok: boolean; reason?: string } {
-    const s = this.stewardshipOf(kind, id);
-    if (!s) return { ok: false, reason: 'Not found' };
-    const lines = [...(s.budgetLines ?? [])];
-    if (input.id) {
-      const idx = lines.findIndex((l) => l.id === input.id);
-      if (idx < 0) return { ok: false, reason: 'Budget line not found' };
-      if (lines[idx].frozen) {
-        return { ok: false, reason: 'Line is frozen — unfreeze to amend' };
-      }
-      lines[idx] = {
-        ...lines[idx],
-        label: input.label.trim(),
-        plannedAmount: Math.max(0, Math.round(input.plannedAmount)),
-        amendNote: `Amended to ${Math.round(input.plannedAmount)}`,
-        amendedAt: new Date().toISOString(),
-        amendedByPersonId: input.personId,
-      };
-    } else {
-      if (lines.length >= 8) {
-        return { ok: false, reason: 'Max 8 budget lines' };
-      }
-      lines.push({
-        id: nid('bl'),
-        label: input.label.trim(),
-        plannedAmount: Math.max(0, Math.round(input.plannedAmount)),
-      });
-    }
-    const plannedCost = lines.reduce((sum, l) => sum + l.plannedAmount, 0);
-    return this.patchStewardship(kind, id, { budgetLines: lines, plannedCost });
-  },
 
-  setBudgetLineFrozen(
-    kind: MissionStewardKind,
-    id: string,
-    lineId: string,
-    frozen: boolean,
-    opts?: { amendNote?: string },
-  ): { ok: boolean; reason?: string } {
-    const s = this.stewardshipOf(kind, id);
-    if (!s) return { ok: false, reason: 'Not found' };
-    if (!(s.budgetLines ?? []).some((l) => l.id === lineId)) {
-      return { ok: false, reason: 'Budget line not found' };
-    }
-    if (!frozen) {
-      const note = (opts?.amendNote ?? '').trim();
-      if (note.length < 4) {
-        return {
-          ok: false,
-          reason: 'Unfreeze requires a short amend note',
-        };
-      }
-    }
-    const lines = (s.budgetLines ?? []).map((l) =>
-      l.id === lineId
-        ? {
-            ...l,
-            frozen,
-            amendNote: !frozen
-              ? (opts?.amendNote ?? '').trim()
-              : l.amendNote,
-          }
-        : l,
-    );
-    return this.patchStewardship(kind, id, { budgetLines: lines });
-  },
 
   addBlocker(
     kind: MissionStewardKind,
@@ -2687,204 +2316,8 @@ export const missionService = {
     return { ok: true, tasks };
   },
 
-  issueAdvance(
-    kind: MissionStewardKind,
-    id: string,
-    input: {
-      holderPersonId: string;
-      amount: number;
-      purpose: string;
-      personId: string;
-      fundId?: string;
-      allowWhileOpen?: boolean;
-    },
-  ): { ok: boolean; reason?: string; advance?: MissionAdvance } {
-    const s = this.stewardshipOf(kind, id);
-    if (!s) return { ok: false, reason: 'Not found' };
-    const open = openAdvances(s);
-    if (open.length > 0 && !input.allowWhileOpen) {
-      return {
-        ok: false,
-        reason: `${open.length} open advance(s) — retire first or force`,
-      };
-    }
-    const amount = Math.max(0, Math.round(input.amount));
-    if (amount <= 0) return { ok: false, reason: 'Amount required' };
-    const advance: MissionAdvance = {
-      id: nid('adv'),
-      holderPersonId: input.holderPersonId,
-      amount,
-      fundId: input.fundId,
-      purpose: input.purpose.trim() || 'Float',
-      status: 'OPEN',
-      issuedAt: new Date().toISOString(),
-      issuedByPersonId: input.personId,
-    };
-    const advances = [...(s.advances ?? []), advance];
-    const r = this.patchStewardship(kind, id, { advances });
-    return r.ok ? { ok: true, advance } : r;
-  },
 
-  retireAdvance(
-    kind: MissionStewardKind,
-    id: string,
-    advanceId: string,
-    input: {
-      personId: string;
-      retiredSpent: number;
-      returnedAmount?: number;
-      receiptNote?: string;
-      applyToUsedCost?: boolean;
-    },
-  ): { ok: boolean; reason?: string } {
-    const s = this.stewardshipOf(kind, id);
-    if (!s) return { ok: false, reason: 'Not found' };
-    const advances = [...(s.advances ?? [])];
-    const idx = advances.findIndex((a) => a.id === advanceId);
-    if (idx < 0) return { ok: false, reason: 'Advance not found' };
-    if (advances[idx].status !== 'OPEN') {
-      return { ok: false, reason: 'Already retired' };
-    }
-    const spent = Math.max(0, Math.round(input.retiredSpent));
-    const returned =
-      input.returnedAmount !== undefined
-        ? Math.max(0, Math.round(input.returnedAmount))
-        : Math.max(0, advances[idx].amount - spent);
-    advances[idx] = {
-      ...advances[idx],
-      status: 'RETIRED',
-      retiredAt: new Date().toISOString(),
-      retiredByPersonId: input.personId,
-      retiredSpent: spent,
-      returnedAmount: returned,
-      receiptNote: input.receiptNote?.trim() || undefined,
-    };
-    const patch: Partial<MissionStewardship> = { advances };
-    if (input.applyToUsedCost !== false && spent > 0) {
-      patch.usedCost = (Number(s.usedCost) || 0) + spent;
-    }
-    return this.patchStewardship(kind, id, patch);
-  },
 
-  addInKind(
-    kind: MissionStewardKind,
-    id: string,
-    input: {
-      label: string;
-      personId: string;
-      estimatedValue?: number;
-      donorName?: string;
-      note?: string;
-    },
-  ): { ok: boolean; reason?: string; item?: MissionInKind } {
-    const s = this.stewardshipOf(kind, id);
-    if (!s) return { ok: false, reason: 'Not found' };
-    if (!input.label.trim()) return { ok: false, reason: 'Label required' };
-    const item: MissionInKind = {
-      id: nid('ik'),
-      label: input.label.trim(),
-      estimatedValue:
-        input.estimatedValue !== undefined
-          ? Math.max(0, Math.round(input.estimatedValue))
-          : undefined,
-      donorName: input.donorName?.trim() || undefined,
-      notedAt: new Date().toISOString(),
-      notedByPersonId: input.personId,
-      note: input.note?.trim() || undefined,
-    };
-    const inKind = [...(s.inKind ?? []), item];
-    const r = this.patchStewardship(kind, id, { inKind });
-    return r.ok ? { ok: true, item } : r;
-  },
 
-  /**
-   * Close current envelope period without ending the programme; start next.
-   */
-  renewProgramPhase(
-    id: string,
-    input: {
-      personId: string;
-      periodLabel: string;
-      nextPeriodLabel: string;
-      nextPlannedCost?: number;
-      leftoverDecision?: LeftoverDecision;
-      narrative?: string;
-      clearUsedCost?: boolean;
-    },
-  ): { ok: boolean; reason?: string; program?: Program } {
-    const p = this.getProgram(id);
-    if (!p) return { ok: false, reason: 'Program not found' };
-    if (p.status !== 'ACTIVE' && p.status !== 'PAUSED') {
-      return { ok: false, reason: 'Only ACTIVE/PAUSED programmes can renew envelope' };
-    }
-    const renewal: MissionPhaseRenewal = {
-      id: nid('ren'),
-      periodLabel: input.periodLabel.trim() || p.envelopePeriod || 'Prior period',
-      closedAt: new Date().toISOString(),
-      closedByPersonId: input.personId,
-      plannedCostSnapshot: p.plannedCost,
-      usedCostSnapshot: p.usedCost,
-      confirmedFundingSnapshot: (p.fundingPlan ?? [])
-        .filter((f) => f.status === 'CONFIRMED')
-        .reduce((sum, f) => sum + (Number(f.amount) || 0), 0),
-      leftoverDecision: input.leftoverDecision,
-      narrative: input.narrative?.trim() || undefined,
-      nextPlannedCost: input.nextPlannedCost,
-      nextPeriodLabel: input.nextPeriodLabel.trim(),
-    };
-    const phaseRenewals = [...(p.phaseRenewals ?? []), renewal];
-    const patch: Partial<Program> = {
-      phaseRenewals,
-      envelopePeriod: input.nextPeriodLabel.trim(),
-    };
-    if (input.nextPlannedCost !== undefined) {
-      patch.plannedCost = Math.max(0, Math.round(input.nextPlannedCost));
-    }
-    if (input.clearUsedCost !== false) {
-      patch.usedCost = 0;
-    }
-    const program = this.updateProgram(id, patch);
-    return program
-      ? { ok: true, program }
-      : { ok: false, reason: 'Update failed' };
-  },
 
-  /**
-   * Record vault transfer and optionally tag as confirmed GENERAL_ALLOCATION.
-   */
-  recordStewardshipTransfer(input: {
-    kind: MissionStewardKind;
-    id: string;
-    actorPersonId: string;
-    fromFundId: string;
-    toFundId: string;
-    amount: number;
-    description: string;
-    tagAsConfirmedSource?: boolean;
-  }): { ok: boolean; reason?: string } {
-    const ctx =
-      input.kind === 'PROGRAM'
-        ? ({ contextType: 'PROGRAM' as const, contextId: input.id })
-        : ({ contextType: 'PROJECT' as const, contextId: input.id });
-    const posted = financeService.recordFundTransfer({
-      actorPersonId: input.actorPersonId,
-      fromFundId: input.fromFundId,
-      toFundId: input.toFundId,
-      amount: input.amount,
-      description: input.description,
-      ...ctx,
-    });
-    if (!posted.ok) return { ok: false, reason: posted.reason };
-    if (input.tagAsConfirmedSource) {
-      this.recordConfirmedAllocation(input.kind, input.id, {
-        sourceType: 'GENERAL_ALLOCATION',
-        label: input.description || 'Fund transfer in',
-        amount: Math.round(input.amount),
-        fundId: input.toFundId,
-        personId: input.actorPersonId,
-        note: `Transfer from ${input.fromFundId}`,
-      });
-    }
-    return { ok: true };
-  },
 };

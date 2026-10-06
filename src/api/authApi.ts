@@ -45,7 +45,6 @@ export async function apiAuthorizeProbe(input: {
   systemId: string;
   resource: string;
   action: string;
-  fundId?: string;
 }): Promise<{
   allowed: boolean;
   reason: string;
@@ -64,7 +63,6 @@ export type ApiGrant = {
   action: string;
   source: string;
   reason: string;
-  fundId?: string;
 };
 
 export async function apiFetchGrants(opts?: {

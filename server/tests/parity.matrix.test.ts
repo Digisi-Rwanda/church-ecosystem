@@ -3,7 +3,7 @@
  *
  * parity.spa.test.ts compares the two engines for the seeded accounts. This one
  * builds a synthetic person for every combination of system x role/office
- * x status (and memberships, assignments, tasks, fund grants) and requires the
+ * x status (and memberships, assignments, tasks) and requires the
  * two engines to grant exactly the same things. It exists to catch the day one
  * copy of a rule is changed and the other is not.
  */
@@ -14,7 +14,7 @@ import { SYSTEMS } from '../../src/data/seed';
 
 const NOW = new Date('2026-09-30T12:00:00Z');
 const ids = SYSTEMS.map((s) => s.id);
-const key = (g: any) => `${g.systemId}|${g.resource}|${g.action}${g.fundId ? `|${g.fundId}` : ''}`;
+const key = (g: any) => `${g.systemId}|${g.resource}|${g.action}`;
 const P = 'p-x';
 
 const SYSTEM_ROLES = [undefined, 'CHURCH_LEADER', 'PASTOR', 'CATECHIST', 'CHURCH_SECRETARY', 'CHURCH_TREASURER', 'MEMBER'];
@@ -82,7 +82,7 @@ describe('SPA <-> server grant parity, synthetic matrix', () => {
     const diffs: string[] = [];
     for (const c of cases) {
       const spa = new Set(spaBuild(P, c.input, NOW).map(key));
-      const srv = new Set(serverBuild(P, { ...c.input, fundGrants: [] }, NOW).map(key));
+      const srv = new Set(serverBuild(P, c.input, NOW).map(key));
       const onlySpa = [...spa].filter((k) => !srv.has(k));
       const onlySrv = [...srv].filter((k) => !spa.has(k));
       if (onlySpa.length || onlySrv.length) {

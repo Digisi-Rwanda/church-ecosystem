@@ -48,21 +48,3 @@ export function indicatorProgress(
   if (value == null || typeof value.value !== 'number') return null;
   return Math.min(100, Math.round((value.value / indicator.target) * 100));
 }
-
-/**
- * Impact per franc: participants served per 1,000 RWF used.
- * Returns null when usedCost is 0.
- */
-export function impactPerFranc(
-  participantsServed: number,
-  usedCost: number,
-): number | null {
-  const used = Math.max(0, Math.round(usedCost));
-  if (used <= 0) return null;
-  return Math.round((participantsServed / used) * 1000 * 100) / 100;
-}
-
-export function formatImpactPerFranc(ipf: number | null): string {
-  if (ipf == null) return '—';
-  return `${ipf} / 1k RWF`;
-}

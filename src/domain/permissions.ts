@@ -41,18 +41,9 @@ export function grantMatches(
   systemId: SystemId,
   resource: Resource,
   action: Action,
-  fundId?: string,
 ): boolean {
   if (grant.systemId !== systemId) return false;
   if (grant.resource !== resource) return false;
-  if (fundId) {
-    if (grant.fundId && grant.fundId !== fundId) return false;
-    if (!grant.fundId && resource === 'FINANCE') return false;
-  } else if (grant.fundId && resource === 'FINANCE') {
-    // Unscoped FINANCE check: any fund-scoped grant counts as "has finance access"
-    // only for ENTER-style discovery — callers should use fundId for ledger ops.
-    // For resource FINANCE without fundId, allow if grant satisfies action.
-  }
   return actionSatisfied(grant.action, action);
 }
 

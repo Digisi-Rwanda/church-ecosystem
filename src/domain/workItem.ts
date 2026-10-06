@@ -10,9 +10,6 @@ import type {
   WorkTask,
 } from './types';
 import {
-  confirmedFundingTotal,
-  fundingGap,
-  openAdvances,
   requiredDeliveryOpen,
   type MissionStewardship,
 } from './stewardship';
@@ -31,27 +28,9 @@ export type WorkItem = {
   startsAt?: string;
   dueDate?: string;
   health?: HealthResult;
-  money?: {
-    plannedCost: number;
-    confirmedFunding: number;
-    usedCost: number;
-    gap: number;
-    openAdvances: number;
-  };
   openRequiredDelivery?: number;
   nextSessionAt?: string;
 };
-
-function moneyStrip(s?: MissionStewardship) {
-  if (!s) return undefined;
-  return {
-    plannedCost: Number(s.plannedCost) || 0,
-    confirmedFunding: confirmedFundingTotal(s),
-    usedCost: Number(s.usedCost) || 0,
-    gap: fundingGap(s),
-    openAdvances: openAdvances(s).length,
-  };
-}
 
 export function programToWorkItem(
   p: Program,
@@ -67,7 +46,6 @@ export function programToWorkItem(
     href: `/programs/${p.id}`,
     visibility: p.visibility,
     health: computeMissionHealth(steward, { status: p.status }),
-    money: moneyStrip(steward),
     openRequiredDelivery: requiredDeliveryOpen(steward).length,
     nextSessionAt: extras?.nextSessionAt,
   };
@@ -85,7 +63,6 @@ export function projectToWorkItem(p: ChurchProject): WorkItem {
     visibility: p.visibility,
     startsAt: p.startDate,
     health: computeMissionHealth(steward, { status: p.status }),
-    money: moneyStrip(steward),
     openRequiredDelivery: requiredDeliveryOpen(steward).length,
   };
 }

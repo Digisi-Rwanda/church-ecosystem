@@ -430,7 +430,6 @@ export type PermissionSource =
   | 'MEMBERSHIP'
   | 'ASSIGNMENT'
   | 'TASK'
-  | 'FUND_GRANT'
   | 'ACCOUNT';
 
 /** Church-visible vs org-private (no pastor bypass). */
@@ -475,8 +474,6 @@ export interface PermissionGrant {
   action: Action;
   source: PermissionSource;
   reason: string;
-  /** When set, grant applies only to this fund vault (ORG_PRIVATE finance). */
-  fundId?: string;
 }
 
 export interface AuthzRequest {
@@ -485,7 +482,6 @@ export interface AuthzRequest {
   resource: Resource;
   action: Action;
   now?: Date;
-  fundId?: string;
 }
 
 export interface AuthzDecision {
@@ -494,7 +490,6 @@ export interface AuthzDecision {
   systemId: SystemId;
   resource: Resource;
   action: Action;
-  fundId?: string;
   matchedGrant?: PermissionGrant;
   reason: string;
   evaluatedAt: string;
@@ -510,7 +505,6 @@ export interface AuditEntry {
   allowed: boolean;
   reason: string;
   entryMode?: SessionState['entryMode'];
-  fundId?: string;
 }
 
 export type ProgramStatus =
@@ -593,17 +587,9 @@ export interface Program {
   roles?: import('./programRoles').ProgramRoleDef[];
   /** Eligibility within audience pool (age, married, invite-only…). */
   eligibility?: import('./audiencePool').ProgramEligibility;
-  /** P0/P2 stewardship: money card + delivery + close-out + ops. */
-  plannedCost?: number;
-  budgetLines?: import('./stewardship').MissionBudgetLine[];
-  fundingPlan?: import('./stewardship').MissionFundingSource[];
-  usedCost?: number;
+  /** Delivery checklist, close-out and health. Money is not kept on a mission. */
   deliveryItems?: import('./stewardship').MissionDeliveryItem[];
   closeout?: import('./stewardship').MissionCloseout;
-  advances?: import('./stewardship').MissionAdvance[];
-  inKind?: import('./stewardship').MissionInKind[];
-  envelopePeriod?: string;
-  phaseRenewals?: import('./stewardship').MissionPhaseRenewal[];
   healthSnapshots?: import('./stewardship').MissionHealthSnapshot[];
   blockers?: import('./deliveryRisk').MissionBlocker[];
   /** W5 impact: objectives → indicators → values. */
@@ -730,10 +716,6 @@ export interface ChurchEvent {
   collaboratorPersonIds?: string[];
   /** Prepare → deliver → close operating phase. */
   lifecyclePhase?: EventLifecyclePhase;
-  /** When true, requires projectId or plannedCost (spend policy). */
-  willSpend?: boolean;
-  /** Light event stewardship planned cost (when not linked to a project). */
-  plannedCost?: number;
   /**
    * Calendar taxonomy for Church Leader awareness / approve.
    * MINISTRY_INTERNAL stays inside ministry; others need Itorero date yes.
@@ -806,7 +788,7 @@ export interface WorkTask {
 
 /**
  * Finite initiative that can own many Tasks.
- * Scope approval like Events; optional fund when willSpend; shared collaborators.
+ * Scope approval like Events; shared collaborators.
  */
 export type ChurchProjectStatus =
   | 'DRAFT'
@@ -841,23 +823,12 @@ export interface ChurchProject {
    */
   beyondOwnerScope?: boolean;
   approvals?: EventApprovalRecord[];
-  /** M1+M3+M4: optional unless willSpend. */
-  willSpend?: boolean;
-  fundId?: string;
   createdByPersonId?: string;
   /** Option A close note. */
   outcomeNote?: string;
-  /** P0/P2 stewardship: money card + delivery + close-out + ops. */
-  plannedCost?: number;
-  budgetLines?: import('./stewardship').MissionBudgetLine[];
-  fundingPlan?: import('./stewardship').MissionFundingSource[];
-  usedCost?: number;
+  /** Delivery checklist, close-out and health. Money is not kept on a mission. */
   deliveryItems?: import('./stewardship').MissionDeliveryItem[];
   closeout?: import('./stewardship').MissionCloseout;
-  advances?: import('./stewardship').MissionAdvance[];
-  inKind?: import('./stewardship').MissionInKind[];
-  envelopePeriod?: string;
-  phaseRenewals?: import('./stewardship').MissionPhaseRenewal[];
   healthSnapshots?: import('./stewardship').MissionHealthSnapshot[];
   blockers?: import('./deliveryRisk').MissionBlocker[];
 }
@@ -995,75 +966,6 @@ export interface YouthMeeting {
   startsAt: string;
   endsAt?: string;
   location?: string;
-}
-
-/* ─── Shared Finance (one system, isolated fund vaults) ─── */
-
-export type FundKind = 'GENERAL' | 'MINISTRY' | 'EVENT' | 'PROJECT' | 'PROGRAM';
-
-export interface FinanceFund {
-  id: string;
-  name: string;
-  code: string;
-  kind: FundKind;
-  /** Owning org — privacy boundary. */
-  orgUnitId: string;
-  /** Related peer system when ministry-owned. */
-  ownerSystemId?: SystemId;
-  /** Optional event/program/project context. */
-  contextType?: 'EVENT' | 'PROGRAM' | 'PROJECT';
-  contextId?: string;
-  currency: 'RWF';
-  status: 'ACTIVE' | 'CLOSED';
-  description?: string;
-}
-
-export type FundGrantAction = 'VIEW' | 'MANAGE' | 'APPROVE';
-
-/**
- * Explicit org-issued access to a fund vault.
- * Pastor does NOT inherit these from CHURCH_LEADER.
- */
-export interface FundAccessGrant {
-  id: string;
-  fundId: string;
-  personId: string;
-  action: FundGrantAction;
-  grantedByPersonId: string;
-  reason: string;
-  status: 'ACTIVE' | 'REVOKED';
-  startDate: string;
-  endDate?: string;
-}
-
-export type FinanceTxnType = 'INCOME' | 'EXPENSE' | 'TRANSFER_IN' | 'TRANSFER_OUT';
-
-/** Chart-of-accounts style category for church treasury reporting. */
-export type FinanceCategory =
-  | 'TITHE'
-  | 'OFFERING'
-  | 'GIVING'
-  | 'UTILITIES'
-  | 'SALARIES'
-  | 'MISSIONS'
-  | 'MAINTENANCE'
-  | 'ADMIN'
-  | 'OTHER_INCOME'
-  | 'OTHER_EXPENSE';
-
-export interface FinanceTransaction {
-  id: string;
-  fundId: string;
-  type: FinanceTxnType;
-  amount: number;
-  description: string;
-  occurredOn: string;
-  recordedByPersonId: string;
-  category?: FinanceCategory;
-  /** Optional cross-fund transfer pair. */
-  counterpartyFundId?: string;
-  contextType?: 'EVENT' | 'PROGRAM' | 'PROJECT';
-  contextId?: string;
 }
 
 /* ─── Protocol Management System (PMS) ─── */

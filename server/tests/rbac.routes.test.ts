@@ -24,8 +24,6 @@ beforeEach(async () => {
   const d = db();
   for (const k of ['financeTxn','contributionClaim','ssoHandoffToken','account'])
     d[k] ??= [];
-  d.fund.push({ id: 'fund-choir-b', name: 'Choir B', code: 'CHB', kind: 'MINISTRY', orgUnitId: 'ou-cb', ownerSystemId: 'sys-choir', status: 'ACTIVE', currency: 'RWF' });
-  d.fundAccessGrant.push({ id: 'fg-b', fundId: 'fund-choir-b', personId: 'p-choir-member', action: 'MANAGE', grantedByPersonId: 'p-choir-leader', reason: 't', status: 'ACTIVE', startDate: new Date('2021-01-01') });
   d.churchProject.push({ id: 'proj-deacon', name: 'Deacon relief', ownerSystemId: 'sys-deacon', status: 'PLANNED', beyondOwnerScope: false, stewardshipJson: null, approvalsJson: null, visibility: 'MINISTRY_PRIVATE', createdByPersonId: 'p-pastor' });
   d.program.push({ id: 'prog-deacon', name: 'Deacon program', ownerSystemId: 'sys-deacon', status: 'ACTIVE', stewardshipJson: null, visibility: 'MINISTRY_PRIVATE' });
   d.churchEvent.push(
@@ -38,9 +36,9 @@ beforeEach(async () => {
 describe('A. authentication', () => {
   it('A1 every protected route rejects anonymous callers', async () => {
     const routes: [string, string][] = [
-      ['get', '/api/people'], ['get', '/api/funds'], ['get', '/api/systems'],
+      ['get', '/api/people'], ['get', '/api/systems'],
       ['get', '/api/mission/projects'], ['post', '/api/assignments'],
-      ['post', '/api/mission/shares'], ['post', '/api/mission/stewardship/used-cost'],
+      ['post', '/api/mission/shares'], ['post', '/api/mission/programs'],
       ['get', '/api/authorize/grants'], ['post', '/api/sso/issue'],
     ];
     for (const [m, p] of routes) {
@@ -108,18 +106,6 @@ describe('B. privilege escalation', () => {
     const r = await request(app).get('/api/mission/shares?resourceId=proj-deacon').set(bearer('p-member'));
     expect(r.status, why(r)).toBe(403);
   });
-  it('B6 a member cannot inject stewardship money into a Deacon project (designated-gift)', async () => {
-    const r = await request(app).post('/api/mission/stewardship/designated-gift').set(bearer('p-member')).send({
-      amount: 5_000_000, label: 'fake gift', fundId: 'fund-general', donationId: 'd-1', projectId: 'proj-deacon',
-    });
-    expect(r.status, why(r)).toBe(403);
-  });
-  it('B7 a member cannot inflate used-cost on a Deacon program (used-cost)', async () => {
-    const r = await request(app).post('/api/mission/stewardship/used-cost').set(bearer('p-member')).send({
-      amount: 1_000_000, programId: 'prog-deacon',
-    });
-    expect(r.status, why(r)).toBe(403);
-  });
   it('B8 a member cannot read people contact details without any ministry role (outsider with no membership)', async () => {
     const r = await request(app).get('/api/people').set(bearer('p-outsider'));
     expect(r.status, why(r)).toBe(403);
@@ -138,40 +124,6 @@ describe('C. authorize endpoints', () => {
   });
   it('C2 /authorize/probe refuses probing as another person', async () => {
     const r = await request(app).post('/api/authorize/probe').set(bearer('p-member')).send({ personId: 'p-pastor', systemId: 'sys-main', resource: 'SYSTEM', action: 'ENTER' });
-    expect(r.status, why(r)).toBe(403);
-  });
-});
-
-/* ───────────── D. Finance / vault isolation ───────────── */
-describe('D. finance vaults', () => {
-  it('D1 member cannot open a ministry vault', async () => {
-    const r = await request(app).get('/api/funds/fund-choir').set(bearer('p-member'));
-    expect(r.status, why(r)).toBe(403);
-  });
-  it('D2 pastor has NO implicit access to General Fund without a grant', async () => {
-    const r = await request(app).get('/api/funds/fund-general').set(bearer('p-pastor'));
-    expect(r.status, why(r)).toBe(403);
-  });
-  it('D3 treasurer of General cannot open the Choir vault', async () => {
-    const r = await request(app).get('/api/funds/fund-choir').set(bearer('p-treasurer'));
-    expect(r.status, why(r)).toBe(403);
-  });
-  it('D4 fund detail does not ship the full grant list (who else has access) to a VIEW-only user', async () => {
-    db().fundAccessGrant.push({ id: 'fg-v', fundId: 'fund-choir', personId: 'p-member', action: 'VIEW', grantedByPersonId: 'p-choir-leader', reason: 't', status: 'ACTIVE', startDate: new Date('2021-01-01') });
-    const spy = vi.spyOn(fake.fund, 'findUnique');
-    const r = await request(app).get('/api/funds/fund-choir').set(bearer('p-member'));
-    expect(r.status, why(r)).toBe(200);
-    const include = spy.mock.calls[0]?.[0]?.include ?? {};
-    expect(include.grants, 'route asks Prisma to include every FundAccessGrant row in the response').toBeFalsy();
-  });
-  it('D5 an expired fund grant confers nothing', async () => {
-    db().fundAccessGrant.push({ id: 'fg-x', fundId: 'fund-choir', personId: 'p-outsider', action: 'MANAGE', grantedByPersonId: 'p-choir-leader', reason: 't', status: 'ACTIVE', startDate: new Date('2020-01-01'), endDate: new Date('2021-01-01') });
-    const r = await request(app).get('/api/funds/fund-choir').set(bearer('p-outsider'));
-    expect(r.status, why(r)).toBe(403);
-  });
-  it('D6 a revoked fund grant confers nothing', async () => {
-    db().fundAccessGrant.push({ id: 'fg-r', fundId: 'fund-choir', personId: 'p-outsider', action: 'MANAGE', grantedByPersonId: 'p-choir-leader', reason: 't', status: 'REVOKED', startDate: new Date('2020-01-01') });
-    const r = await request(app).get('/api/funds/fund-choir').set(bearer('p-outsider'));
     expect(r.status, why(r)).toBe(403);
   });
 });
@@ -332,10 +284,6 @@ describe('P. policy engine', () => {
   it('P4 a membership with a FUTURE startDate confers nothing yet', async () => {
     db().membership.push({ id: 'mem-fut', personId: 'p-outsider', systemId: 'sys-choir', type: 'MINISTRY_MEMBER', label: 'Choir member', status: 'ACTIVE', startDate: new Date('2099-01-01') });
     const r = await request(app).post('/api/authorize/probe').set(bearer('p-outsider')).send({ systemId: 'sys-choir', resource: 'SYSTEM', action: 'ENTER' });
-    expect(r.body.allowed, why(r)).toBe(false);
-  });
-  it('P5 a FINANCE request with a fundId never matches a fund-less system grant', async () => {
-    const r = await request(app).post('/api/authorize/probe').set(bearer('p-pastor')).send({ systemId: 'sys-finance', resource: 'FINANCE', action: 'VIEW', fundId: 'fund-choir' });
     expect(r.body.allowed, why(r)).toBe(false);
   });
   it('P6 an ended assignment confers nothing', async () => {

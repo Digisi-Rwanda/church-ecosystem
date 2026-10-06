@@ -1,11 +1,8 @@
 /**
- * Mission Health v1 — weighted schedule / money / delivery / people signals.
+ * Mission Health v1 — weighted schedule / delivery / people signals.
  * RAG chip for lists + Pulse.
  */
 import {
-  confirmedFundingTotal,
-  fundingGap,
-  openAdvances,
   requiredDeliveryOpen,
   type MissionStewardship,
 } from './stewardship';
@@ -18,7 +15,6 @@ export type HealthResult = {
   label: string;
   parts: {
     schedule: number;
-    money: number;
     delivery: number;
     people: number;
   };
@@ -43,7 +39,7 @@ function labelOf(tone: HealthTone): string {
 }
 
 /**
- * Weights (v1): schedule 30 · money 25 · delivery 30 · people 15.
+ * Weights: schedule 40 · delivery 40 · people 20.
  */
 export function computeMissionHealth(
   s: MissionStewardship | undefined,
@@ -68,24 +64,6 @@ export function computeMissionHealth(
             ? 100
             : 50);
 
-  let money = 70;
-  if (s) {
-    const planned = Number(s.plannedCost) || 0;
-    const confirmed = confirmedFundingTotal(s);
-    const used = Number(s.usedCost) || 0;
-    const gap = fundingGap(s);
-    const advances = openAdvances(s).length;
-    if (planned <= 0) {
-      money = 85;
-    } else {
-      const fundedRatio = confirmed / planned;
-      money = clamp(Math.round(fundedRatio * 100));
-      if (gap > planned * 0.25) money = Math.min(money, 45);
-      if (used > planned * 1.1) money = Math.min(money, 35);
-    }
-    if (advances > 0) money = Math.min(money, 50);
-  }
-
   let delivery = 80;
   if (s?.deliveryItems?.length) {
     const required = s.deliveryItems.filter((d) => d.tier === 'REQUIRED');
@@ -103,7 +81,7 @@ export function computeMissionHealth(
 
   const score = clamp(
     Math.round(
-      schedule * 0.3 + money * 0.25 + delivery * 0.3 + people * 0.15,
+      schedule * 0.4 + delivery * 0.4 + people * 0.2,
     ),
   );
   const tone = toneOf(score);
@@ -111,6 +89,6 @@ export function computeMissionHealth(
     score,
     tone,
     label: labelOf(tone),
-    parts: { schedule, money, delivery, people },
+    parts: { schedule, delivery, people },
   };
 }

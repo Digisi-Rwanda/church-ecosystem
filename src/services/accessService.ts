@@ -58,7 +58,6 @@ export const accessService = {
       now?: Date;
       audit?: boolean;
       entryMode?: SessionState['entryMode'];
-      fundId?: string;
     },
   ): AuthzDecision {
     const now = options?.now ?? new Date();
@@ -70,7 +69,6 @@ export const accessService = {
         resource,
         action,
         now,
-        fundId: options?.fundId,
       },
       grants,
     );
@@ -105,7 +103,6 @@ export const accessService = {
       now?: Date;
       audit?: boolean;
       entryMode?: SessionState['entryMode'];
-      fundId?: string;
     },
   ): AuthzDecision {
     const now = options?.now ?? new Date();
@@ -116,7 +113,6 @@ export const accessService = {
         resource,
         action,
         now,
-        fundId: options?.fundId,
       },
       grants,
     );

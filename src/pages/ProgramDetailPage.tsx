@@ -4,14 +4,10 @@ import { isApiEnabled } from '../api';
 import { apiGetProgramPulse, type ApiPulse } from '../api/missionApi';
 import { useAuth } from '../auth/AuthContext';
 import { MissionPulsePanel } from '../components/MissionPulsePanel';
-import { StewardshipPanel } from '../components/StewardshipPanel';
+import { DeliveryPanel } from '../components/DeliveryPanel';
 import { StatusPill } from '../components/ui/StatusPill';
 import { useToast } from '../components/ui/Toast';
 import {
-  confirmedFundingTotal,
-  formatRwf,
-  fundingGap,
-  openAdvances,
   upsertHealthSnapshot,
 } from '../domain/stewardship';
 import { computeMissionHealth } from '../domain/missionHealth';
@@ -99,7 +95,7 @@ export function ProgramDetailPage() {
     | 'sessions'
     | 'about'
     | 'roles'
-    | 'stewardship'
+    | 'delivery'
     | 'impact'
   >('pulse');
   const [objTitle, setObjTitle] = useState('');
@@ -116,18 +112,9 @@ export function ProgramDetailPage() {
         try {
           const p = await apiGetProgramPulse(id);
           if (!cancelled) {
-            const local = missionService.getProgram(id);
             setPulse({
               ...p,
-              impact:
-                p.impact ??
-                (local
-                  ? reportsService.impactMetrics({
-                      kind: 'PROGRAM',
-                      id: local.id,
-                      usedCost: local.usedCost ?? p.money.usedCost,
-                    })
-                  : p.impact),
+              impact: p.impact ?? { participantsServed: reportsService.participantsServed(id) },
             });
           }
           return;
@@ -165,13 +152,6 @@ export function ProgramDetailPage() {
         name: live.name,
         status: live.status,
         health,
-        money: {
-          plannedCost: Number(live.plannedCost) || 0,
-          confirmedFunding: confirmedFundingTotal(live),
-          usedCost: Number(live.usedCost) || 0,
-          gap: fundingGap(live),
-          openAdvances: openAdvances(live).length,
-        },
         openRequiredDelivery: (live.deliveryItems ?? [])
           .filter((d) => d.tier === 'REQUIRED' && d.status === 'TODO')
           .map((d) => ({ id: d.id, title: d.title, status: d.status })),
@@ -190,11 +170,7 @@ export function ProgramDetailPage() {
           tone: h.tone,
           label: h.label,
         })),
-        impact: reportsService.impactMetrics({
-          kind: 'PROGRAM',
-          id: live.id,
-          usedCost: live.usedCost,
-        }),
+        impact: { participantsServed: reportsService.participantsServed(live.id) },
       });
     })();
     return () => {
@@ -256,9 +232,6 @@ export function ProgramDetailPage() {
   const activities = missionService.activitiesForProgram(program.id);
   const people = peopleService.list();
   const poolSystems = missionService.audiencePoolSystems(program.ownerSystemId);
-  const planned = Number(program.plannedCost) || 0;
-  const confirmed = confirmedFundingTotal(program);
-  const gap = fundingGap(program);
 
   async function onSubmitApproval() {
     const r = await writeSubmitProgram(program!.id);
@@ -449,9 +422,7 @@ export function ProgramDetailPage() {
                 setMsg(
                   r.ok
                     ? [
-                        r.gap
-                          ? `Running — funding gap still ${r.gap.toLocaleString()} RWF`
-                          : 'Program started — ACTIVE',
+                        'Program started — ACTIVE',
                         r.openRequired
                           ? `(${r.openRequired} required delivery still open)`
                           : '',
@@ -483,7 +454,7 @@ export function ProgramDetailPage() {
                   type="button"
                   className="btn ghost"
                   onClick={() => {
-                    setTab('stewardship');
+                    setTab('delivery');
                     onEnd();
                   }}
                 >
@@ -498,7 +469,7 @@ export function ProgramDetailPage() {
                 type="button"
                 className="btn"
                 onClick={() => {
-                  setTab('stewardship');
+                  setTab('delivery');
                   setCloseOpen(true);
                 }}
               >
@@ -527,7 +498,7 @@ export function ProgramDetailPage() {
                   type="button"
                   className="btn ghost"
                   onClick={() => {
-                    setTab('stewardship');
+                    setTab('delivery');
                     onEnd();
                   }}
                 >
@@ -539,20 +510,8 @@ export function ProgramDetailPage() {
         </div>
         {program.status === 'CLOSING' && (
           <p className="steward-banner warn" style={{ marginTop: '0.75rem' }}>
-            In CLOSING — complete the stewardship report, or resume running.
+            In CLOSING — complete the close-out report, or resume running.
           </p>
-        )}
-        {planned > 0 && (
-          <div className="grant-callout" style={{ marginTop: '0.75rem' }}>
-            <strong>Stewardship snapshot</strong>
-            <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              Planned {formatRwf(planned)} · confirmed {formatRwf(confirmed)} ·
-              gap {formatRwf(Math.max(0, gap))}
-              {(program.deliveryItems ?? []).length
-                ? ` · ${(program.deliveryItems ?? []).filter((d) => d.tier === 'REQUIRED').length} required delivery`
-                : ''}
-            </p>
-          </div>
         )}
       </div>
 
@@ -616,10 +575,10 @@ export function ProgramDetailPage() {
         </button>
         <button
           type="button"
-          className={`btn ${tab === 'stewardship' ? '' : 'ghost'}`}
-          onClick={() => setTab('stewardship')}
+          className={`btn ${tab === 'delivery' ? '' : 'ghost'}`}
+          onClick={() => setTab('delivery')}
         >
-          Stewardship
+          Delivery
         </button>
         <button
           type="button"
@@ -663,18 +622,17 @@ export function ProgramDetailPage() {
         </div>
       )}
 
-      {(tab === 'stewardship' || closeOpen || !!program.closeout) && (
-        <StewardshipPanel
+      {(tab === 'delivery' || closeOpen || !!program.closeout) && (
+        <DeliveryPanel
           kind="PROGRAM"
           id={program.id}
           canEdit={canManageOutside || canClose}
           personId={account.personId}
-          defaultFundId="fund-youth"
           closeOpen={closeOpen}
           onCloseOpenChange={setCloseOpen}
           onChanged={() => {
             refresh();
-            setMsg('Stewardship updated');
+            setMsg('Delivery updated');
           }}
         />
       )}
@@ -684,15 +642,7 @@ export function ProgramDetailPage() {
           <h3 style={{ margin: 0 }}>Impact</h3>
           <p className="muted" style={{ marginTop: 0 }}>
             Objectives → indicators → values. People served{' '}
-            {reportsService.participantsServed(program.id)} · impact{' '}
-            {
-              reportsService.impactMetrics({
-                kind: 'PROGRAM',
-                id: program.id,
-                usedCost: program.usedCost,
-              }).impactLabel
-            }
-            .
+            {reportsService.participantsServed(program.id)}.
           </p>
           {(program.objectives ?? []).length === 0 ? (
             <p className="muted">No objectives yet.</p>

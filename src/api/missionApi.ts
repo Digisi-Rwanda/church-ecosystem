@@ -65,8 +65,6 @@ export type ApiProject = {
   ownerSystemId: string;
   visibility: string;
   status: string;
-  willSpend: boolean;
-  fundId?: string | null;
   programId?: string | null;
   beyondOwnerScope?: boolean;
   leadPersonId?: string | null;
@@ -169,8 +167,6 @@ export function mapApiProject(p: ApiProject): ChurchProject {
     ownerSystemId: p.ownerSystemId as SystemId,
     visibility: mapVisibility(p.visibility),
     status: (p.status as ChurchProject['status']) || 'DRAFT',
-    willSpend: p.willSpend,
-    fundId: p.fundId ?? undefined,
     programId: p.programId ?? undefined,
     beyondOwnerScope: p.beyondOwnerScope === true,
     leadPersonId: p.leadPersonId ?? undefined,
@@ -261,8 +257,6 @@ export async function apiCreateEvent(input: {
   beyondOwnerScope?: boolean;
   programId?: string;
   projectId?: string;
-  willSpend?: boolean;
-  plannedCost?: number;
 }): Promise<ChurchEvent> {
   const res = await apiFetch<{ event: ApiEvent }>('/api/mission/events', {
     method: 'POST',
@@ -283,8 +277,6 @@ export async function apiCreateEvent(input: {
       beyondOwnerScope: input.beyondOwnerScope,
       programId: input.programId,
       projectId: input.projectId,
-      willSpend: input.willSpend,
-      plannedCost: input.plannedCost,
     },
   });
   return mapApiEvent(res.event);
@@ -332,8 +324,6 @@ export async function apiCreateProject(input: {
   ownerSystemId: string;
   visibility?: MissionVisibility;
   status?: ChurchProject['status'];
-  willSpend?: boolean;
-  fundId?: string;
   programId?: string;
   beyondOwnerScope?: boolean;
   leadPersonId?: string;
@@ -349,8 +339,6 @@ export async function apiCreateProject(input: {
         ? toApiVisibility(input.visibility)
         : 'MINISTRY_PRIVATE',
       status: input.status,
-      willSpend: input.willSpend,
-      fundId: input.fundId,
       programId: input.programId,
       beyondOwnerScope: input.beyondOwnerScope,
       leadPersonId: input.leadPersonId,
@@ -385,12 +373,10 @@ export async function apiApproveProgram(id: string): Promise<Program> {
 
 export async function apiStartProgram(id: string): Promise<{
   program: Program;
-  gap?: number;
   openRequired?: number;
 }> {
   const res = await apiFetch<{
     program: ApiProgram;
-    gap?: number;
     openRequired?: number;
   }>(`/api/mission/programs/${encodeURIComponent(id)}/start`, {
     method: 'POST',
@@ -398,7 +384,6 @@ export async function apiStartProgram(id: string): Promise<{
   });
   return {
     program: mapApiProgram(res.program),
-    gap: res.gap,
     openRequired: res.openRequired,
   };
 }
@@ -415,13 +400,9 @@ export async function apiEndProgram(
   id: string,
   body: {
     workSummary: string;
-    moneySummary: string;
-    leftoverDecision: string;
-    leftoverNote?: string;
     narrative?: string;
     forceClose?: boolean;
     forceReason?: string;
-    usedCost?: number;
   },
 ): Promise<Program> {
   const res = await apiFetch<{ program: ApiProgram }>(
@@ -538,21 +519,16 @@ export async function apiApproveProjectLevel(id: string, levelKey: string) {
   return mapApiProject(res.project);
 }
 
-export async function apiStartProject(
-  id: string,
-  opts?: { forceSpendGap?: boolean; forceReason?: string },
-) {
+export async function apiStartProject(id: string) {
   const res = await apiFetch<{
     project: ApiProject;
-    gap?: number;
     openRequired?: number;
   }>(`/api/mission/projects/${encodeURIComponent(id)}/start`, {
     method: 'POST',
-    body: opts ?? {},
+    body: {},
   });
   return {
     project: mapApiProject(res.project),
-    gap: res.gap,
     openRequired: res.openRequired,
   };
 }
@@ -569,13 +545,9 @@ export async function apiCompleteProject(
   id: string,
   body: {
     workSummary: string;
-    moneySummary: string;
-    leftoverDecision: string;
-    leftoverNote?: string;
     narrative?: string;
     forceClose?: boolean;
     forceReason?: string;
-    usedCost?: number;
   },
 ) {
   const res = await apiFetch<{ project: ApiProject }>(
@@ -714,17 +686,9 @@ export type ApiPulse = {
     label: string;
     parts: {
       schedule: number;
-      money: number;
       delivery: number;
       people: number;
     };
-  };
-  money: {
-    plannedCost: number;
-    confirmedFunding: number;
-    usedCost: number;
-    gap: number;
-    openAdvances: number;
   };
   openRequiredDelivery: Array<{ id?: string; title?: string; status?: string }>;
   nextSession?: {
@@ -753,7 +717,6 @@ export type ApiPulse = {
   }>;
   impact?: {
     participantsServed: number;
-    impactPerFranc: number | null;
   };
 };
 
@@ -769,33 +732,6 @@ export async function apiGetProjectPulse(id: string) {
     `/api/mission/projects/${encodeURIComponent(id)}/pulse`,
   );
   return res.pulse;
-}
-
-export async function apiApplyDesignatedGift(input: {
-  amount: number;
-  label: string;
-  fundId: string;
-  donationId: string;
-  programId?: string;
-  projectId?: string;
-  note?: string;
-}) {
-  return apiFetch<{ ok: boolean }>('/api/mission/stewardship/designated-gift', {
-    method: 'POST',
-    body: input,
-  });
-}
-
-export async function apiIncrementUsedCost(input: {
-  amount: number;
-  programId?: string;
-  projectId?: string;
-  expenseId?: string;
-}) {
-  return apiFetch<{ ok: boolean }>('/api/mission/stewardship/used-cost', {
-    method: 'POST',
-    body: input,
-  });
 }
 
 export async function apiListEnrollments(programId: string) {

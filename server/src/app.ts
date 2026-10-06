@@ -7,7 +7,6 @@ import { attentionRouter } from './routes/attention.js';
 import { authRouter } from './routes/auth.js';
 import { authorizeRouter } from './routes/authorize.js';
 import { assignmentsRouter } from './routes/assignments.js';
-import { fundsRouter } from './routes/funds.js';
 import { healthRouter } from './routes/health.js';
 import { missionRouter } from './routes/mission.js';
 import { participationRouter } from './routes/participation.js';
@@ -46,7 +45,6 @@ export function createApp() {
         people: 'GET /api/people',
         authorize: 'POST /api/authorize/probe',
         grants: 'GET /api/authorize/grants',
-        funds: 'GET /api/funds',
         mission: 'GET/POST /api/mission/{programs|events|tasks|projects}',
         attention: 'GET /api/attention',
         assignments: 'GET/POST /api/assignments',
@@ -69,7 +67,6 @@ export function createApp() {
   app.use('/api/people', peopleRouter);
   app.use('/api/participation', participationRouter);
   app.use('/api/authorize', authorizeRouter);
-  app.use('/api/funds', fundsRouter);
   app.use('/api/mission', missionRouter);
   app.use('/api/attention', attentionRouter);
   app.use('/api/assignments', assignmentsRouter);

@@ -4,7 +4,7 @@ import { authorize, buildEffectiveAccess } from '../src/policy/buildAccess';
 import { SYSTEMS } from './world';
 
 const now = new Date('2026-10-01T12:00:00Z');
-const base = { memberships: [] as any[], assignments: [] as any[], tasks: [] as any[], allSystemIds: SYSTEMS, fundGrants: [] as any[] };
+const base = { memberships: [] as any[], assignments: [] as any[], tasks: [] as any[], allSystemIds: SYSTEMS };
 const pos = (role: string, extra: any = {}) => ({ id: `pos-${role}`, personId: 'p', title: role, systemRole: role, status: 'ACTIVE', startDate: '2020-01-01', ...extra });
 const enterable = (positions: any[]) => {
   const grants = buildEffectiveAccess('p', { ...base, positions }, now);

@@ -16,7 +16,6 @@ export {
   syncChoirScopeFromSession,
 } from './choirScope';
 export { deaconService } from './deaconService';
-export { financeService } from './financeService';
 export { missionService, isChurchLeadership, isChurchLeader } from './missionService';
 export { orgService, systemsService } from './orgService';
 export { participationService } from './participationService';

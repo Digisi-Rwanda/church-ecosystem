@@ -8,7 +8,6 @@ import {
   oversightMayAccessModule,
   resolvePeerEntry,
 } from './oversightAccess';
-import { authorizeFinanceFund, visibleFundIds } from './financeAccess';
 import { choirOfficeMayAccess } from './choirNav';
 import {
   ASSIGNMENTS,
@@ -314,26 +313,6 @@ describe('peer oversight entry', () => {
       ).allowed,
     ).toBe(false);
   });
-
-  it('church leader can VIEW general fund (church-wide contributions)', () => {
-    const grants = grantsFor('p-pastor');
-    expect(
-      authorizeFinanceFund('p-pastor', 'fund-general', 'VIEW', grants).allowed,
-    ).toBe(true);
-    expect(
-      authorizeFinanceFund('p-pastor', 'fund-general', 'APPROVE', grants)
-        .allowed,
-    ).toBe(true);
-  });
-});
-
-describe('leadership pack money privacy', () => {
-  it('never exposes ministry vault totals', async () => {
-    const { reportsService } = await import('../services/reportsService');
-    const pack = reportsService.leadershipPack();
-    expect(pack.money.ministryVaultBalance).toBe(0);
-    expect(reportsService.leadershipCsv()).not.toContain('ministry_vaults');
-  });
 });
 
 describe('choir office nav', () => {
@@ -341,42 +320,6 @@ describe('choir office nav', () => {
     expect(choirOfficeMayAccess('MEMBER', 'people')).toBe(false);
     expect(choirOfficeMayAccess('PRESIDENT', 'people')).toBe(true);
     expect(choirOfficeMayAccess('MUSIC_DIRECTOR', 'people')).toBe(false);
-  });
-});
-
-describe('ORG_PRIVATE fund vaults', () => {
-  it('pastor cannot open youth vault without grant', () => {
-    const grants = grantsFor('p-pastor');
-    const decision = authorizeFinanceFund(
-      'p-pastor',
-      'fund-youth',
-      'VIEW',
-      grants,
-    );
-    expect(decision.allowed).toBe(false);
-  });
-
-  it('youth treasurer can manage youth vault', () => {
-    const grants = grantsFor('p-youth-treas');
-    const decision = authorizeFinanceFund(
-      'p-youth-treas',
-      'fund-youth',
-      'MANAGE',
-      grants,
-    );
-    expect(decision.allowed).toBe(true);
-    expect(visibleFundIds('p-youth-treas', grants)).toContain('fund-youth');
-  });
-
-  it('church treasurer can manage general fund', () => {
-    const grants = grantsFor('p-church-treas');
-    const decision = authorizeFinanceFund(
-      'p-church-treas',
-      'fund-general',
-      'MANAGE',
-      grants,
-    );
-    expect(decision.allowed).toBe(true);
   });
 });
 

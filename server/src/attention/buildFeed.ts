@@ -15,6 +15,7 @@ export type AttentionItemDto = {
 const LEADERSHIP: SystemRole[] = [
   'CHURCH_LEADER',
   'PASTOR',
+  'ASSISTANT_PASTOR',
   'CATECHIST',
 ];
 
@@ -120,7 +121,7 @@ export async function buildAttentionFeed(
       reason:
         p.status === 'SETUP'
           ? 'In SETUP — start running when ready'
-          : 'In CLOSING — finish stewardship close-out',
+          : 'In CLOSING — finish the close-out',
       href: `/programs/${p.id}`,
       rank: p.status === 'CLOSING' ? 20 : 30,
     });
@@ -143,7 +144,7 @@ export async function buildAttentionFeed(
       reason:
         p.status === 'PLANNED'
           ? 'In SETUP — start running when ready'
-          : 'In CLOSING — finish stewardship close-out',
+          : 'In CLOSING — finish the close-out',
       href: `/projects/${p.id}`,
       rank: p.status === 'CLOSING' ? 22 : 32,
     });

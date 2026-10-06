@@ -1,5 +1,4 @@
 import type {
-  FundAccessGrant,
   Membership,
   MissionLeaderOffice,
   Person,
@@ -368,18 +367,6 @@ export const PEER_POSITIONS: Position[] = PEER_MINISTRIES.flatMap((m) =>
     };
   }),
 );
-
-/** Treasurer vault access for each peer ministry fund. */
-export const PEER_FUND_GRANTS: FundAccessGrant[] = PEER_MINISTRIES.map((m) => ({
-  id: `fg-${m.slug}-treas`,
-  fundId: `fund-${m.slug}`,
-  personId: personIdFor(m.slug, 'treas'),
-  action: 'MANAGE' as const,
-  grantedByPersonId: personIdFor(m.slug, 'pres'),
-  reason: `${m.shortName} Treasurer — ministry fund vault`,
-  status: 'ACTIVE' as const,
-  startDate: '2025-01-01',
-}));
 
 export const PEER_PROGRAMS: Program[] = [];
 

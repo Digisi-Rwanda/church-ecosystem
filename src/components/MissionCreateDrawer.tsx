@@ -1,5 +1,4 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
-import { eventSpendPolicyOk } from '../domain/eventOps';
 import { eventTypeLabel } from '../domain/permissions';
 import type {
   ChurchEventType,
@@ -10,7 +9,6 @@ import type {
   TaskContextType,
 } from '../domain/types';
 import {
-  financeService,
   missionService,
   peopleService,
   systemsService,
@@ -115,7 +113,7 @@ const META: Record<
     title: 'Create event',
     formId: 'mission-create-event',
     subtitle: () =>
-      'Public or ministry gatherings — schedule, registration, and optional spend link.',
+      'Public or ministry gatherings — schedule and registration.',
   },
   TASK: {
     title: 'Create task',
@@ -168,8 +166,6 @@ export function MissionCreateDrawer({
   // Project
   const [leadId, setLeadId] = useState('');
   const [beyond, setBeyond] = useState(false);
-  const [willSpend, setWillSpend] = useState(false);
-  const [fundId, setFundId] = useState('');
   const [collabSys, setCollabSys] = useState<SystemId | ''>('');
   const [programId, setProgramId] = useState('');
   const [fastTrack, setFastTrack] = useState(false);
@@ -182,7 +178,6 @@ export function MissionCreateDrawer({
   const [startsAt, setStartsAt] = useState(defaultEventStarts);
   const [location, setLocation] = useState('');
   const [projectId, setProjectId] = useState('');
-  const [plannedCost, setPlannedCost] = useState('');
 
   // Task
   const [ownerId, setOwnerId] = useState(accountPersonId);
@@ -211,17 +206,6 @@ export function MissionCreateDrawer({
     () => systemsService.list().filter((s) => s.id !== ownerSystemId),
     [open, ownerSystemId],
   );
-  const funds = useMemo(
-    () =>
-      financeService.listAllFunds().filter(
-        (f) =>
-          f.status === 'ACTIVE' &&
-          (f.kind === 'PROJECT' ||
-            f.kind === 'GENERAL' ||
-            f.ownerSystemId === ownerSystemId),
-      ),
-    [open, ownerSystemId],
-  );
   const projects = useMemo(
     () => missionService.listProjects({ viewerSystemId: ownerSystemId }),
     [open, ownerSystemId],
@@ -245,8 +229,6 @@ export function MissionCreateDrawer({
     setHint('');
     setLeadId('');
     setBeyond(false);
-    setWillSpend(false);
-    setFundId('');
     setCollabSys('');
     setProgramId('');
     setFastTrack(false);
@@ -256,7 +238,6 @@ export function MissionCreateDrawer({
     setStartsAt(defaultEventStarts());
     setLocation('');
     setProjectId('');
-    setPlannedCost('');
     setOwnerId(accountPersonId);
     setHelperId('');
     setDueDate(defaultTaskDue());
@@ -304,20 +285,8 @@ export function MissionCreateDrawer({
     if (kind === 'PROGRAM' || kind === 'PROJECT' || kind === 'EVENT') {
       if (!trimmed) errs.name = 'Name is required.';
     }
-    if (kind === 'PROJECT' && willSpend && !fundId) {
-      errs.fund = 'Choose a fund when the project will spend.';
-    }
     if (kind === 'EVENT') {
       if (!startsAt) errs.startsAt = 'Start date and time are required.';
-      const planned = plannedCost ? Number(plannedCost) : undefined;
-      const spendGate = eventSpendPolicyOk({
-        willSpend,
-        projectId: projectId || undefined,
-        plannedCost: planned,
-      });
-      if (!spendGate.ok) {
-        errs.cost = spendGate.reason ?? 'Spend policy failed';
-      }
     }
     if (kind === 'TASK') {
       if (!trimmed) errs.title = 'Title is required.';
@@ -373,8 +342,6 @@ export function MissionCreateDrawer({
           visibility: vis,
           leadPersonId: leadId || undefined,
           beyondOwnerScope: beyond,
-          willSpend,
-          fundId: willSpend ? fundId || undefined : undefined,
           collaboratorSystemIds: collabSys
             ? ([collabSys] as SystemId[])
             : undefined,
@@ -402,7 +369,6 @@ export function MissionCreateDrawer({
       }
 
       if (kind === 'EVENT') {
-        const planned = plannedCost ? Number(plannedCost) : undefined;
         const r = await writeCreateEvent({
           name: trimmed,
           type: etype,
@@ -418,8 +384,6 @@ export function MissionCreateDrawer({
               : undefined,
           beyondOwnerScope: beyond,
           projectId: projectId || undefined,
-          willSpend,
-          plannedCost: planned,
           createdByPersonId: accountPersonId,
         });
         if (!r.ok || !r.event) {
@@ -692,38 +656,6 @@ export function MissionCreateDrawer({
                   onChange={setFastTrack}
                 />
               )}
-              <CheckboxField
-                label="Will spend / has budget"
-                checked={willSpend}
-                onChange={(v) => {
-                  setWillSpend(v);
-                  if (!v) {
-                    setFundId('');
-                    clearField('fund');
-                  }
-                }}
-              />
-              {willSpend && (
-                <SelectField
-                  label="Fund"
-                  name="proj-fund"
-                  value={fundId}
-                  onChange={(e) => {
-                    setFundId(e.target.value);
-                    clearField('fund');
-                  }}
-                  required
-                  error={fieldErrors.fund}
-                  hint="Spending still needs a Treasurer FundAccessGrant on the vault."
-                >
-                  <option value="">Select fund…</option>
-                  {funds.map((f) => (
-                    <option key={f.id} value={f.id}>
-                      {f.name} ({f.code})
-                    </option>
-                  ))}
-                </SelectField>
-              )}
             </CreateFormSection>
           </>
         )}
@@ -811,8 +743,7 @@ export function MissionCreateDrawer({
               <VisibilityField name="event-vis" value={vis} onChange={setVis} />
             </CreateFormSection>
             <CreateFormSection
-              title="Project & spend"
-              hint="Linking a project covers spend policy; otherwise set a planned cost."
+              title="Project"
             >
               <SelectField
                 label="Link to project"
@@ -820,7 +751,6 @@ export function MissionCreateDrawer({
                 value={projectId}
                 onChange={(e) => {
                   setProjectId(e.target.value);
-                  clearField('cost');
                 }}
               >
                 <option value="">None</option>
@@ -830,37 +760,6 @@ export function MissionCreateDrawer({
                   </option>
                 ))}
               </SelectField>
-              <CheckboxField
-                label="Will spend"
-                checked={willSpend}
-                onChange={(v) => {
-                  setWillSpend(v);
-                  if (!v) {
-                    setPlannedCost('');
-                    clearField('cost');
-                  }
-                }}
-              />
-              {willSpend && !projectId && (
-                <TextField
-                  label="Planned cost (RWF)"
-                  name="event-cost"
-                  type="number"
-                  min={1}
-                  value={plannedCost}
-                  onChange={(e) => {
-                    setPlannedCost(e.target.value);
-                    clearField('cost');
-                  }}
-                  error={fieldErrors.cost}
-                  required
-                />
-              )}
-              {fieldErrors.cost && (projectId || !willSpend) ? (
-                <p className="create-form-error" role="alert">
-                  {fieldErrors.cost}
-                </p>
-              ) : null}
               <CheckboxField
                 label="Beyond owner scope (needs upper approvals)"
                 checked={beyond}

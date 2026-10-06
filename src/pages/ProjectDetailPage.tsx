@@ -4,7 +4,7 @@ import { isApiEnabled } from '../api';
 import { apiGetProjectPulse, type ApiPulse } from '../api/missionApi';
 import { useAuth } from '../auth/AuthContext';
 import { MissionPulsePanel } from '../components/MissionPulsePanel';
-import { StewardshipPanel } from '../components/StewardshipPanel';
+import { DeliveryPanel } from '../components/DeliveryPanel';
 import { ApprovalRecord } from '../components/ui/ApprovalRecord';
 import { StatusPill } from '../components/ui/StatusPill';
 import { canApproveScopeLevel } from '../domain/eventScope';
@@ -15,16 +15,11 @@ import {
 } from '../domain/deliveryRisk';
 import { projectTemplates } from '../domain/taskTemplates';
 import {
-  confirmedFundingTotal,
-  formatRwf,
-  fundingGap,
-  openAdvances,
   upsertHealthSnapshot,
 } from '../domain/stewardship';
 import type { SystemId } from '../domain/types';
 import { missionListPath } from '../navigation/missionPaths';
 import {
-  financeService,
   isChurchLeader,
   missionService,
   peopleService,
@@ -94,13 +89,6 @@ export function ProjectDetailPage() {
         name: live.name,
         status: live.status,
         health,
-        money: {
-          plannedCost: Number(live.plannedCost) || 0,
-          confirmedFunding: confirmedFundingTotal(live),
-          usedCost: Number(live.usedCost) || 0,
-          gap: fundingGap(live),
-          openAdvances: openAdvances(live).length,
-        },
         openRequiredDelivery: (live.deliveryItems ?? [])
           .filter((d) => d.tier === 'REQUIRED' && d.status === 'TODO')
           .map((d) => ({ id: d.id, title: d.title, status: d.status })),
@@ -133,8 +121,6 @@ export function ProjectDetailPage() {
   const [addSys, setAddSys] = useState<SystemId | ''>('');
   const [addPerson, setAddPerson] = useState('');
   const [linkProgramId, setLinkProgramId] = useState('');
-  const [forceSpend, setForceSpend] = useState(false);
-  const [forceSpendReason, setForceSpendReason] = useState('');
   const [blockerTitle, setBlockerTitle] = useState('');
   const [blockerSeverity, setBlockerSeverity] = useState<'BLOCKER' | 'RISK'>(
     'BLOCKER',
@@ -173,9 +159,6 @@ export function ProjectDetailPage() {
   const parentProgram = project.programId
     ? missionService.getProgram(project.programId)
     : null;
-  const fund = project.fundId
-    ? financeService.getFund(project.fundId)
-    : null;
   const people = peopleService.list();
   const standingPrograms = missionService
     .listPrograms({ viewerSystemId: project.ownerSystemId })
@@ -190,9 +173,6 @@ export function ProjectDetailPage() {
   const collabCount =
     (project.collaboratorSystemIds ?? []).length +
     (project.collaboratorPersonIds ?? []).length;
-  const planned = Number(project.plannedCost) || 0;
-  const confirmed = confirmedFundingTotal(project);
-  const gap = fundingGap(project);
   const deliveryRequired = (project.deliveryItems ?? []).filter(
     (d) => d.tier === 'REQUIRED',
   ).length;
@@ -305,16 +285,6 @@ export function ProjectDetailPage() {
             <div className="value">{collabCount || 'Owner only'}</div>
           </div>
           <div className="overview-tile">
-            <div className="label">Money</div>
-            <div className="value">
-              {planned > 0
-                ? `${formatRwf(planned)} · gap ${formatRwf(Math.max(0, gap))}`
-                : project.willSpend
-                  ? fund?.code ?? project.fundId ?? 'Spend'
-                  : 'No spend'}
-            </div>
-          </div>
-          <div className="overview-tile">
             <div className="label">Delivery</div>
             <div className="value">
               {deliveryRequired || deliveryPlanned
@@ -331,26 +301,6 @@ export function ProjectDetailPage() {
           <p style={{ marginBottom: 0, marginTop: '0.75rem' }}>
             <strong>Outcome:</strong> {project.outcomeNote}
           </p>
-        )}
-        {project.willSpend && (
-          <div className="grant-callout" style={{ marginTop: '0.75rem' }}>
-            <strong>Fund vault (ORG_PRIVATE)</strong>
-            <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              Linked fund: {fund?.name ?? project.fundId}. Spending still
-              requires a Treasurer FundAccessGrant — linking does not open the
-              vault to everyone.
-            </p>
-          </div>
-        )}
-        {planned > 0 && (
-          <div className="grant-callout" style={{ marginTop: '0.75rem' }}>
-            <strong>Stewardship snapshot (for approvers)</strong>
-            <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              Planned {formatRwf(planned)} · confirmed {formatRwf(confirmed)} ·
-              gap {formatRwf(Math.max(0, gap))} · delivery {deliveryRequired}{' '}
-              required / {deliveryPlanned} planned
-            </p>
-          </div>
         )}
         <div className="row" style={{ marginTop: '0.75rem' }}>
           {canManage && project.status === 'DRAFT' && (
@@ -393,42 +343,15 @@ export function ProjectDetailPage() {
             )}
           {canManage && project.status === 'PLANNED' && (
             <div className="stack" style={{ gap: '0.35rem' }}>
-              {project.willSpend && fundingGap(project) > 0 && (
-                <div className="steward-banner warn">
-                  Funding gap {formatRwf(fundingGap(project))} — confirm funding
-                  or force start with a reason.
-                  <label className="row" style={{ marginTop: '0.35rem' }}>
-                    <input
-                      type="checkbox"
-                      checked={forceSpend}
-                      onChange={(e) => setForceSpend(e.target.checked)}
-                    />
-                    Force start despite gap
-                  </label>
-                  {forceSpend && (
-                    <input
-                      style={{ marginTop: '0.35rem', width: '100%' }}
-                      placeholder="Reason (required)"
-                      value={forceSpendReason}
-                      onChange={(e) => setForceSpendReason(e.target.value)}
-                    />
-                  )}
-                </div>
-              )}
               <button
                 type="button"
                 className="btn"
                 onClick={async () => {
-                  const r = await writeStartProject(project.id, {
-                    forceSpendGap: forceSpend || undefined,
-                    forceReason: forceSpend ? forceSpendReason : undefined,
-                  });
+                  const r = await writeStartProject(project.id);
                   setMsg(
                     r.ok
                       ? [
-                          r.gap
-                            ? `Running — funding gap still ${r.gap.toLocaleString()} RWF`
-                            : 'Project started — ACTIVE',
+                          'Project started — ACTIVE',
                           r.openRequired
                             ? `(${r.openRequired} required delivery still open)`
                             : '',
@@ -437,10 +360,6 @@ export function ProjectDetailPage() {
                           .join(' ')
                       : (r.reason ?? 'Failed'),
                   );
-                  if (r.ok) {
-                    setForceSpend(false);
-                    setForceSpendReason('');
-                  }
                   refresh();
                 }}
               >
@@ -739,18 +658,17 @@ export function ProjectDetailPage() {
         </div>
       )}
 
-      <StewardshipPanel
+      <DeliveryPanel
         kind="PROJECT"
         id={project.id}
         canEdit={canManage && !closed}
         personId={account.personId}
-        defaultFundId={project.fundId}
         closeOpen={closeOpen}
         onCloseOpenChange={setCloseOpen}
         openTaskCount={openTasks.length}
         onChanged={() => {
           refresh();
-          setMsg('Stewardship updated');
+          setMsg('Delivery updated');
         }}
       />
 
@@ -916,7 +834,7 @@ export function ProjectDetailPage() {
         <div className="panel">
           <h3>Closing</h3>
           <p className="steward-banner warn" style={{ marginTop: 0 }}>
-            In CLOSING — complete the stewardship report, or resume running.
+            In CLOSING — complete the close-out report, or resume running.
           </p>
           <div className="row">
             <button

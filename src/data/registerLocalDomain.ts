@@ -40,7 +40,6 @@ import {
   PERSON_TALENTS,
   PERSON_TIMELINE,
 } from './personProfileSeed';
-import { FINANCE_TXNS } from './financeSeed';
 import {
   PROTOCOL_ABSENCE_REQUESTS,
   PROTOCOL_ACTIVITY,
@@ -101,7 +100,6 @@ export function registerAllLocalDomain() {
 
 
   // Fund vault (kept until mission money moves to Money module)
-  regReplace('financeTxns', () => FINANCE_TXNS);
 
   // Protocol
   regReplace('protocolRoster', () => PROTOCOL_ROSTER);

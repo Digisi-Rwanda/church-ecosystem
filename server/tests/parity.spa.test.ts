@@ -8,10 +8,9 @@ import { describe, expect, it } from 'vitest';
 import { buildEffectiveAccess as spaBuild } from '../../src/domain/authorize';
 import { buildEffectiveAccess as serverBuild } from '../src/policy/buildAccess';
 import { ACCOUNTS, ASSIGNMENTS, MEMBERSHIPS, POSITIONS, SYSTEMS } from '../../src/data/seed';
-import { FUND_GRANTS } from '../../src/data/financeSeed';
 
 const NOW = new Date('2026-09-30T12:00:00Z');
-const key = (g: any) => `${g.systemId}|${g.resource}|${g.action}${g.fundId ? `|${g.fundId}` : ''}`;
+const key = (g: any) => `${g.systemId}|${g.resource}|${g.action}`;
 const allSystemIds = SYSTEMS.map((s) => s.id);
 
 function grantsFor(personId: string) {
@@ -23,7 +22,7 @@ function grantsFor(personId: string) {
     allSystemIds,
   };
   const spa = spaBuild(personId, input as any, NOW);
-  const srv = serverBuild(personId, { ...input, fundGrants: FUND_GRANTS } as any, NOW);
+  const srv = serverBuild(personId, input as any, NOW);
   return { spa: new Set(spa.map(key)), srv: new Set(srv.map(key)) };
 }
 

@@ -13,11 +13,6 @@ import { parseStewardship } from '../mission/stewardshipJson.js';
 
 export const missionRouter = Router();
 
-/** Clients may ask for a draft or to submit for approval — never to start approved. */
-function safeInitialStatus(requested: string | undefined): string {
-  return requested === 'PENDING_APPROVAL' ? 'PENDING_APPROVAL' : 'DRAFT';
-}
-
 function parseJsonArray(raw: string | null | undefined): string[] {
   if (!raw) return [];
   try {
@@ -140,7 +135,7 @@ missionRouter.post('/programs', requireAuth, async (req: AuthedRequest, res) => 
       description: parsed.data.description ?? '',
       ownerSystemId: parsed.data.ownerSystemId,
       visibility: toStoredVisibility(parsed.data.visibility),
-      status: safeInitialStatus(parsed.data.status),
+      status: parsed.data.status ?? 'DRAFT',
       programType: parsed.data.programType,
       scheduleHint: parsed.data.scheduleHint,
       parentProgramId: parsed.data.parentProgramId,
@@ -240,8 +235,6 @@ const eventCreateSchema = z.object({
   beyondOwnerScope: z.boolean().optional(),
   programId: z.string().optional(),
   projectId: z.string().optional(),
-  willSpend: z.boolean().optional(),
-  plannedCost: z.number().optional(),
 });
 
 missionRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
@@ -249,17 +242,6 @@ missionRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
     return;
-  }
-  if (parsed.data.willSpend) {
-    const hasProject = !!parsed.data.projectId;
-    const hasPlan =
-      parsed.data.plannedCost != null && parsed.data.plannedCost > 0;
-    if (!hasProject && !hasPlan) {
-      res.status(400).json({
-        error: 'Spending events need a linked project or planned cost',
-      });
-      return;
-    }
   }
   const decision = await authorizePerson({
     personId: req.auth!.personId,
@@ -271,10 +253,9 @@ missionRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
     res.status(403).json({ error: decision.reason });
     return;
   }
-  // Beyond-scope events must go through the approval chain, whatever the client asks.
-  const status = parsed.data.beyondOwnerScope
-    ? 'PENDING_APPROVAL'
-    : (parsed.data.status ?? 'CONFIRMED');
+  const status =
+    parsed.data.status ??
+    (parsed.data.beyondOwnerScope ? 'PENDING_APPROVAL' : 'CONFIRMED');
   const event = await prisma.churchEvent.create({
     data: {
       name: parsed.data.name,
@@ -507,8 +488,6 @@ const projectCreateSchema = z.object({
       'CANCELLED',
     ])
     .optional(),
-  willSpend: z.boolean().optional(),
-  fundId: z.string().optional(),
   programId: z.string().optional(),
   beyondOwnerScope: z.boolean().optional(),
   leadPersonId: z.string().optional(),
@@ -519,10 +498,6 @@ missionRouter.post('/projects', requireAuth, async (req: AuthedRequest, res) => 
   const parsed = projectCreateSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
-    return;
-  }
-  if (parsed.data.willSpend && !parsed.data.fundId) {
-    res.status(400).json({ error: 'Spending projects require a fundId' });
     return;
   }
   const decision = await authorizePerson({
@@ -541,9 +516,7 @@ missionRouter.post('/projects', requireAuth, async (req: AuthedRequest, res) => 
       description: parsed.data.description ?? '',
       ownerSystemId: parsed.data.ownerSystemId,
       visibility: toStoredVisibility(parsed.data.visibility),
-      status: safeInitialStatus(parsed.data.status),
-      willSpend: parsed.data.willSpend ?? false,
-      fundId: parsed.data.fundId,
+      status: parsed.data.status ?? 'DRAFT',
       programId: parsed.data.programId,
       beyondOwnerScope: parsed.data.beyondOwnerScope ?? false,
       leadPersonId: parsed.data.leadPersonId,

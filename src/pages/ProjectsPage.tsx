@@ -16,7 +16,6 @@ import {
 import { projectToWorkItem } from '../domain/workItem';
 import { useProjectsList } from '../hooks/useMissionLists';
 import {
-  financeService,
   isChurchLeader,
   missionService,
   peopleService,
@@ -202,7 +201,6 @@ export function ProjectsPage() {
                 <th>Project</th>
                 <th>Lead</th>
                 <th>Collaborators</th>
-                <th>Money</th>
                 <th>Scope</th>
                 <th>Status</th>
               </tr>
@@ -230,11 +228,6 @@ export function ProjectsPage() {
                         (id) => systemsService.getById(id)?.shortName ?? id,
                       )
                       .join(', ') || '—'}
-                  </td>
-                  <td>
-                    {p.willSpend
-                      ? `Spend · ${financeService.getFund(p.fundId ?? '')?.code ?? p.fundId}`
-                      : 'No spend'}
                   </td>
                   <td>{p.beyondOwnerScope ? 'Beyond' : 'In-scope'}</td>
                   <td>

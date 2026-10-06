@@ -2,7 +2,7 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
-import { MINISTRY_KIT_FUNDS, SPECIAL_MINISTRY_FUNDS, CHOIR_FUNDS, CHOIR_PARENT_ORG } from '../src/lib/ministryFunds.js';
+import { MINISTRY_KIT_ORGS, SPECIAL_MINISTRY_ORGS, CHOIR_ORGS, CHOIR_PARENT_ORG } from '../src/lib/ministryOrgs.js';
 
 const prisma = new PrismaClient();
 
@@ -150,7 +150,7 @@ const SYSTEMS = [
     kind: 'SHARED',
     basePath: '/finance',
     description:
-      'Shared fund ACL + church treasury module — used inside Main and ministries',
+      'Church treasury module (Module 5) — used inside Main and ministries',
   },
 ] as const;
 
@@ -313,35 +313,7 @@ async function main() {
     update: {},
   });
 
-  await prisma.fund.upsert({
-    where: { id: 'fund-general' },
-    create: {
-      id: 'fund-general',
-      name: 'General Church Fund',
-      code: 'GENERAL',
-      kind: 'GENERAL',
-      orgUnitId: ouFinance.id,
-      ownerSystemId: 'sys-finance',
-      description: 'Tithes, offerings, congregation treasury',
-    },
-    update: {},
-  });
-
-  await prisma.fundAccessGrant.deleteMany({
-    where: { fundId: 'fund-general', personId: treasurer.id },
-  });
-  await prisma.fundAccessGrant.create({
-    data: {
-      fundId: 'fund-general',
-      personId: treasurer.id,
-      action: 'MANAGE',
-      grantedByPersonId: pastor.id,
-      reason: 'Church Treasurer — General Fund',
-      status: 'ACTIVE',
-    },
-  });
-
-  for (const kit of MINISTRY_KIT_FUNDS) {
+  for (const kit of MINISTRY_KIT_ORGS) {
     const ou = await prisma.orgUnit.upsert({
       where: { id: kit.orgId },
       create: {
@@ -356,36 +328,10 @@ async function main() {
     await prisma.churchSystem.update({
       where: { id: kit.systemId },
       data: { orgUnitId: ou.id },
-    });
-    await prisma.fund.upsert({
-      where: { id: kit.fundId },
-      create: {
-        id: kit.fundId,
-        name: kit.name,
-        code: kit.code,
-        kind: 'MINISTRY',
-        orgUnitId: ou.id,
-        ownerSystemId: kit.systemId,
-        description: `${kit.orgName} org-private vault`,
-      },
-      update: { name: kit.name },
-    });
-    await prisma.fundAccessGrant.deleteMany({
-      where: { fundId: kit.fundId, personId: treasurer.id },
-    });
-    await prisma.fundAccessGrant.create({
-      data: {
-        fundId: kit.fundId,
-        personId: treasurer.id,
-        action: 'MANAGE',
-        grantedByPersonId: pastor.id,
-        reason: `Demo — Church Treasurer verifies ${kit.code} claims`,
-        status: 'ACTIVE',
-      },
     });
   }
 
-  for (const kit of SPECIAL_MINISTRY_FUNDS) {
+  for (const kit of SPECIAL_MINISTRY_ORGS) {
     const ou = await prisma.orgUnit.upsert({
       where: { id: kit.orgId },
       create: {
@@ -400,32 +346,6 @@ async function main() {
     await prisma.churchSystem.update({
       where: { id: kit.systemId },
       data: { orgUnitId: ou.id },
-    });
-    await prisma.fund.upsert({
-      where: { id: kit.fundId },
-      create: {
-        id: kit.fundId,
-        name: kit.name,
-        code: kit.code,
-        kind: 'MINISTRY',
-        orgUnitId: ou.id,
-        ownerSystemId: kit.systemId,
-        description: `${kit.orgName} org-private vault`,
-      },
-      update: { name: kit.name },
-    });
-    await prisma.fundAccessGrant.deleteMany({
-      where: { fundId: kit.fundId, personId: treasurer.id },
-    });
-    await prisma.fundAccessGrant.create({
-      data: {
-        fundId: kit.fundId,
-        personId: treasurer.id,
-        action: 'MANAGE',
-        grantedByPersonId: pastor.id,
-        reason: `Demo — Church Treasurer verifies ${kit.code} claims`,
-        status: 'ACTIVE',
-      },
     });
   }
 
@@ -447,8 +367,8 @@ async function main() {
   // The built-in choirs are demo data: on a real deployment the choirs come from
   // the church (the Protocol import with --create-choirs, or Music's lineup).
   const seedChoirs = process.env.NODE_ENV !== 'production' || process.env.SEED_DEFAULT_CHOIRS === 'true';
-  for (const choir of seedChoirs ? CHOIR_FUNDS : []) {
-    const ou = await prisma.orgUnit.upsert({
+  for (const choir of seedChoirs ? CHOIR_ORGS : []) {
+    await prisma.orgUnit.upsert({
       where: { id: choir.orgId },
       create: {
         id: choir.orgId,
@@ -458,32 +378,6 @@ async function main() {
         systemId: 'sys-choir',
       },
       update: { name: choir.name },
-    });
-    await prisma.fund.upsert({
-      where: { id: choir.fundId },
-      create: {
-        id: choir.fundId,
-        name: `${choir.name} Fund`,
-        code: choir.code,
-        kind: 'MINISTRY',
-        orgUnitId: ou.id,
-        ownerSystemId: 'sys-choir',
-        description: `Private vault — ${choir.name} choir`,
-      },
-      update: { name: `${choir.name} Fund` },
-    });
-    await prisma.fundAccessGrant.deleteMany({
-      where: { fundId: choir.fundId, personId: treasurer.id },
-    });
-    await prisma.fundAccessGrant.create({
-      data: {
-        fundId: choir.fundId,
-        personId: treasurer.id,
-        action: 'MANAGE',
-        grantedByPersonId: pastor.id,
-        reason: `Demo — Church Treasurer verifies ${choir.code} claims`,
-        status: 'ACTIVE',
-      },
     });
   }
 
@@ -659,9 +553,8 @@ async function main() {
   console.log('Seed OK (bootstrap — no demo mission data)');
   if (!isProd) {
     console.log('  pastor / pastor123  (CHURCH_LEADER)');
-    console.log('  treasurer / treas123  (CHURCH_TREASURER + General + all kit funds MANAGE)');
+    console.log('  treasurer / treas123  (CHURCH_TREASURER)');
   }
-  console.log(`  finance: fund-general + ${MINISTRY_KIT_FUNDS.length} kit + ${SPECIAL_MINISTRY_FUNDS.length} special + ${CHOIR_FUNDS.length} choir vaults`);
 }
 
 main()

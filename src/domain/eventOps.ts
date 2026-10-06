@@ -116,18 +116,3 @@ export function offerWindowLabel(reg: EventRegistration): string | null {
   const hours = Math.ceil(ms / 3600000);
   return `Accept seat · ${hours}h left`;
 }
-
-/** willSpend ⇒ need projectId or plannedCost stewardship. */
-export function eventSpendPolicyOk(input: {
-  willSpend?: boolean;
-  projectId?: string;
-  plannedCost?: number;
-}): { ok: boolean; reason?: string } {
-  if (!input.willSpend) return { ok: true };
-  if (input.projectId) return { ok: true };
-  if (input.plannedCost != null && input.plannedCost > 0) return { ok: true };
-  return {
-    ok: false,
-    reason: 'Spending events need a linked project or planned cost',
-  };
-}

@@ -1,4 +1,3 @@
-import { authorizeFinanceFund, fundGrantsToPermissions } from './financeAccess';
 import {
   CHOIR_MEMBERSHIP_GRANTS,
   CHOIR_OFFICE_GRANTS,
@@ -39,8 +38,7 @@ function pushGrant(grants: PermissionGrant[], grant: PermissionGrant) {
       g.resource === grant.resource &&
       g.action === grant.action &&
       g.source === grant.source &&
-      g.reason === grant.reason &&
-      g.fundId === grant.fundId,
+      g.reason === grant.reason,
   );
   if (!exists) grants.push(grant);
 }
@@ -498,7 +496,6 @@ export function buildEffectiveAccess(
         source: 'POSITION',
         reason: `${p.title} — treasury audit`,
       });
-      // Church treasury is a Main module; vault ops still need FundAccessGrant.
     }
 
     // Mission board leaders: President / VP / Secretary / Treasurer
@@ -936,7 +933,7 @@ export function buildEffectiveAccess(
         });
         grantPeopleDirectoryView(grants, p.title);
       }
-      // Treasurer: schedule VIEW only (already granted); fund via FundAccessGrant
+      // Treasurer: schedule VIEW only (already granted)
     }
   }
 
@@ -1017,11 +1014,6 @@ export function buildEffectiveAccess(
     }
   }
 
-  // ORG_PRIVATE finance: only explicit fund grants — never governance.
-  for (const g of fundGrantsToPermissions(personId, now)) {
-    pushGrant(grants, g);
-  }
-
   return grants;
 }
 
@@ -1043,23 +1035,12 @@ export function authorize(
   const now = request.now ?? new Date();
   const evaluatedAt = now.toISOString();
 
-  if (request.resource === 'FINANCE' && request.fundId) {
-    return authorizeFinanceFund(
-      request.personId,
-      request.fundId,
-      request.action,
-      grants,
-      now,
-    );
-  }
-
   const matched = grants.find((g) =>
     grantMatches(
       g,
       request.systemId,
       request.resource,
       request.action,
-      request.fundId,
     ),
   );
 
@@ -1070,17 +1051,13 @@ export function authorize(
       systemId: request.systemId,
       resource: request.resource,
       action: request.action,
-      fundId: request.fundId,
       matchedGrant: matched,
       reason: matched.reason,
       evaluatedAt,
     };
   }
 
-  const privateDenied =
-    request.resource === 'FINANCE'
-      ? 'ORG_PRIVATE finance — no fund grant from the owning organization (pastor cannot bypass)'
-      : 'No matching permission grant for this context';
+  const privateDenied = 'No matching permission grant for this context';
 
   return {
     allowed: false,
@@ -1088,7 +1065,6 @@ export function authorize(
     systemId: request.systemId,
     resource: request.resource,
     action: request.action,
-    fundId: request.fundId,
     reason: privateDenied,
     evaluatedAt,
   };

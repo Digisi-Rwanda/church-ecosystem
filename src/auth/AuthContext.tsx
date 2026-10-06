@@ -50,7 +50,6 @@ function toPermissionGrants(grants: ApiGrant[]): PermissionGrant[] {
     action: g.action as Action,
     source: g.source as PermissionGrant['source'],
     reason: g.reason,
-    fundId: g.fundId,
   }));
 }
 
@@ -91,13 +90,11 @@ interface AuthContextValue {
     resource: Resource,
     action: Action,
     systemId?: SystemId,
-    fundId?: string,
   ) => AuthzDecision;
   can: (
     resource: Resource,
     action: Action,
     systemId?: SystemId,
-    fundId?: string,
   ) => boolean;
   canEnter: (systemId: SystemId) => boolean;
   canManagePeople: boolean;
@@ -218,7 +215,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resource: Resource,
       action: Action,
       systemId: SystemId,
-      fundId: string | undefined,
       audit: boolean,
     ): AuthzDecision => {
       if (!account) {
@@ -230,7 +226,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           action,
           reason: 'Not signed in',
           evaluatedAt: new Date().toISOString(),
-          fundId,
         };
       }
       if (apiGrants) {
@@ -240,7 +235,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
           resource,
           action,
           apiGrants,
-          { entryMode, audit, fundId },
+          { entryMode, audit },
         );
       }
       return accessService.authorize(
@@ -248,7 +243,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         systemId,
         resource,
         action,
-        { entryMode, audit, fundId },
+        { entryMode, audit },
       );
     };
 
@@ -256,15 +251,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       resource: Resource,
       action: Action,
       systemId: SystemId = currentSystemId,
-      fundId?: string,
-    ): AuthzDecision => decide(resource, action, systemId, fundId, true);
+    ): AuthzDecision => decide(resource, action, systemId, true);
 
     const can = (
       resource: Resource,
       action: Action,
       systemId: SystemId = currentSystemId,
-      fundId?: string,
-    ): boolean => decide(resource, action, systemId, fundId, false).allowed;
+    ): boolean => decide(resource, action, systemId, false).allowed;
 
     const canEnter = (systemId: SystemId) =>
       account ? can('SYSTEM', 'ENTER', systemId) : false;

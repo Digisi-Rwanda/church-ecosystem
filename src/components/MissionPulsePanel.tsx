@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import type { ApiPulse } from '../api/missionApi';
-import { formatRwf } from '../domain/stewardship';
 import { blockerUrgency } from '../domain/deliveryRisk';
 import { peopleService } from '../services';
 import { StatusPill } from './ui/StatusPill';
@@ -34,33 +33,6 @@ export function MissionPulsePanel({
           </h3>
         </div>
         <StatusPill status={pulse.status} />
-      </div>
-
-      <div className="overview-strip">
-        <div className="overview-tile">
-          <div className="label">Planned</div>
-          <div className="value" style={{ fontSize: '1rem' }}>
-            {formatRwf(pulse.money.plannedCost)}
-          </div>
-        </div>
-        <div className="overview-tile">
-          <div className="label">Confirmed</div>
-          <div className="value" style={{ fontSize: '1rem' }}>
-            {formatRwf(pulse.money.confirmedFunding)}
-          </div>
-        </div>
-        <div className="overview-tile">
-          <div className="label">Used</div>
-          <div className="value" style={{ fontSize: '1rem' }}>
-            {formatRwf(pulse.money.usedCost)}
-          </div>
-        </div>
-        <div className="overview-tile">
-          <div className="label">Gap</div>
-          <div className="value" style={{ fontSize: '1rem' }}>
-            {formatRwf(pulse.money.gap)}
-          </div>
-        </div>
       </div>
 
       {pulse.nextSession && (
@@ -104,12 +76,8 @@ export function MissionPulsePanel({
       )}
 
       <p className="muted" style={{ margin: 0, fontSize: '0.8rem' }}>
-        Schedule {pulse.health.parts.schedule} · Money {pulse.health.parts.money}{' '}
-        · Delivery {pulse.health.parts.delivery} · People{' '}
-        {pulse.health.parts.people}
-        {pulse.money.openAdvances > 0
-          ? ` · ${pulse.money.openAdvances} open advance(s)`
-          : ''}
+        Schedule {pulse.health.parts.schedule} · Delivery{' '}
+        {pulse.health.parts.delivery} · People {pulse.health.parts.people}
       </p>
 
       {pulse.healthSnapshots && pulse.healthSnapshots.length > 0 && (
@@ -184,14 +152,6 @@ export function MissionPulsePanel({
             <div className="label">People served</div>
             <div className="value" style={{ fontSize: '1rem' }}>
               {pulse.impact.participantsServed}
-            </div>
-          </div>
-          <div className="overview-tile">
-            <div className="label">Impact / 1k RWF</div>
-            <div className="value" style={{ fontSize: '1rem' }}>
-              {pulse.impact.impactPerFranc == null
-                ? '—'
-                : pulse.impact.impactPerFranc}
             </div>
           </div>
         </div>

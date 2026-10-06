@@ -1,6 +1,5 @@
 import { Link } from 'react-router-dom';
 import type { WorkItem } from '../domain/workItem';
-import { formatRwf } from '../domain/stewardship';
 import { EmptyState, StatusPill } from './ui/StatusPill';
 
 export type WorkViewMode = 'list' | 'board' | 'calendar';
@@ -62,11 +61,7 @@ function WorkItemRow({ item }: { item: WorkItem }) {
       </td>
       <td>{healthPill(item)}</td>
       <td>
-        {item.money ? (
-          <span className="muted">
-            {formatRwf(item.money.usedCost)} / {formatRwf(item.money.plannedCost)}
-          </span>
-        ) : item.startsAt || item.dueDate ? (
+        {item.startsAt || item.dueDate ? (
           <span className="muted">
             {item.dueDate
               ? `Due ${item.dueDate}`

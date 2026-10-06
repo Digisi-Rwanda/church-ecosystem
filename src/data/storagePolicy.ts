@@ -36,16 +36,6 @@ export const STORAGE_POLICY: Record<string, DataHome> = {
   ...S('MOVE_S3', `personFamilyLinks personBaptisms personMarriages personTimeline personDocuments
     personEmployment personEducation personTalents personSpiritualGifts
     `),
-  // Slice 4 — money (church finance, ministry finance)
-  ...S('MOVE_S4', `   financeTxns
-
-
-
-
-
-             `),
   // Slice 5 — governance and care
-  ...S('MOVE_S5', `
-
-    youthGroups youthMembers youthMeetings`),
+  ...S('MOVE_S5', `youthGroups youthMembers youthMeetings`),
 };

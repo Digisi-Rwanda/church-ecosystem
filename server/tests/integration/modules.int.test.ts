@@ -35,11 +35,9 @@ let attention: typeof import('../../../src/api/attentionApi');
 let people: typeof import('../../../src/api/peopleApi');
 
 const PASTOR = 'p-pastor';
-const TREASURER = 'p-treasurer';
 const MEMBER = 'p-member';
 const OUTSIDER = 'p-outsider';
 const CHOIR_LEAD = 'p-choir-leader';
-const CHOIR_MEMBER = 'p-choir-member';
 const YOUTH_LEAD = 'p-youth-leader';
 
 /** Run something as one signed-in person (their token in this browser). */
@@ -57,17 +55,8 @@ beforeAll(async () => {
   fake.__db.financeTxn ??= [];
   fake.__db.contributionClaim ??= [];
   fake.__db.account ??= [];
-  // Two things the real database does that the in-memory stand-in does not:
-  // `include: { orgUnit }` on funds, and createdAt/updatedAt stamps on programs.
-  fake.__db.orgUnit ??= [];
-  fake.__db.orgUnit.push(
-    { id: 'ou-f', name: 'Finance' }, { id: 'ou-c', name: 'Choir' }, { id: 'ou-y', name: 'Youth' },
-  );
-  const withOrg = async (f: any) => f && { ...f, orgUnit: fake.__db.orgUnit.find((o: any) => o.id === f.orgUnitId) };
-  const fMany = fake.fund.findMany;
-  const fOne = fake.fund.findUnique;
-  fake.fund.findMany = async (a: any) => Promise.all((await fMany(a)).map(withOrg));
-  fake.fund.findUnique = async (a: any) => withOrg(await fOne(a));
+  // One thing the real database does that the in-memory stand-in does not:
+  // createdAt/updatedAt stamps on programs.
   const stamp = (fn: any) => async (a: any) => fn({ ...a, data: { updatedAt: new Date(), ...a.data } });
   const pCreate = fake.program.create;
   const pUpdate = fake.program.update;
@@ -171,14 +160,14 @@ describe('the rest of the API surface', () => {
 
   it('no sign-in, no data: every protected route refuses an anonymous call', async () => {
     for (const path of ['/api/mission/programs', '/api/mission/events', '/api/mission/tasks', '/api/mission/projects',
-      '/api/funds', '/api/people', '/api/attention', '/api/schedule-state/music']) {
+      '/api/people', '/api/attention', '/api/schedule-state/music']) {
       expect(await status(() => as(null, () => get(path))), path).toBe(401);
     }
   });
 
   it('a forged or expired token is refused', async () => {
     api.setApiToken('not-a-real-token');
-    expect(await status(() => get('/api/funds'))).toBe(401);
+    expect(await status(() => get('/api/people'))).toBe(401);
   });
 });
 

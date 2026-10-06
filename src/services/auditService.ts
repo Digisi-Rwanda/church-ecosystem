@@ -36,7 +36,6 @@ export const auditService = {
       allowed: decision.allowed,
       reason: decision.reason,
       entryMode,
-      fundId: decision.fundId,
     };
     const next = [entry, ...readAll()].slice(0, MAX_ENTRIES);
     writeAll(next);
