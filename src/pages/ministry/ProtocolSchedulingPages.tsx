@@ -2,7 +2,6 @@ import { useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useAuth } from '../../auth/AuthContext';
 import type { ProtocolAttendanceStatus } from '../../domain/types';
-import { PROTOCOL_SCORE_POINTS } from '../../domain/teamEngine';
 import { musicScheduleService, protocolService } from '../../services';
 import type { ProtocolMonthRow } from '../../services/protocolService';
 import { ProtocolCoveragePanel } from './ProtocolCoveragePanel';
@@ -466,111 +465,6 @@ export function ProtocolTeamsPage() {
             </tbody>
           </table>
         </div>
-      </div>
-    </div>
-  );
-}
-
-/** Member performance — served counts, extras, fill-ins, score, ranking. */
-export function ProtocolFaithfulPage() {
-  const { can } = useAuth();
-  const canView = can('PROTOCOL_SCHEDULE', 'VIEW', SYS);
-  const { monthKey, setMonthKey, tick } = useProtocolMonth();
-  const [scope, setScope] = useState<'month' | 'all'>('month');
-
-  const rows = useMemo(
-    () =>
-      protocolService.faithfulServantStats(
-        scope === 'all' ? 'ALL' : monthKey,
-      ),
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [monthKey, scope, tick],
-  );
-
-  if (!canView) {
-    return (
-      <div className="panel">
-        <h2>Member performance</h2>
-        <p className="muted">No access</p>
-      </div>
-    );
-  }
-
-  return (
-    <div className="stack">
-      <div className="panel">
-        <div className="row" style={{ justifyContent: 'space-between' }}>
-          <div>
-            <h2 style={{ margin: 0 }}>Member performance</h2>
-            <p className="muted" style={{ margin: '0.35rem 0 0' }}>
-              Counts from submitted attendance (Present / Half-present). Updates
-              when attendance is recorded.
-            </p>
-          </div>
-          <div className="row">
-            <button
-              type="button"
-              className={scope === 'month' ? 'btn sm' : 'btn secondary sm'}
-              onClick={() => setScope('month')}
-            >
-              This month
-            </button>
-            <button
-              type="button"
-              className={scope === 'all' ? 'btn sm' : 'btn secondary sm'}
-              onClick={() => setScope('all')}
-            >
-              All time
-            </button>
-            {scope === 'month' && (
-              <MonthPicker monthKey={monthKey} onChange={setMonthKey} />
-            )}
-          </div>
-        </div>
-        <p className="muted" style={{ fontSize: '0.85rem' }}>
-          Score: Present {PROTOCOL_SCORE_POINTS.PRESENT} · Half-present{' '}
-          {PROTOCOL_SCORE_POINTS.HALF_PRESENT} · Excused{' '}
-          {PROTOCOL_SCORE_POINTS.EXCUSED} · Absent {PROTOCOL_SCORE_POINTS.ABSENT}{' '}
-          · Extra {PROTOCOL_SCORE_POINTS.EXTRA} · Fill-in{' '}
-          {PROTOCOL_SCORE_POINTS.FILL_IN}
-        </p>
-      </div>
-
-      <div className="panel">
-        <h3>Ranking · {scope === 'all' ? 'All time' : monthKey}</h3>
-        <table className="table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Name</th>
-              <th>Served</th>
-              <th>Extra</th>
-              <th>Fill-in</th>
-              <th>Score</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rows.map((r, i) => (
-              <tr key={r.personId}>
-                <td>{i + 1}</td>
-                <td>{r.name}</td>
-                <td>{r.servedCount}</td>
-                <td>{r.extraCount}</td>
-                <td>{r.fillInCount}</td>
-                <td>
-                  <strong>{r.score}</strong>
-                </td>
-              </tr>
-            ))}
-            {rows.length === 0 && (
-              <tr>
-                <td colSpan={6} className="muted">
-                  No attendance recorded yet for this scope.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
       </div>
     </div>
   );

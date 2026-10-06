@@ -20,7 +20,6 @@ type RecentEntry = PaletteItem & { at: number };
 function buildDestinations(input: {
   canViewPeople: boolean;
   canAdmin: boolean;
-  canTreasury: boolean;
   profilePath: string;
   attentionHrefs: Array<{ id: string; title: string; href: string }>;
 }): PaletteItem[] {
@@ -32,12 +31,6 @@ function buildDestinations(input: {
     { id: 'events', label: 'Events', href: '/events', group: 'Go to' },
     { id: 'tasks', label: 'Tasks', href: '/tasks', group: 'Go to' },
     { id: 'projects', label: 'Projects', href: '/projects', group: 'Go to' },
-    {
-      id: 'reports',
-      label: 'Reports (Leadership)',
-      href: '/reports/leadership',
-      group: 'Go to',
-    },
     { id: 'calendar', label: 'Calendar', href: '/calendar', group: 'Go to' },
     {
       id: 'people',
@@ -59,17 +52,6 @@ function buildDestinations(input: {
     },
     { id: 'systems', label: 'Systems', href: '/systems', group: 'Go to' },
   ];
-  if (input.canTreasury) {
-    dest.push(
-      { id: 'finance', label: 'Church treasury', href: '/finance', group: 'Go to' },
-      {
-        id: 'collections',
-        label: 'Collections',
-        href: '/finance/collections',
-        group: 'Go to',
-      },
-    );
-  }
   if (input.canAdmin) {
     dest.push({
       id: 'access',
@@ -320,7 +302,6 @@ export function CommandPalette() {
   const [recents, setRecents] = useState<RecentEntry[]>([]);
 
   const canAdmin = can('AUDIT', 'VIEW', 'sys-main');
-  const canTreasury = can('FINANCE', 'VIEW', 'sys-main');
   const canManageTask = can('TASK', 'MANAGE');
   const canManageEvent = can('EVENT', 'MANAGE');
   const canManageProgram = can('PROGRAM', 'MANAGE');
@@ -330,7 +311,6 @@ export function CommandPalette() {
     const dest = buildDestinations({
       canViewPeople,
       canAdmin,
-      canTreasury,
       profilePath: `/people/${account.personId}`,
       attentionHrefs: attention.map((a) => ({
         id: a.id,
@@ -355,7 +335,6 @@ export function CommandPalette() {
     account,
     canViewPeople,
     canAdmin,
-    canTreasury,
     attention,
     q,
     canManageTask,

@@ -340,11 +340,6 @@ export function ProjectDetailPage() {
               requires a Treasurer FundAccessGrant — linking does not open the
               vault to everyone.
             </p>
-            {fund && (
-              <Link to="/finance" style={{ fontSize: '0.9rem' }}>
-                Open church treasury →
-              </Link>
-            )}
           </div>
         )}
         {planned > 0 && (

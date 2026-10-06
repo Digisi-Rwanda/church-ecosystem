@@ -8,9 +8,8 @@ import { Icon } from '../components/ui/Icon';
 import { EmptyState, ForbiddenState } from '../components/ui/StatusPill';
 import type { PeopleSearchFacet, PeopleSearchScope } from '../services';
 import { peopleService } from '../services';
-import { pastoralOpsService } from '../services/pastoralOpsService';
 
-type StatusFilter = 'all' | 'ACTIVE' | 'INACTIVE' | 'VISITOR' | 'pathway';
+type StatusFilter = 'all' | 'ACTIVE' | 'INACTIVE' | 'VISITOR';
 
 const SEARCH_SCOPE_OPTIONS: { value: PeopleSearchScope; label: string }[] = [
   { value: 'all', label: 'All fields' },
@@ -86,23 +85,10 @@ export function PeoplePage() {
       }),
     [q, searchScope, searchFacet, searchCategory],
   );
-  const pathwayPersonIds = useMemo(
-    () =>
-      new Set(
-        pastoralOpsService
-          .listPathways({ openOnly: true })
-          .map((p) => p.personId),
-      ),
-    [],
-  );
-
   const people = useMemo(() => {
-    if (statusFilter === 'pathway') {
-      return searched.filter((p) => pathwayPersonIds.has(p.id));
-    }
     if (statusFilter === 'all') return searched;
     return searched.filter((p) => p.status === statusFilter);
-  }, [searched, statusFilter, pathwayPersonIds]);
+  }, [searched, statusFilter]);
 
   const counts = useMemo(() => {
     const all = searched;
@@ -111,9 +97,8 @@ export function PeoplePage() {
       ACTIVE: all.filter((p) => p.status === 'ACTIVE').length,
       INACTIVE: all.filter((p) => p.status === 'INACTIVE').length,
       VISITOR: all.filter((p) => p.status === 'VISITOR').length,
-      pathway: all.filter((p) => pathwayPersonIds.has(p.id)).length,
     };
-  }, [searched, pathwayPersonIds]);
+  }, [searched]);
 
   // Carry this page's search and status filter into the full-page tables.
   const fullPageQuery = (() => {
@@ -253,11 +238,6 @@ export function PeoplePage() {
             options={[
               { value: 'all', label: 'All', count: counts.all },
               { value: 'ACTIVE', label: 'Active', count: counts.ACTIVE },
-              {
-                value: 'pathway',
-                label: 'In process',
-                count: counts.pathway,
-              },
               { value: 'VISITOR', label: 'Visitors', count: counts.VISITOR },
               { value: 'INACTIVE', label: 'Inactive', count: counts.INACTIVE },
             ]}

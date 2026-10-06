@@ -533,15 +533,6 @@ export function EventDetailPage() {
               </Link>
             </p>
           )}
-          {event.type === 'BAPTISM' && (
-            <p style={{ marginBottom: 0 }}>
-              <Link to="/pastoral">Open pastoral desk →</Link>
-              <span className="muted">
-                {' '}
-                (baptism pathways, name gate, follow-up)
-              </span>
-            </p>
-          )}
         </div>
 
         {regMode === 'REGISTRATION_REQUIRED' && activePeople.length > 0 && (

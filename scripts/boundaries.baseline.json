@@ -5,7 +5,6 @@
   "src/domain/audiencePool.ts -> data",
   "src/domain/eventScope.ts -> data",
   "src/domain/financeAccess.ts -> data",
-  "src/domain/oversightAccess.ts -> data",
   "src/pages/ActivitySessionPage.tsx -> data",
   "src/pages/CheckInPage.tsx -> data",
   "src/pages/EventDetailPage.tsx -> data",

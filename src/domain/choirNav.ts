@@ -19,27 +19,9 @@ export const CHOIR_NAV_CATALOG: ChoirNavItem[] = [
   { key: 'home', to: '/systems/choir', label: 'Home', end: true },
   { key: 'mission', to: '/systems/choir/mission', label: 'Mission' },
   { key: 'people', to: '/systems/choir/people', label: 'People' },
-  { key: 'families', to: '/systems/choir/families', label: 'Families' },
+  { key: 'families', to: '/systems/choir/families', label: 'Teams' },
   { key: 'repertoire', to: '/systems/choir/repertoire', label: 'Repertoire' },
-  { key: 'sections', to: '/systems/choir/sections', label: 'Sections' },
   { key: 'rehearsals', to: '/systems/choir/rehearsals', label: 'Rehearsals' },
-  { key: 'roster', to: '/systems/choir/roster', label: 'Duty roster' },
-  {
-    key: 'my-contributions',
-    to: '/systems/choir/my-contributions',
-    label: 'My contributions',
-  },
-  { key: 'finance', to: '/systems/choir/finance', label: 'Finance' },
-  { key: 'donations', to: '/systems/choir/donations', label: 'Donations' },
-  { key: 'sponsors', to: '/systems/choir/sponsors', label: 'Sponsors' },
-  {
-    key: 'fundraising',
-    to: '/systems/choir/fundraising',
-    label: 'Fundraising',
-  },
-  { key: 'accounting', to: '/systems/choir/accounting', label: 'Accounting' },
-  { key: 'assets', to: '/systems/choir/assets', label: 'Assets' },
-  { key: 'reports', to: '/systems/choir/reports', label: 'Reports' },
 ];
 
 export function choirNavForOffice(office: ChoirOffice | null): ChoirNavItem[] {

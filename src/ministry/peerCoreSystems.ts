@@ -81,14 +81,6 @@ export function peerCoreNav(slug: string) {
     { to: `${base}/tasks`, label: 'Tasks' },
     { to: `${base}/projects`, label: 'Projects' },
     { to: `${base}/calendar`, label: 'Calendar' },
-    { to: `${base}/my-contributions`, label: 'My contributions' },
-    { to: `${base}/finance`, label: 'Finance' },
-    { to: `${base}/donations`, label: 'Donations' },
-    { to: `${base}/sponsors`, label: 'Sponsors' },
-    { to: `${base}/fundraising`, label: 'Fundraising' },
-    { to: `${base}/accounting`, label: 'Accounting' },
-    { to: `${base}/assets`, label: 'Assets' },
-    { to: `${base}/reports`, label: 'Reports' },
   ];
 }
 

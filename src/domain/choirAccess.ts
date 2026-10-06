@@ -10,17 +10,7 @@ export type ChoirNavKey =
   | 'people'
   | 'families'
   | 'repertoire'
-  | 'sections'
-  | 'rehearsals'
-  | 'roster'
-  | 'my-contributions'
-  | 'finance'
-  | 'donations'
-  | 'sponsors'
-  | 'fundraising'
-  | 'accounting'
-  | 'assets'
-  | 'reports';
+  | 'rehearsals';
 
 export type ChoirGrantSpec = {
   resource: Resource;
@@ -33,44 +23,24 @@ export const CHOIR_OFFICE_NAV: Record<ChoirOffice, readonly ChoirNavKey[]> = {
     'home',
     'mission',
     'repertoire',
-    'sections',
     'rehearsals',
-    'roster',
-    'my-contributions',
   ],
   SECRETARY: [
     'home',
     'mission',
     'people',
     'repertoire',
-    'sections',
     'rehearsals',
-    'roster',
-    'my-contributions',
-    'finance',
-    'reports',
   ],
   TREASURER: [
     'home',
     'mission',
-    'my-contributions',
-    'finance',
-    'donations',
-    'sponsors',
-    'fundraising',
-    'accounting',
-    'assets',
-    'reports',
   ],
   COORDINATOR: [
     'home',
     'mission',
     'people',
     'families',
-    'roster',
-    'my-contributions',
-    'finance',
-    'reports',
   ],
   PRESIDENT: [
     'home',
@@ -78,12 +48,7 @@ export const CHOIR_OFFICE_NAV: Record<ChoirOffice, readonly ChoirNavKey[]> = {
     'people',
     'families',
     'repertoire',
-    'sections',
     'rehearsals',
-    'roster',
-    'my-contributions',
-    'finance',
-    'reports',
   ],
   VP: [
     'home',
@@ -92,19 +57,13 @@ export const CHOIR_OFFICE_NAV: Record<ChoirOffice, readonly ChoirNavKey[]> = {
     'families',
     'repertoire',
     'rehearsals',
-    'roster',
-    'my-contributions',
-    'finance',
-    'reports',
   ],
-  ADVISOR: ['home', 'mission', 'my-contributions'],
+  ADVISOR: ['home', 'mission'],
   FAMILY_LEADER: [
     'home',
     'families',
-    'my-contributions',
-    'finance',
   ],
-  MEMBER: ['home', 'repertoire', 'rehearsals', 'my-contributions'],
+  MEMBER: ['home', 'repertoire', 'rehearsals'],
 };
 
 /** Plain choir member (membership, no office) — same as MEMBER. */

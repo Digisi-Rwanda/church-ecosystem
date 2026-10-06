@@ -1,50 +1,3 @@
-import type {
-  ContributionGoalScope as ContributionGoalScopeImport,
-  MinistryAsset,
-  MinistryBudget,
-  MinistryBudgetLine,
-  MinistryCampaignGift,
-  MinistryContribution,
-  MinistryContributionDrive,
-  MinistryContributionGoal,
-  MinistryContributionStatus,
-  MinistryContributionType,
-  MinistryDonation,
-  MinistryExpenseRecord,
-  MinistryExpenseStatus,
-  MinistryFollowUp,
-  MinistryFundraisingCampaign,
-  MinistryIncomeRecord,
-  MinistryLiability,
-  MinistryPaymentMethod,
-  MinistryPaymentMethodConfig,
-  MinistrySponsor,
-  MinistrySponsorship,
-} from './ministryFinanceKit';
-
-export type {
-  MinistryAsset,
-  MinistryBudget,
-  MinistryBudgetLine,
-  MinistryCampaignGift,
-  MinistryContribution,
-  MinistryContributionDrive,
-  MinistryContributionGoal,
-  MinistryContributionStatus,
-  MinistryContributionType,
-  MinistryDonation,
-  MinistryExpenseRecord,
-  MinistryExpenseStatus,
-  MinistryFollowUp,
-  MinistryFundraisingCampaign,
-  MinistryIncomeRecord,
-  MinistryLiability,
-  MinistryPaymentMethod,
-  MinistryPaymentMethodConfig,
-  MinistrySponsor,
-  MinistrySponsorship,
-};
-
 /** Canonical human identity — one Person across every system. */
 export interface Person {
   id: string;
@@ -928,8 +881,6 @@ export type ChoirOffice =
   | 'FAMILY_LEADER'
   | 'MEMBER';
 
-export type ChoirVoiceSection = 'SOPRANO' | 'ALTO' | 'TENOR' | 'BASS';
-
 export interface ChoirSong {
   id: string;
   orgUnitId: string;
@@ -938,14 +889,6 @@ export interface ChoirSong {
   language?: string;
   status: 'LEARNING' | 'READY' | 'ARCHIVED';
   notes?: string;
-}
-
-export interface ChoirSectionSeat {
-  id: string;
-  orgUnitId: string;
-  personId: string;
-  section: ChoirVoiceSection;
-  status: 'ACTIVE' | 'INACTIVE';
 }
 
 export interface ChoirRehearsal {
@@ -957,24 +900,6 @@ export interface ChoirRehearsal {
   location?: string;
   songIds: string[];
   notes?: string;
-}
-
-export type ChoirDutyRole =
-  | 'CONDUCTOR'
-  | 'SOLOIST'
-  | 'SECTION_LEAD'
-  | 'SOUND';
-
-export interface ChoirDutySlot {
-  id: string;
-  orgUnitId: string;
-  label: string;
-  /** Linked church event when applicable. */
-  eventId?: string;
-  serviceDate: string;
-  role: ChoirDutyRole;
-  personId: string;
-  status: 'ASSIGNED' | 'CONFIRMED' | 'DONE';
 }
 
 /**
@@ -1008,40 +933,11 @@ export interface ChoirRosterMember {
   status: 'ACTIVE' | 'INACTIVE';
 }
 
-/** Choir finance types = shared ministry finance kit (see ministryFinanceKit.ts). */
-export type ContributionGoalScope = ContributionGoalScopeImport;
-export type ChoirPaymentMethod = MinistryPaymentMethod;
-export type ChoirContributionType = MinistryContributionType;
-export type ChoirPaymentMethodConfig = MinistryPaymentMethodConfig;
-export type ChoirContributionStatus = MinistryContributionStatus;
-export type ChoirContribution = MinistryContribution;
-export type ChoirFollowUp = MinistryFollowUp;
-export type ChoirDonation = MinistryDonation;
-export type ChoirSponsor = MinistrySponsor;
-export type ChoirSponsorship = MinistrySponsorship;
-export type ChoirFundraisingCampaign = MinistryFundraisingCampaign;
-export type ChoirCampaignGift = MinistryCampaignGift;
-export type ChoirBudget = MinistryBudget;
-export type ChoirBudgetLine = MinistryBudgetLine;
-export type ChoirIncomeRecord = MinistryIncomeRecord;
-export type ChoirExpenseStatus = MinistryExpenseStatus;
-export type ChoirExpenseRecord = MinistryExpenseRecord;
-export type ChoirAsset = MinistryAsset;
-export type ChoirLiability = MinistryLiability;
-export type ChoirContributionDrive = MinistryContributionDrive;
-export type ChoirContributionGoal = MinistryContributionGoal;
-
-export type {
-  ChoirFamilyPaymentRail,
-  ChoirOfficePaymentRail,
-  ChoirContributionHandoff,
-  ChoirContributionEvent,
-  ChoirContribNotification,
-} from './choirContributionPipeline';
-
-/* ─── Worship System domain (peer of Choir under Music) ─── */
-
-/** Worship keeps its own office set (not the choir admin/ops model). */
+/**
+ * Old Worship team offices. Worship is becoming a choir of kind Worship (Choir
+ * design); this type goes when the seeded Worship positions move to the choir
+ * unit in the people-and-units slice.
+ */
 export type WorshipOffice =
   | 'ADMIN'
   | 'PRESIDENT'
@@ -1053,42 +949,8 @@ export type WorshipOffice =
   | 'FAMILY_LEADER'
   | 'FAMILY_VICE'
   | 'MEMBER';
-export type WorshipVoiceSection = ChoirVoiceSection;
-export type WorshipSong = ChoirSong;
-export type WorshipSectionSeat = ChoirSectionSeat;
-export type WorshipRehearsal = ChoirRehearsal;
-export type WorshipDutyRole = ChoirDutyRole;
-export type WorshipDutySlot = ChoirDutySlot;
-export type WorshipTeam = ChoirTeam;
-export type WorshipTeamMember = ChoirTeamMember;
-export interface WorshipRosterMember {
-  id: string;
-  orgUnitId: string;
-  personId: string;
-  office: WorshipOffice;
-  teamId?: string;
-  status: 'ACTIVE' | 'INACTIVE';
-}
-export type WorshipPaymentMethod = ChoirPaymentMethod;
-export type WorshipContributionType = ChoirContributionType;
-export type WorshipPaymentMethodConfig = ChoirPaymentMethodConfig;
-export type WorshipContributionStatus = ChoirContributionStatus;
-export type WorshipContribution = ChoirContribution;
-export type WorshipFollowUp = ChoirFollowUp;
-export type WorshipDonation = ChoirDonation;
-export type WorshipSponsor = ChoirSponsor;
-export type WorshipSponsorship = ChoirSponsorship;
-export type WorshipFundraisingCampaign = ChoirFundraisingCampaign;
-export type WorshipCampaignGift = ChoirCampaignGift;
-export type WorshipBudget = ChoirBudget;
-export type WorshipBudgetLine = ChoirBudgetLine;
-export type WorshipIncomeRecord = ChoirIncomeRecord;
-export type WorshipExpenseStatus = ChoirExpenseStatus;
-export type WorshipExpenseRecord = ChoirExpenseRecord;
-export type WorshipAsset = ChoirAsset;
-export type WorshipLiability = ChoirLiability;
 
-/* ─── Deacon Team domain (care / benevolence peer) ─── */
+/* ─── Deacon domain (care design is on hold; roster only) ─── */
 
 export type DeaconOffice =
   | 'COORDINATOR'
@@ -1097,104 +959,11 @@ export type DeaconOffice =
   | 'TREASURER'
   | 'MEMBER';
 
-export type DeaconCaseStatus =
-  | 'OPEN'
-  | 'HANDLING'
-  | 'WILL_HANDLE'
-  | 'CLOSED'
-  /** @deprecated Prefer HANDLING */
-  | 'IN_PROGRESS';
-
-/** Member wellbeing category (Leader sees type, not private clinical detail). */
-export type WellbeingCategory =
-  | 'NORMAL'
-  | 'SICK'
-  | 'DIED_OR_BEREAVED'
-  | 'OTHER_ISSUE'
-  | 'WEDDING'
-  | 'BAPTISM'
-  | 'BREAKTHROUGH';
-
-export type CareSubmitterRole =
-  | 'MEMBER'
-  | 'CATECHIST'
-  | 'SECRETARY'
-  | 'DEACON';
-
-export type CareEscalateTo = 'CATECHIST' | 'PASTOR' | 'CHURCH_LEADER';
-
-export interface DeaconCareCase {
-  id: string;
-  title: string;
-  personId?: string;
-  householdNote?: string;
-  status: DeaconCaseStatus;
-  priority: 'LOW' | 'NORMAL' | 'HIGH';
-  openedOn: string;
-  assignedPersonId?: string;
-  /** @deprecated Prefer summary + privateNotes */
-  notes?: string;
-  category: WellbeingCategory;
-  /** Required name when category is OTHER_ISSUE or BREAKTHROUGH */
-  categoryDetail?: string;
-  /** Upward-safe summary (situation type) — safe for Leader/pastor view */
-  summary?: string;
-  /** Deacon-only / restricted clinical or intimate detail */
-  privateNotes?: string;
-  submittedByPersonId?: string;
-  submittedByRole?: CareSubmitterRole;
-  /** Who should see this after deacons prioritize */
-  escalateTo?: CareEscalateTo;
-  sickSince?: string;
-  sickLocation?: 'HOSPITAL' | 'HOME' | 'OTHER';
-  /** Recovery status — not diagnosis */
-  sickStatus?: string;
-}
-
-export interface DeaconVisit {
-  id: string;
-  caseId?: string;
-  personId?: string;
-  visitedOn: string;
-  visitorPersonId: string;
-  location?: string;
-  notes?: string;
-}
-
 export interface DeaconRosterMember {
   id: string;
   personId: string;
   office: DeaconOffice;
   status: 'ACTIVE' | 'INACTIVE';
-}
-
-export type DeaconPaymentMethod = 'CASH' | 'MOMO' | 'BANK';
-
-export interface DeaconContribution {
-  id: string;
-  personId: string;
-  amount: number;
-  paymentMethod: DeaconPaymentMethod;
-  occurredOn: string;
-  status: 'PENDING' | 'CONFIRMED' | 'DECLINED';
-  submittedAt: string;
-  note?: string;
-  verifiedAt?: string;
-  verifiedByPersonId?: string;
-  financeTxnId?: string;
-}
-
-export interface DeaconExpenseRecord {
-  id: string;
-  category: string;
-  amount: number;
-  occurredOn: string;
-  description: string;
-  status: 'PENDING' | 'APPROVED' | 'REJECTED';
-  caseId?: string;
-  recordedByPersonId: string;
-  approvedByPersonId?: string;
-  financeTxnId?: string;
 }
 
 /* ─── Youth System domain ─── */
@@ -1295,46 +1064,6 @@ export interface FinanceTransaction {
   counterpartyFundId?: string;
   contextType?: 'EVENT' | 'PROGRAM' | 'PROJECT';
   contextId?: string;
-}
-
-/** Tithes / offerings / givings totals posted per worship service. */
-export interface ServiceCollection {
-  id: string;
-  serviceDate: string;
-  serviceLabel: string;
-  titheAmount: number;
-  offeringAmount: number;
-  givingAmount: number;
-  notes?: string;
-  status: 'DRAFT' | 'POSTED';
-  recordedByPersonId: string;
-  postedAt?: string;
-  txnIds: string[];
-}
-
-export interface BudgetLine {
-  id: string;
-  fiscalYear: number;
-  /** Month 1–12 optional; omit for annual line. */
-  month?: number;
-  category: FinanceCategory;
-  kind: 'INCOME' | 'EXPENSE';
-  budgetedAmount: number;
-  label: string;
-  notes?: string;
-}
-
-export type BalanceSheetSection = 'ASSET' | 'LIABILITY' | 'EQUITY';
-
-export interface BalanceSheetLine {
-  id: string;
-  asOfDate: string;
-  section: BalanceSheetSection;
-  label: string;
-  amount: number;
-  notes?: string;
-  /** When true, amount is taken from live fund balance instead of stored amount. */
-  linkedFundId?: string;
 }
 
 /* ─── Protocol Management System (PMS) ─── */
@@ -1576,34 +1305,6 @@ export interface ProtocolServiceReport {
   submittedAt: string;
 }
 
-export type ProtocolPaymentMethod = 'CASH' | 'MOMO' | 'BANK';
-export type ProtocolContributionType =
-  | 'MONTHLY'
-  | 'SPECIAL'
-  | 'EVENT'
-  | 'OTHER';
-export type ProtocolContributionStatus =
-  | 'PENDING'
-  | 'VERIFIED'
-  | 'REJECTED';
-
-/** Member contribution submitted in Protocol; verified → shared Finance ledger. */
-export interface ProtocolContribution {
-  id: string;
-  personId: string;
-  amount: number;
-  contributionType: ProtocolContributionType;
-  paymentMethod: ProtocolPaymentMethod;
-  status: ProtocolContributionStatus;
-  submittedAt: string;
-  note?: string;
-  verifiedAt?: string;
-  verifiedByPersonId?: string;
-  /** Set when verified — links to FinanceTransaction on fund-protocol. */
-  financeTxnId?: string;
-  rejectionReason?: string;
-}
-
 export type ProtocolNotificationKind =
   | 'TEAMS_BUILT'
   | 'SUBMITTED_REVIEW'
@@ -1663,358 +1364,7 @@ export interface ProtocolSchedulingRules {
   relaxChoirOnKinds?: ProtocolServiceKind[];
 }
 
-/** President/vice publish for Itorero oversight — not live ledger access. */
-export type SharedReportPackStatus = 'PUBLISHED' | 'WITHDRAWN';
-
-export interface SharedReportPack {
-  id: string;
-  systemId: SystemId;
-  title: string;
-  summary: string;
-  /** Optional structured highlights for the report surface. */
-  highlights?: string[];
-  publishedAt: string;
-  publishedByPersonId: string;
-  status: SharedReportPackStatus;
-}
-
-/**
- * When the Itorero funded a ministry/org — accountability report
- * (where/how spent, operations, results, impact).
- */
-export type ChurchAssistanceReportStatus =
-  | 'DRAFT'
-  | 'SUBMITTED'
-  | 'ACCEPTED';
-
-export interface ChurchAssistanceReport {
-  id: string;
-  systemId: SystemId;
-  amountRwf: number;
-  purpose: string;
-  whereSpent: string;
-  howSpent: string;
-  operations: string;
-  results: string;
-  impact: string;
-  assistedOn: string;
-  reportedAt: string;
-  reportedByPersonId: string;
-  status: ChurchAssistanceReportStatus;
-}
-
-/** Itorero Board of Directors — authority lives in meetings. */
-export type BoardMeetingStatus = 'SCHEDULED' | 'HELD' | 'CANCELLED';
-
-export type BoardDecisionStatus = 'OPEN' | 'DONE';
-
-/** Progress / result notes on an open Board follow-up (owner reports; Leader reviews). */
-export type BoardFollowUpUpdateKind = 'PROGRESS' | 'RESULT' | 'BLOCKER';
-
-export interface BoardFollowUpUpdate {
-  id: string;
-  at: string;
-  byPersonId: string;
-  note: string;
-  kind: BoardFollowUpUpdateKind;
-}
-
-export interface BoardDecision {
-  id: string;
-  summary: string;
-  ownerPersonId?: string;
-  dueDate?: string;
-  status: BoardDecisionStatus;
-  /** Optional link to a mission task id when follow-up is tracked in Tasks. */
-  followUpTaskId?: string;
-  /** Running progress from the owner (or helpers) — Leader reviews before Mark done. */
-  progressUpdates?: BoardFollowUpUpdate[];
-  /** Final outcome acknowledged when marked DONE. */
-  resultSummary?: string;
-  completedAt?: string;
-  completedByPersonId?: string;
-}
-
-export interface BoardMeeting {
-  id: string;
-  title: string;
-  scheduledAt: string;
-  calledByPersonId: string;
-  status: BoardMeetingStatus;
-  /** @deprecated Prefer agendaItems — kept for older seed rows. */
-  agenda: string[];
-  /** Structured agenda: Leader may freeze for Board or decide alone. */
-  agendaItems?: BoardAgendaItem[];
-  /** Expected / recorded attendees (high leaders, ministry presidents/vice, deacons). */
-  attendeePersonIds: string[];
-  decisions: BoardDecision[];
-  notes?: string;
-  heldAt?: string;
-}
-
-/** Between-meeting escalation: only Church Leader freezes for Board; else he decides. */
-export type BoardAgendaItemState =
-  | 'OPEN'
-  | 'FROZEN'
-  | 'DECIDED'
-  | 'DEFERRED';
-
-export interface BoardAgendaItem {
-  id: string;
-  text: string;
-  state: BoardAgendaItemState;
-  /** Longer context for the Leader / Board (why this is on the agenda). */
-  detail?: string;
-  /** Who brought the big/new item (catechist / pastor / officer). */
-  raisedByPersonId?: string;
-  decidedAt?: string;
-  decidedByPersonId?: string;
-  decisionId?: string;
-  notes?: string;
-}
-
-/* ─── Pastoral pathways, discipline, letters, pulpit (Church Leader P1) ─── */
-
-export type PersonPathwayKind =
-  | 'TRANSFER_IN'
-  | 'TRANSFER_OUT'
-  | 'BAPTISM_TRACK'
-  | 'DEDICATION'
-  | 'RESTORATION'
-  | 'OTHER';
-
-export type PersonPathwayStatus =
-  | 'OPEN'
-  | 'IN_PROGRESS'
-  | 'READY'
-  | 'COMPLETED'
-  | 'WITHDRAWN';
-
-export interface PersonPathway {
-  id: string;
-  personId: string;
-  kind: PersonPathwayKind;
-  status: PersonPathwayStatus;
-  label: string;
-  openedOn: string;
-  openedByPersonId?: string;
-  notes?: string;
-  /** Baptism track: Leader must confirm each name before rite. */
-  leaderConfirmedAt?: string;
-  leaderConfirmedByPersonId?: string;
-}
-
-export type DisciplineCaseStatus =
-  | 'OPEN'
-  | 'IN_PROGRESS'
-  | 'AWAITING_LEADER'
-  | 'RESOLVED'
-  | 'RESTORED';
-
-export interface DisciplineCase {
-  id: string;
-  personId: string;
-  title: string;
-  status: DisciplineCaseStatus;
-  openedOn: string;
-  openedByPersonId: string;
-  /** Pastor or catechist may start; final standing needs Leader. */
-  summary: string;
-  privateNotes?: string;
-  /** Standing outcome set only by Church Leader */
-  finalStanding?: 'NO_CHANGE' | 'RESTRICTED' | 'SUSPENDED' | 'RESTORED';
-  resolvedAt?: string;
-  resolvedByPersonId?: string;
-  mayServe?: boolean;
-  mayTakeCommunion?: boolean;
-}
-
-export type TransferLetterStatus =
-  | 'DRAFT'
-  | 'AWAITING_LEADER'
-  | 'SIGNED'
-  | 'SENT'
-  | 'CANCELLED';
-
-/** Transfer letter OUT — Church Leader only signs. */
-export interface TransferLetterOut {
-  id: string;
-  personId: string;
-  destinationChurch: string;
-  status: TransferLetterStatus;
-  draftedByPersonId: string;
-  draftedOn: string;
-  signedByPersonId?: string;
-  signedOn?: string;
-  note?: string;
-  /** Linked ChurchDocument when migrated onto the correspondence engine. */
-  documentId?: string;
-}
-
-/** Correspondence letter types (Phase 1–2). */
-export type CorrespondenceLetterType =
-  | 'TRANSFER_OUT'
-  | 'MEMBERSHIP_CONFIRMATION'
-  | 'RECOMMENDATION'
-  | 'INCOMING'
-  | 'PROGRAM_CERTIFICATE'
-  | 'MINISTRY_APPOINTMENT';
-
-export type DocumentDirection = 'OUT' | 'IN' | 'INTERNAL';
-
-export type DocumentOrigin =
-  | 'CHURCH_GENERATED'
-  | 'MEMBER_UPLOADED'
-  | 'MEMBER_REQUESTED'
-  | 'MINISTRY_UPLOADED'
-  | 'EXTERNAL_INTAKE'
-  /** Free-text origin; see originDetail. */
-  | 'OTHER';
-
-export type DocumentSensitivity =
-  | 'PUBLIC'
-  | 'INTERNAL'
-  | 'CONFIDENTIAL'
-  | 'RESTRICTED';
-
-/**
- * Letter lifecycle (v1):
- * SUBMITTED → IN_PREPARATION → AWAITING_SIGNATURE → FINALIZED → DELIVERED
- * Side: NEEDS_INFORMATION | REJECTED | CANCELLED
- */
-export type CorrespondenceStatus =
-  | 'SUBMITTED'
-  | 'IN_PREPARATION'
-  | 'NEEDS_INFORMATION'
-  | 'AWAITING_SIGNATURE'
-  | 'FINALIZED'
-  | 'DELIVERED'
-  | 'REJECTED'
-  | 'CANCELLED';
-
-export type DocumentDeliveryMethod =
-  | 'COLLECTED_AT_OFFICE'
-  | 'EMAIL'
-  | 'DOWNLOAD';
-
-/** Intake / ask — one request becomes one ChurchDocument. */
-export interface DocumentRequest {
-  id: string;
-  letterType: CorrespondenceLetterType;
-  personId: string;
-  requestedByPersonId: string;
-  requestedOn: string;
-  status: CorrespondenceStatus;
-  origin: DocumentOrigin;
-  purpose?: string;
-  destinationChurch?: string;
-  note?: string;
-  documentId?: string;
-  /** When origin is OTHER — free-text source. */
-  originDetail?: string;
-  /** Incoming mail: who sent it. */
-  senderName?: string;
-  senderOrg?: string;
-}
-
-/** Official letter artifact (versions hang off this). */
-export interface ChurchDocument {
-  id: string;
-  requestId: string;
-  letterType: CorrespondenceLetterType;
-  direction: DocumentDirection;
-  personId: string;
-  status: CorrespondenceStatus;
-  origin: DocumentOrigin;
-  sensitivity: DocumentSensitivity;
-  title: string;
-  purpose?: string;
-  destinationChurch?: string;
-  referenceNumber?: string;
-  currentVersionId?: string;
-  transferLetterId?: string;
-  createdByPersonId: string;
-  createdOn: string;
-  finalizedOn?: string;
-  finalizedByPersonId?: string;
-  deliveredOn?: string;
-  deliveredByPersonId?: string;
-  deliveryMethod?: DocumentDeliveryMethod;
-  /** Incoming correspondence. */
-  senderName?: string;
-  senderOrg?: string;
-  /** Program certificate link. */
-  programId?: string;
-  /** Ministry appointment org unit. */
-  orgUnitId?: string;
-  /** When origin is OTHER — free-text source (e.g. district courier, lawyer). */
-  originDetail?: string;
-  /** Corrections / missing info requested by office or Leader. */
-  infoRequestNote?: string;
-  infoRequestedByPersonId?: string;
-  infoRequestedOn?: string;
-  /** Latest reply when office/member answered the info request. */
-  infoResponseNote?: string;
-}
-
-export interface DocumentVersion {
-  id: string;
-  documentId: string;
-  versionNumber: number;
-  uploadedByPersonId: string;
-  uploadedOn: string;
-  origin: DocumentOrigin;
-  fileName: string;
-  /** Demo body (template fill or pasted text). */
-  bodyText?: string;
-  /** Demo upload (data URL or empty for template-only). */
-  fileDataUrl?: string;
-  isFinal: boolean;
-  note?: string;
-}
-
-export interface DocumentSignature {
-  id: string;
-  documentId: string;
-  versionId: string;
-  signedByPersonId: string;
-  signedOn: string;
-  authorityRole: string;
-  kind: 'SYSTEM_AUTHORITY' | 'WET_INK_UPLOAD';
-}
-
-export type PulpitSlotStatus =
-  | 'DRAFT'
-  | 'CATECHIST_REVIEW'
-  | 'AWAITING_LEADER'
-  | 'APPROVED'
-  | 'CANCELLED';
-
-/** Evangelism prepares → Catechist reviews → Church Leader approves. */
-export type PulpitServiceKind = 'SS1' | 'SS2' | 'TUESDAY' | 'IGABURO';
-
-export interface PulpitSlot {
-  id: string;
-  serviceDate: string;
-  /** Canonical kind when known (SS1 / SS2 / Tuesday / Igaburo). */
-  serviceKind?: PulpitServiceKind;
-  serviceLabel: string;
-  /** Church preacher when not a guest; omit/empty for outside guests. */
-  preacherPersonId?: string;
-  isGuest?: boolean;
-  guestName?: string;
-  /** Guest church / district / title note. */
-  guestFrom?: string;
-  /** Contact phone for outside guests. */
-  guestPhone?: string;
-  status: PulpitSlotStatus;
-  preparedByPersonId?: string;
-  catechistReviewedByPersonId?: string;
-  catechistReviewedAt?: string;
-  approvedByPersonId?: string;
-  approvedAt?: string;
-  notes?: string;
-}
+/* ─── Calendar scope ─── */
 
 /** Church-wide / sanctuary / large ministry date taxonomy for calendar. */
 export type ChurchCalendarScope =
@@ -2023,19 +1373,3 @@ export type ChurchCalendarScope =
   | 'SANCTUARY'
   | 'CHURCH_WIDE';
 
-export type CalendarConflictStatus =
-  | 'OPEN'
-  | 'RESOLVING'
-  | 'RESOLVED'
-  | 'ESCALATED';
-
-export interface CalendarConflictCase {
-  id: string;
-  title: string;
-  date: string;
-  eventIds: string[];
-  status: CalendarConflictStatus;
-  notes?: string;
-  resolvedByPersonId?: string;
-  resolvedAt?: string;
-}

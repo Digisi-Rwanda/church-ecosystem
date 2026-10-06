@@ -4,9 +4,7 @@ import { useAuth } from '../auth/AuthContext';
 import { PageHead } from '../components/ui/FilterBar';
 import { ForbiddenState, StatusPill } from '../components/ui/StatusPill';
 import type { SystemId } from '../domain/types';
-import { isCatechist, isChurchLeader } from '../domain/churchLeadership';
 import { missionService, systemsService } from '../services';
-import { pastoralOpsService } from '../services/pastoralOpsService';
 
 type CalItem = ReturnType<typeof missionService.calendar>[number];
 
@@ -59,18 +57,10 @@ export function CalendarPage({
   basePath?: string;
   title?: string;
 } = {}) {
-  const { can, account, positions, roles } = useAuth();
+  const { can, account, positions } = useAuth();
   const canView = can('PROGRAM', 'VIEW') || can('EVENT', 'VIEW');
   const [cursor, setCursor] = useState(() => new Date(2026, 8, 1)); // Sep 2026 seed
   const [mode, setMode] = useState<'month' | 'list'>('month');
-  const [tick, setTick] = useState(0);
-  const canResolveConflicts =
-    isCatechist(roles) || isChurchLeader(roles);
-  const conflicts = useMemo(
-    () => pastoralOpsService.listCalendarConflicts(),
-    [tick],
-  );
-
   const items = missionService.calendar(systemId, {
     personId: account?.personId,
     positions,
@@ -163,47 +153,6 @@ export function CalendarPage({
           </Link>
         </div>
       </div>
-
-      {systemId === 'sys-main' && conflicts.length > 0 ? (
-        <div className="panel stack" style={{ marginBottom: '1rem' }}>
-          <h3 style={{ margin: 0 }}>Date conflicts</h3>
-          <p className="muted" style={{ margin: 0, fontSize: '0.9rem' }}>
-            Same day is not always a conflict — ministries try first; catechist
-            resolves if they fail.
-          </p>
-          <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
-            {conflicts.map((c) => (
-              <li key={c.id}>
-                <strong>{c.title}</strong> · {c.date} · {c.status}
-                {c.notes ? (
-                  <div className="muted" style={{ fontSize: '0.85rem' }}>
-                    {c.notes}
-                  </div>
-                ) : null}
-                {canResolveConflicts &&
-                  account &&
-                  c.status !== 'RESOLVED' && (
-                    <button
-                      type="button"
-                      className="btn ghost sm"
-                      style={{ marginLeft: '0.35rem' }}
-                      onClick={() => {
-                        pastoralOpsService.resolveCalendarConflict(
-                          c.id,
-                          account.personId,
-                          'Resolved by catechist / Leader',
-                        );
-                        setTick((t) => t + 1);
-                      }}
-                    >
-                      Resolve
-                    </button>
-                  )}
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
 
       {mode === 'month' && (
         <div className="panel">

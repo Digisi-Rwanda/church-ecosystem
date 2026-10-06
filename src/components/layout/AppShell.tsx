@@ -3,12 +3,6 @@ import { NavLink, Outlet, useLocation } from 'react-router-dom';
 import { ErrorBoundary } from '../ErrorBoundary';
 import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../../auth/AuthContext';
-import {
-  isCatechist,
-  isChurchLeader,
-  isOrdainedPastor,
-} from '../../domain/churchLeadership';
-import { canSeeSystemAdminNav } from '../../domain/systemAdmin';
 import { CommandPalette } from '../CommandPalette';
 import { Icon, type IconName } from '../ui/Icon';
 import { ThemeToggle } from '../ui/ThemeToggle';
@@ -16,11 +10,7 @@ import { useAttention } from '../../hooks/useAttention';
 import { useI18n } from '../../i18n/I18nContext';
 import type { MessageKey } from '../../i18n/translate';
 import { peekExitToMainChurch, consumeExitToMainChurch } from '../../navigation/systemScope';
-import {
-  authService,
-  churchFinanceService,
-} from '../../services';
-import { canViewBoard } from '../../services/boardService';
+import { authService } from '../../services';
 
 function weekOfLabel(locale: string, d = new Date()) {
   const start = new Date(d);
@@ -52,20 +42,6 @@ const NAV_GROUPS: Array<{
     items: [
       { to: '/', labelKey: 'nav.home', icon: 'home', end: true },
       { to: '/inbox', labelKey: 'nav.inbox', icon: 'inbox' },
-      { to: '/board', labelKey: 'nav.board', icon: 'board', secondary: true },
-      { to: '/pastoral', labelKey: 'nav.pastoral', icon: 'pastoral', secondary: true },
-      {
-        to: '/correspondence',
-        labelKey: 'nav.correspondence',
-        icon: 'folder',
-        secondary: true,
-      },
-      {
-        to: '/system-admin',
-        labelKey: 'nav.systemAdmin',
-        icon: 'settings',
-        secondary: true,
-      },
     ],
   },
   {
@@ -97,43 +73,6 @@ const NAV_GROUPS: Array<{
       { to: '/tasks', labelKey: 'nav.tasks', icon: 'task', secondary: true },
       { to: '/projects', labelKey: 'nav.projects', icon: 'folder', secondary: true },
       { to: '/calendar', labelKey: 'nav.calendar', icon: 'calendar', secondary: true },
-      {
-        to: '/reports/leadership',
-        labelKey: 'nav.reports',
-        icon: 'chart',
-        secondary: true,
-      },
-    ],
-  },
-  {
-    label: 'Treasury',
-    labelKey: 'nav.group.treasury',
-    items: [
-      { to: '/finance', labelKey: 'nav.overview', icon: 'wallet', end: true },
-      {
-        to: '/finance/collections',
-        labelKey: 'nav.collections',
-        icon: 'hand',
-        secondary: true,
-      },
-      {
-        to: '/finance/budgets',
-        labelKey: 'nav.budgets',
-        icon: 'chart',
-        secondary: true,
-      },
-      {
-        to: '/finance/balance-sheet',
-        labelKey: 'nav.balanceSheet',
-        icon: 'layers',
-        secondary: true,
-      },
-      {
-        to: '/finance/reports',
-        labelKey: 'nav.reports',
-        icon: 'chart',
-        secondary: true,
-      },
     ],
   },
   {
@@ -163,8 +102,6 @@ export function AppShell({
     account,
     can,
     session,
-    positions,
-    roles,
   } = useAuth();
   const location = useLocation();
   const { t, locale } = useI18n();
@@ -211,22 +148,6 @@ export function AppShell({
   const profilePath = account ? `/people/${account.personId}` : '/people';
   /** Access engine + systems registry — governance only (not regular members). */
   const canAdminTools = can('AUDIT', 'VIEW', 'sys-main');
-  const canTreasury = Boolean(
-    account && churchFinanceService.canViewGeneral(account.personId),
-  );
-  const canBoard =
-    !!account &&
-    (can('BOARD', 'VIEW', 'sys-main') ||
-      canViewBoard(account.personId, positions, roles));
-  const canPastoral =
-    isChurchLeader(roles) || isCatechist(roles) || isOrdainedPastor(roles);
-  const canCorrespondence =
-    can('CORRESPONDENCE', 'VIEW') ||
-    can('CORRESPONDENCE', 'CREATE') ||
-    can('CORRESPONDENCE', 'MANAGE');
-  const canSystemAdmin = Boolean(
-    account && canSeeSystemAdminNav(account.personId, positions, roles),
-  );
   const canOrg = can('ORG_UNIT', 'VIEW');
   const canProgram = can('PROGRAM', 'VIEW');
   const canEvent = can('EVENT', 'VIEW');
@@ -241,14 +162,6 @@ export function AppShell({
       case '/':
       case '/inbox':
         return true;
-      case '/board':
-        return canBoard;
-      case '/pastoral':
-        return canPastoral;
-      case '/correspondence':
-        return canCorrespondence;
-      case '/system-admin':
-        return canSystemAdmin;
       case '/people':
         return true; // remapped to Profile when directory is closed
       case '/organization':
@@ -267,8 +180,6 @@ export function AppShell({
         return canProject;
       case '/calendar':
         return canCalendar;
-      case '/reports/leadership':
-        return canProgram;
       default:
         return true;
     }
@@ -277,10 +188,6 @@ export function AppShell({
   const navGroups = NAV_GROUPS.map((group) => {
     if (group.label === 'Admin') {
       if (!canAdminTools) return { ...group, items: [] };
-      return group;
-    }
-    if (group.label === 'Treasury') {
-      if (!canTreasury) return { ...group, items: [] };
       return group;
     }
 

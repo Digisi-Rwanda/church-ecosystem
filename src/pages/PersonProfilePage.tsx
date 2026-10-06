@@ -1,4 +1,4 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   allowedOwnProfileSections,
@@ -15,11 +15,9 @@ import { ProfilePhoto } from '../components/people/ProfilePhoto';
 import { SectionCards } from '../components/people/SectionCards';
 import { downloadLocalBackup } from '../lib/backupDownload';
 import { usePersonRecord } from '../hooks/usePersonRecord';
-import { SelectField, TextField } from '../components/ui/Field';
-import type { CorrespondenceLetterType, Person } from '../domain/types';
+import type { Person } from '../domain/types';
 import {
   buildPersonParticipationPlaces,
-  correspondenceService,
   orgService,
   participationService,
   peopleService,
@@ -79,7 +77,6 @@ export function PersonProfilePage() {
   const { id } = useParams();
   const {
     account,
-    can,
     canManagePeople,
     canViewFullRecord,
     canViewPeople,
@@ -91,11 +88,6 @@ export function PersonProfilePage() {
   const [section, setSection] = useState(
     () => searchParams.get('section') ?? 'overview',
   );
-  const [letterMsg, setLetterMsg] = useState('');
-  const [reqType, setReqType] =
-    useState<CorrespondenceLetterType>('MEMBERSHIP_CONFIRMATION');
-  const [reqPurpose, setReqPurpose] = useState('');
-  const [reqDest, setReqDest] = useState('');
   const [, setDocTick] = useState(0);
   const isSelf = Boolean(account && person && account.personId === person.id);
 
@@ -182,29 +174,8 @@ export function PersonProfilePage() {
   const education = peopleService.education(person.id);
   const talents = peopleService.talents(person.id);
   const spiritualGifts = peopleService.spiritualGifts(person.id);
-  const letters = correspondenceService.listDocuments({ personId: person.id });
   /** Own profile or pastoral FULL — show 360 fields (not pastoral-only notes). */
   const seeFullFields = canViewFullRecord || isSelf;
-
-  function submitMemberLetterRequest(e: FormEvent) {
-    e.preventDefault();
-    if (!account || !person) return;
-    const r = correspondenceService.memberRequestLetter({
-      letterType: reqType,
-      personId: person.id,
-      purpose: reqPurpose.trim() || undefined,
-      destinationChurch:
-        reqType === 'TRANSFER_OUT' ? reqDest.trim() : undefined,
-    });
-    if (!r.ok) {
-      setLetterMsg(r.reason);
-      return;
-    }
-    setLetterMsg('Request submitted — church office will prepare the letter.');
-    setReqPurpose('');
-    setReqDest('');
-    setDocTick((t) => t + 1);
-  }
 
   let body: ReactNode = null;
 
@@ -493,150 +464,6 @@ export function PersonProfilePage() {
   } else if (activeSection === 'documents') {
     body = (
       <div className="stack">
-        <SectionPanel title="Documents & Letters">
-          {!seeFullFields ? (
-            <ForbiddenState resource="PERSON" action="VIEW_FULL" />
-          ) : (
-            <>
-              <div className="row" style={{ justifyContent: 'space-between' }}>
-                <p className="muted" style={{ margin: 0 }}>
-                  Official letters on the correspondence engine, plus archived
-                  meta (certificates, ID copies).
-                </p>
-                {canManagePeople || can('CORRESPONDENCE', 'CREATE') ? (
-                  <Link className="btn sm" to="/correspondence">
-                    New letter
-                  </Link>
-                ) : null}
-              </div>
-              {letterMsg ? (
-                <p className="muted" style={{ margin: '0.5rem 0 0' }}>
-                  {letterMsg}
-                </p>
-              ) : null}
-              {letters.length === 0 ? (
-                <EmptyState title="No official letters yet" />
-              ) : (
-                <div className="stack" style={{ marginTop: '0.75rem' }}>
-                  {letters.map((d) => (
-                    <div
-                      key={d.id}
-                      className={
-                        d.status === 'NEEDS_INFORMATION'
-                          ? 'panel stack letter-info-needed'
-                          : 'panel stack'
-                      }
-                    >
-                      <div
-                        className="row"
-                        style={{
-                          justifyContent: 'space-between',
-                          gap: '0.75rem',
-                          flexWrap: 'wrap',
-                        }}
-                      >
-                        <div>
-                          <strong>
-                            {
-                              correspondenceService.LETTER_TYPE_LABELS[
-                                d.letterType
-                              ]
-                            }
-                          </strong>
-                          {d.destinationChurch
-                            ? ` · ${d.destinationChurch}`
-                            : ''}
-                          {d.origin === 'MEMBER_REQUESTED'
-                            ? ' · (your request)'
-                            : ''}
-                          <div className="muted" style={{ marginTop: '0.2rem' }}>
-                            {d.status}
-                            {d.referenceNumber
-                              ? ` · Ref ${d.referenceNumber}`
-                              : ''}
-                            {d.purpose ? ` · ${d.purpose}` : ''}
-                          </div>
-                        </div>
-                        <Link
-                          className={
-                            d.status === 'NEEDS_INFORMATION'
-                              ? 'btn sm'
-                              : 'btn ghost sm'
-                          }
-                          to={`/correspondence/${d.id}`}
-                        >
-                          {d.status === 'NEEDS_INFORMATION'
-                            ? isSelf
-                              ? 'See what is needed & reply'
-                              : 'Open · needs info'
-                            : 'Open'}
-                        </Link>
-                      </div>
-                      {d.status === 'NEEDS_INFORMATION' ? (
-                        <div>
-                          <p
-                            style={{
-                              margin: '0 0 0.35rem',
-                              fontWeight: 600,
-                            }}
-                          >
-                            {isSelf
-                              ? 'What the office asked you to provide:'
-                              : 'Information requested:'}
-                          </p>
-                          <p style={{ margin: 0, whiteSpace: 'pre-wrap' }}>
-                            {d.infoRequestNote?.trim() ||
-                              'No details recorded — open the letter or ask the secretary.'}
-                          </p>
-                        </div>
-                      ) : null}
-                    </div>
-                  ))}
-                </div>
-              )}
-            </>
-          )}
-        </SectionPanel>
-        {isSelf && seeFullFields ? (
-          <SectionPanel title="Request a letter">
-            <p className="muted" style={{ marginTop: 0 }}>
-              Ask the church office for a transfer, membership confirmation, or
-              recommendation. You will collect it after the Leader signs.
-            </p>
-            <form className="stack" onSubmit={submitMemberLetterRequest}>
-              <SelectField
-                label="Letter type"
-                value={reqType}
-                onChange={(e) =>
-                  setReqType(e.target.value as CorrespondenceLetterType)
-                }
-              >
-                <option value="MEMBERSHIP_CONFIRMATION">
-                  Membership confirmation
-                </option>
-                <option value="RECOMMENDATION">Recommendation</option>
-                <option value="TRANSFER_OUT">Transfer out</option>
-              </SelectField>
-              {reqType === 'TRANSFER_OUT' ? (
-                <TextField
-                  label="Destination church"
-                  value={reqDest}
-                  onChange={(e) => setReqDest(e.target.value)}
-                  required
-                />
-              ) : null}
-              <TextField
-                label="Purpose / note"
-                value={reqPurpose}
-                onChange={(e) => setReqPurpose(e.target.value)}
-                placeholder="Why do you need this letter?"
-              />
-              <button type="submit" className="btn">
-                Submit request
-              </button>
-            </form>
-          </SectionPanel>
-        ) : null}
         {seeFullFields ? (
           <SectionPanel title="On file (meta)">
             {documents.length === 0 ? (

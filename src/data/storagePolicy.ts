@@ -29,23 +29,23 @@ export const STORAGE_POLICY: Record<string, DataHome> = {
   // Shared documents
   ...S('SERVER_DOC', `musicSchedule protocolRoster protocolServices protocolMonthPlans protocolTeamSlots
     protocolHistory protocolAttendance protocolAbsenceRequests protocolFillInOffers protocolSwapProposals
-    protocolServiceReports protocolContributions protocolNotifications protocolActivity`),
+    protocolServiceReports  protocolNotifications protocolActivity`),
   // Slice 2 — belonging and structure (server tables, switch: VITE_SERVER_MODULES=participation)
   ...S('SERVER', 'memberships positions orgUnits'),
   // Slice 3 — person records
   ...S('MOVE_S3', `personFamilyLinks personBaptisms personMarriages personTimeline personDocuments
-    personEmployment personEducation personTalents personSpiritualGifts personPathways disciplineCases
-    transferLettersOut`),
+    personEmployment personEducation personTalents personSpiritualGifts
+    `),
   // Slice 4 — money (church finance, ministry finance)
-  ...S('MOVE_S4', `serviceCollections budgetLines balanceSheetLines financeTxns sharedReportPacks
-    churchAssistanceReports choirContributionDrives choirContributionGoals choirContributions choirFollowUps
-    choirFamilyRails choirOfficeRails choirHandoffs choirContribEvents choirContribNotifications choirDonations
-    choirCampaignGifts choirIncome choirExpenses choirAssets choirLiabilities worshipContributions
-    worshipFollowUps worshipDonations worshipCampaignGifts worshipIncome worshipExpenses worshipAssets
-    worshipLiabilities mfDrives mfGoals mfContributions mfFollowups mfDonations mfSponsors mfSponsorships
-    mfCampaigns mfCampaignGifts mfTypes mfMethods mfBudgets mfBudgetLines mfIncome mfExpenses mfAssets mfLiabilities`),
+  ...S('MOVE_S4', `   financeTxns
+
+
+
+
+
+             `),
   // Slice 5 — governance and care
-  ...S('MOVE_S5', `boardMeetings documentRequests churchDocuments documentVersions documentSignatures
-    deaconCases deaconVisits deaconContributions deaconExpenses pulpitSlots calendarConflicts
+  ...S('MOVE_S5', `
+
     youthGroups youthMembers youthMeetings`),
 };

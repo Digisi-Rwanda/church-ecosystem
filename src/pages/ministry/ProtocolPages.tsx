@@ -5,7 +5,7 @@ import type { ProtocolAttendanceStatus } from '../../domain/types';
 import { periodOptionsForHorizon } from '../../domain/musicScheduleEngine';
 import type { MusicHorizon } from '../../domain/musicSchedule';
 import { useListSelection } from '../../hooks/useListSelection';
-import { financeService, protocolService } from '../../services';
+import { protocolService } from '../../services';
 import { ProtocolMusicSyncPanel } from './ProtocolMusicSync';
 import { ProtocolRosterManager } from './ProtocolRosterManager';
 
@@ -60,17 +60,6 @@ export function ProtocolHomePage() {
   const office = account
     ? protocolService.officeFor(account.personId)
     : null;
-  const canVerifyFund = account
-    ? financeService.authorizeFund(account.personId, 'fund-protocol', 'MANAGE')
-        .allowed
-    : false;
-  const pendingContribs = protocolService.listContributions({
-    status: 'PENDING',
-  }).length;
-  const unread = account
-    ? protocolService.unreadCount(account.personId)
-    : 0;
-
   type Need = { id: string; title: string; reason: string; to: string };
   const needs: Need[] = [];
   if (canManage && plan && plan.status !== 'PUBLISHED' && plan.status !== 'REVIEW') {
@@ -103,22 +92,6 @@ export function ProtocolHomePage() {
       title: 'Publish after review',
       reason: 'The President publishes once the month is checked',
       to: '/systems/protocol/review',
-    });
-  }
-  if (canVerifyFund && pendingContribs > 0) {
-    needs.push({
-      id: 'contrib',
-      title: `${pendingContribs} contribution${pendingContribs === 1 ? '' : 's'} to verify`,
-      reason: 'Posts into Protocol fund vault',
-      to: '/systems/protocol/finance',
-    });
-  }
-  if (unread > 0) {
-    needs.push({
-      id: 'inbox',
-      title: `${unread} unread notification${unread === 1 ? '' : 's'}`,
-      reason: 'Schedule and contribution updates',
-      to: '/systems/protocol/inbox',
     });
   }
   if (myCount > 0) {
@@ -154,8 +127,7 @@ export function ProtocolHomePage() {
           )}
         </div>
         <p className="muted" style={{ marginBottom: 0 }}>
-          Fair monthly staffing: Music publish → service teams → review → publish → operate.
-          Contributions post to the shared Protocol fund (org-private).
+          Fair monthly staffing: Music publishes → service teams → publish → operate.
         </p>
         <div className="overview-strip" style={{ marginTop: '0.85rem' }}>
           <div className="overview-tile">
@@ -230,25 +202,11 @@ export function ProtocolHomePage() {
           <h3 style={{ marginTop: 0 }}>Operate</h3>
           <ul style={{ margin: 0, paddingLeft: '1.1rem' }}>
             <li>
-              <Link to="/systems/protocol/finance">Contributions / finance</Link>
-              {pendingContribs > 0 && canVerifyFund && (
-                <span className="muted"> · · {pendingContribs} pending</span>
-              )}
-            </li>
-            <li>
-              <Link to="/systems/protocol/reports">Leadership reports</Link>
-            </li>
-            <li>
               <Link to="/systems/protocol/export">CSV / bulletin export</Link>
             </li>
             <li>
-              <Link to="/systems/protocol/attendance">Attendance</Link> · <Link to="/systems/protocol/faithful">Member performance</Link> ·{' '}
+              <Link to="/systems/protocol/attendance">Attendance</Link> ·{' '}
               <Link to="/systems/protocol/history">History</Link>
-            </li>
-            <li>
-              <Link to="/systems/protocol/inbox">
-                Inbox{unread > 0 ? ` (${unread})` : ''}
-              </Link>
             </li>
           </ul>
         </div>
@@ -1229,11 +1187,9 @@ export function ProtocolMySchedulePage() {
         <h2 style={{ marginTop: 0 }}>My schedule</h2>
         <p className="muted">
           Request absence, propose swaps, and respond to fill-in / swap offers.
-          Member performance updates when attendance is recorded.
         </p>
         {message && <p className="muted">{message}</p>}
         <div className="row">
-          <Link to="/systems/protocol/faithful">Member performance →</Link>
           <Link to="/systems/protocol/attendance">Attendance desk →</Link>
         </div>
       </div>

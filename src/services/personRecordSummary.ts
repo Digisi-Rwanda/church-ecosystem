@@ -1,6 +1,5 @@
 import { membershipTypeLabel, roleLabel } from '../domain/access';
 import { peopleService } from './authService';
-import { correspondenceService } from './correspondenceService';
 import { systemsService } from './orgService';
 import { participationService } from './participationService';
 import { buildPersonParticipationPlaces } from './personParticipation';
@@ -214,14 +213,8 @@ export function summarizePersonRecord(
 
       case 'documents': {
         if (!seeFullFields) return locked(FULL_ONLY);
-        const letters = correspondenceService.listDocuments({ personId });
         const docs = peopleService.documents(personId);
         const lines: string[] = [];
-        if (letters.length > 0) {
-          lines.push(
-            `${letters.length} letter${letters.length === 1 ? '' : 's'}`,
-          );
-        }
         if (docs.length > 0) {
           lines.push(
             `${docs.length} document${docs.length === 1 ? '' : 's'} on file`,

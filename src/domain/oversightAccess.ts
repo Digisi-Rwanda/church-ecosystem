@@ -3,7 +3,6 @@
  * Oversight ≠ membership / officer — same module map, reports-first depth.
  */
 import { PASTOR_SYSTEM_IDS, isPastorScoped } from './governanceScope';
-import { hasOversightFinanceArtifacts } from '../data/oversightReportsSeed';
 import type { Position, SystemId, SystemRole } from './types';
 import {
   type MinistryBoardOffice,
@@ -245,12 +244,4 @@ export function filterOversightNav<T extends { to: string; label: string }>(
   return nav.filter((item) =>
     allowed.has(ministryModuleKey(item.to, basePath)),
   );
-}
-
-/**
- * Live finance nav stays hidden. Reports appear when packs / assistance exist
- * (assets always listed separately).
- */
-export function oversightFinanceNavVisible(systemId: SystemId): boolean {
-  return hasOversightFinanceArtifacts(systemId);
 }

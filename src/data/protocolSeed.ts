@@ -3,7 +3,6 @@ import type {
   ProtocolActivityEvent,
   ProtocolAbsenceRequest,
   ProtocolAttendanceRecord,
-  ProtocolContribution,
   ProtocolFillInOffer,
   ProtocolMonthPlan,
   ProtocolNotification,
@@ -45,7 +44,6 @@ export let PROTOCOL_FILL_IN_OFFERS: ProtocolFillInOffer[] = [];
 export let PROTOCOL_SWAP_PROPOSALS: ProtocolSwapProposal[] = [];
 export let PROTOCOL_SERVICE_REPORTS: ProtocolServiceReport[] = [];
 
-export let PROTOCOL_CONTRIBUTIONS: ProtocolContribution[] = [];
 
 export let PROTOCOL_NOTIFICATIONS: ProtocolNotification[] = [];
 
@@ -156,19 +154,6 @@ export function upsertProtocolServiceReport(r: ProtocolServiceReport) {
   } else {
     PROTOCOL_SERVICE_REPORTS = [r, ...PROTOCOL_SERVICE_REPORTS];
   }
-}
-
-export function pushProtocolContribution(c: ProtocolContribution) {
-  PROTOCOL_CONTRIBUTIONS = [c, ...PROTOCOL_CONTRIBUTIONS];
-}
-
-export function updateProtocolContribution(
-  id: string,
-  patch: Partial<ProtocolContribution>,
-) {
-  PROTOCOL_CONTRIBUTIONS = PROTOCOL_CONTRIBUTIONS.map((c) =>
-    c.id === id ? { ...c, ...patch } : c,
-  );
 }
 
 export function pushProtocolNotification(n: ProtocolNotification) {

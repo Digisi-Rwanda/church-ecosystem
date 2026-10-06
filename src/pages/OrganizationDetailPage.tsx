@@ -181,16 +181,8 @@ export function OrganizationDetailPage() {
           {browseUnit.description?.trim() || 'No description yet.'}
         </p>
         {msg && <p className="muted">{msg}</p>}
-        {system && system.status === 'ACTIVE' && system.id === 'sys-finance' && (
-          <div>
-            <Link to="/finance" className="btn">
-              Open church treasury
-            </Link>
-          </div>
-        )}
         {system &&
           system.status === 'ACTIVE' &&
-          system.id !== 'sys-finance' &&
           canEnter(system.id) && (
           <div>
             <button

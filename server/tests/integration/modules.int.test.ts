@@ -5,7 +5,7 @@
  * the real Express app over HTTP; only the database is the in-memory stand-in.
  * Each "person" is a separate sign-in (token) on a separate browser storage.
  *
- * Covered here: ministry contributions -> verification -> fund ledger (money),
+ * Covered here: 
  * ORG_PRIVATE vault privacy, the mission lifecycle (program, event, task,
  * project), attention feed, people directory, assignments, systems, SSO
  * handoff, change password, and what the SPA does when the API is unreachable.
@@ -30,11 +30,9 @@ vi.stubGlobal('window', { localStorage, addEventListener: () => {}, dispatchEven
 
 let server: import('node:http').Server;
 let api: typeof import('../../../src/api');
-let bridge: typeof import('../../../src/services/contributionApiBridge');
 let mission: typeof import('../../../src/api/missionApi');
 let attention: typeof import('../../../src/api/attentionApi');
 let people: typeof import('../../../src/api/peopleApi');
-let contributions: typeof import('../../../src/api/contributionsApi');
 
 const PASTOR = 'p-pastor';
 const TREASURER = 'p-treasurer';
@@ -80,98 +78,13 @@ beforeAll(async () => {
   const port = (server.address() as AddressInfo).port;
   vi.stubEnv('VITE_API_URL', `http://127.0.0.1:${port}`);
   api = await import('../../../src/api');
-  bridge = await import('../../../src/services/contributionApiBridge');
   mission = await import('../../../src/api/missionApi');
   attention = await import('../../../src/api/attentionApi');
   people = await import('../../../src/api/peopleApi');
-  contributions = await import('../../../src/api/contributionsApi');
 });
 afterAll(async () => {
   vi.unstubAllEnvs();
   if (server) await new Promise((r) => server.close(r));
-});
-
-describe('money: contribution -> verification -> fund ledger', () => {
-  let claimId = '';
-  const balance = async (who: string, fundId: string) =>
-    (await as(who, () => get(`/api/funds/${fundId}`))).balance as number;
-
-  it('a choir member submits a contribution through the SPA bridge', async () => {
-    const r = await as(CHOIR_MEMBER, () => bridge.submitClaimPreferApi({
-      systemId: 'sys-choir', typeLabel: 'Tithe', amount: 5000, paymentMethod: 'MOMO', occurredOn: '2026-09-20',
-    }));
-    expect(r).toMatchObject({ ok: true });
-    claimId = r!.id!;
-    expect(claimId).toBeTruthy();
-  });
-
-  it('it is pending, visible to the giver and to the vault manager, and not yet in the ledger', async () => {
-    const mine = await as(CHOIR_MEMBER, () => bridge.listClaimsPreferApi('sys-choir', { mine: true }));
-    expect(mine?.map((c) => c.id)).toContain(claimId);
-    const forLeader = await as(CHOIR_LEAD, () => contributions.apiListContributions('sys-choir'));
-    expect(forLeader.canVerify).toBe(true);
-    expect(forLeader.claims.find((c) => c.id === claimId)?.status).toBe('PENDING');
-    expect(await balance(CHOIR_LEAD, 'fund-choir')).toBe(0);
-  });
-
-  it('the giver cannot verify their own gift, and a plain member cannot verify either', async () => {
-    const own = await as(CHOIR_MEMBER, () => bridge.verifyClaimPreferApi({ contributionId: claimId, decision: 'CONFIRMED' }));
-    expect(own?.ok).toBe(false);
-    const other = await as(MEMBER, () => bridge.verifyClaimPreferApi({ contributionId: claimId, decision: 'CONFIRMED' }));
-    expect(other?.ok).toBe(false);
-    expect(await balance(CHOIR_LEAD, 'fund-choir')).toBe(0);
-  });
-
-  it('another ministry leader cannot verify it (their grant is for their own vault)', async () => {
-    const r = await as(YOUTH_LEAD, () => bridge.verifyClaimPreferApi({ contributionId: claimId, decision: 'CONFIRMED' }));
-    expect(r?.ok).toBe(false);
-  });
-
-  it('the vault manager confirms it: the ledger gains exactly that amount, once', async () => {
-    const r = await as(CHOIR_LEAD, () => bridge.verifyClaimPreferApi({ contributionId: claimId, decision: 'CONFIRMED' }));
-    expect(r).toMatchObject({ ok: true });
-    expect(await balance(CHOIR_LEAD, 'fund-choir')).toBe(5000);
-    const again = await as(CHOIR_LEAD, () => bridge.verifyClaimPreferApi({ contributionId: claimId, decision: 'CONFIRMED' }));
-    expect(again?.ok).toBe(false);
-    expect(await balance(CHOIR_LEAD, 'fund-choir')).toBe(5000);
-  });
-
-  it('a partial confirmation books only the confirmed amount; a declined one books nothing', async () => {
-    const partial = await as(CHOIR_MEMBER, () => bridge.submitClaimPreferApi({
-      systemId: 'sys-choir', typeLabel: 'Offering', amount: 4000, paymentMethod: 'CASH', occurredOn: '2026-09-21',
-    }));
-    const declined = await as(CHOIR_MEMBER, () => bridge.submitClaimPreferApi({
-      systemId: 'sys-choir', typeLabel: 'Offering', amount: 900, paymentMethod: 'CASH', occurredOn: '2026-09-22',
-    }));
-    await as(CHOIR_LEAD, () => bridge.verifyClaimPreferApi({ contributionId: partial!.id!, decision: 'PARTIAL', confirmedAmount: 1500 }));
-    await as(CHOIR_LEAD, () => bridge.verifyClaimPreferApi({ contributionId: declined!.id!, decision: 'DECLINED', note: 'no receipt' }));
-    expect(await balance(CHOIR_LEAD, 'fund-choir')).toBe(6500);
-    const all = await as(CHOIR_LEAD, () => contributions.apiListContributions('sys-choir'));
-    expect(all.claims.find((c) => c.id === declined!.id)?.status).toBe('DECLINED');
-    expect(all.claims.find((c) => c.id === partial!.id)?.confirmedAmount).toBe(1500);
-  });
-
-  it('someone outside the ministry cannot give into it', async () => {
-    const r = await as(OUTSIDER, () => bridge.submitClaimPreferApi({
-      systemId: 'sys-choir', typeLabel: 'Tithe', amount: 100, paymentMethod: 'CASH', occurredOn: '2026-09-23',
-    }));
-    expect(r?.ok).toBe(false);
-  });
-
-  it('vaults are private to their owners: not even the pastor sees the choir balance', async () => {
-    expect(await status(() => as(PASTOR, () => get('/api/funds/fund-choir')))).toBe(403);
-    expect(await status(() => as(YOUTH_LEAD, () => get('/api/funds/fund-choir')))).toBe(403);
-    const overview = await as(PASTOR, () => get('/api/funds'));
-    const choir = overview.funds.find((f: any) => f.fund.id === 'fund-choir');
-    expect(choir.canView).toBe(false);
-    expect(choir.balance).toBeNull();
-  });
-
-  it('the treasurer sees the general fund and nothing of the ministry vaults', async () => {
-    const overview = await as(TREASURER, () => get('/api/funds'));
-    const seen = overview.funds.filter((f: any) => f.canView).map((f: any) => f.fund.id);
-    expect(seen).toEqual(['fund-general']);
-  });
 });
 
 describe('mission: program lifecycle', () => {
@@ -258,7 +171,7 @@ describe('the rest of the API surface', () => {
 
   it('no sign-in, no data: every protected route refuses an anonymous call', async () => {
     for (const path of ['/api/mission/programs', '/api/mission/events', '/api/mission/tasks', '/api/mission/projects',
-      '/api/contributions?systemId=sys-choir', '/api/funds', '/api/people', '/api/attention', '/api/schedule-state/music']) {
+      '/api/funds', '/api/people', '/api/attention', '/api/schedule-state/music']) {
       expect(await status(() => as(null, () => get(path))), path).toBe(401);
     }
   });
@@ -278,11 +191,6 @@ describe('when the server is unreachable the SPA degrades instead of breaking', 
       expect(await mission.loadProgramsPreferApi()).toBeNull();
       expect(await mission.loadEventsPreferApi()).toBeNull();
       expect(await attention.loadAttentionPreferApi()).toBeNull();
-      expect(await bridge.listClaimsPreferApi('sys-choir')).toBeNull();
-      // a failed submit is handed back as "use the local path", not as a lost gift
-      expect(await bridge.submitClaimPreferApi({
-        systemId: 'sys-choir', typeLabel: 'Tithe', amount: 1, paymentMethod: 'CASH', occurredOn: '2026-09-30',
-      })).toBeNull();
     } finally {
       globalThis.fetch = real;
     }

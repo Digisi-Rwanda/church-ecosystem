@@ -11,7 +11,6 @@ import { PeopleGrid } from '../components/people/PeopleGrid';
 import { ForbiddenState } from '../components/ui/StatusPill';
 import type { PeopleSearchFacet, PeopleSearchScope } from '../services';
 import { peopleService } from '../services';
-import { pastoralOpsService } from '../services/pastoralOpsService';
 import {
   PEOPLE_TABLE_KEYS,
   PEOPLE_TABLE_META,
@@ -42,12 +41,6 @@ export function PeopleTablePage() {
       facet: scope === 'all' ? 'any' : facet,
       category,
     });
-    if (status === 'pathway') {
-      const ids = new Set(
-        pastoralOpsService.listPathways({ openOnly: true }).map((p) => p.personId),
-      );
-      return found.filter((p) => ids.has(p.id));
-    }
     if (status === 'all') return found;
     return found.filter((p) => p.status === status);
   }, [q, scope, facet, category, status]);

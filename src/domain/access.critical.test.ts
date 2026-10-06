@@ -337,10 +337,10 @@ describe('leadership pack money privacy', () => {
 });
 
 describe('choir office nav', () => {
-  it('members cannot open finance; treasurer can', () => {
-    expect(choirOfficeMayAccess('MEMBER', 'finance')).toBe(false);
-    expect(choirOfficeMayAccess('TREASURER', 'finance')).toBe(true);
-    expect(choirOfficeMayAccess('MUSIC_DIRECTOR', 'finance')).toBe(false);
+  it('members cannot open the people list; president can', () => {
+    expect(choirOfficeMayAccess('MEMBER', 'people')).toBe(false);
+    expect(choirOfficeMayAccess('PRESIDENT', 'people')).toBe(true);
+    expect(choirOfficeMayAccess('MUSIC_DIRECTOR', 'people')).toBe(false);
   });
 });
 

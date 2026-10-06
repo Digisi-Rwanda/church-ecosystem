@@ -13,8 +13,6 @@ import {
 } from '../../domain/ministryNavAccess';
 import { activeMusicUnits, musicUnitName } from '../../domain/musicUnits';
 import {
-  financeService,
-  ministryFinanceService,
   missionService,
 } from '../../services';
 import { downloadMusicSchedulePdf } from '../../services/musicSchedulePdf';
@@ -326,7 +324,6 @@ export function MusicHomePage() {
     ? resolveMinistryBoardOffice(account.personId, SYS, positions)
     : 'MEMBER';
   const allowed = new Set(ministryModulesForOffice(SYS, office));
-  const showFinance = allowed.has('finance') || allowed.has('reports');
 
   const programs = missionService.listPrograms({
     ownerSystemId: SYS,
@@ -346,27 +343,9 @@ export function MusicHomePage() {
     .listTasks({ viewerSystemId: SYS, systemId: SYS })
     .filter((t) => t.status === 'TODO' || t.status === 'IN_PROGRESS');
 
-  const finance = showFinance
-    ? ministryFinanceService.financeReport(SYS)
-    : null;
-  const myPending =
-    account && allowed.has('my-contributions')
-      ? ministryFinanceService.listContributions(SYS, {
-          personId: account.personId,
-          status: 'PENDING',
-        }).length
-      : 0;
-
   const upcoming = (published?.services ?? [])
     .filter((s) => s.date >= new Date().toISOString().slice(0, 10))
     .slice(0, 4);
-
-  const pendingClaims = financeReportPendingCount(SYS);
-  const pendingExpenses = finance
-    ? ministryFinanceService
-        .listExpenses(SYS)
-        .filter((e) => e.status === 'PENDING').length
-    : 0;
 
   type Need = { id: string; title: string; reason: string; to: string };
   const needs: Need[] = [];
@@ -386,39 +365,12 @@ export function MusicHomePage() {
       to: `${BASE}/schedule-drafts`,
     });
   }
-  if (pendingClaims > 0 && allowed.has('finance')) {
-    needs.push({
-      id: 'claims',
-      title: `${pendingClaims} claim${pendingClaims === 1 ? '' : 's'} to verify`,
-      reason: 'Pending contributions',
-      to: `${BASE}/finance`,
-    });
-  }
-  if (pendingExpenses > 0 && allowed.has('accounting')) {
-    needs.push({
-      id: 'exp',
-      title: `${pendingExpenses} expense${pendingExpenses === 1 ? '' : 's'} pending`,
-      reason: 'Accounting approval',
-      to: `${BASE}/accounting`,
-    });
-  }
-  if (myPending > 0) {
-    needs.push({
-      id: 'mine',
-      title: `${myPending} of your claims pending`,
-      reason: 'Waiting on treasurer',
-      to: `${BASE}/my-contributions`,
-    });
-  }
-
   const kicker =
-    office === 'TREASURER'
-      ? 'Treasurer · Music finance'
-      : office === 'PRESIDENT' || office === 'VP'
-        ? 'Music leadership overview'
-        : office === 'SECRETARY'
-          ? 'Secretary · Music records'
-          : 'Music member home';
+    office === 'PRESIDENT' || office === 'VP'
+      ? 'Music leadership overview'
+      : office === 'SECRETARY'
+        ? 'Secretary · Music records'
+        : 'Music member home';
 
   return (
     <div className="stack">
@@ -443,19 +395,10 @@ export function MusicHomePage() {
             <div className="label">Units</div>
             <div className="value">{activeMusicUnits().length}</div>
           </div>
-          {showFinance && finance ? (
-            <div className="overview-tile">
-              <div className="label">Fund balance</div>
-              <div className="value" style={{ fontSize: '0.95rem' }}>
-                {financeService.formatAmount(finance.fundBalance)}
-              </div>
-            </div>
-          ) : (
-            <div className="overview-tile">
-              <div className="label">Active programs</div>
-              <div className="value">{programs.length}</div>
-            </div>
-          )}
+          <div className="overview-tile">
+            <div className="label">Active programs</div>
+            <div className="value">{programs.length}</div>
+          </div>
         </div>
       </div>
 
@@ -514,58 +457,6 @@ export function MusicHomePage() {
         </div>
       </div>
 
-      {showFinance && finance && (
-        <div className="panel">
-          <h3 style={{ marginTop: 0, marginBottom: '0.65rem' }}>Finance</h3>
-          <div className="overview-strip" style={{ marginTop: 0 }}>
-            <div className="overview-tile">
-              <div className="label">Confirmed</div>
-              <div className="value" style={{ fontSize: '0.95rem' }}>
-                {financeService.formatAmount(finance.contributionsConfirmed)}
-              </div>
-            </div>
-            <div className="overview-tile">
-              <div className="label">Claims pending</div>
-              <div className="value">{pendingClaims}</div>
-            </div>
-            <div className="overview-tile">
-              <div className="label">Expenses approved</div>
-              <div className="value" style={{ fontSize: '0.95rem' }}>
-                {financeService.formatAmount(finance.expensesApproved)}
-              </div>
-            </div>
-            <div className="overview-tile">
-              <div className="label">Expenses pending</div>
-              <div className="value">{pendingExpenses}</div>
-            </div>
-            <div className="overview-tile">
-              <div className="label">Assets</div>
-              <div className="value" style={{ fontSize: '0.95rem' }}>
-                {financeService.formatAmount(finance.assets)}
-              </div>
-            </div>
-            <div className="overview-tile">
-              <div className="label">Liabilities</div>
-              <div className="value" style={{ fontSize: '0.95rem' }}>
-                {financeService.formatAmount(finance.liabilities)}
-              </div>
-            </div>
-            <div className="overview-tile">
-              <div className="label">Net assets</div>
-              <div className="value" style={{ fontSize: '0.95rem' }}>
-                {financeService.formatAmount(finance.netAssets)}
-              </div>
-            </div>
-            <div className="overview-tile">
-              <div className="label">Fund</div>
-              <div className="value" style={{ fontSize: '0.95rem' }}>
-                {financeService.formatAmount(finance.fundBalance)}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="panel">
         <div
           className="row"
@@ -623,12 +514,6 @@ export function MusicHomePage() {
       </div>
     </div>
   );
-}
-
-function financeReportPendingCount(systemId: typeof SYS): number {
-  return ministryFinanceService.listContributions(systemId, {
-    status: 'PENDING',
-  }).length;
 }
 
 export function MusicMissionPage() {

@@ -285,22 +285,6 @@ export function ProtocolTeamsBoard({
                   </span>
                   <span className="stat-label">Duties this month</span>
                 </div>
-                <div className="stat-tile">
-                  <span className="stat-num">{participation.served}</span>
-                  <span className="stat-label">Services served</span>
-                </div>
-                <div className="stat-tile">
-                  <span className="stat-num">{participation.fillIns}</span>
-                  <span className="stat-label">Fill-ins</span>
-                </div>
-                <div className="stat-tile">
-                  <span className="stat-num">
-                    {participation.rank ? `#${participation.rank}` : '—'}
-                  </span>
-                  <span className="stat-label">
-                    Performance rank{participation.rank ? ` of ${participation.ranked}` : ''}
-                  </span>
-                </div>
               </div>
               <p className="muted" style={{ fontSize: '0.85rem', margin: '0.5rem 0 0' }}>
                 Absent {participation.absent} · Excused {participation.excused} · Absence requests{' '}

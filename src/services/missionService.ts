@@ -25,7 +25,6 @@ import {
   isItoreroHighLeader,
 } from '../domain/churchLeadership';
 import { TASK_TEMPLATES } from '../domain/taskTemplates';
-import { pastoralOpsService } from './pastoralOpsService';
 import {
   findRole,
   legacyRoleKey,
@@ -100,7 +99,6 @@ import {
   type MissionStewardship,
 } from '../domain/stewardship';
 import { peopleService } from './authService';
-import { correspondenceService } from './correspondenceService';
 import { financeService } from './financeService';
 import { participationService } from './participationService';
 import { systemsService } from './orgService';
@@ -788,16 +786,6 @@ export const missionService = {
     const program = this.getProgram(e.programId);
     if (!program) return { ok: false, reason: 'Program not found' };
 
-    if (input.nextSteps?.updateBaptism) {
-      if (!pastoralOpsService.baptismNameConfirmed(e.personId)) {
-        return {
-          ok: false,
-          reason:
-            'Church Leader must confirm this baptism name on the pathway list before the rite is recorded',
-        };
-      }
-    }
-
     const today = new Date().toISOString().slice(0, 10);
     e.status = 'COMPLETED';
     e.completedOn = today;
@@ -820,13 +808,6 @@ export const missionService = {
         kind: 'CERTIFICATE',
         issuedOn: today,
         note: program.cohortLabel ?? program.programType,
-      });
-      correspondenceService.issueProgramCertificate({
-        personId: e.personId,
-        programId: program.id,
-        programName: program.name,
-        actorPersonId: input.actorPersonId ?? e.personId,
-        cohortLabel: program.cohortLabel,
       });
     }
 

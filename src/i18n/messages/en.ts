@@ -28,16 +28,11 @@ export const en = {
   'nav.group.home': 'Home',
   'nav.group.people': 'People & org',
   'nav.group.work': 'Work',
-  'nav.group.treasury': 'Treasury',
   'nav.group.admin': 'Admin',
 
   // Menu items
   'nav.home': 'Home',
   'nav.inbox': 'Inbox',
-  'nav.board': 'Board',
-  'nav.pastoral': 'Pastoral desk',
-  'nav.correspondence': 'Correspondence',
-  'nav.systemAdmin': 'System admin',
   'nav.people': 'People',
   'nav.profile': 'Profile',
   'nav.organization': 'Organisation',
@@ -48,11 +43,8 @@ export const en = {
   'nav.tasks': 'Tasks',
   'nav.projects': 'Projects',
   'nav.calendar': 'Calendar',
-  'nav.reports': 'Reports',
   'nav.overview': 'Overview',
   'nav.collections': 'Collections',
-  'nav.budgets': 'Budgets',
-  'nav.balanceSheet': 'Balance sheet',
   'nav.access': 'Access',
   'nav.systems': 'Systems',
 
@@ -82,7 +74,6 @@ export const en = {
   'login.signingIn': 'Signing in…',
   'login.signingInLabel': 'Signing in',
   'login.error': 'Invalid credentials or you are not entitled to this system.',
-  'login.demoAccounts': 'Demo accounts',
 
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',

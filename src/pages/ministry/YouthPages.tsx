@@ -55,9 +55,6 @@ export function YouthHomePage() {
             <Link to="/systems/youth/events">Events</Link>
             <Link to="/systems/youth/tasks">Tasks</Link>
             <Link to="/systems/youth/projects">Projects</Link>
-            <Link to="/systems/youth/finance">
-              Finance kit — contributions · donations · budgets · assets
-            </Link>
           </div>
         </div>
       </div>

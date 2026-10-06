@@ -7,8 +7,8 @@ describe('local data backup', () => {
     registerAllLocalDomain();
     const b = exportAllLocalData();
     expect(b.format).toBe('church-ecosystem-local-backup');
-    expect(registeredCollectionNames().length).toBeGreaterThan(50);
-    expect(Object.keys(b.collections).length).toBeGreaterThan(40);
+    expect(registeredCollectionNames().length).toBeGreaterThan(30);
+    expect(Object.keys(b.collections).length).toBeGreaterThan(25);
     expect(() => JSON.parse(JSON.stringify(b))).not.toThrow();
   });
 });

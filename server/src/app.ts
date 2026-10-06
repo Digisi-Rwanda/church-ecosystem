@@ -7,7 +7,6 @@ import { attentionRouter } from './routes/attention.js';
 import { authRouter } from './routes/auth.js';
 import { authorizeRouter } from './routes/authorize.js';
 import { assignmentsRouter } from './routes/assignments.js';
-import { contributionsRouter } from './routes/contributions.js';
 import { fundsRouter } from './routes/funds.js';
 import { healthRouter } from './routes/health.js';
 import { missionRouter } from './routes/mission.js';
@@ -50,8 +49,6 @@ export function createApp() {
         funds: 'GET /api/funds',
         mission: 'GET/POST /api/mission/{programs|events|tasks|projects}',
         attention: 'GET /api/attention',
-        contributions:
-          'GET/POST /api/contributions, POST /api/contributions/:id/verify',
         assignments: 'GET/POST /api/assignments',
         scheduleState: 'GET/PUT /api/schedule-state/{music|protocol}',
         protocolOffices: 'GET /api/protocol/offices',
@@ -75,7 +72,6 @@ export function createApp() {
   app.use('/api/funds', fundsRouter);
   app.use('/api/mission', missionRouter);
   app.use('/api/attention', attentionRouter);
-  app.use('/api/contributions', contributionsRouter);
   app.use('/api/assignments', assignmentsRouter);
   app.use('/api/protocol/offices', protocolOfficesRouter);
   app.use('/api/sso', ssoRouter);

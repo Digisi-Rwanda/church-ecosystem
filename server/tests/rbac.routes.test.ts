@@ -176,46 +176,6 @@ describe('D. finance vaults', () => {
   });
 });
 
-/* ───────────── E. Contribution claims ───────────── */
-describe('E. contributions', () => {
-  const seedClaims = () => {
-    db().contributionClaim.push(
-      { id: 'cl-a', systemId: 'sys-choir', fundId: 'fund-choir', orgUnitId: 'ou-c', personId: 'p-choir-leader', typeLabel: 'Tithe', amount: 1000, paymentMethod: 'CASH', occurredOn: new Date(), status: 'PENDING', submittedAt: new Date() },
-      { id: 'cl-b', systemId: 'sys-choir', fundId: 'fund-choir-b', orgUnitId: 'ou-cb', personId: 'p-member', typeLabel: 'Tithe', amount: 2000, paymentMethod: 'CASH', occurredOn: new Date(), status: 'PENDING', submittedAt: new Date() },
-    );
-  };
-  it('E1 treasurer of vault B cannot see vault A’s claims', async () => {
-    seedClaims();
-    const r = await request(app).get('/api/contributions?systemId=sys-choir').set(bearer('p-choir-member'));
-    expect(r.status, why(r)).toBe(200);
-    const ids = r.body.claims.map((c: any) => c.id);
-    expect(ids, 'claims from a vault the caller does not manage').not.toContain('cl-a');
-  });
-  it('E2 treasurer of vault B cannot verify vault A’s claim', async () => {
-    seedClaims();
-    const r = await request(app).post('/api/contributions/cl-a/verify').set(bearer('p-choir-member')).send({ decision: 'CONFIRMED' });
-    expect(r.status, why(r)).toBe(403);
-  });
-  it('E3 a manager cannot verify their own claim (separation of duties)', async () => {
-    seedClaims();
-    const r = await request(app).post('/api/contributions/cl-a/verify').set(bearer('p-choir-leader')).send({ decision: 'CONFIRMED' });
-    expect(r.status, why(r)).toBe(403);
-  });
-  it('E4 concurrent double-verify posts the money only once', async () => {
-    seedClaims();
-    const [a, b] = await Promise.all([
-      request(app).post('/api/contributions/cl-b/verify').set(bearer('p-choir-member')).send({ decision: 'CONFIRMED' }),
-      request(app).post('/api/contributions/cl-b/verify').set(bearer('p-choir-member')).send({ decision: 'CONFIRMED' }),
-    ]);
-    const ok = [a, b].filter((r) => r.status === 200 || r.status === 201).length;
-    expect(ok, `${a.status}/${b.status}`).toBe(1);
-  });
-  it('E5 outsider (no membership) cannot submit a claim into sys-main', async () => {
-    const r = await request(app).post('/api/contributions').set(bearer('p-outsider')).send({ systemId: 'sys-choir', typeLabel: 't', amount: 10, paymentMethod: 'CASH', occurredOn: '2026-09-01' });
-    expect(r.status, why(r)).toBe(403);
-  });
-});
-
 /* ───────────── F. Mission lifecycle ───────────── */
 describe('F. mission lifecycle', () => {
   it('F1 a MANAGE holder cannot bypass the approval chain by PATCHing status on a beyond-scope event', async () => {

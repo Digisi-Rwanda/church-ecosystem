@@ -35,32 +35,8 @@ const EventDetailPage = lazy(() =>
 const EventsPage = lazy(() =>
   import('./pages/EventsPage').then((m) => ({ default: m.EventsPage })),
 );
-const BoardPage = lazy(() =>
-  import('./pages/BoardPage').then((m) => ({ default: m.BoardPage })),
-);
-const BoardFollowUpPage = lazy(() =>
-  import('./pages/BoardFollowUpPage').then((m) => ({ default: m.BoardFollowUpPage })),
-);
-const BoardMeetingPage = lazy(() =>
-  import('./pages/BoardMeetingPage').then((m) => ({ default: m.BoardMeetingPage })),
-);
-const PastoralDeskPage = lazy(() =>
-  import('./pages/PastoralDeskPage').then((m) => ({ default: m.PastoralDeskPage })),
-);
-const CorrespondenceDetailPage = lazy(() =>
-  import('./pages/CorrespondencePage').then((m) => ({ default: m.CorrespondenceDetailPage })),
-);
-const CorrespondencePage = lazy(() =>
-  import('./pages/CorrespondencePage').then((m) => ({ default: m.CorrespondencePage })),
-);
-const SystemAdminPage = lazy(() =>
-  import('./pages/SystemAdminPage').then((m) => ({ default: m.SystemAdminPage })),
-);
 const InboxPage = lazy(() =>
   import('./pages/InboxPage').then((m) => ({ default: m.InboxPage })),
-);
-const ReportsHubPage = lazy(() =>
-  import('./pages/reports/ReportsHubPage').then((m) => ({ default: m.ReportsHubPage })),
 );
 const ChoirHomePage = lazy(() =>
   import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirHomePage })),
@@ -71,104 +47,17 @@ const ChoirRehearsalsPage = lazy(() =>
 const ChoirRepertoirePage = lazy(() =>
   import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirRepertoirePage })),
 );
-const ChoirRosterPage = lazy(() =>
-  import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirRosterPage })),
-);
-const ChoirSectionsPage = lazy(() =>
-  import('./pages/ministry/ChoirPages').then((m) => ({ default: m.ChoirSectionsPage })),
-);
-const ChoirFinancePage = lazy(() =>
-  import('./pages/ministry/ChoirFinancePages').then((m) => ({ default: m.ChoirFinancePage })),
-);
-const ChoirMyContributionsPage = lazy(() =>
-  import('./pages/ministry/ChoirFinancePages').then((m) => ({ default: m.ChoirMyContributionsPage })),
-);
 const ChoirPeoplePage = lazy(() =>
-  import('./pages/ministry/ChoirFinancePages').then((m) => ({ default: m.ChoirPeoplePage })),
+  import('./pages/ministry/ChoirPeoplePages').then((m) => ({ default: m.ChoirPeoplePage })),
 );
 const ChoirTeamsPage = lazy(() =>
-  import('./pages/ministry/ChoirFinancePages').then((m) => ({ default: m.ChoirTeamsPage })),
-);
-const ChoirAccountingPage = lazy(() =>
-  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirAccountingPage })),
-);
-const ChoirAssetsPage = lazy(() =>
-  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirAssetsPage })),
-);
-const ChoirDonationsPage = lazy(() =>
-  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirDonationsPage })),
-);
-const ChoirFundraisingPage = lazy(() =>
-  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirFundraisingPage })),
-);
-const ChoirReportsPage = lazy(() =>
-  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirReportsPage })),
-);
-const ChoirSponsorsPage = lazy(() =>
-  import('./pages/ministry/ChoirOpsPages').then((m) => ({ default: m.ChoirSponsorsPage })),
-);
-const WorshipHomePage = lazy(() =>
-  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipHomePage })),
-);
-const WorshipRehearsalsPage = lazy(() =>
-  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipRehearsalsPage })),
-);
-const WorshipRepertoirePage = lazy(() =>
-  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipRepertoirePage })),
-);
-const WorshipRosterPage = lazy(() =>
-  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipRosterPage })),
-);
-const WorshipSectionsPage = lazy(() =>
-  import('./pages/ministry/WorshipPages').then((m) => ({ default: m.WorshipSectionsPage })),
-);
-const WorshipFinancePage = lazy(() =>
-  import('./pages/ministry/WorshipFinancePages').then((m) => ({ default: m.WorshipFinancePage })),
-);
-const WorshipMyContributionsPage = lazy(() =>
-  import('./pages/ministry/WorshipFinancePages').then((m) => ({ default: m.WorshipMyContributionsPage })),
-);
-const WorshipPeoplePage = lazy(() =>
-  import('./pages/ministry/WorshipFinancePages').then((m) => ({ default: m.WorshipPeoplePage })),
-);
-const WorshipTeamsPage = lazy(() =>
-  import('./pages/ministry/WorshipFinancePages').then((m) => ({ default: m.WorshipTeamsPage })),
-);
-const WorshipAccountingPage = lazy(() =>
-  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipAccountingPage })),
-);
-const WorshipAssetsPage = lazy(() =>
-  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipAssetsPage })),
-);
-const WorshipDonationsPage = lazy(() =>
-  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipDonationsPage })),
-);
-const WorshipFundraisingPage = lazy(() =>
-  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipFundraisingPage })),
-);
-const WorshipReportsPage = lazy(() =>
-  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipReportsPage })),
-);
-const WorshipSponsorsPage = lazy(() =>
-  import('./pages/ministry/WorshipOpsPages').then((m) => ({ default: m.WorshipSponsorsPage })),
-);
-const DeaconCasesPage = lazy(() =>
-  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconCasesPage })),
-);
-const DeaconFinancePage = lazy(() =>
-  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconFinancePage })),
+  import('./pages/ministry/ChoirPeoplePages').then((m) => ({ default: m.ChoirTeamsPage })),
 );
 const DeaconHomePage = lazy(() =>
   import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconHomePage })),
 );
-const DeaconMyContributionsPage = lazy(() =>
-  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconMyContributionsPage })),
-);
 const DeaconRosterPage = lazy(() =>
   import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconRosterPage })),
-);
-const DeaconVisitsPage = lazy(() =>
-  import('./pages/ministry/DeaconPages').then((m) => ({ default: m.DeaconVisitsPage })),
 );
 const ChoirShell = lazy(() =>
   import('./pages/ministry/ChoirShell').then((m) => ({ default: m.ChoirShell })),
@@ -184,30 +73,6 @@ const RequireMinistryModule = lazy(() =>
 );
 const RequireChoirNav = lazy(() =>
   import('./pages/ministry/RequireChoirNav').then((m) => ({ default: m.RequireChoirNav })),
-);
-const FinanceFundLedgerPage = lazy(() =>
-  import('./pages/ministry/FinancePages').then((m) => ({ default: m.FinanceFundLedgerPage })),
-);
-const FinanceHomePage = lazy(() =>
-  import('./pages/ministry/FinancePages').then((m) => ({ default: m.FinanceHomePage })),
-);
-const FinanceSystemRedirect = lazy(() =>
-  import('./pages/ministry/FinancePages').then((m) => ({ default: m.FinanceSystemRedirect })),
-);
-const MinistryFundLedgerPage = lazy(() =>
-  import('./pages/ministry/FinancePages').then((m) => ({ default: m.MinistryFundLedgerPage })),
-);
-const ChurchBalanceSheetPage = lazy(() =>
-  import('./pages/ministry/ChurchFinancePages').then((m) => ({ default: m.ChurchBalanceSheetPage })),
-);
-const ChurchBudgetsPage = lazy(() =>
-  import('./pages/ministry/ChurchFinancePages').then((m) => ({ default: m.ChurchBudgetsPage })),
-);
-const ChurchCollectionsPage = lazy(() =>
-  import('./pages/ministry/ChurchFinancePages').then((m) => ({ default: m.ChurchCollectionsPage })),
-);
-const ChurchReportsPage = lazy(() =>
-  import('./pages/ministry/ChurchFinancePages').then((m) => ({ default: m.ChurchReportsPage })),
 );
 const ProtocolAttendancePage = lazy(() =>
   import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolAttendancePage })),
@@ -230,9 +95,6 @@ const ProtocolMySchedulePage = lazy(() =>
 const ProtocolReviewPage = lazy(() =>
   import('./pages/ministry/ProtocolPages').then((m) => ({ default: m.ProtocolReviewPage })),
 );
-const ProtocolFaithfulPage = lazy(() =>
-  import('./pages/ministry/ProtocolSchedulingPages').then((m) => ({ default: m.ProtocolFaithfulPage })),
-);
 const ProtocolTeamsPage = lazy(() =>
   import('./pages/ministry/ProtocolSchedulingPages').then((m) => ({ default: m.ProtocolTeamsPage })),
 );
@@ -244,15 +106,6 @@ const ProtocolAvailabilityPage = lazy(() =>
 );
 const ProtocolExportPage = lazy(() =>
   import('./pages/ministry/ProtocolOpsPages').then((m) => ({ default: m.ProtocolExportPage })),
-);
-const ProtocolFinancePage = lazy(() =>
-  import('./pages/ministry/ProtocolOpsPages').then((m) => ({ default: m.ProtocolFinancePage })),
-);
-const ProtocolNotificationsPage = lazy(() =>
-  import('./pages/ministry/ProtocolOpsPages').then((m) => ({ default: m.ProtocolNotificationsPage })),
-);
-const ProtocolReportsPage = lazy(() =>
-  import('./pages/ministry/ProtocolOpsPages').then((m) => ({ default: m.ProtocolReportsPage })),
 );
 const YouthHomePage = lazy(() =>
   import('./pages/ministry/YouthPages').then((m) => ({ default: m.YouthHomePage })),
@@ -295,30 +148,6 @@ const PeerProjectsPage = lazy(() =>
 );
 const PeerTasksPage = lazy(() =>
   import('./pages/ministry/PeerMissionPages').then((m) => ({ default: m.PeerTasksPage })),
-);
-const MinistryAccountingPage = lazy(() =>
-  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryAccountingPage })),
-);
-const MinistryAssetsPage = lazy(() =>
-  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryAssetsPage })),
-);
-const MinistryDonationsPage = lazy(() =>
-  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryDonationsPage })),
-);
-const MinistryFinanceOverviewPage = lazy(() =>
-  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryFinanceOverviewPage })),
-);
-const MinistryFinanceReportsPage = lazy(() =>
-  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryFinanceReportsPage })),
-);
-const MinistryFundraisingPage = lazy(() =>
-  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryFundraisingPage })),
-);
-const MinistryMyContributionsPage = lazy(() =>
-  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistryMyContributionsPage })),
-);
-const MinistrySponsorsPage = lazy(() =>
-  import('./pages/ministry/MinistryFinanceKitPages').then((m) => ({ default: m.MinistrySponsorsPage })),
 );
 const OrganizationDetailPage = lazy(() =>
   import('./pages/OrganizationDetailPage').then((m) => ({ default: m.OrganizationDetailPage })),
@@ -384,30 +213,6 @@ function ShellWithTitle() {
   if (location.pathname.startsWith('/inbox')) {
     title = t('page.inbox.title');
     subtitle = t('page.inbox.subtitle');
-  } else if (location.pathname.startsWith('/board/meetings')) {
-    title = 'Board meeting';
-    subtitle =
-      'Agenda detail, attendees, and Leader actions (Freeze for Board or Decide now).';
-  } else if (location.pathname.startsWith('/board/follow-ups')) {
-    title = 'Follow-up report';
-    subtitle = 'Progress and results for a Board decision — review before Mark done.';
-  } else if (location.pathname.startsWith('/board')) {
-    title = 'Board';
-    subtitle = 'Meetings, decisions, and follow-ups for church leadership.';
-  } else if (location.pathname.startsWith('/pastoral')) {
-    title = 'Pastoral desk';
-    subtitle =
-      'Pathways, baptism names, discipline, transfer letters, and pulpit.';
-  } else if (location.pathname.startsWith('/correspondence/')) {
-    title = 'Letter';
-    subtitle = 'Draft, sign, deliver, and archive official correspondence.';
-  } else if (location.pathname.startsWith('/correspondence')) {
-    title = 'Correspondence';
-    subtitle =
-      'Transfer, membership confirmation, and recommendation letters.';
-  } else if (location.pathname.startsWith('/system-admin')) {
-    title = 'System admin';
-    subtitle = 'Configure tools for systems you are appointed to — not church ledgers.';
   } else if (location.pathname.startsWith('/people/tables')) {
     title = 'People tables';
     subtitle = 'Personal, church and other details for everyone.';
@@ -480,34 +285,13 @@ function ShellWithTitle() {
   } else if (location.pathname.startsWith('/calendar')) {
     title = 'Calendar';
     subtitle = 'What’s happening across the church.';
-  } else if (location.pathname.startsWith('/finance')) {
-    title = 'Treasury';
-    subtitle = 'Collections, budgets, and church fund reports.';
   } else if (location.pathname.startsWith('/systems')) {
     title = 'Systems';
     subtitle = 'Open a ministry or peer system you may enter.';
-  } else if (location.pathname.startsWith('/reports')) {
-    title = 'Reports';
-    subtitle = 'Leadership packs and oversight summaries.';
   }
 
   return <AppShell title={title} subtitle={subtitle} />;
 }
-
-const WORSHIP_NAV = [
-  { to: '/systems/worship', label: 'Home', end: true },
-  { to: '/systems/worship/mission', label: 'Mission' },
-  { to: '/systems/worship/people', label: 'People' },
-  { to: '/systems/worship/families', label: 'Families' },
-  { to: '/systems/worship/repertoire', label: 'Setlists' },
-  { to: '/systems/worship/sections', label: 'Sections' },
-  { to: '/systems/worship/rehearsals', label: 'Rehearsals' },
-  { to: '/systems/worship/roster', label: 'Duty roster' },
-  { to: '/systems/worship/my-contributions', label: 'My contributions' },
-  { to: '/systems/worship/finance', label: 'Finance' },
-  { to: '/systems/worship/assets', label: 'Assets' },
-  { to: '/systems/worship/reports', label: 'Reports' },
-];
 
 const YOUTH_NAV = [
   { to: '/systems/youth', label: 'Home', end: true },
@@ -517,10 +301,6 @@ const YOUTH_NAV = [
   { to: '/systems/youth/tasks', label: 'Tasks' },
   { to: '/systems/youth/projects', label: 'Projects' },
   { to: '/systems/youth/calendar', label: 'Calendar' },
-  { to: '/systems/youth/my-contributions', label: 'My contributions' },
-  { to: '/systems/youth/finance', label: 'Finance' },
-  { to: '/systems/youth/assets', label: 'Assets' },
-  { to: '/systems/youth/reports', label: 'Reports' },
 ];
 
 const MUSIC_NAV = [
@@ -533,10 +313,6 @@ const MUSIC_NAV = [
   { to: '/systems/music/tasks', label: 'Tasks' },
   { to: '/systems/music/projects', label: 'Projects' },
   { to: '/systems/music/calendar', label: 'Calendar' },
-  { to: '/systems/music/my-contributions', label: 'My contributions' },
-  { to: '/systems/music/finance', label: 'Finance' },
-  { to: '/systems/music/assets', label: 'Assets' },
-  { to: '/systems/music/reports', label: 'Reports' },
 ];
 
 const PROTOCOL_NAV = [
@@ -547,23 +323,15 @@ const PROTOCOL_NAV = [
   { to: '/systems/protocol/music', label: 'Music schedule' },
   { to: '/systems/protocol/calendar', label: 'Calendar' },
   { to: '/systems/protocol/teams', label: 'Service teams' },
-  { to: '/systems/protocol/review', label: 'Review' },
+  { to: '/systems/protocol/review', label: 'Review & publish' },
   { to: '/systems/protocol/attendance', label: 'Attendance' },
-  { to: '/systems/protocol/faithful', label: 'Member performance' },
   { to: '/systems/protocol/mine', label: 'My schedule' },
-  { to: '/systems/protocol/finance', label: 'Finance' },
-  { to: '/systems/protocol/inbox', label: 'Inbox' },
-  { to: '/systems/protocol/reports', label: 'Reports' },
 ];
 
 const DEACON_NAV = [
   { to: '/systems/deacon', label: 'Home', end: true },
   { to: '/systems/deacon/mission', label: 'Mission' },
   { to: '/systems/deacon/roster', label: 'Roster' },
-  { to: '/systems/deacon/cases', label: 'Care cases' },
-  { to: '/systems/deacon/visits', label: 'Visits' },
-  { to: '/systems/deacon/my-contributions', label: 'My contributions' },
-  { to: '/systems/deacon/finance', label: 'Finance' },
 ];
 
 function ChoirMissionPage() {
@@ -628,14 +396,6 @@ export default function App() {
             }
           />
           <Route
-            path="sections"
-            element={
-              <RequireChoirNav navKey="sections">
-                <ChoirSectionsPage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
             path="rehearsals"
             element={
               <RequireChoirNav navKey="rehearsals">
@@ -643,126 +403,6 @@ export default function App() {
               </RequireChoirNav>
             }
           />
-          <Route
-            path="roster"
-            element={
-              <RequireChoirNav navKey="roster">
-                <ChoirRosterPage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
-            path="my-contributions"
-            element={
-              <RequireChoirNav navKey="my-contributions">
-                <ChoirMyContributionsPage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
-            path="finance"
-            element={
-              <RequireChoirNav navKey="finance">
-                <ChoirFinancePage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
-            path="donations"
-            element={
-              <RequireChoirNav navKey="donations">
-                <ChoirDonationsPage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
-            path="sponsors"
-            element={
-              <RequireChoirNav navKey="sponsors">
-                <ChoirSponsorsPage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
-            path="fundraising"
-            element={
-              <RequireChoirNav navKey="fundraising">
-                <ChoirFundraisingPage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
-            path="accounting"
-            element={
-              <RequireChoirNav navKey="accounting">
-                <ChoirAccountingPage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
-            path="assets"
-            element={
-              <RequireChoirNav navKey="assets">
-                <ChoirAssetsPage />
-              </RequireChoirNav>
-            }
-          />
-          <Route
-            path="reports"
-            element={
-              <RequireChoirNav navKey="reports">
-                <ChoirReportsPage />
-              </RequireChoirNav>
-            }
-          />
-        </Route>
-
-        <Route
-          path="/systems/worship"
-          element={
-            <MinistryShell
-              systemId="sys-worship"
-              basePath="/systems/worship"
-              nav={WORSHIP_NAV}
-            />
-          }
-        >
-          <Route
-            element={
-              <RequireMinistryModule
-                systemId="sys-worship"
-                basePath="/systems/worship"
-              />
-            }
-          >
-            <Route index element={<WorshipHomePage />} />
-            <Route
-              path="mission"
-              element={
-                <MinistryMissionBoard
-                  systemId="sys-worship"
-                  title="Worship mission board"
-                />
-              }
-            />
-            <Route path="people" element={<WorshipPeoplePage />} />
-            <Route path="families" element={<WorshipTeamsPage />} />
-            <Route path="repertoire" element={<WorshipRepertoirePage />} />
-            <Route path="sections" element={<WorshipSectionsPage />} />
-            <Route path="rehearsals" element={<WorshipRehearsalsPage />} />
-            <Route path="roster" element={<WorshipRosterPage />} />
-            <Route
-              path="my-contributions"
-              element={<WorshipMyContributionsPage />}
-            />
-            <Route path="finance" element={<WorshipFinancePage />} />
-            <Route path="donations" element={<WorshipDonationsPage />} />
-            <Route path="sponsors" element={<WorshipSponsorsPage />} />
-            <Route path="fundraising" element={<WorshipFundraisingPage />} />
-            <Route path="accounting" element={<WorshipAccountingPage />} />
-            <Route path="assets" element={<WorshipAssetsPage />} />
-            <Route path="reports" element={<WorshipReportsPage />} />
-          </Route>
         </Route>
 
         <Route
@@ -831,42 +471,6 @@ export default function App() {
                   title="Youth calendar"
                 />
               }
-            />
-            <Route
-              path="my-contributions"
-              element={<MinistryMyContributionsPage systemId="sys-youth" />}
-            />
-            <Route
-              path="finance"
-              element={<MinistryFinanceOverviewPage systemId="sys-youth" />}
-            />
-            <Route
-              path="donations"
-              element={<MinistryDonationsPage systemId="sys-youth" />}
-            />
-            <Route
-              path="sponsors"
-              element={<MinistrySponsorsPage systemId="sys-youth" />}
-            />
-            <Route
-              path="fundraising"
-              element={<MinistryFundraisingPage systemId="sys-youth" />}
-            />
-            <Route
-              path="accounting"
-              element={<MinistryAccountingPage systemId="sys-youth" />}
-            />
-            <Route
-              path="assets"
-              element={<MinistryAssetsPage systemId="sys-youth" />}
-            />
-            <Route
-              path="reports"
-              element={<MinistryFinanceReportsPage systemId="sys-youth" />}
-            />
-            <Route
-              path="ledger"
-              element={<MinistryFundLedgerPage systemId="sys-youth" />}
             />
           </Route>
         </Route>
@@ -954,42 +558,6 @@ export default function App() {
                 />
               }
             />
-            <Route
-              path="my-contributions"
-              element={<MinistryMyContributionsPage systemId="sys-music" />}
-            />
-            <Route
-              path="finance"
-              element={<MinistryFinanceOverviewPage systemId="sys-music" />}
-            />
-            <Route
-              path="donations"
-              element={<MinistryDonationsPage systemId="sys-music" />}
-            />
-            <Route
-              path="sponsors"
-              element={<MinistrySponsorsPage systemId="sys-music" />}
-            />
-            <Route
-              path="fundraising"
-              element={<MinistryFundraisingPage systemId="sys-music" />}
-            />
-            <Route
-              path="accounting"
-              element={<MinistryAccountingPage systemId="sys-music" />}
-            />
-            <Route
-              path="assets"
-              element={<MinistryAssetsPage systemId="sys-music" />}
-            />
-            <Route
-              path="reports"
-              element={<MinistryFinanceReportsPage systemId="sys-music" />}
-            />
-            <Route
-              path="ledger"
-              element={<MinistryFundLedgerPage systemId="sys-music" />}
-            />
           </Route>
         </Route>
 
@@ -1071,50 +639,6 @@ export default function App() {
                   />
                 }
               />
-              <Route
-                path="my-contributions"
-                element={
-                  <MinistryMyContributionsPage systemId={peer.systemId} />
-                }
-              />
-              <Route
-                path="finance"
-                element={
-                  <MinistryFinanceOverviewPage systemId={peer.systemId} />
-                }
-              />
-              <Route
-                path="donations"
-                element={<MinistryDonationsPage systemId={peer.systemId} />}
-              />
-              <Route
-                path="sponsors"
-                element={<MinistrySponsorsPage systemId={peer.systemId} />}
-              />
-              <Route
-                path="fundraising"
-                element={<MinistryFundraisingPage systemId={peer.systemId} />}
-              />
-              <Route
-                path="accounting"
-                element={<MinistryAccountingPage systemId={peer.systemId} />}
-              />
-              <Route
-                path="assets"
-                element={<MinistryAssetsPage systemId={peer.systemId} />}
-              />
-              <Route
-                path="reports"
-                element={
-                  <MinistryFinanceReportsPage systemId={peer.systemId} />
-                }
-              />
-              <Route
-                path="ledger"
-                element={
-                  <MinistryFundLedgerPage systemId={peer.systemId} />
-                }
-              />
             </Route>
           </Route>
         ))}
@@ -1154,11 +678,7 @@ export default function App() {
             <Route path="teams" element={<ProtocolTeamsPage />} />
             <Route path="review" element={<ProtocolReviewPage />} />
             <Route path="attendance" element={<ProtocolAttendancePage />} />
-            <Route path="faithful" element={<ProtocolFaithfulPage />} />
             <Route path="mine" element={<ProtocolMySchedulePage />} />
-            <Route path="finance" element={<ProtocolFinancePage />} />
-            <Route path="reports" element={<ProtocolReportsPage />} />
-            <Route path="inbox" element={<ProtocolNotificationsPage />} />
             <Route path="export" element={<ProtocolExportPage />} />
             <Route path="history" element={<ProtocolHistoryPage />} />
           </Route>
@@ -1193,56 +713,14 @@ export default function App() {
               }
             />
             <Route path="roster" element={<DeaconRosterPage />} />
-            <Route path="cases" element={<DeaconCasesPage />} />
-            <Route path="visits" element={<DeaconVisitsPage />} />
-            <Route
-              path="my-contributions"
-              element={<DeaconMyContributionsPage />}
-            />
-            <Route path="finance" element={<DeaconFinancePage />} />
           </Route>
         </Route>
 
-        <Route
-          path="/systems/finance/*"
-          element={<FinanceSystemRedirect />}
-        />
 
         <Route element={<RequireAuth />}>
           <Route element={<ShellWithTitle />}>
             <Route index element={<DashboardPage />} />
             <Route path="inbox" element={<InboxPage />} />
-            <Route path="board" element={<BoardPage />} />
-            <Route
-              path="board/meetings/:meetingId"
-              element={<BoardMeetingPage />}
-            />
-            <Route
-              path="board/follow-ups/:decisionId"
-              element={<BoardFollowUpPage />}
-            />
-            <Route path="pastoral" element={<PastoralDeskPage />} />
-            <Route path="correspondence" element={<CorrespondencePage />} />
-            <Route
-              path="correspondence/:id"
-              element={<CorrespondenceDetailPage />}
-            />
-            <Route path="system-admin" element={<SystemAdminPage />} />
-            <Route path="finance" element={<FinanceHomePage />} />
-            <Route
-              path="finance/collections"
-              element={<ChurchCollectionsPage />}
-            />
-            <Route path="finance/budgets" element={<ChurchBudgetsPage />} />
-            <Route
-              path="finance/balance-sheet"
-              element={<ChurchBalanceSheetPage />}
-            />
-            <Route path="finance/reports" element={<ChurchReportsPage />} />
-            <Route
-              path="finance/funds/:fundId"
-              element={<FinanceFundLedgerPage />}
-            />
             <Route path="people" element={<PeoplePage />} />
             <Route path="people/tables/:table" element={<PeopleTablePage />} />
             <Route path="people/new" element={<PersonFormPage />} />
@@ -1285,8 +763,6 @@ export default function App() {
             <Route path="projects/:id" element={<ProjectDetailPage />} />
             <Route path="calendar" element={<CalendarPage />} />
             <Route path="check-in" element={<CheckInPage />} />
-            <Route path="reports" element={<Navigate to="/reports/leadership" replace />} />
-            <Route path="reports/:section" element={<ReportsHubPage />} />
             <Route
               path="systems"
               element={

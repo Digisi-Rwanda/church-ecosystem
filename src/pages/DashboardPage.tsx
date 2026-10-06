@@ -13,12 +13,7 @@ import {
   missionService,
   peopleService,
   systemsService,
-  deaconService,
-  churchFinanceService,
 } from '../services';
-import { formatRwf } from '../domain/stewardship';
-import { reportsService } from '../services/reportsService';
-import { isChurchLeader } from '../domain/churchLeadership';
 
 type HomePersona =
   | 'leader'
@@ -188,38 +183,14 @@ export function DashboardPage() {
     .filter((s) => s.id !== 'sys-main')
     .slice(0, 6);
 
-  const pack = useMemo(() => reportsService.leadershipPack(), []);
   const peopleCount = peopleService.list().length;
   const firstName = personName.split(' ')[0] || personName;
-  const churchLeader = isChurchLeader(roles);
-  const careUpward = useMemo(
-    () =>
-      churchLeader
-        ? deaconService.listCasesForOversight('CHURCH_LEADER').slice(0, 5)
-        : [],
-    [churchLeader],
-  );
-  const pendingCareSpend = useMemo(
-    () =>
-      churchLeader
-        ? deaconService.listExpenses().filter((e) => e.status === 'PENDING')
-            .length
-        : 0,
-    [churchLeader],
-  );
-  const canViewChurchMoney =
-    account != null && churchFinanceService.canViewGeneral(account.personId);
-
   const needsYou = attentionItems.slice(0, 6);
 
   const primaryCta =
     persona === 'secretary' && canManagePeople ? (
       <Link to="/people/new" className="btn">
         Add person
-      </Link>
-    ) : persona === 'treasurer' ? (
-      <Link to="/finance" className="btn">
-        Open treasury
       </Link>
     ) : persona === 'leader' ? (
       <Link to="/inbox" className="btn">
@@ -436,92 +407,6 @@ export function DashboardPage() {
         </section>
 
         {/* 4 · Persona block */}
-        {persona === 'leader' && (
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <CardTitle icon="pulse" tone="coral">
-                Leadership glance
-              </CardTitle>
-              <Link to="/reports/leadership" className="muted">
-                Full report →
-              </Link>
-            </div>
-            <p style={{ margin: '0 0 0.65rem' }}>
-              <strong>
-                {pack.health.green} steady · {pack.health.amber} watch ·{' '}
-                {pack.health.red} urgent
-              </strong>
-            </p>
-            <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-              {pack.peopleServed} people touched in recent mission work
-              {pack.money.usedCost
-                ? ` · ${formatRwf(pack.money.usedCost)} used`
-                : ''}
-              {canViewChurchMoney
-                ? ` · church funds ${formatRwf(pack.money.churchFundsBalance)}`
-                : ''}
-              . Church-wide money only — not ministry vaults.
-            </p>
-            {churchLeader && (
-              <div style={{ marginTop: '0.85rem' }}>
-                <p style={{ margin: '0 0 0.35rem', fontWeight: 650 }}>
-                  Care escalated to you
-                </p>
-                {careUpward.length === 0 ? (
-                  <p className="muted" style={{ margin: 0, fontSize: '0.85rem' }}>
-                    No open cases escalated to Church Leader
-                    {pendingCareSpend
-                      ? ` · ${pendingCareSpend} care spend waiting your yes`
-                      : ''}
-                  </p>
-                ) : (
-                  <ul className="dash-deadline-list">
-                    {careUpward.map((c) => (
-                      <li key={c.id}>
-                        <div>
-                          <strong>{c.summary}</strong>
-                          <div className="muted" style={{ fontSize: '0.78rem' }}>
-                            {deaconService.CARE_STATUS_LABELS[c.status ?? ''] ??
-                              c.status}
-                            {c.sickLocation
-                              ? ` · ${c.sickLocation.toLowerCase()}`
-                              : ''}
-                          </div>
-                        </div>
-                        <StatusPill tone="warn">
-                          {deaconService.WELLBEING_LABELS[c.category]}
-                        </StatusPill>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-                {pendingCareSpend > 0 ? (
-                  <p className="muted" style={{ fontSize: '0.85rem' }}>
-                    {pendingCareSpend} benevolence spend(s) need your approval
-                    (wait — no act-then-report).
-                  </p>
-                ) : null}
-              </div>
-            )}
-            <div className="row" style={{ marginTop: '0.85rem' }}>
-              <Link to="/board" className="btn secondary sm">
-                Board
-              </Link>
-              <Link to="/pastoral" className="btn secondary sm">
-                Pastoral desk
-              </Link>
-              <Link to="/mission" className="btn ghost sm">
-                Mission
-              </Link>
-              {canViewChurchMoney ? (
-                <Link to="/finance" className="btn ghost sm">
-                  Church funds
-                </Link>
-              ) : null}
-            </div>
-          </section>
-        )}
-
         {persona === 'secretary' && (
           <section className="dash-card">
             <div className="dash-card-head">
@@ -552,36 +437,7 @@ export function DashboardPage() {
           </section>
         )}
 
-        {persona === 'treasurer' && (
-          <section className="dash-card">
-            <div className="dash-card-head">
-              <CardTitle icon="chart" tone="yellow">
-                Treasury
-              </CardTitle>
-              <Link to="/finance" className="muted">
-                Open →
-              </Link>
-            </div>
-            <p style={{ margin: 0 }}>
-              Recent mission spend recorded:{' '}
-              <strong>{formatRwf(pack.money.usedCost)}</strong>
-            </p>
-            <p className="muted" style={{ margin: '0.5rem 0 0', fontSize: '0.85rem' }}>
-              Collections, budgets, and the General Church Fund live in Treasury —
-              not on this home screen.
-            </p>
-            <div className="row" style={{ marginTop: '0.85rem' }}>
-              <Link to="/finance/collections" className="btn sm">
-                Collections
-              </Link>
-              <Link to="/finance/reports" className="btn ghost sm">
-                Reports
-              </Link>
-            </div>
-          </section>
-        )}
-
-        {persona === 'member' && (
+        {persona !== 'secretary' && (
           <section className="dash-card">
             <div className="dash-card-head">
               <CardTitle icon="folder" tone="accent">
