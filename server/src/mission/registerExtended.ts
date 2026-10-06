@@ -807,9 +807,6 @@ export function registerMissionExtendedRoutes(router: Router) {
         res.status(403).json({ error: decision.reason });
         return;
       }
-      const registrations = await prisma.eventRegistration.findMany({
-        where: { eventId: id },
-      });
       const { mapRegistration, expireAndPromote } = await import(
         '../mission/eventRegistrations.js'
       );

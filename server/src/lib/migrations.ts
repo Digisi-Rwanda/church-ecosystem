@@ -17,3 +17,8 @@ export function needsBaseline(output: string): boolean {
 export function hasMigrations(entries: Array<{ name: string; isDirectory: boolean; hasSql: boolean }>): boolean {
   return entries.some((e) => e.isDirectory && e.hasSql);
 }
+
+/** True when the baseline migration itself is present (later migrations are not enough on their own). */
+export function hasBaseline(entries: Array<{ name: string; isDirectory: boolean; hasSql: boolean }>): boolean {
+  return entries.some((e) => e.isDirectory && e.hasSql && e.name === BASELINE_MIGRATION);
+}

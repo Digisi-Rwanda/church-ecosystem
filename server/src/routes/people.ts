@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { filterPerson, SELF_EDITABLE } from '../policy/personFields.js';
 import { personTier } from '../policy/personAccess.js';
 import { prisma } from '../lib/prisma.js';
+import { nextMemberCode, personWithNationalId } from '../lib/codes.js';
 import { authorizePerson, grantsForPerson } from '../policy/index.js';
 import {
   pathParam,
@@ -115,6 +116,10 @@ peopleRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
   }
   const actor = req.auth!.personId;
   const tier = await tierOf(actor, id);
+  if (req.body && typeof req.body === 'object' && 'memberCode' in req.body) {
+    res.status(400).json({ error: 'A member code never changes', code: 'CODE_IS_FIXED' });
+    return;
+  }
   const parsed = patchSchema.safeParse(req.body);
   if (!parsed.success) {
     res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
@@ -152,6 +157,13 @@ peopleRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
   if (!existing) {
     res.status(404).json({ error: 'Person not found' });
     return;
+  }
+  if (typeof data.nationalId === 'string') {
+    const twin = await personWithNationalId(prisma, data.nationalId, id);
+    if (twin) {
+      res.status(409).json({ error: 'This national ID is already registered', code: 'DUPLICATE_NATIONAL_ID', personId: twin.id });
+      return;
+    }
   }
   const person = await prisma.person.update({ where: { id }, data });
   await prisma.auditEvent.create({
@@ -219,9 +231,15 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
     res.status(409).json({ error: 'A person with this id already exists' });
     return;
   }
+  const twin = await personWithNationalId(prisma, parsed.data.nationalId);
+  if (twin) {
+    res.status(409).json({ error: 'This national ID is already registered', code: 'DUPLICATE_NATIONAL_ID', personId: twin.id });
+    return;
+  }
   const person = await prisma.person.create({
     data: {
       id,
+      memberCode: await nextMemberCode(prisma),
       fullName: parsed.data.fullName,
       preferredName: parsed.data.preferredName,
       phone: parsed.data.phone,

@@ -87,5 +87,5 @@ export function formatMemberCode(n: number): string {
 }
 
 /** Unit codes look like KAC-MUS-IJWI: church, kind or ministry, then the unit. */
-export const UNIT_CODE_PATTERN = /^[A-Z]{2,5}(-[A-Z0-9]{2,8}){1,3}$/;
+export const UNIT_CODE_PATTERN = /^[A-Z]{2,5}(-[A-Z0-9]{2,8}){0,3}$/;
 export const MEMBER_CODE_PATTERN = /^M-\d{5,}$/;

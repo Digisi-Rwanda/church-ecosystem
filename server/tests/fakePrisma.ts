@@ -38,6 +38,14 @@ function matches(row: Row, where?: Row): boolean {
   return true;
 }
 
+/** Apply Prisma-style { increment: n } on numeric fields, plain values otherwise. */
+function applyData(row: Row, data: Row) {
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== null && typeof v === 'object' && !(v instanceof Date) && 'increment' in v) row[k] = (row[k] ?? 0) + v.increment;
+    else row[k] = v;
+  }
+}
+
 function model(store: Row[]) {
   const api: Record<string, any> = {
     findMany: async (a: Row = {}) => {
@@ -63,7 +71,7 @@ function model(store: Row[]) {
     update: async (a: Row) => {
       const r = store.find((x) => matches(x, a.where));
       if (!r) throw new Error('Record not found');
-      Object.assign(r, a.data);
+      applyData(r, a.data);
       return { ...r };
     },
     updateMany: async (a: Row) => {
@@ -73,7 +81,7 @@ function model(store: Row[]) {
     },
     upsert: async (a: Row) => {
       const r = store.find((x) => matches(x, a.where));
-      if (r) { Object.assign(r, a.update); return { ...r }; }
+      if (r) { applyData(r, a.update); return { ...r }; }
       return api.create({ data: { ...a.where, ...a.create } });
     },
     delete: async (a: Row) => {

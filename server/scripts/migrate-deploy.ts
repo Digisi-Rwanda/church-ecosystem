@@ -11,7 +11,7 @@
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
-import { BASELINE_MIGRATION, hasMigrations, needsBaseline } from '../src/lib/migrations.js';
+import { BASELINE_MIGRATION, hasBaseline, needsBaseline } from '../src/lib/migrations.js';
 
 const SCHEMA = 'prisma/schema.postgres.prisma';
 const MIGRATIONS = join('prisma', 'migrations');
@@ -34,8 +34,8 @@ const entries = existsSync(MIGRATIONS)
     }))
   : [];
 
-if (!hasMigrations(entries)) {
-  console.warn('[migrate] No migrations found — applying the schema with db push instead. Generate the baseline: npm run db:baseline');
+if (!hasBaseline(entries)) {
+  console.warn('[migrate] Baseline migration not found — applying the schema with db push instead. Generate the baseline: npm run db:baseline');
   process.exit(prisma(['db', 'push']).status);
 }
 
@@ -45,5 +45,10 @@ if (result.status !== 0 && needsBaseline(result.output)) {
   const resolved = prisma(['migrate', 'resolve', '--applied', BASELINE_MIGRATION]);
   if (resolved.status !== 0) process.exit(resolved.status);
   result = prisma(['migrate', 'deploy']);
+}
+if (result.status !== 0) {
+  // A failed migration must never leave the server down: fall back to the old way (add-only changes).
+  console.warn('[migrate] migrate deploy failed — falling back to db push so the server can start.');
+  result = prisma(['db', 'push']);
 }
 process.exit(result.status);

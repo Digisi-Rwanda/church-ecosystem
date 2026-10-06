@@ -10,10 +10,11 @@
  */
 export type PersonTier = 'FULL' | 'BASIC' | 'DIRECTORY' | 'SELF' | 'NONE';
 
-export const DIRECTORY_FIELDS = ['id', 'fullName', 'preferredName', 'status'] as const;
+export const DIRECTORY_FIELDS = ['id', 'memberCode', 'fullName', 'preferredName', 'status'] as const;
 
 export const BASIC_FIELDS = [
   'id',
+  'memberCode',
   'fullName',
   'preferredName',
   'phone',

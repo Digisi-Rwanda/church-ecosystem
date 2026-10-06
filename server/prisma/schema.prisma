@@ -12,6 +12,8 @@ datasource db {
 
 model Person {
   id              String   @id
+  /// Church-wide member code M-00123: issued once from a counter, never reused, never changed.
+  memberCode      String?  @unique
   fullName        String
   preferredName   String?
   phone           String?
@@ -68,6 +70,8 @@ model ChurchSystem {
 
 model OrgUnit {
   id             String  @id
+  /// Unit code like KAC-MUS-IJWI: set once, never changes when the unit moves.
+  code           String? @unique
   name           String
   type           String // MINISTRY | TEAM | ORGANISATION | OFFICE | COMMITTEE
   parentId       String?
@@ -484,4 +488,10 @@ model ScheduleDocumentRevision {
   savedByPersonId    String?
 
   @@index([key, version])
+}
+
+/// Named counters (member codes). A counter only goes up, so a code is never handed out twice.
+model Counter {
+  key   String @id
+  value Int    @default(0)
 }

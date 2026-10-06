@@ -13,6 +13,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { isValidUnitCode, suggestUnitCode } from '../lib/codes.js';
 import { authorizePerson } from '../policy/index.js';
 import { hasPeopleModule } from '../policy/personAccess.js';
 import { requireAuth, pathParam, type AuthedRequest } from '../middleware/http.js';
@@ -87,6 +88,7 @@ participationRouter.get('/records', requireAuth, async (req: AuthedRequest, res)
       description: nn(u.description),
       systemId: nn(u.systemId),
       leaderPersonId: nn(u.leaderPersonId),
+      code: nn(u.code),
     })),
     memberships: seeMembership.map((m) => ({
       id: m.id,
@@ -127,6 +129,14 @@ participationRouter.get('/records', requireAuth, async (req: AuthedRequest, res)
 
 /* ───────────── helpers ───────────── */
 
+/** An active appointment as Church Leader held by someone else (null when the office is vacant). */
+async function otherActiveChurchLeader(exceptPositionId?: string): Promise<{ id: string } | null> {
+  const rows = await prisma.position.findMany({ where: { systemRole: 'CHURCH_LEADER', status: 'ACTIVE' } });
+  const now = Date.now();
+  const hit = rows.find((r: { id: string; endDate?: Date | null }) => r.id !== exceptPositionId && (!r.endDate || r.endDate.getTime() > now));
+  return hit ? { id: hit.id } : null;
+}
+
 async function audit(actorId: string, systemId: string | null | undefined, action: string, detail: string) {
   await prisma.auditEvent.create({
     data: { actorId, systemId: systemId ?? MAIN, action, resource: 'PARTICIPATION', detail },
@@ -146,6 +156,8 @@ const orgSchema = z.object({
   description: z.string().max(2000).nullable().optional(),
   systemId: z.string().nullable().optional(),
   leaderPersonId: z.string().nullable().optional(),
+  /** Set once (or left out and suggested from the name); never changes afterwards. */
+  code: z.string().optional(),
 });
 
 participationRouter.post('/org-units', requireAuth, async (req: AuthedRequest, res) => {
@@ -155,8 +167,19 @@ participationRouter.post('/org-units', requireAuth, async (req: AuthedRequest, r
   if (!(await can(req.auth!.personId, d.systemId, 'ORG_UNIT', 'MANAGE'))) return forbid(res, 'You may not create org units here');
   const id = d.id ?? `ou-${crypto.randomUUID().slice(0, 8)}`;
   if (await prisma.orgUnit.findUnique({ where: { id } })) return res.status(409).json({ error: 'Already exists' });
+  const existingUnits = await prisma.orgUnit.findMany({});
+  const taken = new Set<string>(existingUnits.map((u: { code?: string | null }) => u.code).filter(Boolean) as string[]);
+  let code: string;
+  if (d.code) {
+    code = d.code.trim().toUpperCase();
+    if (!isValidUnitCode(code)) return res.status(400).json({ error: 'A unit code looks like KAC-MUS-IJWI', code: 'BAD_UNIT_CODE' });
+    if (taken.has(code)) return res.status(409).json({ error: 'This unit code is already used', code: 'DUPLICATE_UNIT_CODE' });
+  } else {
+    const parent = d.parentId ? existingUnits.find((u: { id: string }) => u.id === d.parentId) : undefined;
+    code = suggestUnitCode(d.name, (parent as { code?: string | null } | undefined)?.code ?? (d.parentId ? undefined : 'KAC'), taken);
+  }
   const unit = await prisma.orgUnit.create({
-    data: { id, name: d.name, type: d.type, parentId: d.parentId ?? null, description: d.description ?? null, systemId: d.systemId ?? null, leaderPersonId: d.leaderPersonId ?? null },
+    data: { id, code, name: d.name, type: d.type, parentId: d.parentId ?? null, description: d.description ?? null, systemId: d.systemId ?? null, leaderPersonId: d.leaderPersonId ?? null },
   });
   await audit(req.auth!.personId, d.systemId, 'ORG_UNIT_CREATE', `${unit.id} ${unit.name}`);
   res.status(201).json({ orgUnit: unit });
@@ -168,6 +191,15 @@ participationRouter.patch('/org-units/:id', requireAuth, async (req: AuthedReque
   if (!parsed.success) return bad(res, parsed);
   const unit = await prisma.orgUnit.findUnique({ where: { id } });
   if (!unit) return res.status(404).json({ error: 'Not found' });
+  if (parsed.data.code !== undefined) {
+    const next = parsed.data.code.trim().toUpperCase();
+    if (unit.code && next !== unit.code) return res.status(400).json({ error: 'A unit code never changes', code: 'CODE_IS_FIXED' });
+    if (!unit.code) {
+      if (!isValidUnitCode(next)) return res.status(400).json({ error: 'A unit code looks like KAC-MUS-IJWI', code: 'BAD_UNIT_CODE' });
+      if (await prisma.orgUnit.findFirst({ where: { code: next } })) return res.status(409).json({ error: 'This unit code is already used', code: 'DUPLICATE_UNIT_CODE' });
+    }
+    parsed.data.code = next;
+  }
   const me = req.auth!.personId;
   if (!(await can(me, unit.systemId, 'ORG_UNIT', 'MANAGE'))) return forbid(res, 'You may not change this org unit');
   // Moving a unit under another system needs power over the destination too.
@@ -275,6 +307,10 @@ participationRouter.post('/positions', requireAuth, async (req: AuthedRequest, r
   if (!(await prisma.person.findUnique({ where: { id: d.personId } }))) return res.status(404).json({ error: 'Person not found' });
   const id = d.id ?? `pos-${crypto.randomUUID().slice(0, 8)}`;
   if (await prisma.position.findUnique({ where: { id } })) return res.status(409).json({ error: 'Already exists' });
+  if (d.systemRole === 'CHURCH_LEADER' && (d.status ?? 'ACTIVE') === 'ACTIVE') {
+    const clash = await otherActiveChurchLeader();
+    if (clash) return res.status(409).json({ error: 'There is already an active Church Leader. End that appointment first.', code: 'ONE_CHURCH_LEADER', positionId: clash.id });
+  }
   const p = await prisma.position.create({
     data: {
       id, personId: d.personId, title: d.title,
@@ -310,6 +346,11 @@ participationRouter.patch('/positions/:id', requireAuth, async (req: AuthedReque
     ((p.systemRole || p.grantsAllSystems || p.systemAdmin) && (d.status !== undefined || GOVERNANCE_FIELDS.some((k) => (d as Record<string, unknown>)[k] !== undefined)));
   if (touchesGovernance && !(await can(me, MAIN, 'POSITION', 'MANAGE'))) {
     return forbid(res, 'Only the church leadership can change church-wide authority');
+  }
+  const becomesLeader = (d.systemRole ?? p.systemRole) === 'CHURCH_LEADER' && (d.status ?? p.status) === 'ACTIVE';
+  if (becomesLeader && (d.systemRole !== undefined || d.status !== undefined)) {
+    const clash = await otherActiveChurchLeader(id);
+    if (clash) return res.status(409).json({ error: 'There is already an active Church Leader. End that appointment first.', code: 'ONE_CHURCH_LEADER', positionId: clash.id });
   }
   const data: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(d)) {

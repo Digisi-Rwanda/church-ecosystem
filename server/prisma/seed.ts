@@ -2,6 +2,7 @@ import 'dotenv/config';
 import { readFileSync } from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
+import { backfillCodes } from '../src/lib/codes.js';
 import { MINISTRY_KIT_ORGS, SPECIAL_MINISTRY_ORGS, CHOIR_ORGS, CHOIR_PARENT_ORG } from '../src/lib/ministryOrgs.js';
 
 const prisma = new PrismaClient();
@@ -549,6 +550,9 @@ async function main() {
       console.warn('  demo church roster skipped:', err instanceof Error ? err.message : err);
     }
   }
+
+  const backfilled = await backfillCodes(prisma as never);
+  console.log(`  codes: ${backfilled.people} member codes and ${backfilled.units} unit codes issued`);
 
   console.log('Seed OK (bootstrap — no demo mission data)');
   if (!isProd) {
