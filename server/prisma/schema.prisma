@@ -648,3 +648,29 @@ model Decision {
 
   @@index([systemId, createdAt])
 }
+
+model Letter {
+  id              String    @id @default(cuid())
+  reference       String
+  orgUnitId       String
+  systemId        String
+  typeCode        String
+  subject         String
+  body            String
+  recipientName   String
+  recipientNote   String?
+  /// DRAFT | DELIVERED | WITHDRAWN
+  status          String    @default("DRAFT")
+  createdById     String
+  createdAt       DateTime  @default(now())
+  printedAt       DateTime?
+  printedById     String?
+  deliveredAt     DateTime?
+  deliveredById   String?
+  deliveryMethod  String?
+  deliveredOn     DateTime?
+  deliveryNote    String?
+  withdrawnReason String?
+
+  @@index([systemId, createdAt])
+}

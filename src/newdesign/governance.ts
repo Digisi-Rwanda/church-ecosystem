@@ -18,6 +18,9 @@ const ERROR_KEYS: Record<string, string> = {
   UNKNOWN_ATTENDEE: 'door.gov.err.unknownAttendee',
   UNIT_HAS_NO_SYSTEM: 'door.gov.err.noSystem',
   BAD_VALUE: 'door.settings.err.badValue',
+  NOT_PRINTED: 'door.letters.err.notPrinted',
+  ALREADY_PRINTED: 'door.letters.err.alreadyPrinted',
+  BAD_METHOD: 'door.letters.err.badMethod',
 };
 export const govErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
 

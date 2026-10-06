@@ -1,10 +1,10 @@
 /**
- * The new-design switch. Off by default and off on staging, so the old app keeps
- * working while the new front door is built beside it. Turn it on with
- * VITE_NEW_DESIGN=true on the site you want to try it on.
+ * The new design is the app people see. It stays switchable for one reason: setting
+ * VITE_NEW_DESIGN=false on a site brings the old screens back, in case something must be
+ * compared. With nothing set, the new design is on.
  */
 export function isNewDesign(): boolean {
-  return import.meta.env.VITE_NEW_DESIGN === 'true';
+  return import.meta.env.VITE_NEW_DESIGN !== 'false';
 }
 
 /** True for the screens of the new front door (sign-in, Portal and the system frame). */

@@ -13,3 +13,16 @@ describe('new front door paths', () => {
     }
   });
 });
+
+describe('the new design switch', () => {
+  it('is on unless a site explicitly sets it to false', async () => {
+    const { vi } = await import('vitest');
+    vi.resetModules();
+    vi.stubEnv('VITE_NEW_DESIGN', '');
+    expect((await import('./newDesign')).isNewDesign()).toBe(true);
+    vi.resetModules();
+    vi.stubEnv('VITE_NEW_DESIGN', 'false');
+    expect((await import('./newDesign')).isNewDesign()).toBe(false);
+    vi.unstubAllEnvs();
+  });
+});

@@ -13,7 +13,7 @@ export type PortalSystem = {
 };
 
 /** A system's own blocks after the six shared ones. */
-export type OwnBlock = 'governance' | 'settings';
+export type OwnBlock = 'central' | 'governance' | 'settings';
 
 export type Capabilities = {
   personId: string;
@@ -585,4 +585,133 @@ export async function rejectDecision(id: string, reason: string): Promise<void> 
 
 export async function withdrawDecision(id: string, reason: string): Promise<void> {
   await apiFetch(`/api/governance/decisions/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: { reason } });
+}
+
+
+/* ───────────── Letters desk (slice 2.3) ───────────── */
+
+export type LetterStatus = 'DRAFT' | 'DELIVERED' | 'WITHDRAWN';
+export type DeliveryMethod = 'HAND' | 'POST' | 'EMAIL' | 'OTHER';
+
+export type LetterItem = {
+  id: string;
+  reference: string;
+  orgUnitId: string;
+  unitName: string;
+  systemId: string;
+  typeCode: string;
+  typeName: string;
+  subject: string;
+  recipientName: string;
+  status: LetterStatus;
+  createdAt: string | null;
+  authorName: string;
+  printed: boolean;
+  deliveredOn: string | null;
+  canEdit: boolean;
+  canSend: boolean;
+  canWithdraw: boolean;
+};
+
+export type LetterDetail = LetterItem & {
+  body: string;
+  recipientNote: string;
+  printedAt: string | null;
+  printedByName: string | null;
+  deliveredAt: string | null;
+  deliveredByName: string | null;
+  deliveryMethod: DeliveryMethod | null;
+  deliveryNote: string;
+  withdrawnReason: string | null;
+};
+
+export type LetterOptions = {
+  units: Array<{ id: string; name: string; code: string | null; kind: string | null; systemId: string }>;
+  letterTypes: Array<{ code: string; name: string }>;
+  deliveryMethods: DeliveryMethod[];
+  limits: { subjectMax: number; bodyMax: number };
+};
+
+export type LetterPrint = {
+  reference: string;
+  church: { name: string; shortName: string; address: string; phone: string; email?: string };
+  unitName: string;
+  date: string;
+  typeName: string;
+  recipientName: string;
+  recipientNote: string;
+  subject: string;
+  body: string;
+};
+
+export type LetterDraft = { orgUnitId: string; typeCode: string; subject: string; body: string; recipientName: string; recipientNote?: string };
+
+export async function fetchLetterOptions(): Promise<LetterOptions> {
+  return apiFetch('/api/letters/options');
+}
+
+export async function fetchLetters(opts: { systemId?: string; unitId?: string; status?: LetterStatus; q?: string } = {}): Promise<LetterItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ letters: LetterItem[] }>(`/api/letters${qs.size ? `?${qs}` : ''}`);
+  return res.letters;
+}
+
+export async function fetchLetter(id: string): Promise<LetterDetail> {
+  const res = await apiFetch<{ letter: LetterDetail }>(`/api/letters/${encodeURIComponent(id)}`);
+  return res.letter;
+}
+
+export async function draftLetter(input: LetterDraft): Promise<string> {
+  const res = await apiFetch<{ letter: { id: string } }>('/api/letters', { method: 'POST', body: input });
+  return res.letter.id;
+}
+
+export async function editLetter(id: string, input: Pick<LetterDraft, 'subject' | 'body' | 'recipientName' | 'recipientNote'>): Promise<void> {
+  await apiFetch(`/api/letters/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+
+export async function printLetter(id: string): Promise<LetterPrint> {
+  const res = await apiFetch<{ print: LetterPrint }>(`/api/letters/${encodeURIComponent(id)}/print`, { method: 'POST', body: {} });
+  return res.print;
+}
+
+export async function deliverLetter(id: string, input: { method: DeliveryMethod; deliveredOn: string; note?: string }): Promise<void> {
+  await apiFetch(`/api/letters/${encodeURIComponent(id)}/deliver`, { method: 'POST', body: input });
+}
+
+export async function withdrawLetter(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/letters/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: { reason } });
+}
+
+/* ───────────── Central Administration home (slice 2.4) ───────────── */
+
+export type UrgentKind = 'DECISION_TO_APPROVE' | 'MEETING_OVERDUE' | 'LETTER_TO_DELIVER' | 'LETTER_TO_PRINT' | 'VACANCY' | 'TERM_ENDING';
+
+export type UrgentItem = {
+  key: string;
+  kind: UrgentKind;
+  systemId: string;
+  systemName: string;
+  unitName: string;
+  subject: string;
+  id: string | null;
+  at: string | null;
+};
+
+export type OversightRow = {
+  systemId: string;
+  name: string;
+  units: number;
+  plannedMeetings: number;
+  overdueMeetings: number;
+  decisionsWaiting: number;
+  lettersOpen: number;
+  vacancies: number;
+};
+
+export type CentralOverview = { urgent: UrgentItem[]; urgentTotal: number; oversight: OversightRow[]; reports: unknown[] };
+
+export async function fetchCentralOverview(): Promise<CentralOverview> {
+  return apiFetch('/api/central/overview');
 }

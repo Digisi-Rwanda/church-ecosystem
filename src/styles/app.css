@@ -7106,3 +7106,26 @@ button.door-menu-link.active { background: var(--accent-soft); }
 .door-decision p { margin: 0; }
 .door-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
 @media (max-width: 560px) { .door-type-row { grid-template-columns: 1fr; } }
+
+/* Letters desk and Central home (slices 2.3 and 2.4) */
+.door-print-sheet { background: #fff; color: #000; padding: 1.5rem; border: 1px solid var(--border, #ccc); border-radius: 0.5rem; display: grid; gap: 0.75rem; min-width: 0; overflow-wrap: anywhere; }
+.door-print-sheet header { text-align: center; }
+.door-print-sheet h2, .door-print-sheet h3, .door-print-sheet p { margin: 0; }
+.door-print-body { white-space: pre-wrap; line-height: 1.5; }
+.door-print-ref { font-size: 0.85rem; }
+.door-print-sign { margin-top: 2.5rem; width: min(18rem, 100%); }
+.door-print-line { border-bottom: 1px solid #000; height: 2.5rem; }
+.door-urgent { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.door-urgent li { min-width: 0; overflow-wrap: anywhere; }
+.door-oversight { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: 0.75rem; }
+.door-oversight-card { border: 1px solid var(--border, #ccc); border-radius: 0.5rem; padding: 0.75rem; min-width: 0; overflow-wrap: anywhere; }
+.door-oversight-card.attention { border-color: var(--warn, #b45309); }
+.door-oversight-card dl { display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.75rem; margin: 0.5rem 0 0; }
+.door-oversight-card dt { color: var(--muted, #666); }
+.door-oversight-card dd { margin: 0; text-align: right; font-weight: 600; }
+@media print {
+  body * { visibility: hidden; }
+  .door-print-sheet, .door-print-sheet * { visibility: visible; }
+  .door-print-sheet { position: absolute; left: 0; top: 0; width: 100%; border: 0; padding: 0; }
+  .door-no-print { display: none !important; }
+}

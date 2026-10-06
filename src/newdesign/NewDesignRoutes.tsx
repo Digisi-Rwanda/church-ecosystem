@@ -3,7 +3,10 @@ import { AccessPage } from './AccessPage';
 import { AddPersonPage } from './AddPersonPage';
 import { AnnouncementsPage } from './AnnouncementsPage';
 import { AppointmentsPage } from './AppointmentsPage';
+import { CentralHomePage } from './CentralHomePage';
 import { DecisionsPage } from './DecisionsPage';
+import { LetterPage } from './LetterPage';
+import { LettersPage } from './LettersPage';
 import { GovernanceLayout } from './GovernanceLayout';
 import { MeetingPage } from './MeetingPage';
 import { MeetingsPage } from './MeetingsPage';
@@ -54,7 +57,10 @@ export function newDesignRoutes() {
             <Route index element={<MeetingsPage />} />
             <Route path="meetings/:meetingId" element={<MeetingPage />} />
             <Route path="decisions" element={<DecisionsPage />} />
+            <Route path="letters" element={<LettersPage />} />
+            <Route path="letters/:letterId" element={<LetterPage />} />
           </Route>
+          <Route path="central" element={<CentralHomePage />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>
