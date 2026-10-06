@@ -13,6 +13,8 @@ import { CommandPalette } from '../CommandPalette';
 import { Icon, type IconName } from '../ui/Icon';
 import { ThemeToggle } from '../ui/ThemeToggle';
 import { useAttention } from '../../hooks/useAttention';
+import { useI18n } from '../../i18n/I18nContext';
+import type { MessageKey } from '../../i18n/translate';
 import { peekExitToMainChurch, consumeExitToMainChurch } from '../../navigation/systemScope';
 import {
   authService,
@@ -20,12 +22,12 @@ import {
 } from '../../services';
 import { canViewBoard } from '../../services/boardService';
 
-function weekOfLabel(d = new Date()) {
+function weekOfLabel(locale: string, d = new Date()) {
   const start = new Date(d);
   // Church week often begins Sunday
   start.setDate(d.getDate() - d.getDay());
   start.setHours(0, 0, 0, 0);
-  return start.toLocaleDateString(undefined, {
+  return start.toLocaleDateString(locale, {
     month: 'long',
     day: 'numeric',
     year: 'numeric',
@@ -33,10 +35,12 @@ function weekOfLabel(d = new Date()) {
 }
 
 const NAV_GROUPS: Array<{
+  /** Stable id used by the access logic below (never shown). */
   label: string;
+  labelKey: MessageKey;
   items: Array<{
     to: string;
-    label: string;
+    labelKey: MessageKey;
     icon: IconName;
     end?: boolean;
     secondary?: boolean;
@@ -44,20 +48,21 @@ const NAV_GROUPS: Array<{
 }> = [
   {
     label: 'Home',
+    labelKey: 'nav.group.home',
     items: [
-      { to: '/', label: 'Home', icon: 'home', end: true },
-      { to: '/inbox', label: 'Inbox', icon: 'inbox' },
-      { to: '/board', label: 'Board', icon: 'board', secondary: true },
-      { to: '/pastoral', label: 'Pastoral desk', icon: 'pastoral', secondary: true },
+      { to: '/', labelKey: 'nav.home', icon: 'home', end: true },
+      { to: '/inbox', labelKey: 'nav.inbox', icon: 'inbox' },
+      { to: '/board', labelKey: 'nav.board', icon: 'board', secondary: true },
+      { to: '/pastoral', labelKey: 'nav.pastoral', icon: 'pastoral', secondary: true },
       {
         to: '/correspondence',
-        label: 'Correspondence',
+        labelKey: 'nav.correspondence',
         icon: 'folder',
         secondary: true,
       },
       {
         to: '/system-admin',
-        label: 'System admin',
+        labelKey: 'nav.systemAdmin',
         icon: 'settings',
         secondary: true,
       },
@@ -65,17 +70,18 @@ const NAV_GROUPS: Array<{
   },
   {
     label: 'People & org',
+    labelKey: 'nav.group.people',
     items: [
-      { to: '/people', label: 'People', icon: 'users' },
+      { to: '/people', labelKey: 'nav.people', icon: 'users' },
       {
         to: '/organization',
-        label: 'Organisation',
+        labelKey: 'nav.organization',
         icon: 'building',
         secondary: true,
       },
       {
         to: '/participation',
-        label: 'Participation',
+        labelKey: 'nav.participation',
         icon: 'hand',
         secondary: true,
       },
@@ -83,16 +89,17 @@ const NAV_GROUPS: Array<{
   },
   {
     label: 'Work',
+    labelKey: 'nav.group.work',
     items: [
-      { to: '/mission', label: 'Mission', icon: 'pulse' },
-      { to: '/programs', label: 'Programs', icon: 'program', secondary: true },
-      { to: '/events', label: 'Events', icon: 'event', secondary: true },
-      { to: '/tasks', label: 'Tasks', icon: 'task', secondary: true },
-      { to: '/projects', label: 'Projects', icon: 'folder', secondary: true },
-      { to: '/calendar', label: 'Calendar', icon: 'calendar', secondary: true },
+      { to: '/mission', labelKey: 'nav.mission', icon: 'pulse' },
+      { to: '/programs', labelKey: 'nav.programs', icon: 'program', secondary: true },
+      { to: '/events', labelKey: 'nav.events', icon: 'event', secondary: true },
+      { to: '/tasks', labelKey: 'nav.tasks', icon: 'task', secondary: true },
+      { to: '/projects', labelKey: 'nav.projects', icon: 'folder', secondary: true },
+      { to: '/calendar', labelKey: 'nav.calendar', icon: 'calendar', secondary: true },
       {
         to: '/reports/leadership',
-        label: 'Reports',
+        labelKey: 'nav.reports',
         icon: 'chart',
         secondary: true,
       },
@@ -100,29 +107,30 @@ const NAV_GROUPS: Array<{
   },
   {
     label: 'Treasury',
+    labelKey: 'nav.group.treasury',
     items: [
-      { to: '/finance', label: 'Overview', icon: 'wallet', end: true },
+      { to: '/finance', labelKey: 'nav.overview', icon: 'wallet', end: true },
       {
         to: '/finance/collections',
-        label: 'Collections',
+        labelKey: 'nav.collections',
         icon: 'hand',
         secondary: true,
       },
       {
         to: '/finance/budgets',
-        label: 'Budgets',
+        labelKey: 'nav.budgets',
         icon: 'chart',
         secondary: true,
       },
       {
         to: '/finance/balance-sheet',
-        label: 'Balance sheet',
+        labelKey: 'nav.balanceSheet',
         icon: 'layers',
         secondary: true,
       },
       {
         to: '/finance/reports',
-        label: 'Reports',
+        labelKey: 'nav.reports',
         icon: 'chart',
         secondary: true,
       },
@@ -130,9 +138,10 @@ const NAV_GROUPS: Array<{
   },
   {
     label: 'Admin',
+    labelKey: 'nav.group.admin',
     items: [
-      { to: '/access', label: 'Access', icon: 'lock' },
-      { to: '/systems', label: 'Systems', icon: 'systems', secondary: true },
+      { to: '/access', labelKey: 'nav.access', icon: 'lock' },
+      { to: '/systems', labelKey: 'nav.systems', icon: 'systems', secondary: true },
     ],
   },
 ];
@@ -158,6 +167,7 @@ export function AppShell({
     roles,
   } = useAuth();
   const location = useLocation();
+  const { t, locale } = useI18n();
   const { unreadCount } = useAttention();
   const [navOpen, setNavOpen] = useState(false);
 
@@ -281,7 +291,7 @@ export function AppShell({
           ? {
               ...item,
               to: profilePath,
-              label: 'Profile',
+              labelKey: 'nav.profile' as MessageKey,
               icon: 'user' as IconName,
             }
           : item,
@@ -290,22 +300,22 @@ export function AppShell({
     return { ...group, items };
   }).filter((group) => group.items.length > 0);
 
-  const weekLabel = useMemo(() => weekOfLabel(), []);
+  const weekLabel = useMemo(() => weekOfLabel(locale), [locale]);
 
   return (
     <div className={`app-shell${navOpen ? ' nav-open' : ''}`}>
       <a className="skip-link" href="#main-content">
-        Skip to content
+        {t('shell.skip')}
       </a>
       <CommandPalette />
       <button
         type="button"
         className="nav-backdrop"
-        aria-label="Close menu"
+        aria-label={t('shell.menuClose')}
         tabIndex={navOpen ? 0 : -1}
         onClick={() => setNavOpen(false)}
       />
-      <aside className="sidebar" aria-label="Primary" id="app-sidebar">
+      <aside className="sidebar" aria-label={t('shell.primaryNav')} id="app-sidebar">
         <div className="brand">
           <img
             className="brand-logo"
@@ -316,21 +326,21 @@ export function AppShell({
           />
           <div className="brand-text">
             ADEPR Kacyiru
-            <small>{currentSystem?.shortName ?? 'Main Church'}</small>
+            <small>{currentSystem?.shortName ?? t('shell.mainChurch')}</small>
           </div>
           <button
             type="button"
             className="nav-drawer-close"
-            aria-label="Close menu"
+            aria-label={t('shell.menuClose')}
             onClick={() => setNavOpen(false)}
           >
             <Icon name="close" size={18} />
           </button>
         </div>
-        <nav className="nav" aria-label="Main">
+        <nav className="nav" aria-label={t('shell.mainNav')}>
           {navGroups.map((group) => (
             <div key={group.label} className="nav-group">
-              <div className="nav-group-label">{group.label}</div>
+              <div className="nav-group-label">{t(group.labelKey)}</div>
               {group.items.map((item) => (
                 <NavLink
                   key={item.to}
@@ -348,10 +358,10 @@ export function AppShell({
                 >
                   <span className="nav-link-main">
                     <Icon name={item.icon} size={15} className="nav-icon" />
-                    <span className="nav-label">{item.label}</span>
+                    <span className="nav-label">{t(item.labelKey)}</span>
                   </span>
                   {item.to === '/inbox' && unreadCount > 0 ? (
-                    <span className="nav-badge" aria-label={`${unreadCount} unread`}>
+                    <span className="nav-badge" aria-label={t('shell.unread', { count: unreadCount })}>
                       {unreadCount}
                     </span>
                   ) : null}
@@ -363,14 +373,14 @@ export function AppShell({
         <div className="sidebar-foot">
           <div className="sidebar-foot-name">{personName}</div>
           <div className="sidebar-foot-role">
-            {roleLabels.join(' · ') || 'Member'}
+            {roleLabels.join(' · ') || t('shell.memberFallback')}
           </div>
           <button
             type="button"
             className="btn sm btn-signout"
             onClick={logout}
           >
-            Sign out
+            {t('shell.signOut')}
           </button>
         </div>
       </aside>
@@ -380,7 +390,7 @@ export function AppShell({
             <button
               type="button"
               className="nav-toggle"
-              aria-label="Open menu"
+              aria-label={t('shell.menuOpen')}
               aria-expanded={navOpen}
               aria-controls="app-sidebar"
               onClick={() => setNavOpen(true)}
@@ -388,7 +398,7 @@ export function AppShell({
               <Icon name="menu" size={20} />
             </button>
             <div className="topbar-titles">
-              <p className="topbar-week">Week of {weekLabel}</p>
+              <p className="topbar-week">{t('shell.weekOf', { date: weekLabel })}</p>
               <h1>{title}</h1>
               <p className="topbar-subtitle">{subtitle}</p>
             </div>
@@ -399,18 +409,18 @@ export function AppShell({
               type="button"
               className="topbar-search"
               onClick={() => window.dispatchEvent(new Event('adepr:cmdk'))}
-              title="Search (Ctrl/⌘+K)"
-              aria-label="Open search"
+              title={t('shell.searchTitle')}
+              aria-label={t('shell.searchOpen')}
             >
               <Icon name="search" size={15} />
-              <span className="topbar-search-label">Search</span>
+              <span className="topbar-search-label">{t('shell.search')}</span>
               <kbd className="topbar-kbd">⌘K</kbd>
             </button>
-            <NavLink to="/inbox" className="topbar-inbox" aria-label="Inbox">
+            <NavLink to="/inbox" className="topbar-inbox" aria-label={t('shell.inbox')}>
               <Icon name="inbox" size={15} />
-              <span className="topbar-inbox-label">Inbox</span>
+              <span className="topbar-inbox-label">{t('shell.inbox')}</span>
               {unreadCount > 0 ? (
-                <span className="nav-badge" aria-label={`${unreadCount} unread`}>
+                <span className="nav-badge" aria-label={t('shell.unread', { count: unreadCount })}>
                   {unreadCount}
                 </span>
               ) : null}
@@ -421,7 +431,7 @@ export function AppShell({
         <main className="content" id="main-content" tabIndex={-1}>
           {/* A crashing page must not take the menu with it; reset when you navigate. */}
           <ErrorBoundary key={location.pathname} label={location.pathname}>
-            <Suspense fallback={<div className="route-loading" role="status">Loading…</div>}>
+            <Suspense fallback={<div className="route-loading" role="status">{t('shell.loading')}</div>}>
               <Outlet />
             </Suspense>
           </ErrorBoundary>

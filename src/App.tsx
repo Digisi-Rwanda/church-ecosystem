@@ -7,6 +7,7 @@ import { AppShell } from './components/layout/AppShell';
 import { RequireAdminTools } from './components/RequireAdminTools';
 import { ToastProvider } from './components/ui/Toast';
 import { ThemeProvider } from './theme/theme';
+import { useT } from './i18n/I18nContext';
 import { SystemScopeGuard } from './navigation/SystemScopeGuard';
 import { LoginPage } from './pages/LoginPage';
 import { useActiveChoir } from './pages/ministry/useActiveChoir';
@@ -376,12 +377,13 @@ function RequireAuth() {
 
 function ShellWithTitle() {
   const location = useLocation();
-  let title = 'Home';
-  let subtitle = 'This week at ADEPR Kacyiru — what needs you, and what’s coming.';
+  const t = useT();
+  let title = t('page.home.title');
+  let subtitle = t('page.home.subtitle');
 
   if (location.pathname.startsWith('/inbox')) {
-    title = 'Inbox';
-    subtitle = 'Approvals, handoffs, and work that needs you.';
+    title = t('page.inbox.title');
+    subtitle = t('page.inbox.subtitle');
   } else if (location.pathname.startsWith('/board/meetings')) {
     title = 'Board meeting';
     subtitle =

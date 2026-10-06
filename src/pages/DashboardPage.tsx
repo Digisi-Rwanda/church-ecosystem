@@ -6,6 +6,7 @@ import { ListSkeleton } from '../components/ui/Skeleton';
 import { SystemLauncher } from '../components/SystemLauncher';
 import { useAuth } from '../auth/AuthContext';
 import { useAttention } from '../hooks/useAttention';
+import { useT } from '../i18n/I18nContext';
 import { statusLabel } from '../domain/statusCopy';
 import type { SystemRole } from '../domain/types';
 import {
@@ -88,6 +89,7 @@ function CardTitle({
 }
 
 export function DashboardPage() {
+  const t = useT();
   const {
     personName,
     account,
@@ -234,38 +236,38 @@ export function DashboardPage() {
       <header className="dash-home-welcome">
         <div>
           <p className="dash-home-greeting">
-            Good day, <strong>{firstName}</strong>
+            {t('home.goodDay')} <strong>{firstName}</strong>
             <span className="muted">
               {' '}
               · {roleLabels[0] ?? 'Member'}
-              {unreadCount > 0 ? ` · ${unreadCount} waiting in Inbox` : ''}
+              {unreadCount > 0 ? ` · ${t('home.waitingInbox', { count: unreadCount })}` : ''}
             </span>
           </p>
         </div>
         <div className="row">
           <Link to="/inbox" className="btn secondary">
-            Inbox{unreadCount > 0 ? ` · ${unreadCount}` : ''}
+            {t('shell.inbox')}{unreadCount > 0 ? ` · ${unreadCount}` : ''}
           </Link>
           {primaryCta}
         </div>
       </header>
 
       <div className="dash-home-grid">
-        {/* 1 · Needs you */}
+        {/* 1 · Urgent */}
         <section className="dash-card dash-home-span">
           <div className="dash-card-head">
             <CardTitle icon="inbox" tone="coral">
-              Needs you
+              {t('home.urgent')}
             </CardTitle>
             <Link to="/inbox" className="muted">
-              Inbox →
+              {t('home.inboxLink')}
             </Link>
           </div>
           {attentionLoading ? (
             <ListSkeleton rows={3} />
           ) : needsYou.length === 0 ? (
             <p className="muted" style={{ margin: 0 }}>
-              Nothing waiting. When approvals or handoffs arrive, they show here.
+              {t('home.urgentEmpty')}
             </p>
           ) : (
             <ul className="dash-deadline-list">
@@ -282,10 +284,10 @@ export function DashboardPage() {
                     ) : null}
                   </div>
                   {item.unread ? (
-                    <StatusPill tone="warn">New</StatusPill>
+                    <StatusPill tone="warn">{t('home.statusNew')}</StatusPill>
                   ) : (
                     <span className="muted" style={{ fontSize: '0.75rem' }}>
-                      Open
+                      {t('home.statusOpen')}
                     </span>
                   )}
                 </li>

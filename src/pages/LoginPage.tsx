@@ -6,6 +6,7 @@ import { isChoirOrgUnitId, choirName } from '../domain/choirCatalog';
 import type { SystemId } from '../domain/types';
 import { systemsService, authService } from '../services';
 import { Spinner } from '../components/ui/Spinner';
+import { useT } from '../i18n/I18nContext';
 import { TextField } from '../components/ui/Field';
 
 const DEMO_HINTS = [
@@ -75,6 +76,7 @@ function pickScripture() {
 }
 
 export function LoginPage() {
+  const t = useT();
   const { account, login, setActiveChoir } = useAuth();
   const [params] = useSearchParams();
   const navigate = useNavigate();
@@ -139,10 +141,7 @@ export function LoginPage() {
     try {
       const ok = await login(typedUser, typedPass, targetSystemId);
       if (!ok) {
-        setError(
-          getLoginNote() ||
-            'Invalid credentials or you are not entitled to this system.',
-        );
+        setError(getLoginNote() || t('login.error'));
         return;
       }
       if (
@@ -164,7 +163,7 @@ export function LoginPage() {
 
   return (
     <div className="login-page login-split">
-      <aside className="login-hero-pane" aria-label="Welcome">
+      <aside className="login-hero-pane" aria-label={t('login.welcome')}>
         <img
           className="login-hero-media"
           src="/brand/church-building.png?v=2"
@@ -188,17 +187,17 @@ export function LoginPage() {
               <h1>{systemTitle}</h1>
               <p className="muted" style={{ margin: 0 }}>
                 {targetSystem?.kind === 'MAIN'
-                  ? 'Sign in to continue to your account'
+                  ? t('login.subtitleMain')
                   : choirOrgUnitId && isChoirOrgUnitId(choirOrgUnitId)
-                    ? `Direct login to this choir. Same account as Main Church.`
-                    : `Direct login to ${targetSystem?.name}. Same account as Main Church.`}
+                    ? t('login.subtitleChoir')
+                    : t('login.subtitleSystem', { system: targetSystem?.name ?? '' })}
               </p>
             </div>
           </div>
 
           <form className="stack" onSubmit={onSubmit}>
             <TextField
-              label="Username"
+              label={t('login.username')}
               name="username"
               id="username"
               autoComplete="username"
@@ -208,7 +207,7 @@ export function LoginPage() {
               disabled={busy}
             />
             <TextField
-              label="Password"
+              label={t('login.password')}
               name="password"
               id="password"
               type="password"
@@ -226,11 +225,11 @@ export function LoginPage() {
             <button type="submit" className="btn" disabled={busy}>
               {busy ? (
                 <>
-                  <Spinner label="Signing in" />
-                  Signing in…
+                  <Spinner label={t('login.signingInLabel')} />
+                  {t('login.signingIn')}
                 </>
               ) : (
-                'Sign in'
+                t('login.signIn')
               )}
             </button>
           </form>

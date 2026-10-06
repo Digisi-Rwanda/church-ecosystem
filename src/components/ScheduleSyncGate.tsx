@@ -6,6 +6,7 @@ import {
   type SyncStatus,
 } from '../data/scheduleServerSync';
 import { appEnv } from '../lib/appEnv';
+import { useT } from '../i18n/I18nContext';
 import { useToast } from './ui/Toast';
 
 /** True while the person is in the middle of something a re-render would wipe. */
@@ -27,6 +28,7 @@ function userIsBusy(): boolean {
 
 /** Top ribbon on the rehearsal site so nobody mistakes it for the real one. */
 function StagingRibbon() {
+  const t = useT();
   return (
     <div
       role="note"
@@ -45,7 +47,7 @@ function StagingRibbon() {
         pointerEvents: 'none',
       }}
     >
-      TEST SITE — practice data only. Nothing here is real, and it may be reset.
+      {t('demo.ribbon')}
     </div>
   );
 }
