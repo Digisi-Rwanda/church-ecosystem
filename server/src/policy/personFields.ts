@@ -21,6 +21,7 @@ export const BASIC_FIELDS = [
   'email',
   'status',
   'photoUrl',
+  'archivedAt',
   'createdAt',
   'updatedAt',
 ] as const;

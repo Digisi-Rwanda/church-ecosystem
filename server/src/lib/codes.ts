@@ -109,3 +109,40 @@ export async function backfillCodes(db: CodeDb): Promise<{ people: number; units
   }
   return { people: people.length, units: done };
 }
+
+/** People who may already be this person: same name, and the same birth date or phone (or neither given). */
+export async function possibleDuplicates(
+  db: Pick<CodeDb, 'person'>,
+  wanted: { fullName: string; dateOfBirth?: string | null; phone?: string | null },
+): Promise<Array<{ id: string; fullName: string; memberCode?: string | null }>> {
+  const nameKey = normaliseName(wanted.fullName);
+  if (!nameKey) return [];
+  const phoneKey = normalisePhone(wanted.phone);
+  const dob = (wanted.dateOfBirth ?? '').trim();
+  const rows = await db.person.findMany({});
+  return rows
+    .filter((p) => normaliseName(p.fullName as string) === nameKey)
+    .filter((p) => {
+      const sameDob = !!dob && p.dateOfBirth === dob;
+      const samePhone = !!phoneKey && normalisePhone(p.phone as string) === phoneKey;
+      return sameDob || samePhone || (!dob && !phoneKey);
+    })
+    .map((p) => ({ id: p.id as string, fullName: p.fullName as string, memberCode: (p.memberCode as string | null) ?? null }));
+}
+
+/** Case, accents, spacing and word order do not matter: "Mukamana  Aline" = "aline mukamana". */
+export function normaliseName(raw: string | null | undefined): string {
+  return (raw ?? '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter(Boolean)
+    .sort()
+    .join(' ');
+}
+
+export function normalisePhone(raw: string | null | undefined): string {
+  const digits = (raw ?? '').replace(/\D/g, '');
+  return digits.length > 9 ? digits.slice(-9) : digits;
+}

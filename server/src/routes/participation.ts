@@ -14,6 +14,8 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { isValidUnitCode, suggestUnitCode } from '../lib/codes.js';
+import { legacyColumnsFor, officeOf, unitKindOf } from '../lib/offices.js';
+import { OFFICE_CODES, UNIT_KINDS } from '../shared/vocabulary.js';
 import { authorizePerson } from '../policy/index.js';
 import { hasPeopleModule } from '../policy/personAccess.js';
 import { requireAuth, pathParam, type AuthedRequest } from '../middleware/http.js';
@@ -89,6 +91,7 @@ participationRouter.get('/records', requireAuth, async (req: AuthedRequest, res)
       systemId: nn(u.systemId),
       leaderPersonId: nn(u.leaderPersonId),
       code: nn(u.code),
+      kind: unitKindOf(u),
     })),
     memberships: seeMembership.map((m) => ({
       id: m.id,
@@ -107,6 +110,7 @@ participationRouter.get('/records', requireAuth, async (req: AuthedRequest, res)
       title: p.title,
       orgUnitId: nn(p.orgUnitId),
       systemId: nn(p.systemId),
+      office: officeOf(p),
       ...(full
         ? {
             systemRole: nn(p.systemRole),
@@ -128,6 +132,15 @@ participationRouter.get('/records', requireAuth, async (req: AuthedRequest, res)
 });
 
 /* ───────────── helpers ───────────── */
+
+/** When an office code is given, also fill the older office columns it stands for, unless they were given. */
+function withOldColumns<T extends { office?: string | null }>(d: T): T {
+  if (!d.office) return d;
+  const legacy = legacyColumnsFor(d.office as (typeof OFFICE_CODES)[number]) as Record<string, unknown>;
+  const out: Record<string, unknown> = { ...d };
+  for (const [k, v] of Object.entries(legacy)) if (out[k] === undefined || out[k] === null) out[k] = v;
+  return out as T;
+}
 
 /** An active appointment as Church Leader held by someone else (null when the office is vacant). */
 async function otherActiveChurchLeader(exceptPositionId?: string): Promise<{ id: string } | null> {
@@ -158,6 +171,7 @@ const orgSchema = z.object({
   leaderPersonId: z.string().nullable().optional(),
   /** Set once (or left out and suggested from the name); never changes afterwards. */
   code: z.string().optional(),
+  kind: z.enum(UNIT_KINDS).optional(),
 });
 
 participationRouter.post('/org-units', requireAuth, async (req: AuthedRequest, res) => {
@@ -179,7 +193,7 @@ participationRouter.post('/org-units', requireAuth, async (req: AuthedRequest, r
     code = suggestUnitCode(d.name, (parent as { code?: string | null } | undefined)?.code ?? (d.parentId ? undefined : 'KAC'), taken);
   }
   const unit = await prisma.orgUnit.create({
-    data: { id, code, name: d.name, type: d.type, parentId: d.parentId ?? null, description: d.description ?? null, systemId: d.systemId ?? null, leaderPersonId: d.leaderPersonId ?? null },
+    data: { id, code, kind: d.kind ?? unitKindOf({ type: d.type, parentId: d.parentId }), name: d.name, type: d.type, parentId: d.parentId ?? null, description: d.description ?? null, systemId: d.systemId ?? null, leaderPersonId: d.leaderPersonId ?? null },
   });
   await audit(req.auth!.personId, d.systemId, 'ORG_UNIT_CREATE', `${unit.id} ${unit.name}`);
   res.status(201).json({ orgUnit: unit });
@@ -218,7 +232,8 @@ participationRouter.patch('/org-units/:id', requireAuth, async (req: AuthedReque
 const memberSchema = z.object({
   id: ID.optional(),
   personId: z.string().min(1),
-  type: z.string().min(1).max(40),
+  /** Optional: a membership is simply belonging. The older type column is kept for the old app. */
+  type: z.string().min(1).max(40).optional(),
   label: z.string().max(200).optional(),
   orgUnitId: z.string().nullable().optional(),
   systemId: z.string().nullable().optional(),
@@ -231,6 +246,7 @@ participationRouter.post('/memberships', requireAuth, async (req: AuthedRequest,
   const parsed = memberSchema.safeParse(req.body);
   if (!parsed.success) return bad(res, parsed);
   const d = parsed.data;
+  if (!d.systemId && !d.orgUnitId) return res.status(400).json({ error: 'A membership needs a system or a unit', code: 'NEEDS_PLACE' });
   const me = req.auth!.personId;
   if (!(await can(me, d.systemId, 'MEMBERSHIP', 'MANAGE'))) return forbid(res, 'You may not add members here');
   if (!(await prisma.person.findUnique({ where: { id: d.personId } }))) return res.status(404).json({ error: 'Person not found' });
@@ -238,13 +254,13 @@ participationRouter.post('/memberships', requireAuth, async (req: AuthedRequest,
   if (await prisma.membership.findUnique({ where: { id } })) return res.status(409).json({ error: 'Already exists' });
   const m = await prisma.membership.create({
     data: {
-      id, personId: d.personId, type: d.type, label: d.label ?? d.type,
+      id, personId: d.personId, type: d.type ?? 'MEMBER', label: d.label ?? d.type ?? 'Member',
       orgUnitId: d.orgUnitId ?? null, systemId: d.systemId ?? null,
       status: d.status ?? 'ACTIVE',
       startDate: d.startDate ? new Date(d.startDate) : new Date(),
     },
   });
-  await audit(me, d.systemId, 'MEMBERSHIP_CREATE', `${id} ${d.personId} ${d.type}`);
+  await audit(me, d.systemId, 'MEMBERSHIP_CREATE', `${id} ${d.personId} ${d.type ?? 'MEMBER'}`);
   res.status(201).json({ membership: m });
 });
 
@@ -284,6 +300,8 @@ const positionSchema = z.object({
   worshipOffice: z.string().nullable().optional(),
   protocolOffice: z.string().nullable().optional(),
   deaconOffice: z.string().nullable().optional(),
+  /** The one office record. The older office columns are filled in from it for the old app. */
+  office: z.enum(OFFICE_CODES).nullable().optional(),
   systemAdmin: z.boolean().optional(),
   grantsAllSystems: z.boolean().optional(),
   status: z.enum(['ACTIVE', 'ENDED', 'SUSPENDED']).optional(),
@@ -298,10 +316,10 @@ const sets = (data: Record<string, unknown>, k: string) => data[k] !== undefined
 participationRouter.post('/positions', requireAuth, async (req: AuthedRequest, res) => {
   const parsed = positionSchema.safeParse(req.body);
   if (!parsed.success) return bad(res, parsed);
-  const d = parsed.data;
+  const d = withOldColumns(parsed.data);
   const me = req.auth!.personId;
   if (!(await can(me, d.systemId, 'POSITION', 'MANAGE'))) return forbid(res, 'You may not appoint here');
-  if (GOVERNANCE_FIELDS.some((k) => sets(d, k)) && !(await can(me, MAIN, 'POSITION', 'MANAGE'))) {
+  if ((GOVERNANCE_FIELDS.some((k) => sets(d, k)) || d.office === 'ADMINISTRATOR') && !(await can(me, MAIN, 'POSITION', 'MANAGE'))) {
     return forbid(res, 'Only the church leadership can grant church-wide authority');
   }
   if (!(await prisma.person.findUnique({ where: { id: d.personId } }))) return res.status(404).json({ error: 'Person not found' });
@@ -313,7 +331,7 @@ participationRouter.post('/positions', requireAuth, async (req: AuthedRequest, r
   }
   const p = await prisma.position.create({
     data: {
-      id, personId: d.personId, title: d.title,
+      id, personId: d.personId, title: d.title, office: d.office ?? officeOf(d),
       orgUnitId: d.orgUnitId ?? null, systemId: d.systemId ?? null,
       systemRole: d.systemRole ?? null, ministryOffice: d.ministryOffice ?? null,
       choirOffice: d.choirOffice ?? null, choirAdvisorRole: d.choirAdvisorRole ?? null,
@@ -334,6 +352,7 @@ participationRouter.patch('/positions/:id', requireAuth, async (req: AuthedReque
   if (!parsed.success) return bad(res, parsed);
   const p = await prisma.position.findUnique({ where: { id } });
   if (!p) return res.status(404).json({ error: 'Not found' });
+  parsed.data = withOldColumns(parsed.data);
   const me = req.auth!.personId;
   if (!(await can(me, p.systemId, 'POSITION', 'MANAGE'))) return forbid(res, 'You may not change this position');
   const d = parsed.data;
@@ -343,6 +362,7 @@ participationRouter.patch('/positions/:id', requireAuth, async (req: AuthedReque
   // Changing or removing church-wide authority needs the same power as granting it.
   const touchesGovernance =
     GOVERNANCE_FIELDS.some((k) => sets(d as Record<string, unknown>, k)) ||
+    d.office === 'ADMINISTRATOR' ||
     ((p.systemRole || p.grantsAllSystems || p.systemAdmin) && (d.status !== undefined || GOVERNANCE_FIELDS.some((k) => (d as Record<string, unknown>)[k] !== undefined)));
   if (touchesGovernance && !(await can(me, MAIN, 'POSITION', 'MANAGE'))) {
     return forbid(res, 'Only the church leadership can change church-wide authority');

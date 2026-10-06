@@ -1,11 +1,17 @@
 import { Route } from 'react-router-dom';
+import { AddPersonPage } from './AddPersonPage';
 import { NewDesignLayout, RequireSignedIn } from './NewDesignGuards';
 import { NewSignInPage } from './NewSignInPage';
+import { OrgTreePage } from './OrgTreePage';
+import { PeopleDirectoryPage } from './PeopleDirectoryPage';
+import { PeopleLayout } from './PeopleLayout';
+import { PersonCardPage } from './PersonCardPage';
 import { PortalBlockPage } from './PortalBlockPage';
 import { PortalLayout } from './PortalLayout';
 import { PortalPage } from './PortalPage';
 import { SystemBlockPage } from './SystemBlockPage';
 import { SystemFrame } from './SystemFrame';
+import { UnitPage } from './UnitPage';
 
 /**
  * The new routes, to be placed inside <Routes>. Only added when the new-design
@@ -22,6 +28,13 @@ export function newDesignRoutes() {
         </Route>
         <Route path="/s/:systemId" element={<SystemFrame />}>
           <Route index element={<SystemBlockPage />} />
+          <Route path="people" element={<PeopleLayout />}>
+            <Route index element={<PeopleDirectoryPage />} />
+            <Route path="new" element={<AddPersonPage />} />
+            <Route path="units" element={<OrgTreePage />} />
+            <Route path="units/:unitId" element={<UnitPage />} />
+            <Route path=":personId" element={<PersonCardPage />} />
+          </Route>
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>
       </Route>

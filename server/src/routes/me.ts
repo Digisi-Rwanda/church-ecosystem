@@ -5,7 +5,8 @@ import { buildEffectiveAccess, grantsForSystem } from '../policy/evaluate.js';
 import { loadPolicyContext } from '../policy/loadContext.js';
 import type { Position } from '../policy/types.js';
 import { blocksForSystem } from '../capabilities/letters.js';
-import { SHARED_BLOCKS, type OfficeCode } from '../shared/vocabulary.js';
+import { officeOf } from '../lib/offices.js';
+import { SHARED_BLOCKS } from '../shared/vocabulary.js';
 
 export const meRouter = Router();
 export const portalRouter = Router();
@@ -14,26 +15,6 @@ const isLive = (p: { status: string; startDate: string; endDate?: string }, now:
   p.status === 'ACTIVE' &&
   new Date(p.startDate) <= now &&
   (!p.endDate || new Date(p.endDate) >= now);
-
-const SYSTEM_ROLE_TO_OFFICE: Record<string, OfficeCode> = {
-  CHURCH_LEADER: 'CHURCH_LEADER',
-  PASTOR: 'CHURCH_LEADER',
-  CATECHIST: 'CATECHIST',
-  CHURCH_SECRETARY: 'CHURCH_SECRETARY',
-};
-const MINISTRY_OFFICE_TO_OFFICE: Record<string, OfficeCode> = {
-  PRESIDENT: 'PRESIDENT',
-  VP: 'VICE_PRESIDENT',
-  SECRETARY: 'SECRETARY',
-  TREASURER: 'TREASURER',
-  COORDINATOR: 'COORDINATOR',
-};
-
-function officeCodeOf(p: Position): OfficeCode | null {
-  if (p.systemRole && SYSTEM_ROLE_TO_OFFICE[p.systemRole]) return SYSTEM_ROLE_TO_OFFICE[p.systemRole];
-  const raw = p.ministryOffice ?? p.choirOffice ?? p.worshipOffice ?? p.protocolOffice ?? p.deaconOffice;
-  return raw ? (MINISTRY_OFFICE_TO_OFFICE[raw] ?? null) : null;
-}
 
 /** Everything the server knows about this person's standing, computed once per request. */
 async function standing(personId: string) {
@@ -92,7 +73,7 @@ meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
         id: p.id,
         systemId: p.systemId ?? null,
         title: p.title,
-        code: officeCodeOf(p),
+        code: officeOf(p),
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
     systems: s.enterable.map((sys) => ({

@@ -3,7 +3,7 @@ import { z } from 'zod';
 import { filterPerson, SELF_EDITABLE } from '../policy/personFields.js';
 import { personTier } from '../policy/personAccess.js';
 import { prisma } from '../lib/prisma.js';
-import { nextMemberCode, personWithNationalId } from '../lib/codes.js';
+import { nextMemberCode, personWithNationalId, possibleDuplicates } from '../lib/codes.js';
 import { authorizePerson, grantsForPerson } from '../policy/index.js';
 import {
   pathParam,
@@ -27,19 +27,31 @@ peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+  // Archived people stay out of the directory unless asked for (?archived=true) by someone who may see them.
+  const wantArchived = req.query.archived === 'true';
+  const status = typeof req.query.status === 'string' ? req.query.status : '';
+  // ?ids=a,b,c fetches exactly those people (used by unit pages to name their members).
+  const ids = typeof req.query.ids === 'string' ? req.query.ids.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 200) : [];
+  const text = q
+    ? {
+        OR: [
+          { fullName: { contains: q } },
+          { preferredName: { contains: q } },
+          { email: { contains: q } },
+          { phone: { contains: q } },
+          { memberCode: { contains: q } },
+        ],
+      }
+    : {};
   const people = await prisma.person.findMany({
-    where: q
-      ? {
-          OR: [
-            { fullName: { contains: q } },
-            { preferredName: { contains: q } },
-            { email: { contains: q } },
-            { phone: { contains: q } },
-          ],
-        }
-      : undefined,
+    where: {
+      ...text,
+      ...(ids.length ? { id: { in: ids } } : {}),
+      ...(status && ['ACTIVE', 'INACTIVE', 'VISITOR'].includes(status) ? { status } : {}),
+      ...(wantArchived ? { archivedAt: { not: null } } : { archivedAt: null }),
+    },
     orderBy: { fullName: 'asc' },
-    take: 100,
+    take: ids.length ? 200 : 100,
   });
   // The list is a directory: identity details never travel here; contact details only for the people module.
   const viewer = req.auth!.personId;
@@ -82,6 +94,22 @@ peopleRouter.get('/records', requireAuth, async (req: AuthedRequest, res) => {
   });
 });
 
+/** Check a name before adding someone: who already looks like this person? */
+peopleRouter.get('/check-duplicate', requireAuth, async (req: AuthedRequest, res) => {
+  const gate = await authorizePerson({ personId: req.auth!.personId, systemId: 'sys-main', resource: 'PERSON', action: 'MANAGE' });
+  if (!gate.allowed) {
+    res.status(403).json({ error: gate.reason });
+    return;
+  }
+  const str = (v: unknown) => (typeof v === 'string' ? v : undefined);
+  const maybe = await possibleDuplicates(prisma, {
+    fullName: str(req.query.fullName) ?? '',
+    dateOfBirth: str(req.query.dateOfBirth),
+    phone: str(req.query.phone),
+  });
+  res.json({ candidates: maybe.map((p) => ({ id: p.id, fullName: p.fullName, memberCode: p.memberCode ?? null })) });
+});
+
 peopleRouter.get('/:id', requireAuth, async (req: AuthedRequest, res) => {
   const id = pathParam(req, 'id');
   if (!id) {
@@ -106,6 +134,61 @@ peopleRouter.get('/:id', requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   res.json({ person: visible, tier });
+});
+
+/**
+ * Archive a person: they leave the directory and cannot sign in, but their code and history stay.
+ * Refused while they hold an active office (end it first, so nobody loses authority by surprise).
+ * Their memberships are ended.
+ */
+peopleRouter.post('/:id/archive', requireAuth, async (req: AuthedRequest, res) => {
+  const id = pathParam(req, 'id');
+  const gate = await authorizePerson({ personId: req.auth!.personId, systemId: 'sys-main', resource: 'PERSON', action: 'MANAGE' });
+  if (!gate.allowed) {
+    res.status(403).json({ error: gate.reason });
+    return;
+  }
+  const person = id ? await prisma.person.findUnique({ where: { id } }) : null;
+  if (!id || !person) {
+    res.status(404).json({ error: 'Person not found' });
+    return;
+  }
+  if (id === req.auth!.personId) {
+    res.status(409).json({ error: 'You cannot archive yourself', code: 'CANNOT_ARCHIVE_SELF' });
+    return;
+  }
+  if (person.archivedAt) {
+    res.json({ person });
+    return;
+  }
+  const offices = await prisma.position.findMany({ where: { personId: id, status: 'ACTIVE' } });
+  if (offices.length) {
+    res.status(409).json({ error: 'This person holds an active office. End it before archiving.', code: 'HOLDS_OFFICE', offices: offices.map((o) => o.id) });
+    return;
+  }
+  const reason = typeof req.body?.reason === 'string' ? req.body.reason.slice(0, 500) : null;
+  const now = new Date();
+  await prisma.membership.updateMany({ where: { personId: id, status: 'ACTIVE' }, data: { status: 'ENDED', endDate: now } });
+  const archived = await prisma.person.update({ where: { id }, data: { archivedAt: now, archivedReason: reason } });
+  await prisma.auditEvent.create({ data: { actorId: req.auth!.personId, systemId: 'sys-main', action: 'ARCHIVE', resource: 'PERSON', detail: id } });
+  res.json({ person: archived });
+});
+
+peopleRouter.post('/:id/unarchive', requireAuth, async (req: AuthedRequest, res) => {
+  const id = pathParam(req, 'id');
+  const gate = await authorizePerson({ personId: req.auth!.personId, systemId: 'sys-main', resource: 'PERSON', action: 'MANAGE' });
+  if (!gate.allowed) {
+    res.status(403).json({ error: gate.reason });
+    return;
+  }
+  const person = id ? await prisma.person.findUnique({ where: { id } }) : null;
+  if (!id || !person) {
+    res.status(404).json({ error: 'Person not found' });
+    return;
+  }
+  const restored = await prisma.person.update({ where: { id }, data: { archivedAt: null, archivedReason: null } });
+  await prisma.auditEvent.create({ data: { actorId: req.auth!.personId, systemId: 'sys-main', action: 'UNARCHIVE', resource: 'PERSON', detail: id } });
+  res.json({ person: restored });
 });
 
 peopleRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
@@ -208,6 +291,8 @@ const createSchema = z.object({
   joinedChurchOn: z.string().optional(),
   pastoralNotes: z.string().optional(),
   photoUrl: z.string().max(40_000).optional(),
+  /** Set to true after the warning about a possible duplicate has been read. */
+  confirmDuplicate: z.boolean().optional(),
 });
 
 peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
@@ -235,6 +320,17 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   if (twin) {
     res.status(409).json({ error: 'This national ID is already registered', code: 'DUPLICATE_NATIONAL_ID', personId: twin.id });
     return;
+  }
+  if (!parsed.data.confirmDuplicate) {
+    const maybe = await possibleDuplicates(prisma, parsed.data);
+    if (maybe.length) {
+      res.status(409).json({
+        error: 'Someone with this name may already be registered. Check before adding.',
+        code: 'POSSIBLE_DUPLICATE',
+        candidates: maybe.map((p) => ({ id: p.id, fullName: p.fullName, memberCode: p.memberCode ?? null })),
+      });
+      return;
+    }
   }
   const person = await prisma.person.create({
     data: {

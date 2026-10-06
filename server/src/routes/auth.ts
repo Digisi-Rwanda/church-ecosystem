@@ -59,7 +59,8 @@ authRouter.post('/login', async (req, res) => {
   if (
     !account ||
     !(await verifyPassword(password, account.passwordHash)) ||
-    account.person.status === 'INACTIVE'
+    account.person.status === 'INACTIVE' ||
+    account.person.archivedAt
   ) {
     noteFail(throttleKey);
     res.status(401).json({ error: 'Invalid username or password' });

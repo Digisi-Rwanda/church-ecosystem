@@ -14,6 +14,9 @@ model Person {
   id              String   @id
   /// Church-wide member code M-00123: issued once from a counter, never reused, never changed.
   memberCode      String?  @unique
+  /// Archived people keep their code and history but leave the directory and cannot sign in.
+  archivedAt      DateTime?
+  archivedReason  String?
   fullName        String
   preferredName   String?
   phone           String?
@@ -72,6 +75,8 @@ model OrgUnit {
   id             String  @id
   /// Unit code like KAC-MUS-IJWI: set once, never changes when the unit moves.
   code           String? @unique
+  /// CENTRAL | MINISTRY | ORGANISATION | TEAM (the older `type` column stays for the old app).
+  kind           String?
   name           String
   type           String // MINISTRY | TEAM | ORGANISATION | OFFICE | COMMITTEE
   parentId       String?
@@ -111,6 +116,8 @@ model Position {
   systemId       String?
   orgUnitId      String?
   title          String
+  /// The one office record (see OFFICE_CODES); the older office columns stay for the old app.
+  office         String?
   systemRole     String? // CHURCH_LEADER | CHURCH_TREASURER | …
   ministryOffice String? // PRESIDENT | VP | TREASURER | SECRETARY
   choirOffice    String?

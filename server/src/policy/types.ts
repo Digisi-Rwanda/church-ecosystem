@@ -34,6 +34,8 @@ export type Position = {
   systemRole?: SystemRole;
   ministryOffice?: string;
   choirOffice?: string;
+  /** The one office record (new); the older columns above stay until the engine moves to letters. */
+  office?: string;
   choirAdvisorRole?: string;
   systemAdmin?: boolean;
   worshipOffice?: string;

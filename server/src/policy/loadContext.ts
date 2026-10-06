@@ -56,6 +56,7 @@ export async function loadPolicyContext(): Promise<PolicyContext> {
         systemId: p.systemId ?? undefined,
         orgUnitId: p.orgUnitId ?? undefined,
         title: p.title,
+        office: p.office ?? undefined,
         systemRole: p.systemRole ?? undefined,
         ministryOffice: p.ministryOffice ?? undefined,
         choirOffice: p.choirOffice ?? undefined,

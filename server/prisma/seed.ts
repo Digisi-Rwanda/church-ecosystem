@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { backfillCodes } from '../src/lib/codes.js';
+import { backfillStructure } from '../src/lib/offices.js';
 import { MINISTRY_KIT_ORGS, SPECIAL_MINISTRY_ORGS, CHOIR_ORGS, CHOIR_PARENT_ORG } from '../src/lib/ministryOrgs.js';
 
 const prisma = new PrismaClient();
@@ -551,8 +552,15 @@ async function main() {
     }
   }
 
-  const backfilled = await backfillCodes(prisma as never);
-  console.log(`  codes: ${backfilled.people} member codes and ${backfilled.units} unit codes issued`);
+  try {
+    const backfilled = await backfillCodes(prisma as never);
+    console.log(`  codes: ${backfilled.people} member codes and ${backfilled.units} unit codes issued`);
+    const structure = await backfillStructure(prisma as never);
+    console.log(`  structure: ${structure.offices} office records and ${structure.kinds} unit kinds filled in`);
+  } catch (err) {
+    // Never stop the server from starting over a code that could not be issued.
+    console.warn('  codes skipped:', err instanceof Error ? err.message : err);
+  }
 
   console.log('Seed OK (bootstrap — no demo mission data)');
   if (!isProd) {
