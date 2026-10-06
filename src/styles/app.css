@@ -7082,3 +7082,11 @@ button.door-menu-link.active { background: var(--accent-soft); }
 }
 .door-page > *, .door-frame-body > * { min-width: 0; }
 .door-menu { max-width: 100%; }
+
+/* Announcements (slice 1.5) */
+.door-announce-body { white-space: pre-wrap; overflow-wrap: anywhere; }
+.door-announce-actions { display: flex; flex-direction: column; align-items: flex-end; gap: 0.25rem; flex: none; }
+.door-strip { display: grid; gap: 0.5rem; }
+.door-strip, .door-strip > * { min-width: 0; }
+.door-strip .door-list { overflow-wrap: anywhere; }
+@media (max-width: 560px) { .door-announce-actions { flex-direction: row; flex-wrap: wrap; align-items: flex-start; } }

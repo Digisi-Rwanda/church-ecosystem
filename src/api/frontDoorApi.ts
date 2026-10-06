@@ -377,3 +377,55 @@ export async function fetchPreferences(): Promise<Preferences> {
 export async function savePreferences(body: Partial<Preferences>): Promise<Preferences> {
   return apiFetch('/api/me/preferences', { method: 'PUT', body });
 }
+
+/* ── Announcements (slice 1.5) ── */
+
+export type AudienceKind = 'WHOLE_CHURCH' | 'SYSTEM' | 'OFFICE';
+
+export type Audience = { kind: AudienceKind; systemId?: string; office?: OfficeCode };
+
+export type AnnouncementItem = {
+  id: string;
+  title: string;
+  body: string;
+  audience: { kind: AudienceKind; systemId: string | null; systemName: string | null; office: OfficeCode | null };
+  authorId: string;
+  authorName: string;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  read: boolean;
+  mine: boolean;
+  canWithdraw: boolean;
+};
+
+export type AnnouncementOptions = {
+  wholeChurch: boolean;
+  offices: OfficeCode[];
+  systems: Array<{ id: string; name: string; shortName: string }>;
+  limits: { titleMax: number; bodyMax: number };
+};
+
+export async function fetchAnnouncements(): Promise<{ items: AnnouncementItem[]; unread: number }> {
+  return apiFetch('/api/announcements');
+}
+
+export async function fetchAnnouncementSummary(): Promise<{ unread: number; latest: AnnouncementItem[] }> {
+  return apiFetch('/api/announcements/summary');
+}
+
+export async function fetchAnnouncementOptions(): Promise<AnnouncementOptions> {
+  return apiFetch('/api/announcements/options');
+}
+
+export async function postAnnouncement(body: { title: string; body: string; audience: Audience; expiresAt?: string }): Promise<void> {
+  await apiFetch('/api/announcements', { method: 'POST', body });
+}
+
+export async function withdrawAnnouncement(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/announcements/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: { reason } });
+}
+
+export async function markAnnouncementsRead(body: { ids?: string[]; all?: boolean }): Promise<number> {
+  const res = await apiFetch<{ marked: number }>('/api/announcements/read', { method: 'POST', body });
+  return res.marked;
+}

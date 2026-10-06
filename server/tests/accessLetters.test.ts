@@ -220,61 +220,69 @@ const caps = async (as: string, sys: string) => {
 };
 
 describe('appointments', () => {
-  it('need sign-in, and only the Church Leader appoints', async () => {
+  it('need sign-in, and only an Administrator assigns offices', async () => {
     expect((await request(app).post('/api/access/appointments').send({})).status).toBe(401);
     const r = await appoint('p-choir-leader', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });
     expect(r.status).toBe(403);
     expect(r.body.code).toBe('NOT_ALLOWED');
   });
-  it('the Church Leader appoints, the person gets the matrix letters at once, and it is audited', async () => {
+  it('an Administrator assigns, the person gets the matrix letters at once, and it is audited', async () => {
     expect(await caps('p-new', 'sys-choir')).toBeUndefined();
-    const r = await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });
+    const r = await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });
     expect(r.status, JSON.stringify(r.body)).toBe(201);
     const row = fake.__db.position.find((p: any) => p.id === r.body.appointment.id);
     expect(row).toMatchObject({ office: 'SECRETARY', ministryOffice: 'SECRETARY', systemId: 'sys-choir', orgUnitId: 'ou-choir', status: 'ACTIVE' });
     const a = fake.__db.auditEvent.find((e: any) => e.action === 'APPOINTED');
-    expect(a).toMatchObject({ actorId: 'p-pastor' });
+    expect(a).toMatchObject({ actorId: 'p-admin1' });
     expect(JSON.parse(a.metaJson)).toMatchObject({ office: 'SECRETARY', personId: 'p-new' });
   });
   it('one live holder per office per unit, and no president who is also treasurer', async () => {
-    const r = await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'PRESIDENT' });
+    const r = await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'PRESIDENT' });
     expect(r.status).toBe(409);
     expect(r.body.code).toBe('OFFICE_TAKEN');
-    const sod = await appoint('p-pastor', { personId: 'p-choir-leader', orgUnitId: 'ou-choir', office: 'TREASURER' });
+    const sod = await appoint('p-admin1', { personId: 'p-choir-leader', orgUnitId: 'ou-choir', office: 'TREASURER' });
     expect(sod.body.code).toBe('SEPARATION_OF_DUTIES');
   });
   it('only an active person, and only an office that fits the unit', async () => {
-    expect((await appoint('p-pastor', { personId: 'p-visitor', orgUnitId: 'ou-youth', office: 'SECRETARY' })).body.code).toBe('PERSON_NOT_ACTIVE');
-    expect((await appoint('p-pastor', { personId: 'p-gone', orgUnitId: 'ou-youth', office: 'SECRETARY' })).body.code).toBe('PERSON_NOT_ACTIVE');
-    expect((await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'CATECHIST' })).body.code).toBe('OFFICE_NOT_IN_UNIT');
-    expect((await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'ADMINISTRATOR' })).body.code).toBe('OFFICE_NOT_IN_UNIT');
-    expect((await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-nope', office: 'SECRETARY' })).status).toBe(404);
-    expect((await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'SECRETARY', startDate: '2026-05-01', endDate: '2026-04-01' })).body.code).toBe('BAD_DATES');
+    expect((await appoint('p-admin1', { personId: 'p-visitor', orgUnitId: 'ou-youth', office: 'SECRETARY' })).body.code).toBe('PERSON_NOT_ACTIVE');
+    expect((await appoint('p-admin1', { personId: 'p-gone', orgUnitId: 'ou-youth', office: 'SECRETARY' })).body.code).toBe('PERSON_NOT_ACTIVE');
+    expect((await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'CATECHIST' })).body.code).toBe('OFFICE_NOT_IN_UNIT');
+    expect((await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'ADMINISTRATOR' })).body.code).toBe('OFFICE_NOT_IN_UNIT');
+    expect((await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-nope', office: 'SECRETARY' })).status).toBe(404);
+    expect((await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'SECRETARY', startDate: '2026-05-01', endDate: '2026-04-01' })).body.code).toBe('BAD_DATES');
   });
-  it('the Church Leader appoints Administrators in Media', async () => {
-    const r = await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-media', office: 'ADMINISTRATOR' });
+  it('an Administrator assigns Administrators in Media', async () => {
+    const r = await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-media', office: 'ADMINISTRATOR' });
     expect(r.status).toBe(201);
     expect(fake.__db.position.find((p: any) => p.id === r.body.appointment.id).systemAdmin).toBe(true);
   });
-  it('the Church Leader seat is filled and ended by an Administrator, never by the Leader', async () => {
-    const own = await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-church', office: 'CHURCH_LEADER' });
-    expect(own.status).toBe(403);
+  it('the Church Leader cannot assign or end anything, their own seat included', async () => {
+    const mine = await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });
+    expect(mine.status).toBe(403);
+    const end = await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-pastor')).send({ reason: 'stepping down' });
+    expect(end.body.code).toBe('NOT_ALLOWED');
+    const own = await request(app).post('/api/access/appointments/pos-pastor/end').set(bearer('p-pastor')).send({ reason: 'stepping down' });
+    expect(own.body.code).toBe('NOT_ALLOWED');
+  });
+  it('the Church Leader seat is handed over by an Administrator: end the old holder, assign the new one', async () => {
     const taken = await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-church', office: 'CHURCH_LEADER' });
     expect(taken.body.code).toBe('OFFICE_TAKEN');
-    const end = await request(app).post('/api/access/appointments/pos-pastor/end').set(bearer('p-pastor')).send({ reason: 'stepping down' });
-    expect(end.body.code).toBe('NOT_ALLOWED');
     const ended = await request(app).post('/api/access/appointments/pos-pastor/end').set(bearer('p-admin1')).send({ reason: 'term finished' });
     expect(ended.status, JSON.stringify(ended.body)).toBe(200);
     const filled = await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-church', office: 'CHURCH_LEADER' });
     expect(filled.status, JSON.stringify(filled.body)).toBe(201);
     expect(fake.__db.position.find((p: any) => p.id === filled.body.appointment.id)).toMatchObject({ systemRole: 'CHURCH_LEADER', grantsAllSystems: true });
   });
+  it('an Administrator cannot end their own appointment', async () => {
+    const r = await request(app).post('/api/access/appointments/pos-ad1/end').set(bearer('p-admin1')).send({ reason: 'stepping down' });
+    expect(r.body.code).toBe('CANNOT_END_OWN_OFFICE');
+  });
 });
 
 describe('ending an office', () => {
   it('removes access at once, keeps the record, and is audited with the reason', async () => {
     expect((await caps('p-choir-leader', 'sys-choir')).blocks.money).toContain('A');
-    const r = await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-pastor')).send({ reason: 'moved away' });
+    const r = await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-admin1')).send({ reason: 'moved away' });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(await caps('p-choir-leader', 'sys-choir')).toBeUndefined();
     const row = fake.__db.position.find((p: any) => p.id === 'pos-choir');
@@ -283,26 +291,26 @@ describe('ending an office', () => {
     const ev = fake.__db.auditEvent.find((e: any) => e.action === 'OFFICE_ENDED');
     expect(JSON.parse(ev.metaJson)).toMatchObject({ office: 'PRESIDENT', reason: 'moved away' });
   });
-  it('needs a reason, a Leader, and an office that is still live', async () => {
-    expect((await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-pastor')).send({})).status).toBe(400);
+  it('needs a reason, an Administrator, and an office that is still live', async () => {
+    expect((await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-admin1')).send({})).status).toBe(400);
     expect((await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-choir-leader')).send({ reason: 'no' + 'pe' })).status).toBe(403);
-    await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-pastor')).send({ reason: 'done here' });
-    expect((await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-pastor')).send({ reason: 'done here' })).body.code).toBe('ALREADY_ENDED');
-    expect((await request(app).post('/api/access/appointments/pos-zzz/end').set(bearer('p-pastor')).send({ reason: 'done here' })).status).toBe(404);
+    await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-admin1')).send({ reason: 'done here' });
+    expect((await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-admin1')).send({ reason: 'done here' })).body.code).toBe('ALREADY_ENDED');
+    expect((await request(app).post('/api/access/appointments/pos-zzz/end').set(bearer('p-admin1')).send({ reason: 'done here' })).status).toBe(404);
   });
   it('the church keeps at least two Administrators', async () => {
     expect(MIN_ADMINISTRATORS).toBe(2);
-    const r = await request(app).post('/api/access/appointments/pos-ad1/end').set(bearer('p-pastor')).send({ reason: 'left the church' });
+    const r = await request(app).post('/api/access/appointments/pos-ad1/end').set(bearer('p-admin2')).send({ reason: 'left the church' });
     expect(r.status).toBe(409);
     expect(r.body.code).toBe('NEEDS_TWO_ADMINISTRATORS');
-    await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-media', office: 'ADMINISTRATOR' });
-    const ok = await request(app).post('/api/access/appointments/pos-ad1/end').set(bearer('p-pastor')).send({ reason: 'left the church' });
+    await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-media', office: 'ADMINISTRATOR' });
+    const ok = await request(app).post('/api/access/appointments/pos-ad1/end').set(bearer('p-admin2')).send({ reason: 'left the church' });
     expect(ok.status).toBe(200);
   });
   it('a term can be set or moved, but only into the future', async () => {
-    const ok = await request(app).post('/api/access/appointments/pos-choir/term').set(bearer('p-pastor')).send({ endDate: '2027-12-31' });
+    const ok = await request(app).post('/api/access/appointments/pos-choir/term').set(bearer('p-admin1')).send({ endDate: '2027-12-31' });
     expect(ok.body.endDate).toBe('2027-12-31');
-    expect((await request(app).post('/api/access/appointments/pos-choir/term').set(bearer('p-pastor')).send({ endDate: '2020-01-01' })).body.code).toBe('BAD_DATES');
+    expect((await request(app).post('/api/access/appointments/pos-choir/term').set(bearer('p-admin1')).send({ endDate: '2020-01-01' })).body.code).toBe('BAD_DATES');
     expect((await request(app).post('/api/access/appointments/pos-choir/term').set(bearer('p-choir-leader')).send({ endDate: '2027-12-31' })).status).toBe(403);
   });
 });
@@ -347,17 +355,17 @@ describe('delegation', () => {
   });
   it('ending the lender’s office ends the delegation at once', async () => {
     await lend('p-choir-leader', { ...ok, endDate: soon() });
-    await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-pastor')).send({ reason: 'moved away' });
+    await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-admin1')).send({ reason: 'moved away' });
     const c = await caps('p-vp', 'sys-choir');
     expect(c.blocks.money).toEqual([]);
     expect(fake.__db.delegation[0].status).toBe('REVOKED');
   });
-  it('the lender or the Church Leader takes letters back; others cannot', async () => {
+  it('the lender or an Administrator takes letters back; others cannot', async () => {
     const r = await lend('p-choir-leader', { ...ok, endDate: soon() });
     const id = fake.__db.delegation[0].id;
     expect((await request(app).post(`/api/access/delegations/${id}/revoke`).set(bearer('p-youth-leader'))).status).toBe(403);
-    expect((await request(app).post(`/api/access/delegations/${id}/revoke`).set(bearer('p-pastor'))).status).toBe(200);
-    expect((await request(app).post(`/api/access/delegations/${id}/revoke`).set(bearer('p-pastor'))).body.code).toBe('ALREADY_REVOKED');
+    expect((await request(app).post(`/api/access/delegations/${id}/revoke`).set(bearer('p-admin1'))).status).toBe(200);
+    expect((await request(app).post(`/api/access/delegations/${id}/revoke`).set(bearer('p-admin1'))).body.code).toBe('ALREADY_REVOKED');
     expect(r.status).toBe(201);
   });
   it('lists given and received, and everything only for the Leader and Administrators', async () => {
@@ -385,13 +393,14 @@ describe('vacancies and appointments list', () => {
     expect((await request(app).get('/api/access/vacancies').set(bearer('p-member'))).status).toBe(403);
   });
   it('filling a seat removes the vacancy', async () => {
-    await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });
+    await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });
     const r = await request(app).get('/api/access/vacancies').set(bearer('p-pastor'));
     expect(r.body.vacancies.some((v: any) => v.unitId === 'ou-choir' && v.office === 'SECRETARY')).toBe(false);
   });
   it('lists live appointments with names, units and the powers of the reader', async () => {
-    const r = await request(app).get('/api/access/appointments?unitId=ou-choir').set(bearer('p-pastor'));
+    const r = await request(app).get('/api/access/appointments?unitId=ou-choir').set(bearer('p-admin1'));
     expect(r.body.canAppoint).toBe(true);
+    expect((await request(app).get('/api/access/appointments?unitId=ou-choir').set(bearer('p-pastor'))).body.canAppoint).toBe(false);
     expect(r.body.appointments).toEqual([expect.objectContaining({ id: 'pos-choir', office: 'PRESIDENT', unitName: 'Choir', live: true })]);
     const t = await request(app).get('/api/access/appointments').set(bearer('p-treasurer'));
     expect(t.status).toBe(403);
@@ -399,7 +408,7 @@ describe('vacancies and appointments list', () => {
     expect(pres.body.canAppoint).toBe(false);
   });
   it('shows ended appointments only when asked', async () => {
-    await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-pastor')).send({ reason: 'moved away' });
+    await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-admin1')).send({ reason: 'moved away' });
     const live = await request(app).get('/api/access/appointments?unitId=ou-choir').set(bearer('p-pastor'));
     expect(live.body.appointments).toHaveLength(0);
     const all = await request(app).get('/api/access/appointments?unitId=ou-choir&ended=true').set(bearer('p-pastor'));
@@ -423,9 +432,9 @@ describe('the explainer and the audit trail', () => {
     expect(r.body.systems.find((s: any) => s.id === 'sys-youth')).toBeUndefined();
     expect(r.body.powers).toMatchObject({ canAppoint: false, canReadAudit: false, canExplainOthers: false });
     const lead = await request(app).get('/api/access/me').set(bearer('p-pastor'));
-    expect(lead.body.powers).toMatchObject({ canAppoint: true, canAppointLeader: false, canReadAudit: true, canExplainOthers: true });
+    expect(lead.body.powers).toMatchObject({ canAppoint: false, canAppointLeader: false, canReadAudit: true, canExplainOthers: true });
     const adm = await request(app).get('/api/access/me').set(bearer('p-admin1'));
-    expect(adm.body.powers).toMatchObject({ canAppoint: false, canAppointLeader: true, canExplainOthers: true });
+    expect(adm.body.powers).toMatchObject({ canAppoint: true, canAppointLeader: true, canExplainOthers: true });
   });
   it('shows a delegate which letters are borrowed', async () => {
     await request(app).post('/api/access/delegations').set(bearer('p-choir-leader')).send({ positionId: 'pos-choir', toPersonId: 'p-vp', letters: { MONEY: ['A'] }, endDate: new Date(Date.now() + 86400000 * 10).toISOString().slice(0, 10) });
@@ -442,13 +451,13 @@ describe('the explainer and the audit trail', () => {
     expect((await request(app).get('/api/access/explain/p-member').set(bearer('p-member'))).status).toBe(200);
   });
   it('shows the audit trail, newest first, to the Leader and Administrators only', async () => {
-    await appoint('p-pastor', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });
+    await appoint('p-admin1', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });
     await new Promise((r) => setTimeout(r, 10));
-    await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-pastor')).send({ reason: 'moved away' });
+    await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-admin1')).send({ reason: 'moved away' });
     const r = await request(app).get('/api/access/audit').set(bearer('p-admin2'));
     expect(r.status).toBe(200);
     expect(r.body.events.map((e: any) => e.action)).toEqual(['OFFICE_ENDED', 'APPOINTED']);
-    expect(r.body.events[0]).toMatchObject({ actorName: 'p-pastor' });
+    expect(r.body.events[0]).toMatchObject({ actorName: 'p-admin1' });
     expect((await request(app).get('/api/access/audit').set(bearer('p-choir-leader'))).status).toBe(403);
   });
 });

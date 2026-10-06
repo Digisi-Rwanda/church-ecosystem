@@ -90,24 +90,24 @@ describe('seats waiting to be filled', () => {
   ];
   const pos = (id: string, personId: string, office: string, systemId: string, orgUnitId: string) => ({ id, personId, office, systemId, orgUnitId, status: 'ACTIVE', startDate: '2020-01-01', endDate: null });
   const positions = [pos('a', 'lead', 'CHURCH_LEADER', 'sys-main', 'ou-church'), pos('b', 'cat', 'CATECHIST', 'sys-main', 'ou-church'), pos('c', 'sec', 'CHURCH_SECRETARY', 'sys-main', 'ou-church'), pos('d', 'p', 'PRESIDENT', 'sys-choir', 'ou-choir')];
-  it('tells the Church Leader about empty seats and too few Administrators', () => {
-    const w = waitingFromAppointments([holding('CHURCH_LEADER', 'sys-main', 'CHURCH')], units as any, positions as any, NOW);
+  it('tells an Administrator about empty seats, the Church Leader seat and too few Administrators', () => {
+    const w = waitingFromAppointments([holding('ADMINISTRATOR', 'sys-media', 'CHURCH')], units as any, positions as any, NOW);
     expect(w.map((x) => x.key)).toEqual(['vac-admins', 'vac:ou-choir:SECRETARY', 'vac:ou-choir:TREASURER']);
     expect(w[1].title).toBe('Choir needs a Secretary');
-  });
-  it('tells an Administrator only about the Church Leader seat', () => {
-    expect(waitingFromAppointments([holding('ADMINISTRATOR', 'sys-media', 'CHURCH')], units as any, positions as any, NOW)).toEqual([]);
     const without = positions.filter((p) => p.office !== 'CHURCH_LEADER');
-    const w = waitingFromAppointments([holding('ADMINISTRATOR', 'sys-media', 'CHURCH')], units as any, without as any, NOW);
-    expect(w.map((x) => x.key)).toEqual(['vac:ou-church:CHURCH_LEADER']);
+    const w2 = waitingFromAppointments([holding('ADMINISTRATOR', 'sys-media', 'CHURCH')], units as any, without as any, NOW);
+    expect(w2.map((x) => x.key)).toContain('vac:ou-church:CHURCH_LEADER');
+  });
+  it('tells the Church Leader nothing: only Administrators assign offices', () => {
+    expect(waitingFromAppointments([holding('CHURCH_LEADER', 'sys-main', 'CHURCH')], units as any, positions as any, NOW)).toEqual([]);
   });
   it('tells nobody else', () => {
     expect(waitingFromAppointments([holding('PRESIDENT', 'sys-choir')], units as any, positions as any, NOW)).toEqual([]);
     expect(waitingFromAppointments([], units as any, positions as any, NOW)).toEqual([]);
   });
-  it('flags two holders of a sole office to the Leader', () => {
+  it('flags two holders of a sole office to an Administrator', () => {
     const dup = [...positions, pos('e', 'q', 'PRESIDENT', 'sys-choir', 'ou-choir')];
-    const w = waitingFromAppointments([holding('CHURCH_LEADER', 'sys-main', 'CHURCH')], units as any, dup as any, NOW);
+    const w = waitingFromAppointments([holding('ADMINISTRATOR', 'sys-media', 'CHURCH')], units as any, dup as any, NOW);
     expect(w.some((x) => x.key === 'vac-conflict:ou-choir:PRESIDENT')).toBe(true);
   });
 });
@@ -137,6 +137,8 @@ beforeEach(async () => {
     { id: 'ou-youth', name: 'Youth', code: 'KAC-YOU', kind: 'MINISTRY', type: 'MINISTRY', parentId: 'ou-church', systemId: 'sys-youth' },
   );
   db.person.push({ id: 'p-new', fullName: 'New Person', status: 'ACTIVE' });
+  db.person.push({ id: 'p-admin1', fullName: 'Admin One', status: 'ACTIVE' });
+  db.position.push({ id: 'pos-ad1', personId: 'p-admin1', systemId: 'sys-main', orgUnitId: 'ou-church', title: 'Administrator', office: 'ADMINISTRATOR', systemAdmin: true, status: 'ACTIVE', startDate: new Date('2024-01-01') });
   const { createApp } = await import('../src/app.js');
   app = createApp();
 });
@@ -219,18 +221,19 @@ describe('things waiting for me', () => {
     fake.__db.workTask[0].status = 'DONE';
     expect((await get('p-member', '/api/notifications?tab=waiting')).body.items).toEqual([]);
   });
-  it('the Church Leader is told about empty seats; an ordinary member is not', async () => {
-    const lead = await get('p-pastor', '/api/notifications?tab=waiting');
+  it('an Administrator is told about empty seats; the Church Leader and an ordinary member are not', async () => {
+    expect((await get('p-pastor', '/api/notifications?tab=waiting')).body.items.map((i: any) => i.title)).not.toContain('Choir needs a Secretary');
+    const lead = await get('p-admin1', '/api/notifications?tab=waiting');
     const titles = lead.body.items.map((i: any) => i.title);
     expect(titles).toContain('Choir needs a Secretary');
     expect(titles.some((t: string) => /Administrators/.test(t))).toBe(true);
     expect((await get('p-member', '/api/notifications?tab=waiting')).body.items).toEqual([]);
   });
   it('a filled seat stops waiting', async () => {
-    const before = (await get('p-pastor', '/api/notifications?tab=waiting')).body.items.map((i: any) => i.title);
+    const before = (await get('p-admin1', '/api/notifications?tab=waiting')).body.items.map((i: any) => i.title);
     expect(before).toContain('Youth needs a Secretary');
-    await post('p-pastor', '/api/access/appointments', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'SECRETARY' });
-    const after = (await get('p-pastor', '/api/notifications?tab=waiting')).body.items.map((i: any) => i.title);
+    await post('p-admin1', '/api/access/appointments', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'SECRETARY' });
+    const after = (await get('p-admin1', '/api/notifications?tab=waiting')).body.items.map((i: any) => i.title);
     expect(after).not.toContain('Youth needs a Secretary');
   });
 });
@@ -285,11 +288,11 @@ describe('preferences', () => {
 
 describe('notices the server writes itself', () => {
   it('appointing, ending and lending each tell the person, once, as important information', async () => {
-    const a = await post('p-pastor', '/api/access/appointments', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'SECRETARY' });
+    const a = await post('p-admin1', '/api/access/appointments', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'SECRETARY' });
     expect(a.status).toBe(201);
     let mine = (await get('p-new', '/api/notifications?tab=info')).body.items;
     expect(mine).toEqual([expect.objectContaining({ title: 'You are now Secretary of Youth', important: true, read: false })]);
-    await post('p-pastor', `/api/access/appointments/${a.body.appointment.id}/end`, { reason: 'moved away' });
+    await post('p-admin1', `/api/access/appointments/${a.body.appointment.id}/end`, { reason: 'moved away' });
     mine = (await get('p-new', '/api/notifications?tab=info')).body.items;
     expect(mine.map((i: any) => i.title)).toContain('You are no longer Secretary');
     const soon = new Date(Date.now() + 10 * 86400000).toISOString().slice(0, 10);
@@ -301,7 +304,7 @@ describe('notices the server writes itself', () => {
   });
   it('a muted system never hides these, because they are important', async () => {
     await request(app).put('/api/me/preferences').set(bearer('p-new')).send({ mutedSystems: ['sys-youth'] });
-    await post('p-pastor', '/api/access/appointments', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'SECRETARY' });
+    await post('p-admin1', '/api/access/appointments', { personId: 'p-new', orgUnitId: 'ou-youth', office: 'SECRETARY' });
     expect((await get('p-new', '/api/notifications?tab=info')).body.items).toHaveLength(1);
   });
 });

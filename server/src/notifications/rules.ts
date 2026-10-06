@@ -51,51 +51,47 @@ export function addressedTo(n: Pick<StoredRow, 'toPersonId' | 'toOffice' | 'toSy
   );
 }
 
-/** Seats and conflicts the Church Leader (or an Administrator, for the Leader's own seat) has to act on. */
+/** Seats, clashes and Administrator numbers that an Administrator has to act on. */
 export function waitingFromAppointments(
   holdings: Holding[],
   units: UnitRec[],
   positions: PositionRec[],
   now: Date,
 ): Array<Pick<Notice, 'key' | 'title' | 'body' | 'href' | 'rank'>> {
-  const isLeader = holdings.some((h) => h.via === 'OFFICE' && h.office === 'CHURCH_LEADER');
   const isAdmin = holdings.some((h) => h.via === 'OFFICE' && h.office === 'ADMINISTRATOR');
-  if (!isLeader && !isAdmin) return [];
+  // Offices are assigned by Administrators only; nobody else has seats to fill.
+  if (!isAdmin) return [];
   const href = `/s/${MAIN}/people/appointments`;
   const out: Array<Pick<Notice, 'key' | 'title' | 'body' | 'href' | 'rank'>> = [];
   const { vacancies, conflicts } = computeVacancies(units, positions, now);
   for (const v of vacancies) {
     if (v.reason !== 'EMPTY') continue;
-    // Only the Leader fills ordinary seats; only an Administrator fills the Leader's own.
-    if (v.office === 'CHURCH_LEADER' ? !isAdmin : !isLeader) continue;
     out.push({
       key: `vac:${v.unitId}:${v.office}`,
       title: `${v.unitName} needs a ${OFFICE_TITLE[v.office]}`,
-      body: 'This seat is empty. Appoint someone.',
+      body: 'This seat is empty. Assign someone.',
       href,
       rank: v.office === 'CHURCH_LEADER' ? 8 : 50,
     });
   }
-  if (isLeader) {
-    for (const c of conflicts) {
-      out.push({
-        key: `vac-conflict:${c.unitId}:${c.office}`,
-        title: `Two people hold ${OFFICE_TITLE[c.office]} in ${c.unitName}`,
-        body: 'Only one may. End one appointment.',
-        href,
-        rank: 45,
-      });
-    }
-    const admins = countLiveAdministrators(positions, now);
-    if (admins < MIN_ADMINISTRATORS) {
-      out.push({
-        key: 'vac-admins',
-        title: `The church has ${admins} Administrators and needs ${MIN_ADMINISTRATORS}`,
-        body: 'Appoint another Administrator in Media.',
-        href,
-        rank: 40,
-      });
-    }
+  for (const c of conflicts) {
+    out.push({
+      key: `vac-conflict:${c.unitId}:${c.office}`,
+      title: `Two people hold ${OFFICE_TITLE[c.office]} in ${c.unitName}`,
+      body: 'Only one may. End one appointment.',
+      href,
+      rank: 45,
+    });
+  }
+  const admins = countLiveAdministrators(positions, now);
+  if (admins < MIN_ADMINISTRATORS) {
+    out.push({
+      key: 'vac-admins',
+      title: `The church has ${admins} Administrators and needs ${MIN_ADMINISTRATORS}`,
+      body: 'Assign another Administrator in Media.',
+      href,
+      rank: 40,
+    });
   }
   return out.sort((a, b) => a.rank - b.rank || a.title.localeCompare(b.title)).slice(0, MAX_VACANCY_ITEMS);
 }

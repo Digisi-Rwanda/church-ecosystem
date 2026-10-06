@@ -6,7 +6,7 @@ import type { AppointmentRow, UnitRecord, Vacancy } from '../api/frontDoorApi';
 export function officesFor(kind: UnitKind, systemId: string | null | undefined, isLeader: boolean, isAdministrator: boolean): OfficeCode[] {
   const list: OfficeCode[] = [...OFFICES_BY_KIND[kind]];
   if (systemId === 'sys-media') list.push('ADMINISTRATOR');
-  // The Church Leader's seat is filled by an Administrator; every other seat by the Church Leader.
+  // Offices are voted in real life: only Administrators assign them, the Church Leader's seat included.
   return list.filter((o) => (o === 'CHURCH_LEADER' ? isAdministrator : isLeader));
 }
 

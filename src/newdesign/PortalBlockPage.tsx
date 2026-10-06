@@ -6,21 +6,13 @@ import { isPortalBlock, systemsWithBlock } from './menu';
 
 /**
  * A Portal bar item. A shared block lists the systems where the person holds it, each a
- * link into that system's block. Announcements has its own empty state until notifications.
+ * link into that system's block. Announcements and Notifications have their own routes.
  */
 export function PortalBlockPage() {
   const t = useT();
   const { block = '' } = useParams();
   const { portal, capabilities } = useFrontDoor();
 
-  if (block === 'announcements') {
-    return (
-      <section className="door-block" aria-labelledby="door-portal-block">
-        <h2 id="door-portal-block">{t('door.portal.announce.title')}</h2>
-        <EmptyState title={t('door.portal.announce.empty')} detail={t('door.portal.announce.detail')} />
-      </section>
-    );
-  }
   if (!isPortalBlock(block)) {
     return <EmptyState variant="no-results" title={t('door.portal.unknown')} />;
   }

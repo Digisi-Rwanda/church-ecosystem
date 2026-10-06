@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { useT } from '../i18n/I18nContext';
+import { AnnouncementsStrip } from './AnnouncementsStrip';
 import { useFrontDoor } from './FrontDoorContext';
 
 /** The Portal: one card per system this person may enter, as the server answers. */
@@ -15,6 +16,8 @@ export function PortalPage() {
         <h1>{t('door.portal.title')}</h1>
         <p className="muted">{t('door.portal.subtitle')}</p>
       </div>
+
+      {status === 'in' && <AnnouncementsStrip />}
 
       {status === 'loading' && (
         <div className="door-center" role="status">

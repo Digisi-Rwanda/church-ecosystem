@@ -1,6 +1,7 @@
 import { Route } from 'react-router-dom';
 import { AccessPage } from './AccessPage';
 import { AddPersonPage } from './AddPersonPage';
+import { AnnouncementsPage } from './AnnouncementsPage';
 import { AppointmentsPage } from './AppointmentsPage';
 import { NewDesignLayout, RequireSignedIn } from './NewDesignGuards';
 import { NewSignInPage } from './NewSignInPage';
@@ -28,6 +29,7 @@ export function newDesignRoutes() {
       <Route element={<RequireSignedIn />}>
         <Route path="/portal" element={<PortalLayout />}>
           <Route index element={<PortalPage />} />
+          <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="notifications/preferences" element={<PreferencesPage />} />
           <Route path=":block" element={<PortalBlockPage />} />

@@ -567,3 +567,28 @@ model Preference {
   mutedSystemsJson  String   @default("[]")
   updatedAt         DateTime @updatedAt
 }
+
+/// An announcement (slice 1.5). Who sees it is worked out on read from its audience and the
+/// letters engine, so nothing is copied per person and a leaver stops seeing it at once.
+model Announcement {
+  id               String    @id @default(cuid())
+  title            String
+  body             String
+  /// WHOLE_CHURCH | SYSTEM (everyone with a place in one system) | OFFICE (every live holder of one office)
+  audienceKind     String
+  audienceSystemId String?
+  audienceOffice   String?
+  /// The system whose Send letter allowed the post (the main church for WHOLE_CHURCH and OFFICE).
+  systemId         String
+  authorId         String
+  /// PUBLISHED | WITHDRAWN
+  status           String    @default("PUBLISHED")
+  publishedAt      DateTime  @default(now())
+  /// Last day shown, inclusive; empty means until withdrawn.
+  expiresAt        DateTime?
+  withdrawnAt      DateTime?
+  withdrawnById    String?
+  withdrawnReason  String?
+
+  @@index([publishedAt])
+}

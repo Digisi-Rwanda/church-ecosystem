@@ -4,10 +4,11 @@
  * screens show is what the server enforces.
  *
  * Who may do what here:
- *  - the Church Leader appoints and ends every office except their own seat;
- *  - an Administrator appoints and ends the Church Leader seat (so the Leader never
- *    appoints themself) and the Leader alone appoints and ends Administrators;
- *  - an office holder lends part of their own letters to someone else for a short time;
+ *  - offices are voted in real life, so the system has no election flow: Administrators
+ *    (in Media) assign every office to an existing person, the Church Leader's seat included,
+ *    and reassign it when it changes hands. An Administrator never ends their own office,
+ *    and the church keeps at least two Administrators;
+ *  - the Church Leader and the rest only read the roster;
  *  - the Leader, Administrators and the Church Secretary read the audit trail.
  */
 import { Router } from 'express';
@@ -107,7 +108,9 @@ function powers(hs: Holding[]) {
   const admin = own(hs, 'ADMINISTRATOR');
   const secretary = own(hs, 'CHURCH_SECRETARY');
   return {
-    canAppoint: leader,
+    // Offices are voted in real life; the system only records who holds them.
+    // Administrators assign every office (the Church Leader's too) and reassign it when it changes hands.
+    canAppoint: admin,
     canAppointLeader: admin,
     canReadAppointments: hs.some((h) => (h.letters.PEOPLE?.length ?? 0) > 0),
     canReadAudit: leader || admin || secretary,
@@ -288,17 +291,7 @@ accessRouter.post('/appointments', requireAuth, async (req: AuthedRequest, res) 
   const now = new Date();
   const { data, units } = await load();
   const pw = powers(liveHoldings(me, data, now));
-  const allowed = d.office === 'CHURCH_LEADER' ? pw.canAppointLeader : pw.canAppoint;
-  if (!allowed) {
-    return fail(
-      res,
-      403,
-      'NOT_ALLOWED',
-      d.office === 'CHURCH_LEADER'
-        ? 'Only an Administrator appoints the Church Leader'
-        : 'Only the Church Leader makes appointments',
-    );
-  }
+  if (!pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only an Administrator assigns offices');
   const unit = units.find((u) => u.id === d.orgUnitId);
   if (!unit) return fail(res, 404, 'UNIT_NOT_FOUND', 'Unit not found');
   const person = (await prisma.person.findUnique({ where: { id: d.personId } })) as
@@ -380,8 +373,7 @@ accessRouter.post('/appointments/:id/end', requireAuth, async (req: AuthedReques
   if (!pos || !office) return fail(res, 404, 'NOT_FOUND', 'Appointment not found');
   if (pos.status !== 'ACTIVE' || !isLive(pos, now)) return fail(res, 409, 'ALREADY_ENDED', 'This appointment has already ended');
   const pw = powers(liveHoldings(me, data, now));
-  const allowed = office === 'CHURCH_LEADER' ? pw.canAppointLeader : pw.canAppoint;
-  if (!allowed) return fail(res, 403, 'NOT_ALLOWED', office === 'CHURCH_LEADER' ? 'Only an Administrator ends the Church Leader’s appointment' : 'Only the Church Leader ends appointments');
+  if (!pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only an Administrator ends appointments');
   if (pos.personId === me) return fail(res, 403, 'CANNOT_END_OWN_OFFICE', 'You cannot end your own appointment');
   if (office === 'ADMINISTRATOR' && countLiveAdministrators(data.positions, now, id) < MIN_ADMINISTRATORS) {
     return fail(res, 409, 'NEEDS_TWO_ADMINISTRATORS', `The church keeps at least ${MIN_ADMINISTRATORS} Administrators. Appoint another first.`);
@@ -426,7 +418,7 @@ accessRouter.post('/appointments/:id/term', requireAuth, async (req: AuthedReque
   if (!pos || !office) return fail(res, 404, 'NOT_FOUND', 'Appointment not found');
   if (!isLive(pos, now)) return fail(res, 409, 'ALREADY_ENDED', 'This appointment has already ended');
   const pw = powers(liveHoldings(me, data, now));
-  if (!(office === 'CHURCH_LEADER' ? pw.canAppointLeader : pw.canAppoint)) return fail(res, 403, 'NOT_ALLOWED', 'Only the Church Leader sets terms');
+  if (!pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only an Administrator sets terms');
   const end = parsed.data.endDate ? new Date(parsed.data.endDate) : null;
   if (end && (Number.isNaN(end.getTime()) || end <= now)) return fail(res, 400, 'BAD_DATES', 'A term must end in the future; to end it now, end the appointment');
   await prisma.position.update({ where: { id }, data: { endDate: end } });
@@ -594,7 +586,7 @@ accessRouter.post('/delegations/:id/revoke', requireAuth, async (req: AuthedRequ
   if (!del) return fail(res, 404, 'NOT_FOUND', 'Delegation not found');
   if (del.status !== 'ACTIVE') return fail(res, 409, 'ALREADY_REVOKED', 'This delegation has already ended');
   const pw = powers(liveHoldings(me, data, now));
-  if (del.fromPersonId !== me && !pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only the lender or the Church Leader can take letters back');
+  if (del.fromPersonId !== me && !pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only the lender or an Administrator can take letters back');
   await prisma.delegation.update({ where: { id }, data: { status: 'REVOKED', revokedAt: now, revokedById: me } });
   await audit(me, null, 'DELEGATION_REVOKED', `Delegation ${id} taken back`, { delegationId: id, positionId: del.positionId });
   await notifySafely(prisma as never, {
