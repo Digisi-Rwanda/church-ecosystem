@@ -180,7 +180,7 @@ announcementsRouter.post('/:id/withdraw', requireAuth, async (req: AuthedRequest
   if (!parsed.success) return fail(res, 400, 'BAD_REQUEST', 'Say why you are taking it down');
   const me = req.auth!.personId;
   const now = new Date();
-  const row = (await prisma.announcement.findUnique({ where: { id: req.params.id } })) as AnnouncementRow | null;
+  const row = (await prisma.announcement.findUnique({ where: { id: String(req.params.id) } })) as AnnouncementRow | null;
   if (!row) return fail(res, 404, 'NOT_FOUND', 'Announcement not found');
   if (row.status !== 'PUBLISHED') return fail(res, 409, 'ALREADY_WITHDRAWN', 'This announcement is already down');
   const { data } = await loadAccessData(me);
