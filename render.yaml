@@ -16,10 +16,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_ENV
+        value: staging       # staging keeps rehearsal settings; only the live service uses production
       - key: PORT
         value: "10000"
-      - key: APP_ENV
-        value: staging
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

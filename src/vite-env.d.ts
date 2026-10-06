@@ -10,6 +10,8 @@ interface ImportMetaEnv {
   /** When "false", no demo roster or demo choirs are built into the site. */
   readonly VITE_DEMO_SEED?: string;
   readonly VITE_SERVER_MODULES?: string;
+  /** When "true", the new front door (Portal and system frame) is switched on. */
+  readonly VITE_NEW_DESIGN?: string;
 }
 
 interface ImportMeta {

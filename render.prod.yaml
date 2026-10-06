@@ -24,10 +24,10 @@ services:
     envVars:
       - key: NODE_ENV
         value: production
+      - key: APP_ENV
+        value: production    # turns on the production safety check at start-up (see lib/productionProfile.ts)
       - key: PORT
         value: "10000"
-      - key: APP_ENV
-        value: production    # start-up refuses demo settings (see server/src/lib/productionProfile.ts)
       - key: DATABASE_URL
         sync: false
       - key: JWT_SECRET

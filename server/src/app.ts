@@ -6,6 +6,7 @@ import { rateLimit, requestLog, securityHeaders } from './middleware/hardening.j
 import { attentionRouter } from './routes/attention.js';
 import { authRouter } from './routes/auth.js';
 import { authorizeRouter } from './routes/authorize.js';
+import { meRouter, portalRouter } from './routes/me.js';
 import { assignmentsRouter } from './routes/assignments.js';
 import { healthRouter } from './routes/health.js';
 import { missionRouter } from './routes/mission.js';
@@ -41,6 +42,8 @@ export function createApp() {
         health: 'GET /api/health',
         login: 'POST /api/auth/login',
         me: 'GET /api/auth/me',
+        capabilities: 'GET /api/me/capabilities',
+        portal: 'GET /api/portal',
         systems: 'GET /api/systems',
         people: 'GET /api/people',
         authorize: 'POST /api/authorize/probe',
@@ -67,6 +70,8 @@ export function createApp() {
   app.use('/api/people', peopleRouter);
   app.use('/api/participation', participationRouter);
   app.use('/api/authorize', authorizeRouter);
+  app.use('/api/me', meRouter);
+  app.use('/api/portal', portalRouter);
   app.use('/api/mission', missionRouter);
   app.use('/api/attention', attentionRouter);
   app.use('/api/assignments', assignmentsRouter);

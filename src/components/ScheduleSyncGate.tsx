@@ -5,7 +5,9 @@ import {
   type ScheduleSyncDetail,
   type SyncStatus,
 } from '../data/scheduleServerSync';
+import { useLocation } from 'react-router-dom';
 import { appEnv } from '../lib/appEnv';
+import { isNewDoorPath } from '../lib/newDesign';
 import { useT } from '../i18n/I18nContext';
 import { useToast } from './ui/Toast';
 
@@ -54,6 +56,7 @@ function StagingRibbon() {
 
 /** Small corner badge: is Music/Protocol data being shared through the server? */
 function SyncBadge() {
+  const { pathname } = useLocation();
   const [st, setSt] = useState<SyncStatus>(() => getSyncStatus());
   useEffect(() => {
     const t = window.setInterval(() => setSt(getSyncStatus()), 2000);
@@ -68,6 +71,9 @@ function SyncBadge() {
           ? 'This device only — this site has no server address (VITE_API_URL)'
           : `Not syncing — ${st.error ?? 'server problem'}`;
   const bad = st.state !== 'ok';
+  // The new front door talks only to the server and has nothing to do with the
+  // old shared-schedule sync, so the badge would only confuse people there.
+  if (isNewDoorPath(pathname)) return null;
   return (
     <div
       role="status"

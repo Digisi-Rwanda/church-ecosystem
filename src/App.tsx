@@ -12,6 +12,8 @@ import { SystemScopeGuard } from './navigation/SystemScopeGuard';
 import { LoginPage } from './pages/LoginPage';
 import { useActiveChoir } from './pages/ministry/useActiveChoir';
 import { PEER_CORE_SYSTEMS, peerCoreNav } from './ministry/peerCoreSystems';
+import { isNewDesign } from './lib/newDesign';
+import { newDesignRoutes } from './newdesign/NewDesignRoutes';
 
 // Each page loads on first visit, so the first screen downloads only what it needs.
 const AccessEnginePage = lazy(() =>
@@ -357,6 +359,7 @@ export default function App() {
       <Routes>
         <Route path="/login" element={<LoginPage />} />
         <Route path="/sso/handoff" element={<SsoHandoffPage />} />
+        {isNewDesign() && newDesignRoutes()}
 
         <Route
           path="/systems/choir"
@@ -719,7 +722,10 @@ export default function App() {
 
         <Route element={<RequireAuth />}>
           <Route element={<ShellWithTitle />}>
-            <Route index element={<DashboardPage />} />
+            <Route
+              index
+              element={isNewDesign() ? <Navigate to="/portal" replace /> : <DashboardPage />}
+            />
             <Route path="inbox" element={<InboxPage />} />
             <Route path="people" element={<PeoplePage />} />
             <Route path="people/tables/:table" element={<PeopleTablePage />} />
