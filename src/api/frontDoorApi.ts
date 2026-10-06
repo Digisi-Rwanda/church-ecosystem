@@ -324,3 +324,56 @@ export async function fetchAuditTrail(limit = 50): Promise<AuditEntry[]> {
   const res = await apiFetch<{ events: AuditEntry[] }>(`/api/access/audit?limit=${limit}`);
   return res.events;
 }
+
+/* ── Notifications and preferences (slice 1.4) ── */
+
+export type NoticeKind = 'WAITING_FOR_ME' | 'FOR_INFORMATION';
+
+export type NoticeItem = {
+  key: string;
+  kind: NoticeKind;
+  title: string;
+  body: string | null;
+  href: string | null;
+  systemId: string;
+  createdAt: string;
+  read: boolean;
+  important: boolean;
+};
+
+export type NoticeCounts = {
+  waiting: { total: number; unread: number };
+  info: { total: number; unread: number };
+  unread: number;
+  bySystem: Record<string, number>;
+};
+
+export async function fetchNotices(opts: { tab?: 'waiting' | 'info'; system?: string } = {}): Promise<{ items: NoticeItem[]; counts: NoticeCounts }> {
+  const qs = new URLSearchParams();
+  if (opts.tab) qs.set('tab', opts.tab);
+  if (opts.system) qs.set('system', opts.system);
+  return apiFetch(`/api/notifications${qs.size ? `?${qs}` : ''}`);
+}
+
+export async function fetchNoticeSummary(system?: string): Promise<{ counts: NoticeCounts; urgent: NoticeItem[] }> {
+  return apiFetch(`/api/notifications/summary${system ? `?system=${encodeURIComponent(system)}` : ''}`);
+}
+
+export async function markNoticesRead(body: { keys?: string[]; all?: boolean; tab?: 'waiting' | 'info'; system?: string }): Promise<number> {
+  const res = await apiFetch<{ marked: number }>('/api/notifications/read', { method: 'POST', body });
+  return res.marked;
+}
+
+export async function markNoticesUnread(keys: string[]): Promise<void> {
+  await apiFetch('/api/notifications/unread', { method: 'POST', body: { keys } });
+}
+
+export type Preferences = { language: string | null; mutedSystems: string[] };
+
+export async function fetchPreferences(): Promise<Preferences> {
+  return apiFetch('/api/me/preferences');
+}
+
+export async function savePreferences(body: Partial<Preferences>): Promise<Preferences> {
+  return apiFetch('/api/me/preferences', { method: 'PUT', body });
+}

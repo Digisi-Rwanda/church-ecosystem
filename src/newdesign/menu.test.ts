@@ -49,19 +49,19 @@ describe('menu from capabilities', () => {
 });
 
 describe('Portal bar', () => {
-  it('always has Systems first and Announcements last', () => {
+  it('always has Systems first, Announcements last and Notifications before it', () => {
     const keys = buildPortalNav(caps).map((i) => i.key);
     expect(keys[0]).toBe('systems');
     expect(keys[keys.length - 1]).toBe('announcements');
-    expect(buildPortalNav(null).map((i) => i.key)).toEqual(['systems', 'announcements']);
+    expect(buildPortalNav(null).map((i) => i.key)).toEqual(['systems', 'notifications', 'announcements']);
   });
   it('offers a block only when the person holds a letter in it somewhere', () => {
-    expect(buildPortalNav(caps).map((i) => i.key)).toEqual(['systems', 'work', 'people', 'announcements']);
+    expect(buildPortalNav(caps).map((i) => i.key)).toEqual(['systems', 'work', 'people', 'notifications', 'announcements']);
   });
   it('never puts Money or Home on the Portal bar', () => {
     const rich: Capabilities = { ...caps, systems: [{ id: 'sys-x', blocks: { home: ['R'], people: ['R'], work: ['R'], schedule: ['R'], money: ['V'], reports: ['R'] } }] };
     const keys = buildPortalNav(rich).map((i) => i.key);
-    expect(keys).toEqual(['systems', 'work', 'people', 'schedule', 'reports', 'announcements']);
+    expect(keys).toEqual(['systems', 'work', 'people', 'schedule', 'reports', 'notifications', 'announcements']);
     expect(isPortalBlock('money')).toBe(false);
     expect(isPortalBlock('work')).toBe(true);
   });

@@ -12,6 +12,7 @@ import { healthRouter } from './routes/health.js';
 import { missionRouter } from './routes/mission.js';
 import { participationRouter } from './routes/participation.js';
 import { accessRouter } from './routes/access.js';
+import { notificationsRouter } from './routes/notifications.js';
 import { peopleRouter } from './routes/people.js';
 import { protocolOfficesRouter } from './routes/protocolOffices.js';
 import { scheduleStateRouter } from './routes/scheduleState.js';
@@ -71,6 +72,7 @@ export function createApp() {
   app.use('/api/people', peopleRouter);
   app.use('/api/participation', participationRouter);
   app.use('/api/access', accessRouter);
+  app.use('/api/notifications', notificationsRouter);
   app.use('/api/authorize', authorizeRouter);
   app.use('/api/me', meRouter);
   app.use('/api/portal', portalRouter);

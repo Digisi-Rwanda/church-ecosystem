@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { buildEffectiveAccess } from '../policy/evaluate.js';
@@ -7,6 +8,8 @@ import type { Position } from '../policy/types.js';
 import { blocksFromModules } from '../capabilities/letters.js';
 import { liveHoldings, lettersInSystem, type AccessData } from '../capabilities/engine.js';
 import { officeOf } from '../lib/offices.js';
+import { loadNotices, mutedSystemsOf } from '../notifications/feed.js';
+import { countNotices } from '../notifications/rules.js';
 import { SHARED_BLOCKS } from '../shared/vocabulary.js';
 
 export const meRouter = Router();
@@ -55,6 +58,7 @@ function roleLabel(
 /** The portal: one card per system this person may enter. */
 portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const s = await standing(req.auth!.personId);
+  const counts = countNotices(await loadNotices(req.auth!.personId));
   res.json({
     systems: s.enterable.map((sys) => ({
       id: sys.id,
@@ -63,8 +67,7 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
       shortName: sys.shortName ?? sys.name ?? sys.id,
       basePath: sys.basePath,
       role: roleLabel(sys.id, s.positions, s.memberships),
-      // Notifications arrive in slice 1.4; until then nothing is unread.
-      unreadCount: 0,
+      unreadCount: counts.bySystem[sys.id] ?? 0,
     })),
   });
 });
@@ -88,5 +91,44 @@ meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
       blocks: blocksFromModules(lettersInSystem(req.auth!.personId, sys.id, s.access, new Date(), holdings)),
     })),
     blockOrder: SHARED_BLOCKS,
+  });
+});
+
+/* ───────────── preferences (slice 1.4) ───────────── */
+
+const LANGUAGES = ['en', 'rw', 'fr'] as const;
+
+/** Kept on the server so a person's choices follow them to every device. */
+meRouter.get('/preferences', requireAuth, async (req: AuthedRequest, res) => {
+  const pref = (await prisma.preference.findFirst({ where: { personId: req.auth!.personId } })) as { language?: string | null } | null;
+  res.json({
+    language: pref?.language ?? null,
+    mutedSystems: await mutedSystemsOf(req.auth!.personId),
+    languages: LANGUAGES,
+  });
+});
+
+const prefSchema = z.object({
+  language: z.enum(LANGUAGES).nullable().optional(),
+  /** Systems whose "For information" notices are muted. Things waiting for you can never be muted. */
+  mutedSystems: z.array(z.string().min(1).max(60)).max(40).optional(),
+});
+
+meRouter.put('/preferences', requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = prefSchema.safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid preferences', code: 'BAD_REQUEST' });
+  const me = req.auth!.personId;
+  const data: Record<string, unknown> = {};
+  if (parsed.data.language !== undefined) data.language = parsed.data.language;
+  if (parsed.data.mutedSystems !== undefined) {
+    const known = new Set((await prisma.churchSystem.findMany({ select: { id: true } })).map((x: { id: string }) => x.id));
+    const unknown = parsed.data.mutedSystems.filter((id) => !known.has(id));
+    if (unknown.length) return res.status(400).json({ error: 'Unknown system', code: 'UNKNOWN_SYSTEM', unknown });
+    data.mutedSystemsJson = JSON.stringify([...new Set(parsed.data.mutedSystems)].sort());
+  }
+  await prisma.preference.upsert({ where: { personId: me }, create: { personId: me, ...data }, update: data });
+  res.json({
+    language: (data.language as string | null | undefined) ?? ((await prisma.preference.findFirst({ where: { personId: me } })) as { language?: string | null } | null)?.language ?? null,
+    mutedSystems: await mutedSystemsOf(me),
   });
 });

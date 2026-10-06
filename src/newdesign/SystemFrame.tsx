@@ -4,6 +4,8 @@ import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { buildMenu } from './menu';
+import { badge } from './notices';
+import { useNoticeSummary } from './useNoticeSummary';
 
 /**
  * One frame for every system: a header, and a menu of the shared blocks the person
@@ -15,6 +17,7 @@ export function SystemFrame() {
   const { portal, capabilities, signOut } = useFrontDoor();
   const system = portal.find((s) => s.id === systemId);
   const menu = buildMenu(capabilities, systemId);
+  const { counts } = useNoticeSummary();
 
   if (!system) {
     return (
@@ -43,6 +46,10 @@ export function SystemFrame() {
           <span className="muted">{t('door.portal.role', { role: system.role })}</span>
         </div>
         <div className="door-top-actions">
+          <Link className="btn ghost sm" to={`/portal/notifications?system=${encodeURIComponent(systemId)}`}>
+            {t('door.portal.nav.notifications')}
+            {counts && (counts.bySystem[systemId] ?? 0) > 0 && <span className="door-badge">{badge(counts.bySystem[systemId] ?? 0)}</span>}
+          </Link>
           <ThemeToggle />
           <button type="button" className="btn secondary sm" onClick={signOut}>
             {t('shell.signOut')}

@@ -3,6 +3,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { isSharedBlock, lettersFor } from './menu';
+import { UrgentTile } from './UrgentTile';
 
 /**
  * One of the six shared blocks of a system. The blocks are empty frames for now: each
@@ -36,6 +37,7 @@ export function SystemBlockPage() {
   return (
     <section className="door-block" aria-labelledby="door-block-title">
       <h2 id="door-block-title">{blockName}</h2>
+      {block === 'home' && <UrgentTile systemId={systemId} />}
       <div className="panel">
         <h3>{t('door.block.letters')}</h3>
         <ul className="door-letters">

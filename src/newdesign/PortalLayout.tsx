@@ -3,12 +3,15 @@ import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { buildPortalNav } from './menu';
+import { badge } from './notices';
+import { useNoticeSummary } from './useNoticeSummary';
 
 /** The Portal frame: who is signed in, and a bar for the blocks that span all my systems. */
 export function PortalLayout() {
   const t = useT();
   const { personName, capabilities, signOut } = useFrontDoor();
   const nav = buildPortalNav(capabilities);
+  const { counts } = useNoticeSummary();
 
   return (
     <main className="door-page">
@@ -25,7 +28,12 @@ export function PortalLayout() {
                 ? t('door.portal.nav.systems')
                 : item.key === 'announcements'
                   ? t('door.portal.nav.announcements')
-                  : t(`door.block.${item.key}` as const)}
+                  : item.key === 'notifications'
+                    ? t('door.portal.nav.notifications')
+                    : t(`door.block.${item.key}` as const)}
+              {item.key === 'notifications' && counts && counts.unread > 0 && (
+                <span className="door-badge">{badge(counts.unread)}</span>
+              )}
             </NavLink>
           ))}
         </nav>

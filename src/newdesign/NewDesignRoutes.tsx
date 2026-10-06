@@ -4,10 +4,12 @@ import { AddPersonPage } from './AddPersonPage';
 import { AppointmentsPage } from './AppointmentsPage';
 import { NewDesignLayout, RequireSignedIn } from './NewDesignGuards';
 import { NewSignInPage } from './NewSignInPage';
+import { NotificationsPage } from './NotificationsPage';
 import { OrgTreePage } from './OrgTreePage';
 import { PeopleDirectoryPage } from './PeopleDirectoryPage';
 import { PeopleLayout } from './PeopleLayout';
 import { PersonCardPage } from './PersonCardPage';
+import { PreferencesPage } from './PreferencesPage';
 import { PortalBlockPage } from './PortalBlockPage';
 import { PortalLayout } from './PortalLayout';
 import { PortalPage } from './PortalPage';
@@ -26,6 +28,8 @@ export function newDesignRoutes() {
       <Route element={<RequireSignedIn />}>
         <Route path="/portal" element={<PortalLayout />}>
           <Route index element={<PortalPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="notifications/preferences" element={<PreferencesPage />} />
           <Route path=":block" element={<PortalBlockPage />} />
         </Route>
         <Route path="/s/:systemId" element={<SystemFrame />}>

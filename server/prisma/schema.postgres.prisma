@@ -523,3 +523,47 @@ model Delegation {
   @@index([toPersonId, status])
   @@index([positionId])
 }
+
+/// Slice 1.4: a notice for a person, or for whoever holds an office. WAITING_FOR_ME needs the person
+/// to act; FOR_INFORMATION only tells them. Read state is per person (NotificationRead).
+model Notification {
+  id         String   @id @default(cuid())
+  kind       String // WAITING_FOR_ME | FOR_INFORMATION
+  toPersonId String?
+  /// An office code: every live holder of the office receives it.
+  toOffice   String?
+  /// Narrows an office address to the holders in one system.
+  toSystemId String?
+  /// The system the notice belongs to; the main church when empty.
+  systemId   String?
+  title      String
+  body       String?
+  href       String?
+  /// Stops the same event notifying the same person twice.
+  sourceKey  String?
+  /// Important notices ignore a person's muted systems.
+  important  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([toPersonId, createdAt])
+  @@index([toOffice, createdAt])
+}
+
+/// Which notifications (or attention items, keyed attn:<id>) a person has read.
+model NotificationRead {
+  id       String   @id @default(cuid())
+  personId String
+  key      String
+  readAt   DateTime @default(now())
+
+  @@unique([personId, key])
+}
+
+/// A person's preferences, kept on the server so they follow them to every device.
+model Preference {
+  personId          String   @id
+  language          String?
+  /// Systems whose "For information" notices the person has muted: ["sys-youth"].
+  mutedSystemsJson  String   @default("[]")
+  updatedAt         DateTime @updatedAt
+}

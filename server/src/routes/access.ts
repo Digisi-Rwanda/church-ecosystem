@@ -47,6 +47,7 @@ import {
   type OfficeCode,
 } from '../shared/vocabulary.js';
 import { legacyColumnsFor, officeOf, unitKindOf } from '../lib/offices.js';
+import { notifySafely } from '../lib/notify.js';
 import {
   computeVacancies,
   countLiveAdministrators,
@@ -352,6 +353,16 @@ accessRouter.post('/appointments', requireAuth, async (req: AuthedRequest, res) 
     startDate: start.toISOString().slice(0, 10),
     endDate: end ? end.toISOString().slice(0, 10) : null,
   });
+  await notifySafely(prisma as never, {
+    kind: 'FOR_INFORMATION',
+    toPersonId: d.personId,
+    systemId,
+    title: `You are now ${OFFICE_TITLE[d.office]}${OFFICE_SCOPE[d.office] === 'CHURCH' ? '' : ` of ${unit.name}`}`,
+    body: 'Your access has changed. See Access to find out what you can do.',
+    href: `/s/${MAIN}/people/access`,
+    sourceKey: `appointed:${id}`,
+    important: true,
+  });
   res.status(201).json({ appointment: { ...created, office: d.office } });
 });
 
@@ -387,6 +398,16 @@ accessRouter.post('/appointments/:id/end', requireAuth, async (req: AuthedReques
     office,
     reason: parsed.data.reason,
     delegationsRevoked: lent.count,
+  });
+  await notifySafely(prisma as never, {
+    kind: 'FOR_INFORMATION',
+    toPersonId: pos.personId,
+    systemId: pos.systemId,
+    title: `You are no longer ${OFFICE_TITLE[office]}`,
+    body: 'The access that came with the office has ended.',
+    href: `/s/${MAIN}/people/access`,
+    sourceKey: `ended:${id}`,
+    important: true,
   });
   res.json({ ended: true, delegationsRevoked: lent.count });
 });
@@ -551,6 +572,16 @@ accessRouter.post('/delegations', requireAuth, async (req: AuthedRequest, res) =
     letters: lend,
     endDate: end.toISOString().slice(0, 10),
   });
+  await notifySafely(prisma as never, {
+    kind: 'FOR_INFORMATION',
+    toPersonId: d.toPersonId,
+    systemId: pos.systemId,
+    title: `${OFFICE_TITLE[office]} has lent you some letters`,
+    body: `Until ${day(end)}. See Access for which ones.`,
+    href: `/s/${MAIN}/people/access`,
+    sourceKey: `delegated:${created.id}`,
+    important: true,
+  });
   res.status(201).json({ delegation: { id: created.id, letters: lend, endDate: day(end) } });
 });
 
@@ -566,6 +597,14 @@ accessRouter.post('/delegations/:id/revoke', requireAuth, async (req: AuthedRequ
   if (del.fromPersonId !== me && !pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only the lender or the Church Leader can take letters back');
   await prisma.delegation.update({ where: { id }, data: { status: 'REVOKED', revokedAt: now, revokedById: me } });
   await audit(me, null, 'DELEGATION_REVOKED', `Delegation ${id} taken back`, { delegationId: id, positionId: del.positionId });
+  await notifySafely(prisma as never, {
+    kind: 'FOR_INFORMATION',
+    toPersonId: del.toPersonId,
+    title: 'Letters lent to you have been taken back',
+    href: `/s/${MAIN}/people/access`,
+    sourceKey: `revoked:${id}`,
+    important: true,
+  });
   res.json({ revoked: true });
 });
 

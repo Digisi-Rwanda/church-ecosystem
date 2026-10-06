@@ -42,6 +42,7 @@ export type PortalBlock = (typeof PORTAL_BLOCKS)[number];
 export type PortalNavItem =
   | { key: 'systems' }
   | { key: PortalBlock }
+  | { key: 'notifications' }
   | { key: 'announcements' };
 
 export function isPortalBlock(value: string | undefined): value is PortalBlock {
@@ -50,7 +51,7 @@ export function isPortalBlock(value: string | undefined): value is PortalBlock {
 
 /**
  * The Portal bar: Systems first, then each shared block the person holds a letter in
- * in at least one system (Work, People, Schedule, Reports), then Announcements.
+ * in at least one system (Work, People, Schedule, Reports), then Notifications and Announcements.
  * Built only from the server's capabilities, so it never offers a block the person lacks.
  */
 export function buildPortalNav(caps: Capabilities | null): PortalNavItem[] {
@@ -60,7 +61,7 @@ export function buildPortalNav(caps: Capabilities | null): PortalNavItem[] {
       if (caps.systems.some((s) => (s.blocks[block] ?? []).length > 0)) items.push({ key: block });
     }
   }
-  items.push({ key: 'announcements' });
+  items.push({ key: 'notifications' }, { key: 'announcements' });
   return items;
 }
 
