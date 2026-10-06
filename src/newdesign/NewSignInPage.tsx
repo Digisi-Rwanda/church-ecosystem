@@ -1,8 +1,8 @@
-import { type FormEvent, useState } from 'react';
+import { type FormEvent, useMemo, useState } from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { TextField } from '../components/ui/Field';
 import { Spinner } from '../components/ui/Spinner';
-import { ThemeToggle } from '../components/ui/ThemeToggle';
+import { pickScripture } from '../lib/scriptures';
 import { useT } from '../i18n/I18nContext';
 import type { MessageKey } from '../i18n/translate';
 import { useFrontDoor, type SignInResult } from './FrontDoorContext';
@@ -19,6 +19,7 @@ export function NewSignInPage() {
   const location = useLocation();
   const [error, setError] = useState<MessageKey | null>(null);
   const [busy, setBusy] = useState(false);
+  const scripture = useMemo(() => pickScripture(), []);
   const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
 
   if (status === 'in') return <Navigate to={from ?? '/portal'} replace />;
@@ -37,44 +38,56 @@ export function NewSignInPage() {
   }
 
   return (
-    <main className="door-center">
-      <form className="panel door-card" onSubmit={onSubmit} aria-busy={busy}>
-        <div className="door-card-head">
-          <h1>{t('door.signIn.title')}</h1>
-          <ThemeToggle />
+    <div className="login-page login-split">
+      <aside className="login-hero-pane" aria-label={t('login.welcome')}>
+        <img
+          className="login-hero-media"
+          src="/brand/church-building.png?v=2"
+          alt="ADEPR Kacyiru church building"
+          decoding="async"
+          fetchPriority="high"
+        />
+        <div className="login-hero-shade" aria-hidden />
+        <div className="login-hero-copy">
+          <p className="login-hero-brand">“{scripture.text}”</p>
+          <p className="login-hero-line">{scripture.ref}</p>
         </div>
-        <p className="muted">{t('door.signIn.subtitle')}</p>
-        <TextField
-          label={t('door.signIn.username')}
-          name="username"
-          autoComplete="username"
-          autoCapitalize="none"
-          required
-          disabled={busy}
-        />
-        <TextField
-          label={t('door.signIn.password')}
-          name="password"
-          type="password"
-          autoComplete="current-password"
-          required
-          disabled={busy}
-        />
-        {error && (
-          <p className="door-error" role="alert">
-            {t(error)}
-          </p>
-        )}
-        <button type="submit" className="btn" disabled={busy}>
-          {busy ? (
-            <>
-              <Spinner size="sm" label={t('door.signIn.busy')} /> {t('door.signIn.busy')}
-            </>
-          ) : (
-            t('door.signIn.submit')
-          )}
-        </button>
-      </form>
-    </main>
+        <div className="login-hero-wave" aria-hidden />
+      </aside>
+
+      <div className="login-form-pane">
+        <div className="login-card stack">
+          <div className="login-brand">
+            <img src="/brand/adepr-logo.png" alt="ADEPR" width={76} height={76} />
+            <div>
+              <h1>ADEPR Kacyiru</h1>
+              <p className="muted" style={{ margin: 0 }}>
+                {t('login.subtitleMain')}
+              </p>
+            </div>
+          </div>
+
+          <form className="stack" onSubmit={onSubmit} aria-busy={busy}>
+            <TextField label={t('login.username')} name="username" id="username" autoComplete="username" autoCapitalize="none" required disabled={busy} />
+            <TextField label={t('login.password')} name="password" id="password" type="password" autoComplete="current-password" required disabled={busy} />
+            {error && (
+              <div className="error" role="alert">
+                {t(error)}
+              </div>
+            )}
+            <button type="submit" className="btn" disabled={busy}>
+              {busy ? (
+                <>
+                  <Spinner label={t('login.signingInLabel')} />
+                  {t('login.signingIn')}
+                </>
+              ) : (
+                t('login.signIn')
+              )}
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
   );
 }

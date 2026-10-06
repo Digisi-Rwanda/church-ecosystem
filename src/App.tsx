@@ -357,7 +357,7 @@ export default function App() {
       <ErrorBoundary>
       <Suspense fallback={<div className="route-loading" role="status">Loading…</div>}>
       <Routes>
-        <Route path="/login" element={<LoginPage />} />
+        <Route path="/login" element={isNewDesign() ? <Navigate to="/signin" replace /> : <LoginPage />} />
         <Route path="/sso/handoff" element={<SsoHandoffPage />} />
         {isNewDesign() && newDesignRoutes()}
 
