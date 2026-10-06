@@ -1,30 +1,20 @@
 import { Link } from 'react-router-dom';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
-import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 
 /** The Portal: one card per system this person may enter, as the server answers. */
 export function PortalPage() {
   const t = useT();
-  const { status, personName, portal, signOut, reload } = useFrontDoor();
+  const { status, portal, reload } = useFrontDoor();
 
   return (
-    <main className="door-page">
-      <header className="door-top">
-        <div>
-          <h1>{t('door.portal.title')}</h1>
-          <p className="muted">{t('door.portal.subtitle')}</p>
-        </div>
-        <div className="door-top-actions">
-          {personName && <span className="muted">{t('door.portal.welcome', { name: personName })}</span>}
-          <ThemeToggle />
-          <button type="button" className="btn secondary sm" onClick={signOut}>
-            {t('shell.signOut')}
-          </button>
-        </div>
-      </header>
+    <>
+      <div>
+        <h1>{t('door.portal.title')}</h1>
+        <p className="muted">{t('door.portal.subtitle')}</p>
+      </div>
 
       {status === 'loading' && (
         <div className="door-center" role="status">
@@ -66,6 +56,6 @@ export function PortalPage() {
           ))}
         </ul>
       )}
-    </main>
+    </>
   );
 }

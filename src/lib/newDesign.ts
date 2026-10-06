@@ -12,6 +12,7 @@ export function isNewDoorPath(pathname: string): boolean {
   return (
     pathname === '/signin' ||
     pathname === '/portal' ||
+    pathname.startsWith('/portal/') ||
     pathname === '/s' ||
     pathname.startsWith('/s/')
   );

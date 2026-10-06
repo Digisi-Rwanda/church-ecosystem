@@ -7018,3 +7018,6 @@ body.letter-workspace-open {
 .door-letters { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
 .door-letters li { display: flex; gap: 0.6rem; align-items: baseline; }
 .door-letter { display: inline-grid; place-items: center; width: 1.6rem; height: 1.6rem; border-radius: 6px; background: var(--accent-soft); font-weight: 700; flex: none; }
+
+.door-portal-nav { flex: 1 1 18rem; min-width: 0; border-bottom: 0; padding-bottom: 0; }
+.door-letters-inline { display: flex; gap: 0.3rem; flex-wrap: wrap; margin-top: 0.25rem; }
