@@ -1,4 +1,4 @@
-import type { AccessLetter, OfficeCode, SharedBlock } from '../../server/src/shared/vocabulary';
+import type { AccessLetter, ModuleKey, OfficeCode, SharedBlock, UnitKind } from '../../server/src/shared/vocabulary';
 import { apiFetch } from './client';
 
 export type PortalSystem = {
@@ -144,4 +144,183 @@ export async function unarchivePerson(id: string): Promise<DirectoryPerson> {
     body: {},
   });
   return res.person;
+}
+
+/* ── Access by letters (slice 1.3) ── */
+
+export type AccessPowers = {
+  canAppoint: boolean;
+  canAppointLeader: boolean;
+  canReadAppointments: boolean;
+  canReadAudit: boolean;
+  canExplainOthers: boolean;
+  canSeeAllDelegations: boolean;
+};
+
+export type AppointmentRow = {
+  id: string;
+  personId: string;
+  personName: string;
+  memberCode: string | null;
+  office: OfficeCode;
+  title: string;
+  orgUnitId: string | null;
+  unitName: string | null;
+  unitCode: string | null;
+  systemId: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: string;
+  live: boolean;
+  endsSoon: boolean;
+};
+
+export async function fetchAppointments(
+  opts: { unitId?: string; ended?: boolean } = {},
+): Promise<AccessPowers & { appointments: AppointmentRow[] }> {
+  const qs = new URLSearchParams();
+  if (opts.unitId) qs.set('unitId', opts.unitId);
+  if (opts.ended) qs.set('ended', 'true');
+  return apiFetch(`/api/access/appointments${qs.size ? `?${qs}` : ''}`);
+}
+
+export type NewAppointment = {
+  personId: string;
+  orgUnitId: string;
+  office: OfficeCode;
+  endDate?: string | null;
+};
+
+export async function appointOffice(body: NewAppointment): Promise<void> {
+  await apiFetch('/api/access/appointments', { method: 'POST', body });
+}
+
+export async function endAppointment(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/access/appointments/${encodeURIComponent(id)}/end`, { method: 'POST', body: { reason } });
+}
+
+export async function setAppointmentTerm(id: string, endDate: string | null): Promise<void> {
+  await apiFetch(`/api/access/appointments/${encodeURIComponent(id)}/term`, { method: 'POST', body: { endDate } });
+}
+
+export type Vacancy = {
+  unitId: string;
+  unitName: string;
+  unitCode: string | null;
+  kind: UnitKind;
+  office: OfficeCode;
+  reason: 'EMPTY' | 'ENDS_SOON';
+  endsOn?: string;
+  holderName?: string | null;
+};
+
+export type VacancyReport = {
+  vacancies: Vacancy[];
+  conflicts: Array<{ unitId: string; unitName: string; office: OfficeCode; positionIds: string[] }>;
+  administrators: { count: number; minimum: number };
+};
+
+export async function fetchVacancies(): Promise<VacancyReport> {
+  return apiFetch('/api/access/vacancies');
+}
+
+export type LetterSource = {
+  letter: AccessLetter;
+  from: string;
+  via: 'OFFICE' | 'DELEGATION' | 'MEMBER';
+  office?: OfficeCode;
+};
+
+export type AccessExplanation = {
+  person: { id: string; name: string; code: string | null };
+  offices: Array<{ id: string; office: OfficeCode; title: string; systemId: string | null; orgUnitId: string | null; endDate: string | null }>;
+  delegated: Array<{ delegationId: string; office: OfficeCode; fromPersonId: string }>;
+  systems: Array<{
+    id: string;
+    name: string;
+    letters: Record<ModuleKey, AccessLetter[]>;
+    why: Record<ModuleKey, LetterSource[]>;
+  }>;
+};
+
+export async function fetchMyAccess(): Promise<AccessExplanation & { powers: AccessPowers }> {
+  return apiFetch('/api/access/me');
+}
+
+export async function fetchAccessOf(personId: string): Promise<AccessExplanation> {
+  return apiFetch(`/api/access/explain/${encodeURIComponent(personId)}`);
+}
+
+export type RuleMatrix = {
+  letters: Array<{ letter: AccessLetter; name: string; meaning: string }>;
+  modules: Array<{ key: ModuleKey; letters: AccessLetter[] }>;
+  offices: Array<{
+    code: OfficeCode;
+    title: string;
+    scope: 'CHURCH' | 'UNIT';
+    sole: boolean;
+    letters: Partial<Record<ModuleKey, AccessLetter[]>>;
+  }>;
+  member: Partial<Record<ModuleKey, AccessLetter[]>>;
+  limits: { minAdministrators: number; delegationMaxDays: number };
+};
+
+export async function fetchRuleMatrix(): Promise<RuleMatrix> {
+  return apiFetch('/api/access/matrix');
+}
+
+export type DelegationRow = {
+  id: string;
+  positionId: string;
+  fromPersonId: string;
+  fromName: string;
+  toPersonId: string;
+  toName: string;
+  letters: Partial<Record<ModuleKey, AccessLetter[]>>;
+  note: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: string;
+  live: boolean;
+};
+
+export type DelegationList = {
+  canSeeAll: boolean;
+  given: DelegationRow[];
+  received: DelegationRow[];
+  all?: DelegationRow[];
+  limits: { maxDays: number };
+};
+
+export async function fetchDelegations(all = false): Promise<DelegationList> {
+  return apiFetch(`/api/access/delegations${all ? '?all=true' : ''}`);
+}
+
+export type NewDelegation = {
+  positionId: string;
+  toPersonId: string;
+  letters: Partial<Record<ModuleKey, AccessLetter[]>>;
+  endDate: string;
+  note?: string;
+};
+
+export async function lendLetters(body: NewDelegation): Promise<void> {
+  await apiFetch('/api/access/delegations', { method: 'POST', body });
+}
+
+export async function revokeDelegation(id: string): Promise<void> {
+  await apiFetch(`/api/access/delegations/${encodeURIComponent(id)}/revoke`, { method: 'POST', body: {} });
+}
+
+export type AuditEntry = {
+  id: string;
+  at: string | null;
+  action: string;
+  detail: string;
+  actorName: string | null;
+};
+
+export async function fetchAuditTrail(limit = 50): Promise<AuditEntry[]> {
+  const res = await apiFetch<{ events: AuditEntry[] }>(`/api/access/audit?limit=${limit}`);
+  return res.events;
 }

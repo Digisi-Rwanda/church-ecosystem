@@ -260,32 +260,35 @@ async function main() {
     console.log('  no "treasurer" sign-in created: set BOOTSTRAP_TREASURER_PASSWORD (10+ characters) to create it');
   }
 
-  await prisma.position.deleteMany({
-    where: { personId: { in: [pastor.id, treasurer.id] } },
-  });
+  // Appointments keep their identity from one start to the next: delegations and the audit
+  // trail point at them, so they are created once and never wiped and re-created.
+  if (!(await prisma.position.findFirst({ where: { personId: pastor.id, systemRole: 'CHURCH_LEADER' } }))) {
+    await prisma.position.create({
+      data: {
+        personId: pastor.id,
+        systemId: 'sys-main',
+        orgUnitId: ouChurch.id,
+        title: 'Senior Pastor',
+        systemRole: 'CHURCH_LEADER',
+        office: 'CHURCH_LEADER',
+        grantsAllSystems: true,
+        status: 'ACTIVE',
+      },
+    });
+  }
 
-  await prisma.position.create({
-    data: {
-      personId: pastor.id,
-      systemId: 'sys-main',
-      orgUnitId: ouChurch.id,
-      title: 'Senior Pastor',
-      systemRole: 'CHURCH_LEADER',
-      grantsAllSystems: true,
-      status: 'ACTIVE',
-    },
-  });
-
-  await prisma.position.create({
-    data: {
-      personId: treasurer.id,
-      systemId: 'sys-finance',
-      orgUnitId: ouFinance.id,
-      title: 'Church Treasurer',
-      systemRole: 'CHURCH_TREASURER',
-      status: 'ACTIVE',
-    },
-  });
+  if (!(await prisma.position.findFirst({ where: { personId: treasurer.id, systemRole: 'CHURCH_TREASURER' } }))) {
+    await prisma.position.create({
+      data: {
+        personId: treasurer.id,
+        systemId: 'sys-finance',
+        orgUnitId: ouFinance.id,
+        title: 'Church Treasurer',
+        systemRole: 'CHURCH_TREASURER',
+        status: 'ACTIVE',
+      },
+    });
+  }
 
   await prisma.membership.upsert({
     where: { id: 'mem-pastor-main' },

@@ -1,5 +1,7 @@
 import { Route } from 'react-router-dom';
+import { AccessPage } from './AccessPage';
 import { AddPersonPage } from './AddPersonPage';
+import { AppointmentsPage } from './AppointmentsPage';
 import { NewDesignLayout, RequireSignedIn } from './NewDesignGuards';
 import { NewSignInPage } from './NewSignInPage';
 import { OrgTreePage } from './OrgTreePage';
@@ -33,6 +35,8 @@ export function newDesignRoutes() {
             <Route path="new" element={<AddPersonPage />} />
             <Route path="units" element={<OrgTreePage />} />
             <Route path="units/:unitId" element={<UnitPage />} />
+            <Route path="appointments" element={<AppointmentsPage />} />
+            <Route path="access" element={<AccessPage />} />
             <Route path=":personId" element={<PersonCardPage />} />
           </Route>
           <Route path=":block" element={<SystemBlockPage />} />

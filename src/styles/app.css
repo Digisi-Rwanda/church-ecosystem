@@ -7037,3 +7037,23 @@ body.letter-workspace-open {
 .door-tree { list-style: none; margin: 0; display: grid; gap: 0.5rem; }
 .door-tree li { display: flex; flex-wrap: wrap; gap: 0.5rem; align-items: baseline; }
 .door-chip { font-size: 0.75rem; padding: 0.05rem 0.45rem; border-radius: 999px; background: var(--accent-soft); }
+
+/* ── Access by letters (slice 1.3) ── */
+.door-ok { color: var(--success, #067647); margin: 0; }
+.door-warn { color: var(--warning, #b54708); margin: 0 0 0.4rem; }
+.door-attention { border-left: 4px solid var(--warning, #b54708); }
+.door-chip.warn { background: color-mix(in srgb, var(--warning, #b54708) 18%, transparent); }
+.door-appt { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 0.5rem; }
+.door-end { flex-basis: 100%; max-width: none; }
+.door-check { display: inline-flex; align-items: center; gap: 0.4rem; margin-right: 0.8rem; }
+.door-check-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem 0.8rem; padding: 0.25rem 0; }
+.door-check-label { min-width: 11rem; font-weight: 600; }
+.door-fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 0.5rem 0.75rem; }
+.door-search-row { display: flex; gap: 0.5rem; align-items: flex-end; flex-wrap: wrap; }
+.door-search-row .field { flex: 1 1 12rem; }
+.door-letters { display: inline-flex; gap: 0.25rem; flex-wrap: wrap; }
+.door-rules { margin: 0.75rem 0 0; padding-left: 1.2rem; display: grid; gap: 0.25rem; }
+.door-matrix th, .door-matrix td { white-space: nowrap; }
+@media (max-width: 640px) {
+  .door-check-label { min-width: 100%; }
+}

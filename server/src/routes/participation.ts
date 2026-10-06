@@ -15,6 +15,8 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { isValidUnitCode, suggestUnitCode } from '../lib/codes.js';
 import { legacyColumnsFor, officeOf, unitKindOf } from '../lib/offices.js';
+import { findClash } from '../lib/appointments.js';
+import { OFFICE_TITLE } from '../shared/accessMatrix.js';
 import { OFFICE_CODES, UNIT_KINDS } from '../shared/vocabulary.js';
 import { authorizePerson } from '../policy/index.js';
 import { hasPeopleModule } from '../policy/personAccess.js';
@@ -148,6 +150,25 @@ async function otherActiveChurchLeader(exceptPositionId?: string): Promise<{ id:
   const now = Date.now();
   const hit = rows.find((r: { id: string; endDate?: Date | null }) => r.id !== exceptPositionId && (!r.endDate || r.endDate.getTime() > now));
   return hit ? { id: hit.id } : null;
+}
+
+/** The rule every appointment obeys (slice 1.3): one live holder of a sole office per place, and no President who is also Treasurer. */
+async function officeClashFor(
+  d: { personId: string; office?: string | null; systemRole?: string | null; ministryOffice?: string | null; choirOffice?: string | null; worshipOffice?: string | null; protocolOffice?: string | null; deaconOffice?: string | null; systemAdmin?: boolean | null; orgUnitId?: string | null; systemId?: string | null; status?: string },
+  exceptId?: string,
+) {
+  const office = officeOf(d);
+  if (!office || (d.status ?? 'ACTIVE') !== 'ACTIVE') return null;
+  const rows = await prisma.position.findMany();
+  const clash = findClash(rows as never, { personId: d.personId, office, orgUnitId: d.orgUnitId, systemId: d.systemId, exceptId });
+  if (!clash) return null;
+  if (clash.code === 'SEPARATION_OF_DUTIES') {
+    return { error: 'The President and the Treasurer of one unit cannot be the same person', code: clash.code, positionId: clash.other.id };
+  }
+  if (clash.code === 'ALREADY_HOLDS') {
+    return { error: `This person already holds ${OFFICE_TITLE[office]} here`, code: clash.code, positionId: clash.holder.id };
+  }
+  return { error: `${OFFICE_TITLE[office]} is already held by someone else here. End that appointment first.`, code: clash.code, positionId: clash.holder.id };
 }
 
 async function audit(actorId: string, systemId: string | null | undefined, action: string, detail: string) {
@@ -329,6 +350,10 @@ participationRouter.post('/positions', requireAuth, async (req: AuthedRequest, r
     const clash = await otherActiveChurchLeader();
     if (clash) return res.status(409).json({ error: 'There is already an active Church Leader. End that appointment first.', code: 'ONE_CHURCH_LEADER', positionId: clash.id });
   }
+  {
+    const clash = await officeClashFor({ ...d, personId: d.personId });
+    if (clash) return res.status(409).json(clash);
+  }
   const p = await prisma.position.create({
     data: {
       id, personId: d.personId, title: d.title, office: d.office ?? officeOf(d),
@@ -371,6 +396,11 @@ participationRouter.patch('/positions/:id', requireAuth, async (req: AuthedReque
   if (becomesLeader && (d.systemRole !== undefined || d.status !== undefined)) {
     const clash = await otherActiveChurchLeader(id);
     if (clash) return res.status(409).json({ error: 'There is already an active Church Leader. End that appointment first.', code: 'ONE_CHURCH_LEADER', positionId: clash.id });
+  }
+  if (d.office !== undefined || d.status !== undefined || d.orgUnitId !== undefined || d.systemId !== undefined || GOVERNANCE_FIELDS.some((k) => (d as Record<string, unknown>)[k] !== undefined)) {
+    const merged = { ...p, ...Object.fromEntries(Object.entries(d).filter(([, v]) => v !== undefined)) } as Parameters<typeof officeClashFor>[0];
+    const clash = await officeClashFor(merged, id);
+    if (clash) return res.status(409).json(clash);
   }
   const data: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(d)) {

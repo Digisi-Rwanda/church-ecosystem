@@ -24,6 +24,12 @@ export function PeopleLayout() {
         <NavLink to={`${base}/units`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
           {t('door.people.tab.units')}
         </NavLink>
+        <NavLink to={`${base}/appointments`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
+          {t('door.people.tab.appointments')}
+        </NavLink>
+        <NavLink to={`${base}/access`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
+          {t('door.people.tab.access')}
+        </NavLink>
       </nav>
       <Outlet />
     </section>

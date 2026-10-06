@@ -1,10 +1,11 @@
 import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
-import { buildEffectiveAccess, grantsForSystem } from '../policy/evaluate.js';
+import { buildEffectiveAccess } from '../policy/evaluate.js';
 import { loadPolicyContext } from '../policy/loadContext.js';
 import type { Position } from '../policy/types.js';
-import { blocksForSystem } from '../capabilities/letters.js';
+import { blocksFromModules } from '../capabilities/letters.js';
+import { liveHoldings, lettersInSystem, type AccessData } from '../capabilities/engine.js';
 import { officeOf } from '../lib/offices.js';
 import { SHARED_BLOCKS } from '../shared/vocabulary.js';
 
@@ -30,7 +31,12 @@ async function standing(personId: string) {
       (s.kind ?? 'MINISTRY') !== 'SHARED' &&
       grants.some((g) => g.systemId === s.id && g.resource === 'SYSTEM' && g.action === 'ENTER'),
   );
-  return { grants, positions, memberships, enterable };
+  const access: AccessData = {
+    positions: ctx.positions,
+    memberships: ctx.memberships,
+    delegations: await prisma.delegation.findMany({ where: { toPersonId: personId } }),
+  };
+  return { grants, positions, memberships, enterable, access };
 }
 
 function roleLabel(
@@ -66,6 +72,7 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
 /** What this person may do, so the app can show or hide screens. The server checks again on every call. */
 meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
   const s = await standing(req.auth!.personId);
+  const holdings = liveHoldings(req.auth!.personId, s.access, new Date());
   res.json({
     personId: req.auth!.personId,
     offices: s.positions
@@ -78,7 +85,7 @@ meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
       .sort((a, b) => a.id.localeCompare(b.id)),
     systems: s.enterable.map((sys) => ({
       id: sys.id,
-      blocks: blocksForSystem(grantsForSystem(s.grants, sys.id)),
+      blocks: blocksFromModules(lettersInSystem(req.auth!.personId, sys.id, s.access, new Date(), holdings)),
     })),
     blockOrder: SHARED_BLOCKS,
   });
