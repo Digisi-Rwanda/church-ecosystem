@@ -7090,3 +7090,19 @@ button.door-menu-link.active { background: var(--accent-soft); }
 .door-strip, .door-strip > * { min-width: 0; }
 .door-strip .door-list { overflow-wrap: anywhere; }
 @media (max-width: 560px) { .door-announce-actions { flex-direction: row; flex-wrap: wrap; align-items: flex-start; } }
+
+/* Settings and Governance (slices 2.1 and 2.2) */
+.door-settings { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.75rem; }
+.door-setting { display: grid; gap: 0.35rem; }
+.door-setting p { margin: 0; }
+.door-setting-value { overflow-wrap: anywhere; font-weight: 600; }
+.door-types { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; }
+.door-type-row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) auto; gap: 0.5rem; align-items: end; }
+.door-picker { display: grid; gap: 0.35rem; justify-items: start; }
+.door-picker > * { min-width: 0; }
+.door-check { display: flex; gap: 0.5rem; align-items: flex-start; }
+.door-decisions { display: grid; gap: 0.6rem; }
+.door-decision { display: grid; gap: 0.3rem; min-width: 0; overflow-wrap: anywhere; }
+.door-decision p { margin: 0; }
+.door-chips { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; }
+@media (max-width: 560px) { .door-type-row { grid-template-columns: 1fr; } }

@@ -3,7 +3,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
-import { buildMenu } from './menu';
+import { buildMenu, buildOwnMenu } from './menu';
 import { badge } from './notices';
 import { useNoticeSummary } from './useNoticeSummary';
 
@@ -17,6 +17,7 @@ export function SystemFrame() {
   const { portal, capabilities, signOut } = useFrontDoor();
   const system = portal.find((s) => s.id === systemId);
   const menu = buildMenu(capabilities, systemId);
+  const ownMenu = buildOwnMenu(capabilities, systemId);
   const { counts } = useNoticeSummary();
 
   if (!system) {
@@ -65,6 +66,11 @@ export function SystemFrame() {
             className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}
           >
             {t(`door.block.${item.block}` as const)}
+          </NavLink>
+        ))}
+        {ownMenu.map((item) => (
+          <NavLink key={item.block} to={`/s/${systemId}/${item.block}`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
+            {t(`door.own.${item.block}` as const)}
           </NavLink>
         ))}
       </nav>

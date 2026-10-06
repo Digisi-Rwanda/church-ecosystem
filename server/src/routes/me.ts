@@ -10,7 +10,8 @@ import { liveHoldings, lettersInSystem, type AccessData } from '../capabilities/
 import { officeOf } from '../lib/offices.js';
 import { loadNotices, mutedSystemsOf } from '../notifications/feed.js';
 import { countNotices } from '../notifications/rules.js';
-import { SHARED_BLOCKS } from '../shared/vocabulary.js';
+import { SHARED_BLOCKS, type AccessLetter } from '../shared/vocabulary.js';
+import { SETTINGS_EDITORS } from '../settings/catalog.js';
 
 export const meRouter = Router();
 export const portalRouter = Router();
@@ -72,6 +73,23 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   });
 });
 
+
+/**
+ * A system's own blocks after the six shared ones (slices 2.1 and 2.2): Governance in every
+ * system where the person holds a Governance letter, and Settings in Central Administration
+ * for the offices that run it (they change settings; Administrators only read them).
+ */
+function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, holdings: ReturnType<typeof liveHoldings>) {
+  const own: Array<{ key: 'governance' | 'settings'; letters: AccessLetter[] }> = [];
+  if ((modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'governance', letters: modules.GOVERNANCE });
+  if (systemId === 'sys-main') {
+    const offices = holdings.filter((h) => h.via === 'OFFICE').map((h) => h.office as string);
+    if (offices.some((o) => (SETTINGS_EDITORS as readonly string[]).includes(o))) own.push({ key: 'settings', letters: ['R', 'W'] });
+    else if (offices.includes('ADMINISTRATOR')) own.push({ key: 'settings', letters: ['R'] });
+  }
+  return own;
+}
+
 /** What this person may do, so the app can show or hide screens. The server checks again on every call. */
 meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
   const s = await standing(req.auth!.personId);
@@ -86,10 +104,14 @@ meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
         code: officeOf(p),
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
-    systems: s.enterable.map((sys) => ({
-      id: sys.id,
-      blocks: blocksFromModules(lettersInSystem(req.auth!.personId, sys.id, s.access, new Date(), holdings)),
-    })),
+    systems: s.enterable.map((sys) => {
+      const modules = lettersInSystem(req.auth!.personId, sys.id, s.access, new Date(), holdings);
+      return {
+        id: sys.id,
+        blocks: blocksFromModules(modules),
+        own: ownBlocks(sys.id, modules, holdings),
+      };
+    }),
     blockOrder: SHARED_BLOCKS,
   });
 });

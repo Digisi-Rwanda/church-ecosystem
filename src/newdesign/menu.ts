@@ -1,5 +1,5 @@
 import { SHARED_BLOCKS, type AccessLetter, type SharedBlock } from '../../server/src/shared/vocabulary';
-import type { Capabilities } from '../api/frontDoorApi';
+import type { Capabilities, OwnBlock } from '../api/frontDoorApi';
 
 export type MenuItem = { block: SharedBlock; letters: AccessLetter[] };
 
@@ -76,4 +76,12 @@ export function systemsWithBlock(
   return caps.systems
     .filter((s) => mine.has(s.id) && (s.blocks[block] ?? []).length > 0)
     .map((s) => ({ systemId: s.id, letters: s.blocks[block] }));
+}
+
+export type OwnMenuItem = { block: OwnBlock; letters: AccessLetter[] };
+
+/** A system's own blocks after the six shared ones (Governance, and Settings in Central Administration), from the server's answer. */
+export function buildOwnMenu(caps: Capabilities | null, systemId: string): OwnMenuItem[] {
+  const own = caps?.systems.find((s) => s.id === systemId)?.own ?? [];
+  return own.filter((o) => o.letters.length > 0).map((o) => ({ block: o.key, letters: o.letters }));
 }

@@ -13,6 +13,8 @@ import { missionRouter } from './routes/mission.js';
 import { participationRouter } from './routes/participation.js';
 import { accessRouter } from './routes/access.js';
 import { announcementsRouter } from './routes/announcements.js';
+import { governanceRouter } from './routes/governance.js';
+import { settingsRouter } from './routes/settings.js';
 import { notificationsRouter } from './routes/notifications.js';
 import { peopleRouter } from './routes/people.js';
 import { protocolOfficesRouter } from './routes/protocolOffices.js';
@@ -75,6 +77,8 @@ export function createApp() {
   app.use('/api/access', accessRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/announcements', announcementsRouter);
+  app.use('/api/settings', settingsRouter);
+  app.use('/api/governance', governanceRouter);
   app.use('/api/authorize', authorizeRouter);
   app.use('/api/me', meRouter);
   app.use('/api/portal', portalRouter);

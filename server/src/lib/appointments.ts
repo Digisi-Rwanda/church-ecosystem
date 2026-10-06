@@ -112,10 +112,11 @@ export function computeVacancies(
   units: UnitRec[],
   positions: PositionRec[],
   now = new Date(),
+  soonDays: number = TERM_ENDING_SOON_DAYS,
 ): { vacancies: Vacancy[]; conflicts: Conflict[] } {
   const vacancies: Vacancy[] = [];
   const conflicts: Conflict[] = [];
-  const soon = now.getTime() + TERM_ENDING_SOON_DAYS * 24 * 3600 * 1000;
+  const soon = now.getTime() + soonDays * 24 * 3600 * 1000;
   for (const u of units) {
     const kind = unitKindOf(u);
     const place = u.id;

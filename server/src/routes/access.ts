@@ -14,6 +14,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { loadSettings } from '../settings/store.js';
 import { requireAuth, pathParam, type AuthedRequest } from '../middleware/http.js';
 import {
   explainSystem,
@@ -27,7 +28,6 @@ import {
   type PositionRec,
 } from '../capabilities/engine.js';
 import {
-  DELEGATION_MAX_DAYS,
   MEMBER_LETTERS,
   MIN_ADMINISTRATORS,
   MODULE_KEYS,
@@ -143,7 +143,7 @@ const titleOf = (o: OfficeCode) => OFFICE_TITLE[o];
 
 /* ───────────── the rule matrix ───────────── */
 
-accessRouter.get('/matrix', requireAuth, (_req, res) => {
+accessRouter.get('/matrix', requireAuth, async (_req, res) => {
   res.json({
     letters: ACCESS_LETTERS.map((l) => ({ letter: l, ...ACCESS_LETTER_MEANING[l] })),
     modules: MODULE_KEYS.map((k) => ({ key: k, letters: MODULE_LETTERS[k] })),
@@ -157,7 +157,7 @@ accessRouter.get('/matrix', requireAuth, (_req, res) => {
     member: MEMBER_LETTERS,
     required: REQUIRED_OFFICES,
     placement: OFFICES_BY_KIND,
-    limits: { minAdministrators: MIN_ADMINISTRATORS, delegationMaxDays: DELEGATION_MAX_DAYS },
+    limits: { minAdministrators: MIN_ADMINISTRATORS, delegationMaxDays: (await loadSettings())['access.delegationMaxDays'] },
     rules: [
       'W, V, A, S, P and C each include R.',
       'Nobody approves their own entry or request.',
@@ -437,7 +437,7 @@ accessRouter.get('/vacancies', requireAuth, async (req: AuthedRequest, res) => {
   const { data, units } = await load();
   const pw = powers(liveHoldings(req.auth!.personId, data, now));
   if (!pw.canReadAppointments) return fail(res, 403, 'NOT_ALLOWED', 'You may not see vacancies');
-  const { vacancies, conflicts } = computeVacancies(units, data.positions, now);
+  const { vacancies, conflicts } = computeVacancies(units, data.positions, now, (await loadSettings())['access.termReminderDays']);
   const who = await names(vacancies.map((v) => v.holderPersonId ?? ''));
   res.json({
     vacancies: vacancies.map((v) => ({ ...v, holderName: v.holderPersonId ? (who.get(v.holderPersonId)?.name ?? null) : null })),
@@ -496,7 +496,7 @@ accessRouter.get('/delegations', requireAuth, async (req: AuthedRequest, res) =>
     given: shaped.filter((r) => r.fromPersonId === me),
     received: shaped.filter((r) => r.toPersonId === me),
     ...(all ? { all: shaped } : {}),
-    limits: { maxDays: DELEGATION_MAX_DAYS },
+    limits: { maxDays: (await loadSettings())['access.delegationMaxDays'] },
   });
 });
 
@@ -524,8 +524,9 @@ accessRouter.post('/delegations', requireAuth, async (req: AuthedRequest, res) =
   if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end <= start) {
     return fail(res, 400, 'BAD_DATES', 'The delegation must end after it starts');
   }
-  if (end.getTime() - start.getTime() > DELEGATION_MAX_DAYS * DAY) {
-    return fail(res, 400, 'DELEGATION_TOO_LONG', `A delegation lasts at most ${DELEGATION_MAX_DAYS} days`);
+  const maxDays = (await loadSettings())['access.delegationMaxDays'];
+  if (end.getTime() - start.getTime() > maxDays * DAY) {
+    return fail(res, 400, 'DELEGATION_TOO_LONG', `A delegation lasts at most ${maxDays} days`);
   }
   if (pos.endDate && end > new Date(pos.endDate as string | Date)) {
     return fail(res, 400, 'PAST_TERM', 'A delegation cannot outlast the term it is lent from');

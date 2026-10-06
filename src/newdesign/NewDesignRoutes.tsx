@@ -3,6 +3,10 @@ import { AccessPage } from './AccessPage';
 import { AddPersonPage } from './AddPersonPage';
 import { AnnouncementsPage } from './AnnouncementsPage';
 import { AppointmentsPage } from './AppointmentsPage';
+import { DecisionsPage } from './DecisionsPage';
+import { GovernanceLayout } from './GovernanceLayout';
+import { MeetingPage } from './MeetingPage';
+import { MeetingsPage } from './MeetingsPage';
 import { NewDesignLayout, RequireSignedIn } from './NewDesignGuards';
 import { NewSignInPage } from './NewSignInPage';
 import { NotificationsPage } from './NotificationsPage';
@@ -11,6 +15,7 @@ import { PeopleDirectoryPage } from './PeopleDirectoryPage';
 import { PeopleLayout } from './PeopleLayout';
 import { PersonCardPage } from './PersonCardPage';
 import { PreferencesPage } from './PreferencesPage';
+import { SettingsPage } from './SettingsPage';
 import { PortalBlockPage } from './PortalBlockPage';
 import { PortalLayout } from './PortalLayout';
 import { PortalPage } from './PortalPage';
@@ -45,6 +50,12 @@ export function newDesignRoutes() {
             <Route path="access" element={<AccessPage />} />
             <Route path=":personId" element={<PersonCardPage />} />
           </Route>
+          <Route path="governance" element={<GovernanceLayout />}>
+            <Route index element={<MeetingsPage />} />
+            <Route path="meetings/:meetingId" element={<MeetingPage />} />
+            <Route path="decisions" element={<DecisionsPage />} />
+          </Route>
+          <Route path="settings" element={<SettingsPage />} />
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>
       </Route>

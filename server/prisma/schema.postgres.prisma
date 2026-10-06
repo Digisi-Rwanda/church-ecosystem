@@ -592,3 +592,59 @@ model Announcement {
 
   @@index([publishedAt])
 }
+
+/// Central Administration's settings (slice 2.1): one row per setting that differs from its default.
+model Setting {
+  key         String   @id
+  valueJson   String
+  updatedAt   DateTime @default(now())
+  updatedById String?
+}
+
+/// A meeting of one unit (slice 2.2); the Board is a Central Administration meeting of type BOARD.
+model Meeting {
+  id              String    @id @default(cuid())
+  orgUnitId       String
+  systemId        String
+  /// A code from the meeting types setting.
+  typeCode        String
+  title           String
+  scheduledAt     DateTime
+  location        String?
+  agenda          String?
+  minutes         String?
+  /// JSON array of person ids who attended, recorded when the meeting is marked held.
+  attendeesJson   String    @default("[]")
+  /// PLANNED | HELD | CANCELLED
+  status          String    @default("PLANNED")
+  createdById     String
+  createdAt       DateTime  @default(now())
+  heldAt          DateTime?
+  heldById        String?
+  cancelledReason String?
+
+  @@index([systemId, scheduledAt])
+}
+
+/// A decision in the register (slice 2.2). A decision about work carries its owner and date and becomes a task when approved.
+model Decision {
+  id              String    @id @default(cuid())
+  meetingId       String?
+  orgUnitId       String
+  systemId        String
+  title           String
+  detail          String?
+  /// DRAFT | APPROVED | REJECTED | WITHDRAWN
+  status          String    @default("DRAFT")
+  createdById     String
+  createdAt       DateTime  @default(now())
+  decidedAt       DateTime?
+  decidedById     String?
+  rejectReason    String?
+  withdrawnReason String?
+  ownerPersonId   String?
+  dueDate         DateTime?
+  taskId          String?
+
+  @@index([systemId, createdAt])
+}

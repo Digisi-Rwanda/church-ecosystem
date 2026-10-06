@@ -12,10 +12,13 @@ export type PortalSystem = {
   unreadCount: number;
 };
 
+/** A system's own blocks after the six shared ones. */
+export type OwnBlock = 'governance' | 'settings';
+
 export type Capabilities = {
   personId: string;
   offices: Array<{ id: string; systemId: string | null; title: string; code: OfficeCode | null }>;
-  systems: Array<{ id: string; blocks: Record<SharedBlock, AccessLetter[]> }>;
+  systems: Array<{ id: string; blocks: Record<SharedBlock, AccessLetter[]>; own?: Array<{ key: OwnBlock; letters: AccessLetter[] }> }>;
   blockOrder: SharedBlock[];
 };
 
@@ -428,4 +431,158 @@ export async function withdrawAnnouncement(id: string, reason: string): Promise<
 export async function markAnnouncementsRead(body: { ids?: string[]; all?: boolean }): Promise<number> {
   const res = await apiFetch<{ marked: number }>('/api/announcements/read', { method: 'POST', body });
   return res.marked;
+}
+
+/* ── Settings (slice 2.1) ── */
+
+export type TypeItem = { code: string; name: string };
+export type ChurchProfile = { name: string; shortName: string; address: string; phone: string; email: string };
+
+export type SettingValues = {
+  'church.profile': ChurchProfile;
+  'church.language': 'en' | 'rw' | 'fr';
+  'letters.types': TypeItem[];
+  'meetings.types': TypeItem[];
+  'access.termReminderDays': number;
+  'access.delegationMaxDays': number;
+};
+export type SettingKey = keyof SettingValues;
+
+export type SettingRow = {
+  key: SettingKey;
+  value: SettingValues[SettingKey];
+  isDefault: boolean;
+  defaultValue: SettingValues[SettingKey];
+  updatedAt: string | null;
+  updatedByName: string | null;
+};
+
+export async function fetchSettings(): Promise<{ canChange: boolean; settings: SettingRow[] }> {
+  return apiFetch('/api/settings');
+}
+
+export async function saveSetting(key: SettingKey, value: unknown): Promise<void> {
+  await apiFetch(`/api/settings/${encodeURIComponent(key)}`, { method: 'PUT', body: { value } });
+}
+
+export async function resetSetting(key: SettingKey): Promise<void> {
+  await apiFetch(`/api/settings/${encodeURIComponent(key)}`, { method: 'DELETE' });
+}
+
+/* ── Governance (slice 2.2) ── */
+
+export type MeetingStatus = 'PLANNED' | 'HELD' | 'CANCELLED';
+export type DecisionStatus = 'DRAFT' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
+
+export type MeetingItem = {
+  id: string;
+  orgUnitId: string;
+  unitName: string;
+  systemId: string;
+  typeCode: string;
+  typeName: string;
+  title: string;
+  scheduledAt: string | null;
+  location: string | null;
+  status: MeetingStatus;
+  decisionCount: number;
+  canWrite: boolean;
+};
+
+export type DecisionItem = {
+  id: string;
+  meetingId: string | null;
+  meetingTitle: string | null;
+  orgUnitId: string;
+  unitName: string;
+  systemId: string;
+  title: string;
+  detail: string;
+  status: DecisionStatus;
+  createdAt: string | null;
+  authorName: string;
+  decidedAt: string | null;
+  decidedByName: string | null;
+  rejectReason: string | null;
+  owner: { id: string; name: string } | null;
+  dueDate: string | null;
+  taskId: string | null;
+  canApprove: boolean;
+  canWithdraw: boolean;
+};
+
+export type GovernanceOptions = {
+  units: Array<{ id: string; name: string; code: string | null; kind: string | null; systemId: string }>;
+  meetingTypes: TypeItem[];
+  limits: { titleMax: number; textMax: number };
+};
+
+export type MeetingDetail = MeetingItem & {
+  agenda: string;
+  minutes: string;
+  createdByName: string;
+  heldAt: string | null;
+  cancelledReason: string | null;
+  attendees: Array<{ id: string; name: string }>;
+};
+
+export async function fetchGovernanceOptions(): Promise<GovernanceOptions> {
+  return apiFetch('/api/governance/options');
+}
+
+export async function fetchMeetings(opts: { systemId?: string; unitId?: string; status?: MeetingStatus } = {}): Promise<MeetingItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ meetings: MeetingItem[] }>(`/api/governance/meetings${qs.size ? `?${qs}` : ''}`);
+  return res.meetings;
+}
+
+export async function fetchMeeting(id: string): Promise<{ meeting: MeetingDetail; decisions: DecisionItem[] }> {
+  return apiFetch(`/api/governance/meetings/${encodeURIComponent(id)}`);
+}
+
+export type NewMeeting = { orgUnitId: string; typeCode: string; title?: string; scheduledAt: string; location?: string; agenda?: string };
+
+export async function planMeeting(body: NewMeeting): Promise<string> {
+  const res = await apiFetch<{ meeting: { id: string } }>('/api/governance/meetings', { method: 'POST', body });
+  return res.meeting.id;
+}
+
+export async function markMeetingHeld(id: string, body: { minutes?: string; attendeeIds?: string[] }): Promise<void> {
+  await apiFetch(`/api/governance/meetings/${encodeURIComponent(id)}/held`, { method: 'POST', body });
+}
+
+export async function cancelMeeting(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/governance/meetings/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } });
+}
+
+export async function fetchDecisions(opts: { systemId?: string; unitId?: string; status?: DecisionStatus; q?: string } = {}): Promise<DecisionItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ decisions: DecisionItem[] }>(`/api/governance/decisions${qs.size ? `?${qs}` : ''}`);
+  return res.decisions;
+}
+
+export type NewDecision = {
+  meetingId?: string;
+  orgUnitId?: string;
+  title: string;
+  detail?: string;
+  work?: { ownerPersonId?: string; dueDate?: string };
+};
+
+export async function draftDecision(body: NewDecision): Promise<void> {
+  await apiFetch('/api/governance/decisions', { method: 'POST', body });
+}
+
+export async function approveDecision(id: string): Promise<void> {
+  await apiFetch(`/api/governance/decisions/${encodeURIComponent(id)}/approve`, { method: 'POST', body: {} });
+}
+
+export async function rejectDecision(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/governance/decisions/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } });
+}
+
+export async function withdrawDecision(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/governance/decisions/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: { reason } });
 }
