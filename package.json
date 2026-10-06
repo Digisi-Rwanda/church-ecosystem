@@ -13,7 +13,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "boundaries": "node scripts/check-boundaries.mjs",
-    "check": "npm run lint && npm run boundaries && npm run test && npm run build && npm run test --prefix server && npm run test:policy --prefix server",
+    "check": "npm run lint && npm run boundaries && npm run test && npm run build && npm run db:generate:pg --prefix server && npm run build --prefix server && npm run test --prefix server && npm run test:policy --prefix server",
     "api:setup": "npm run setup --prefix server",
     "api:seed": "npm run db:seed --prefix server"
   },

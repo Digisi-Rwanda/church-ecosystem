@@ -11,22 +11,10 @@ import { formatMemberCode, UNIT_CODE_PATTERN } from '../shared/vocabulary.js';
 
 /** The part of Prisma these helpers need (a transaction client fits too). */
 export interface CodeDb {
-  counter: {
-    upsert(args: {
-      where: { key: string };
-      update: { value: { increment: number } };
-      create: { key: string; value: number };
-    }): Promise<{ value: number }>;
-  };
-  person: {
-    findFirst(args: { where: Record<string, unknown> }): Promise<{ id: string } | null>;
-    findMany(args: Record<string, unknown>): Promise<Array<Record<string, any>>>;
-    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
-  };
-  orgUnit: {
-    findMany(args: Record<string, unknown>): Promise<Array<Record<string, any>>>;
-    update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<unknown>;
-  };
+  // Arguments are typed loosely on purpose so the real PrismaClient (generic, strict) fits.
+  counter: { upsert(args: any): Promise<{ value: number }> };
+  person: { findMany(args?: any): Promise<any[]>; update(args: any): Promise<unknown> };
+  orgUnit: { findMany(args?: any): Promise<any[]>; update(args: any): Promise<unknown> };
 }
 
 export const MEMBER_COUNTER = 'member';
