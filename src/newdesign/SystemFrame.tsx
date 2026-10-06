@@ -5,6 +5,7 @@ import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { buildMenu, buildOwnMenu } from './menu';
 import { badge } from './notices';
+import { churchWideLink } from './portalHome';
 import { useNoticeSummary } from './useNoticeSummary';
 
 /**
@@ -19,6 +20,7 @@ export function SystemFrame() {
   const menu = buildMenu(capabilities, systemId);
   const ownMenu = buildOwnMenu(capabilities, systemId);
   const { counts } = useNoticeSummary();
+  const churchWide = churchWideLink(portal, systemId);
 
   if (!system) {
     return (
@@ -39,9 +41,11 @@ export function SystemFrame() {
   return (
     <div className="door-frame">
       <header className="door-frame-top">
-        <Link className="btn ghost sm" to="/portal">
-          {t('door.frame.allSystems')}
-        </Link>
+        {churchWide && (
+          <Link className="btn ghost sm" to={churchWide}>
+            {t('door.frame.churchWide')}
+          </Link>
+        )}
         <div className="door-frame-title">
           <strong>{system.name}</strong>
           <span className="muted">{t('door.portal.role', { role: system.role })}</span>

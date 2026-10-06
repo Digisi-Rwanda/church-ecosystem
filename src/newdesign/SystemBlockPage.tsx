@@ -3,6 +3,8 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { isSharedBlock, lettersFor } from './menu';
+import { ChurchHome } from './ChurchHome';
+import { CHURCH_SYSTEM } from './portalHome';
 import { UrgentTile } from './UrgentTile';
 
 /**
@@ -33,6 +35,8 @@ export function SystemBlockPage() {
       />
     );
   }
+
+  if (block === 'home' && systemId === CHURCH_SYSTEM) return <ChurchHome systemId={systemId} />;
 
   return (
     <section className="door-block" aria-labelledby="door-block-title">

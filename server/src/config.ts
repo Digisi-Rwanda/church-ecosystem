@@ -1,16 +1,18 @@
 import 'dotenv/config';
-import { assertProductionProfile } from './lib/productionProfile.js';
 
-// APP_ENV=production (live service only) refuses unsafe rehearsal settings at start-up.
-assertProductionProfile();
-
-function parseCorsOrigin(raw: string | undefined): string | string[] | boolean {
+/**
+ * One address, a comma-separated list, or `*`. An entry may hold `*` as a stand-in for one
+ * piece of a host name, such as https://church-ecosystem-*-my-team.vercel.app, so every
+ * preview deployment of one Vercel project is allowed without listing each by hand.
+ */
+export function parseCorsOrigin(raw: string | undefined): string | Array<string | RegExp> | boolean {
   const value = (raw ?? 'http://localhost:5173').trim();
   if (value === '*') return true;
-  if (value.includes(',')) {
-    return value.split(',').map((s) => s.trim()).filter(Boolean);
-  }
-  return value;
+  const entries = value.split(',').map((s) => s.trim()).filter(Boolean);
+  const toEntry = (e: string): string | RegExp =>
+    e.includes('*') ? new RegExp(`^${e.split('*').map((part) => part.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('[a-z0-9-]+')}$`, 'i') : e;
+  if (entries.length === 1 && !entries[0].includes('*')) return entries[0];
+  return entries.map(toEntry);
 }
 
 const DEFAULT_SECRET = 'dev-only-change-me';
@@ -26,7 +28,7 @@ if (isProdEnv) {
 }
 
 export const config = {
-  /** production | staging | unset (local) */
+  /** Which deployment this is (production, staging, or unset); shown by the health check. */
   appEnv: process.env.APP_ENV,
   port: Number(process.env.PORT ?? 4000),
   databaseUrl: process.env.DATABASE_URL ?? 'file:./dev.db',

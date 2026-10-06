@@ -1,14 +1,19 @@
-import { Link } from 'react-router-dom';
+import { Navigate } from 'react-router-dom';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Spinner } from '../components/ui/Spinner';
 import { useT } from '../i18n/I18nContext';
 import { AnnouncementsStrip } from './AnnouncementsStrip';
 import { useFrontDoor } from './FrontDoorContext';
+import { landingPath } from './portalHome';
+import { SystemCards } from './SystemCards';
 
 /** The Portal: one card per system this person may enter, as the server answers. */
 export function PortalPage() {
   const t = useT();
   const { status, portal, reload } = useFrontDoor();
+  // Everyone who may enter the church-wide level lands there; the cards are the way into their units from its Home.
+  const landing = status === 'in' ? landingPath(portal) : null;
+  if (landing) return <Navigate to={landing} replace />;
 
   return (
     <>
@@ -39,26 +44,7 @@ export function PortalPage() {
       {status === 'in' && portal.length === 0 && (
         <EmptyState title={t('door.portal.emptyTitle')} detail={t('door.portal.emptyDetail')} />
       )}
-      {status === 'in' && portal.length > 0 && (
-        <ul className="door-cards">
-          {portal.map((s) => (
-            <li key={s.id}>
-              <Link
-                className="panel door-system-card"
-                to={`/s/${s.id}`}
-                aria-label={t('door.portal.open', { system: s.name })}
-              >
-                <strong>{s.shortName}</strong>
-                <span className="muted">{s.name}</span>
-                <span className="door-role">{t('door.portal.role', { role: s.role })}</span>
-                {s.unreadCount > 0 && (
-                  <span className="door-unread">{t('door.portal.unread', { count: s.unreadCount })}</span>
-                )}
-              </Link>
-            </li>
-          ))}
-        </ul>
-      )}
+      {status === 'in' && portal.length > 0 && <SystemCards systems={portal} />}
     </>
   );
 }

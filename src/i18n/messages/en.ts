@@ -98,7 +98,7 @@ export const en = {
   'door.portal.errorDetail': 'Check your connection, then try again.',
   'door.portal.retry': 'Try again',
   'door.portal.nav': 'Portal menu',
-  'door.portal.nav.systems': 'Systems',
+  'door.portal.nav.systems': 'Home',
   'door.portal.nav.announcements': 'Announcements',
   'door.portal.block.title': '{block} across your systems',
   'door.portal.block.subtitle': 'Open the block inside the system you need.',
@@ -627,6 +627,13 @@ export const en = {
   'door.central.reports': 'Reports received',
   'door.central.reports.none': 'No reports yet',
   'door.central.reports.noneDetail': 'When the systems send in their reports, they show here.',
+
+  'door.home.title': 'ADEPR Kacyiru',
+  'door.home.subtitle': 'The whole church: what concerns everyone, and the way into your units.',
+  'door.home.myUnits': 'My units',
+  'door.home.myUnits.hint': 'Open the system of a unit you belong to or lead.',
+  'door.home.myUnits.none': 'You are not part of any unit yet.',
+  'door.frame.churchWide': 'Church-wide',
 
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
