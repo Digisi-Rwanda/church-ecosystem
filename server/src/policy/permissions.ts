@@ -38,8 +38,11 @@ export function grantMatches(
 
 export function isTaskActive(task: WorkTask, now = new Date()): boolean {
   if (task.status !== 'TODO' && task.status !== 'IN_PROGRESS') return false;
-  if (!task.dueAt) return true;
-  // Active work items stay valid until closed — due date is informational.
-  void now;
+  const start = new Date(task.startDate ?? '');
+  if (Number.isNaN(start.getTime()) || start > now) return false;
+  if (task.endDate) {
+    const end = new Date(task.endDate);
+    if (!Number.isNaN(end.getTime()) && end < now) return false;
+  }
   return true;
 }

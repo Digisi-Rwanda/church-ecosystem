@@ -13,6 +13,18 @@ import { requireAuth, type AuthedRequest } from '../middleware/http.js';
  */
 export const authorizeRouter = Router();
 
+/** Looking at someone else's access is for people who manage the whole church's people. */
+async function mayInspect(callerId: string, targetId: string): Promise<boolean> {
+  if (callerId === targetId) return true;
+  const d = await authorizePerson({
+    personId: callerId,
+    systemId: 'sys-main',
+    resource: 'PERSON',
+    action: 'VIEW_FULL',
+  });
+  return d.allowed;
+}
+
 const probeSchema = z.object({
   systemId: z.string().min(1),
   resource: z.string().min(1),
@@ -27,6 +39,10 @@ authorizeRouter.post('/probe', requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   const personId = parsed.data.personId ?? req.auth!.personId;
+  if (!(await mayInspect(req.auth!.personId, personId))) {
+    res.status(403).json({ error: 'You can only check your own access.' });
+    return;
+  }
   const decision = await authorizePerson({
     personId,
     systemId: parsed.data.systemId,
@@ -46,6 +62,10 @@ authorizeRouter.get('/grants', requireAuth, async (req: AuthedRequest, res) => {
     typeof req.query.personId === 'string'
       ? req.query.personId
       : req.auth!.personId;
+  if (!(await mayInspect(req.auth!.personId, personId))) {
+    res.status(403).json({ error: 'You can only see your own access.' });
+    return;
+  }
   const systemId =
     typeof req.query.systemId === 'string' ? req.query.systemId : undefined;
   const grants = systemId

@@ -688,6 +688,16 @@ export function registerMissionExtendedRoutes(router: Router) {
         res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
         return;
       }
+      if (
+        event.status === 'PENDING_APPROVAL' &&
+        parsed.data.status &&
+        !['PENDING_APPROVAL', 'CANCELLED'].includes(parsed.data.status)
+      ) {
+        res.status(409).json({
+          error: 'This event is waiting for approval — use the approval steps.',
+        });
+        return;
+      }
       const result = await life.setEventStatus(id, parsed.data);
       if (!result.ok) {
         res.status(result.status).json({ error: result.error });
@@ -742,6 +752,29 @@ export function registerMissionExtendedRoutes(router: Router) {
   );
 
   /* ── Event registrations + mission shares ── */
+
+  async function shareTarget(
+    kind: string,
+    id: string,
+  ): Promise<{ systemId: string; resource: string } | null> {
+    if (kind === 'PROJECT') {
+      const r = await prisma.churchProject.findUnique({ where: { id } });
+      return r ? { systemId: r.ownerSystemId, resource: 'PROJECT' } : null;
+    }
+    if (kind === 'EVENT') {
+      const r = await prisma.churchEvent.findUnique({ where: { id } });
+      return r ? { systemId: r.ownerSystemId, resource: 'EVENT' } : null;
+    }
+    if (kind === 'PROGRAM') {
+      const r = await prisma.program.findUnique({ where: { id } });
+      return r ? { systemId: r.ownerSystemId, resource: 'PROGRAM' } : null;
+    }
+    if (kind === 'TASK') {
+      const r = await prisma.workTask.findUnique({ where: { id } });
+      return r ? { systemId: r.systemId ?? 'sys-main', resource: 'TASK' } : null;
+    }
+    return null;
+  }
 
   const regSchema = z.object({
     personId: z.string().min(1),
@@ -811,16 +844,30 @@ export function registerMissionExtendedRoutes(router: Router) {
         action: 'MANAGE',
       });
       const selfReg = req.body?.personId === req.auth!.personId;
-      if (!decision.allowed && !selfReg) {
-        res.status(403).json({ error: decision.reason });
-        return;
+      if (!decision.allowed) {
+        // A person may only register themselves, and only for an event they can see.
+        const canSee = selfReg
+          ? await authorizePerson({
+              personId: req.auth!.personId,
+              systemId: event.ownerSystemId,
+              resource: 'EVENT',
+              action: 'VIEW',
+            })
+          : decision;
+        if (!selfReg || !canSee.allowed) {
+          res.status(403).json({ error: (selfReg ? canSee : decision).reason });
+          return;
+        }
       }
       const parsed = regSchema.safeParse(req.body);
       if (!parsed.success) {
         res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
         return;
       }
-      let status = parsed.data.status ?? 'REGISTERED';
+      // Only managers may record attendance or other statuses; people register as REGISTERED.
+      let status = decision.allowed
+        ? (parsed.data.status ?? 'REGISTERED')
+        : 'REGISTERED';
       const { expireAndPromote, mapRegistration } = await import(
         '../mission/eventRegistrations.js'
       );
@@ -907,6 +954,21 @@ export function registerMissionExtendedRoutes(router: Router) {
       res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
       return;
     }
+    const target = await shareTarget(parsed.data.kind, parsed.data.resourceId);
+    if (!target) {
+      res.status(404).json({ error: 'Nothing to share' });
+      return;
+    }
+    const gate = await authorizePerson({
+      personId: req.auth!.personId,
+      systemId: target.systemId,
+      resource: target.resource,
+      action: 'MANAGE',
+    });
+    if (!gate.allowed) {
+      res.status(403).json({ error: gate.reason });
+      return;
+    }
     const share = await prisma.missionShare.create({
       data: {
         kind: parsed.data.kind,
@@ -939,8 +1001,34 @@ export function registerMissionExtendedRoutes(router: Router) {
       typeof req.query.kind === 'string' ? req.query.kind : undefined;
     const resourceId =
       typeof req.query.resourceId === 'string' ? req.query.resourceId : undefined;
-    const personId =
+    let personId =
       typeof req.query.personId === 'string' ? req.query.personId : undefined;
+    if (resourceId) {
+      // Listing who a thing is shared with needs the right to see that thing.
+      const kinds = kind ? [kind] : ['PROJECT', 'EVENT', 'PROGRAM', 'TASK'];
+      let target: { systemId: string; resource: string } | null = null;
+      for (const k of kinds) {
+        target = await shareTarget(k, resourceId);
+        if (target) break;
+      }
+      if (!target) {
+        res.status(404).json({ error: 'Not found' });
+        return;
+      }
+      const gate = await authorizePerson({
+        personId: req.auth!.personId,
+        systemId: target.systemId,
+        resource: target.resource,
+        action: 'VIEW',
+      });
+      if (!gate.allowed) {
+        res.status(403).json({ error: gate.reason });
+        return;
+      }
+    } else {
+      // Without a resource, a person only sees their own shares.
+      personId = req.auth!.personId;
+    }
     const shares = await prisma.missionShare.findMany({
       where: {
         ...(kind ? { kind } : {}),
@@ -975,6 +1063,21 @@ export function registerMissionExtendedRoutes(router: Router) {
       const id = pathParam(req, 'id');
       if (!id) {
         res.status(400).json({ error: 'Missing id' });
+        return;
+      }
+      const target = await shareTarget('PROJECT', id);
+      if (!target) {
+        res.status(404).json({ error: 'Not found' });
+        return;
+      }
+      const gate = await authorizePerson({
+        personId: req.auth!.personId,
+        systemId: target.systemId,
+        resource: 'PROJECT',
+        action: 'VIEW',
+      });
+      if (!gate.allowed) {
+        res.status(403).json({ error: gate.reason });
         return;
       }
       const result = await life.getApprovalChainFor('PROJECT', id);
@@ -1163,6 +1266,21 @@ export function registerMissionExtendedRoutes(router: Router) {
       const id = pathParam(req, 'id');
       if (!id) {
         res.status(400).json({ error: 'Missing id' });
+        return;
+      }
+      const target = await shareTarget('EVENT', id);
+      if (!target) {
+        res.status(404).json({ error: 'Not found' });
+        return;
+      }
+      const gate = await authorizePerson({
+        personId: req.auth!.personId,
+        systemId: target.systemId,
+        resource: 'EVENT',
+        action: 'VIEW',
+      });
+      if (!gate.allowed) {
+        res.status(403).json({ error: gate.reason });
         return;
       }
       const result = await life.getApprovalChainFor('EVENT', id);

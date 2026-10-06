@@ -253,9 +253,10 @@ missionRouter.post('/events', requireAuth, async (req: AuthedRequest, res) => {
     res.status(403).json({ error: decision.reason });
     return;
   }
-  const status =
-    parsed.data.status ??
-    (parsed.data.beyondOwnerScope ? 'PENDING_APPROVAL' : 'CONFIRMED');
+  // Beyond-scope events always wait for approval, whatever status the caller sends.
+  const status = parsed.data.beyondOwnerScope
+    ? 'PENDING_APPROVAL'
+    : (parsed.data.status ?? 'CONFIRMED');
   const event = await prisma.churchEvent.create({
     data: {
       name: parsed.data.name,
@@ -516,7 +517,12 @@ missionRouter.post('/projects', requireAuth, async (req: AuthedRequest, res) => 
       description: parsed.data.description ?? '',
       ownerSystemId: parsed.data.ownerSystemId,
       visibility: toStoredVisibility(parsed.data.visibility),
-      status: parsed.data.status ?? 'DRAFT',
+      status:
+        parsed.data.beyondOwnerScope &&
+        parsed.data.status &&
+        !['DRAFT', 'PENDING_APPROVAL'].includes(parsed.data.status)
+          ? 'PENDING_APPROVAL'
+          : (parsed.data.status ?? 'DRAFT'),
       programId: parsed.data.programId,
       beyondOwnerScope: parsed.data.beyondOwnerScope ?? false,
       leadPersonId: parsed.data.leadPersonId,
