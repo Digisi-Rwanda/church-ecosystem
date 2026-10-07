@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchPlanOptions, fetchPlans } from '../api/frontDoorApi';
+import { fetchPlanOptions, fetchPlans, type PlanType } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
@@ -11,13 +11,13 @@ import { useLoad } from './useLoad';
 import { useNavigate } from 'react-router-dom';
 
 /** Full work in one system: plans that are approved, run, closed and reported. */
-export function PlansList({ systemId }: { systemId: string }) {
+export function PlansList({ systemId, planType }: { systemId: string; planType?: PlanType }) {
   const t = useT();
   const navigate = useNavigate();
   const [view, setView] = useState<'mine' | 'all'>('all');
   const [show, setShow] = useState<'open' | 'all'>('open');
   const [creating, setCreating] = useState(false);
-  const list = useLoad(() => fetchPlans({ systemId, view, status: show }), `plans|${systemId}|${view}|${show}`);
+  const list = useLoad(() => fetchPlans({ systemId, view, status: show, type: planType }), `plans|${systemId}|${view}|${show}|${planType ?? ''}`);
   const options = useLoad(fetchPlanOptions, 'plan-options');
   const canCreate = !!options.data && options.data.units.some((u) => u.systemId === systemId);
   const items = sortPlans(list.data ?? []);
@@ -34,12 +34,12 @@ export function PlansList({ systemId }: { systemId: string }) {
         </SelectField>
         {canCreate && !creating && (
           <button type="button" className="btn" onClick={() => setCreating(true)}>
-            {t('door.plan.new')}
+            {planType ? t(`door.plan.new.${planType}` as 'door.plan.new.PROGRAM') : t('door.plan.new')}
           </button>
         )}
       </div>
       {creating && options.data && (
-        <PlanForm options={options.data} systemId={systemId} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={() => setCreating(false)} />
+        <PlanForm options={options.data} systemId={systemId} planType={planType} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={() => setCreating(false)} />
       )}
       <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
         {items.length === 0 ? (

@@ -103,6 +103,16 @@ describe('drafting', () => {
     expect(r.body.plan.team).toHaveLength(1);
     expect(fake.__db.auditEvent.some((e: any) => e.action === 'WORKPLAN_CREATED')).toBe(true);
   });
+  it('a plan is a Program, an Event or a Project; lists filter by type and an edit keeps the type', async () => {
+    const ev = await draft({ planType: 'EVENT', title: 'Concert night' });
+    await draft({ planType: 'PROGRAM', title: 'Discipleship' });
+    await draft({ title: 'Plain' });
+    expect((await post('p-vp', B, body({ planType: 'PARTY' }))).status).toBe(400);
+    expect((await get('p-vp', `${B}?view=all&type=EVENT`)).body.items.map((i: any) => i.title)).toEqual(['Concert night']);
+    expect((await get('p-vp', `${B}?view=all&type=PROJECT`)).body.items.map((i: any) => i.title)).toEqual(['Plain']);
+    const { planType: _omit, ...noType } = body({ title: 'Concert night 2' }) as Record<string, unknown>;
+    expect((await patch('p-vp', `${B}/${ev}`, noType)).body.plan.planType).toBe('EVENT');
+  });
   it('only a draft can be changed; a draft can be deleted softly and an Administrator restores it', async () => {
     const id = await draft();
     expect((await patch('p-vp', `${B}/${id}`, body({ title: 'Harvest concert 2' }))).status).toBe(200);

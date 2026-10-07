@@ -11,7 +11,7 @@ import { SystemCards } from './SystemCards';
 export function PortalPage() {
   const t = useT();
   const { status, portal, reload } = useFrontDoor();
-  // Everyone who may enter the church-wide level lands there; the cards are the way into their units from its Home.
+  // A person with exactly one system goes straight into it; everyone else sees the cards.
   const landing = status === 'in' ? landingPath(portal) : null;
   if (landing) return <Navigate to={landing} replace />;
 

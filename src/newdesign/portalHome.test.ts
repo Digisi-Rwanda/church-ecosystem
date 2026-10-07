@@ -1,25 +1,26 @@
 import { describe, expect, it } from 'vitest';
 import type { PortalSystem } from '../api/frontDoorApi';
-import { churchWideLink, landingPath, myUnits } from './portalHome';
+import { groupByKind, kindOfSystem, landingPath } from './portalHome';
 
 const sys = (id: string): PortalSystem => ({ id, code: id, name: id, shortName: id, basePath: `/${id}`, role: 'Member', unreadCount: 0 });
 
-describe('church-wide landing', () => {
-  const member = [sys('sys-main'), sys('sys-choir'), sys('sys-youth')];
-  it('lands on the church-wide home when the person may enter it', () => {
-    expect(landingPath(member)).toBe('/s/sys-main');
+describe('the Portal', () => {
+  it('goes straight into the only system a person has', () => {
+    expect(landingPath([sys('sys-choir')])).toBe('/s/sys-choir');
+    expect(landingPath([sys('sys-choir'), sys('sys-finance')])).toBe('/s/sys-choir');
   });
-  it('falls back to the card page when the person may not enter the church level', () => {
-    expect(landingPath([sys('sys-choir')])).toBeNull();
+  it('shows the Portal for two or more systems, or none', () => {
+    expect(landingPath([sys('sys-main'), sys('sys-choir')])).toBeNull();
     expect(landingPath([])).toBeNull();
   });
-  it('lists only the unit systems under My units', () => {
-    expect(myUnits(member).map((s) => s.id)).toEqual(['sys-choir', 'sys-youth']);
-    expect(myUnits([sys('sys-main')])).toEqual([]);
+  it('groups the cards as Central Administration, organisations and ministries, and never opens Finance', () => {
+    const groups = groupByKind([sys('sys-youth'), sys('sys-finance'), sys('sys-choir'), sys('sys-main'), sys('sys-media')]);
+    expect(groups.map((g) => g.kind)).toEqual(['central', 'organisation', 'ministry']);
+    expect(groups[1]!.systems.map((s) => s.id)).toEqual(['sys-choir', 'sys-media']);
+    expect(groups.flatMap((g) => g.systems.map((s) => s.id))).not.toContain('sys-finance');
   });
-  it('offers the way back to church-wide from a unit, but not from the church itself', () => {
-    expect(churchWideLink(member, 'sys-choir')).toBe('/s/sys-main');
-    expect(churchWideLink(member, 'sys-main')).toBeNull();
-    expect(churchWideLink([sys('sys-choir')], 'sys-choir')).toBeNull();
+  it('knows each kind', () => {
+    expect(kindOfSystem('sys-protocol')).toBe('organisation');
+    expect(kindOfSystem('sys-music')).toBe('ministry');
   });
 });

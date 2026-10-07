@@ -23,6 +23,11 @@ import { ReportPage } from './ReportPage';
 import { ReportsPage } from './ReportsPage';
 import { CollectionsPage } from './CollectionsPage';
 import { MoneyPage } from './MoneyPage';
+import { MyContributionPage } from './MyContributionPage';
+import { ContributionsPage } from './ContributionsPage';
+import { MoneyReportsPage } from './MoneyReportsPage';
+import { MoneyPlanPage } from './MoneyPlanPage';
+import { MoneyBudgetPage } from './MoneyBudgetPage';
 import { Route } from 'react-router-dom';
 import { AccessPage } from './AccessPage';
 import { AddPersonPage } from './AddPersonPage';
@@ -46,12 +51,15 @@ import { PersonCardPage } from './PersonCardPage';
 import { PreferencesPage } from './PreferencesPage';
 import { SchedulePage } from './SchedulePage';
 import { SettingsPage } from './SettingsPage';
+import { PlansPage } from './PlansPage';
+import { PortalWorkPage } from './PortalWorkPage';
 import { PlanPage } from './PlanPage';
 import { PortalBlockPage } from './PortalBlockPage';
 import { PortalLayout } from './PortalLayout';
 import { PortalPage } from './PortalPage';
 import { SystemBlockPage } from './SystemBlockPage';
 import { SystemFrame } from './SystemFrame';
+import { SystemSettingsPage } from './SystemSettingsPage';
 import { UnitPage } from './UnitPage';
 import { WorkPage } from './WorkPage';
 
@@ -68,6 +76,7 @@ export function newDesignRoutes() {
           <Route index element={<PortalPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="work" element={<PortalWorkPage />} />
           <Route path="notifications/preferences" element={<PreferencesPage />} />
           <Route path=":block" element={<PortalBlockPage />} />
         </Route>
@@ -96,10 +105,19 @@ export function newDesignRoutes() {
           </Route>
           <Route path="central" element={<CentralHomePage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="preferences" element={<SystemSettingsPage />} />
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="work" element={<WorkPage />} />
+          <Route path="programs" element={<PlansPage planType="PROGRAM" />} />
+          <Route path="events" element={<PlansPage planType="EVENT" />} />
+          <Route path="projects" element={<PlansPage planType="PROJECT" />} />
           <Route path="work/plans/:planId" element={<PlanPage />} />
           <Route path="money" element={<MoneyPage />} />
+          <Route path="money/plan" element={<MoneyPlanPage />} />
+          <Route path="money/budget" element={<MoneyBudgetPage />} />
+          <Route path="money/contributions" element={<ContributionsPage />} />
+          <Route path="money/reports" element={<MoneyReportsPage />} />
+          <Route path="money/mine" element={<MyContributionPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="reports/:reportId" element={<ReportPage />} />
           <Route path="groups" element={<GroupsPage />} />

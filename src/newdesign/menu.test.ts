@@ -74,39 +74,96 @@ describe('Portal bar', () => {
 });
 
 describe('buildModules', () => {
-  const caps = {
-    blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'],
-    systems: [
-      {
-        id: 'sys-a',
-        blocks: { ...none, home: ['R'], work: ['R'], schedule: ['R'] },
-        own: [
-          { key: 'roster', letters: ['R'] },
-          { key: 'groups', letters: [] },
-        ],
-      },
-    ],
-  } as unknown as Capabilities;
+  const sys = (id: string, blocks: object, own: unknown[] = []) => ({ id, blocks: { ...none, ...blocks }, own });
+  const mk = (...systems: unknown[]) => ({ blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'], systems }) as unknown as Capabilities;
 
   it('groups what the person can open and drops the rest completely', async () => {
-    const { buildModules, canSeeBlock, activeModule } = await import('./menu');
+    const { buildModules, canSeePath } = await import('./menu');
+    const caps = mk(sys('sys-a', { home: ['R'], work: ['R'], schedule: ['R'] }, [{ key: 'roster', letters: ['R'] }, { key: 'groups', letters: [] }]));
     const mods = buildModules(caps, 'sys-a');
-    expect(mods.map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'serve']);
-    expect(mods[3]!.places.map((p) => p.block)).toEqual(['work', 'schedule', 'roster']);
-    expect(mods.flatMap((m) => m.places.map((p) => p.block))).not.toContain('groups');
-    expect(canSeeBlock(mods, 'money')).toBe(false);
-    expect(canSeeBlock(mods, 'groups')).toBe(false);
-    expect(canSeeBlock(mods, 'deleted-work')).toBe(true);
-    expect(activeModule(mods, 'roster')?.id).toBe('serve');
+    expect(mods.map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'work', 'schedule', 'ministry', 'money', 'settings']);
+    expect(mods.find((m) => m.id === 'work')!.places.map((p) => p.key)).toEqual(['tasks', 'programs', 'events', 'projects']);
+    expect(mods.flatMap((m) => m.places.map((p) => p.key))).not.toContain('groups');
+    expect(canSeePath(mods, '/s/sys-a/money')).toBe(false);
+    expect(canSeePath(mods, '/s/sys-a/groups')).toBe(false);
+    expect(canSeePath(mods, '/s/sys-a/programs')).toBe(true);
+    expect(canSeePath(mods, '/s/sys-a/work/plans/p1')).toBe(true);
+    expect(canSeePath(mods, '/s/sys-a/deleted-work')).toBe(true);
+    expect(canSeePath(mods, '/s/sys-a/notifications')).toBe(true);
   });
 
-  it('gives the church-wide system a Units entry for people with People access', async () => {
-    const { buildModules, moduleForPath } = await import('./menu');
-    const c = { blockOrder: ['home', 'people'], systems: [{ id: 'sys-main', blocks: { ...none, home: ['R'], people: ['R'] }, own: [] }] } as unknown as Capabilities;
-    const mods = buildModules(c, 'sys-main');
-    expect(mods.map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'units', 'people']);
-    expect(moduleForPath(mods, 'people', 'units')?.id).toBe('units');
-    expect(moduleForPath(mods, 'people')?.id).toBe('people');
-    expect(buildModules(caps, 'sys-a').some((m) => m.id === 'units')).toBe(false);
+  it('shows the most specific place as the active one', async () => {
+    const { buildModules, resolveActive } = await import('./menu');
+    const caps = mk(sys('sys-a', { home: ['R'], people: ['R'] }, [{ key: 'governance', letters: ['R'] }]));
+    const mods = buildModules(caps, 'sys-a');
+    expect(resolveActive(mods, '/s/sys-a/people')?.place?.key).toBe('directory');
+    expect(resolveActive(mods, '/s/sys-a/people/appointments')?.place?.key).toBe('appointments');
+    expect(resolveActive(mods, '/s/sys-a/people/p-1')?.place?.key).toBe('directory');
+    expect(resolveActive(mods, '/s/sys-a/governance/letters/l1')?.place?.key).toBe('letters');
+    expect(resolveActive(mods, '/s/sys-a/collections')?.module.id).toBe('governance');
+  });
+
+  it('the Portal (church-wide level) has Units on the sidebar, other systems do not', async () => {
+    const { buildModules } = await import('./menu');
+    const caps = mk(sys('sys-main', { home: ['R'], people: ['R'], work: ['R'] }, [{ key: 'settings', letters: ['R'] }]), sys('sys-a', { people: ['R'] }));
+    const portal = buildModules(caps, 'sys-main').map((m) => m.id);
+    expect(portal).toEqual(['home', 'notifications', 'announcements', 'units', 'people', 'work', 'money', 'settings']);
+    expect(buildModules(caps, 'sys-main').find((m) => m.id === 'people')!.places.map((p) => p.key)).toEqual(['directory', 'appointments', 'access']);
+    const other = buildModules(caps, 'sys-a');
+    expect(other.some((m) => m.id === 'units')).toBe(false);
+    expect(other.find((m) => m.id === 'people')!.places.map((p) => p.key)).toContain('organisation');
+  });
+
+  it('keeps notifications and announcements even with no letters at all', async () => {
+    const { buildModules } = await import('./menu');
+    expect(buildModules(null, 'sys-a').map((m) => m.id)).toEqual(['notifications', 'announcements', 'money', 'settings']);
+  });
+});
+
+describe('buildPortalModules', () => {
+  it('has Home, Notifications and Announcements, then the shared blocks held in any system', async () => {
+    const { buildPortalModules } = await import('./menu');
+    const caps = {
+      blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'],
+      systems: [
+        { id: 'sys-a', blocks: { ...none, work: ['R'] }, own: [] },
+        { id: 'sys-b', blocks: { ...none, reports: ['R'] }, own: [] },
+      ],
+    } as unknown as Capabilities;
+    expect(buildPortalModules(caps).map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'work', 'reports']);
+    expect(buildPortalModules(null).map((m) => m.id)).toEqual(['home', 'notifications', 'announcements']);
+  });
+  it('every system has its own Settings, and Central Administration keeps the church-wide ones beside it', async () => {
+    const { buildModules } = await import('./menu');
+    const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
+    const sys = (id: string, blocks: object, own: unknown[] = []) => ({ id, blocks: { ...none, ...blocks }, own });
+    const mk = (...systems: unknown[]) => ({ blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'], systems }) as unknown as Capabilities;
+    const plain = buildModules(mk(sys('sys-a', { people: ['R'] })), 'sys-a').find((m) => m.id === 'settings');
+    expect(plain?.places.map((p) => p.to)).toEqual(['/s/sys-a/preferences']);
+    const central = buildModules(mk(sys('sys-main', { people: ['R'] }, [{ key: 'settings', letters: ['R'] }])), 'sys-main').find((m) => m.id === 'settings');
+    expect(central?.places.map((p) => p.to)).toEqual(['/s/sys-main/settings', '/s/sys-main/preferences']);
+  });
+  it('Money: five screens for those who hold money letters, and My contribution for every member', async () => {
+    const { buildModules, resolveActive } = await import('./menu');
+    const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
+    const mk = (blocks: object) => ({ blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'], systems: [{ id: 'sys-a', blocks: { ...none, ...blocks }, own: [] }] }) as unknown as Capabilities;
+    const keys = (caps: Capabilities) => buildModules(caps, 'sys-a').find((m) => m.id === 'money')!.places.map((p) => p.key);
+    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'accounting', 'contributions', 'moneyreports', 'mine']);
+    expect(keys(mk({ people: ['R'] }))).toEqual(['mine']);
+    const mods = buildModules(mk({ money: ['R'] }), 'sys-a');
+    expect(resolveActive(mods, '/s/sys-a/money')?.place?.key).toBe('accounting');
+    expect(resolveActive(mods, '/s/sys-a/money/budget')?.place?.key).toBe('budget');
+    // a team leader without money letters may still open the contribution lists, under Money
+    const lead = buildModules(mk({ people: ['R'] }), 'sys-a');
+    expect(resolveActive(lead, '/s/sys-a/money/contributions')).toMatchObject({ module: { id: 'money' }, place: null });
+  });
+  it('Collections is a Governance sub-block of Central Administration only', async () => {
+    const { buildModules } = await import('./menu');
+    const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
+    const sys = (id: string) => ({ id, blocks: { ...none }, own: [{ key: 'governance', letters: ['R'] }] });
+    const caps = { blockOrder: [], systems: [sys('sys-main'), sys('sys-youth')] } as unknown as Capabilities;
+    const keys = (id: string) => buildModules(caps, id).find((m) => m.id === 'governance')!.places.map((p) => p.key);
+    expect(keys('sys-main')).toEqual(['meetings', 'decisions', 'collections', 'letters']);
+    expect(keys('sys-youth')).toEqual(['meetings', 'decisions', 'letters']);
   });
 });

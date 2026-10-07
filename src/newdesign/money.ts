@@ -13,6 +13,15 @@ const ERROR_KEYS: Record<string, string> = {
   NOT_FOUND: 'door.work.err.gone',
   PERSON_NOT_ACTIVE: 'door.gov.err.personNotActive',
   UNIT_HAS_NO_SYSTEM: 'door.gov.err.noSystem',
+  BUDGET_APPROVED: 'door.money.err.budgetApproved',
+  EMPTY_BUDGET: 'door.money.err.emptyBudget',
+  EMPTY_LIST: 'door.money.err.emptyList',
+  LIST_EXISTS: 'door.money.err.listExists',
+  UNKNOWN_TYPE: 'door.money.err.unknownType',
+  UNKNOWN_TEAM: 'door.money.err.unknownTeam',
+  NOTHING_TO_COMBINE: 'door.money.err.nothingToCombine',
+  LINE_NAME: 'door.money.lines.err.name',
+  ACCOUNT: 'door.money.err.account',
 };
 export const moneyErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
 

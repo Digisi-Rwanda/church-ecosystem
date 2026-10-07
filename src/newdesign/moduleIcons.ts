@@ -7,8 +7,11 @@ export const MODULE_ICON: Record<ModuleId, IconName> = {
   announcements: 'pulse',
   units: 'building',
   people: 'users',
-  serve: 'calendar',
+  work: 'task',
+  schedule: 'calendar',
+  ministry: 'layers',
   money: 'wallet',
   reports: 'chart',
-  admin: 'board',
+  governance: 'board',
+  settings: 'settings',
 };

@@ -22,7 +22,10 @@ type Res = import('express').Response;
 const fail = (res: Res, status: number, code: string, error: string) => res.status(status).json({ error, code });
 const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v : new Date(v)).toISOString() : null);
 
+const PLAN_TYPES = ['PROGRAM', 'EVENT', 'PROJECT'] as const;
+
 interface Plan extends PlanRow {
+  planType?: string | null;
   aim?: string | null; needs?: string | null; location?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null;
   rejectedReason?: string | null; cancelReason?: string | null; planningSummary?: string | null; executionSummary?: string | null;
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
@@ -94,7 +97,7 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
     id: p.id, title: p.title, status: p.status, systemId: p.systemId, orgUnitId: p.orgUnitId,
     unitName: c.units.find((u) => u.id === p.orgUnitId)?.name ?? '',
     leaderId: p.leaderPersonId, leaderName: who.get(p.leaderPersonId) ?? '',
-    startsOn: iso(p.startsOn), endsOn: iso(p.endsOn), visibility: p.visibility, beyondUnit: p.beyondUnit,
+    startsOn: iso(p.startsOn), endsOn: iso(p.endsOn), visibility: p.visibility, beyondUnit: p.beyondUnit, planType: p.planType ?? 'PROJECT',
     mine: isOnTeam(p, me), waitingLevel: currentLevel(p)?.label ?? null, ...flags(p, c, me),
   };
   if (!detail) return base;
@@ -125,6 +128,7 @@ const fields = {
   team: z.array(z.object({ personId: z.string().min(1), role: z.string().trim().min(1).max(ROLE_MAX) })).max(TEAM_MAX).default([]),
   beyondUnit: z.boolean().default(false),
   visibility: z.enum(VISIBILITIES).default('SYSTEM'),
+  planType: z.enum(PLAN_TYPES).default('PROJECT'),
 };
 
 async function peopleProblem(ids: string[]): Promise<boolean> {
@@ -181,6 +185,7 @@ workPlansRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const rows = ((await prisma.workPlan.findMany()) as Plan[])
     .filter((p) => canSee(asWorkRow(p), me, c.data))
     .filter((p) => !q('systemId') || p.systemId === q('systemId'))
+    .filter((p) => !q('type') || (p.planType ?? 'PROJECT') === q('type'))
     .filter((p) => view === 'all' || isOnTeam(p, me))
     .filter((p) => (status === 'open' ? !['ENDED', 'CANCELLED'].includes(p.status) : status === 'all' || p.status === status))
     .filter((p) => !text || p.title.toLowerCase().includes(text))
@@ -221,7 +226,7 @@ workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
     data: {
       orgUnitId: unit.id, systemId: unit.systemId, title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null,
       startsOn: b.startsOn ? new Date(b.startsOn) : null, endsOn: b.endsOn ? new Date(b.endsOn) : null, leaderPersonId: b.leaderId,
-      teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility, status: 'DRAFT', approvalsJson: '[]', createdById: me,
+      teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility, planType: b.planType, status: 'DRAFT', approvalsJson: '[]', createdById: me,
     },
   })) as Plan;
   await audit(me, unit.systemId, 'WORKPLAN_CREATED', `Drafted “${row.title}”`, { planId: row.id });
@@ -234,7 +239,7 @@ workPlansRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
   const { me, c, p } = got;
   if (!canManagePlan(p, me, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not change this plan');
   if (stateProblem('edit', p.status)) return fail(res, 409, 'PLAN_LOCKED', 'Only a draft can be changed. Reopen it first.');
-  const parsed = z.object(fields).safeParse(req.body);
+  const parsed = z.object({ ...fields, planType: z.enum(PLAN_TYPES).optional() }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid plan');
   const b = parsed.data;
   if (datesProblem(b.startsOn, b.endsOn)) return fail(res, 400, 'BAD_DATES', 'The end must not be before the start');
@@ -244,6 +249,7 @@ workPlansRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
     data: {
       title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null, startsOn: b.startsOn ? new Date(b.startsOn) : null,
       endsOn: b.endsOn ? new Date(b.endsOn) : null, leaderPersonId: b.leaderId, teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility,
+      planType: b.planType ?? p.planType ?? 'PROJECT',
     },
   })) as Plan;
   await audit(me, p.systemId, 'WORKPLAN_EDITED', `Edited “${row.title}”`, { planId: p.id });

@@ -88,89 +88,142 @@ export function buildOwnMenu(caps: Capabilities | null, systemId: string): OwnMe
 }
 
 /**
- * Modules: the sidebar groups of a system. Each module holds the places (blocks) that belong
- * together; its places become the sub-modules on the top bar. A module only exists for a person
- * who can open at least one of its places, and a place only exists for a person who can open it.
+ * Modules: the sidebar entries of a system (or of the Portal, which is the church-wide level).
+ * Each module holds the places that belong together; its places become the sub-blocks on the top bar.
+ * A module only exists for a person who can open at least one of its places, and a place only exists
+ * for a person who can open it, so what they may not use is not drawn at all.
  */
-export const MODULE_IDS = ['home', 'notifications', 'announcements', 'units', 'people', 'serve', 'money', 'reports', 'admin'] as const;
+export const MODULE_IDS = [
+  'home', 'notifications', 'announcements', 'units', 'people', 'work', 'schedule', 'ministry', 'money', 'reports', 'governance', 'settings',
+] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
 
-const MODULE_BLOCKS: Record<ModuleId, readonly string[]> = {
-  home: ['home'],
-  notifications: ['notifications'],
-  announcements: ['announcements'],
-  units: ['units'],
-  people: ['people', 'groups', 'couples', 'visits', 'watches', 'contacts', 'sponsorship', 'pulpit'],
-  serve: ['work', 'schedule', 'monthplan', 'choirs', 'rehearsals', 'repertoire', 'roster', 'teams', 'mine'],
-  money: ['money', 'collections'],
-  reports: ['reports', 'oversight', 'deaconreports', 'central'],
-  admin: ['governance', 'settings'],
+export type NavPlace = { key: string; to: string; labelKey: string; end: boolean };
+export type NavModule = { id: ModuleId; labelKey: string; to: string; places: NavPlace[] };
+
+const MODULE_LABEL: Record<ModuleId, string> = {
+  home: 'door.block.home', notifications: 'door.portal.nav.notifications', announcements: 'door.portal.nav.announcements', units: 'door.people.tab.units',
+  people: 'door.block.people', work: 'door.block.work', schedule: 'door.block.schedule', ministry: 'door.module.ministry', money: 'door.block.money',
+  reports: 'door.block.reports', governance: 'door.own.governance', settings: 'door.own.settings',
 };
 
-export type NavPlace = { block: string; to: string; labelKey: string; letters: AccessLetter[] };
-export type NavModule = { id: ModuleId; to: string; places: NavPlace[] };
-
-function moduleOf(block: string): ModuleId {
-  return MODULE_IDS.find((id) => MODULE_BLOCKS[id].includes(block)) ?? 'admin';
-}
+/** Central Administration: the leadership system. It is where the church's organisation (Units) lives. */
+export const isCentralSystem = (systemId: string) => systemId === CHURCH_SYSTEM;
 
 /** Sidebar modules with their top-bar places, built only from what the server said the person may open. */
 export function buildModules(caps: Capabilities | null, systemId: string): NavModule[] {
-  const places: NavPlace[] = [
-    ...buildMenu(caps, systemId).map((m) => ({
-      block: m.block as string,
-      to: m.block === 'home' ? `/s/${systemId}` : `/s/${systemId}/${m.block}`,
-      labelKey: `door.block.${m.block}`,
-      letters: m.letters,
-    })),
-    ...buildOwnMenu(caps, systemId).map((o) => ({
-      block: o.block as string,
-      to: `/s/${systemId}/${o.block}`,
-      labelKey: `door.own.${o.block}${o.variant ? `.${o.variant}` : ''}`,
-      letters: o.letters,
-    })),
-  ];
-  // Everyone in a system has notifications and announcements; the church-wide system also shows its units to people who hold People access.
-  {
-    places.push(
-      { block: 'notifications', to: `/s/${systemId}/notifications?system=${encodeURIComponent(systemId)}`, labelKey: 'door.portal.nav.notifications', letters: [] },
-      { block: 'announcements', to: `/s/${systemId}/announcements`, labelKey: 'door.portal.nav.announcements', letters: [] },
-    );
-    if (systemId === CHURCH_SYSTEM && places.some((p) => p.block === 'people')) {
-      places.push({ block: 'units', to: `/s/${systemId}/people/units`, labelKey: 'door.people.tab.units', letters: [] });
+  const base = `/s/${systemId}`;
+  const central = isCentralSystem(systemId);
+  const shared = new Set(buildMenu(caps, systemId).map((m) => m.block as string));
+  const own = new Map(buildOwnMenu(caps, systemId).map((o) => [o.block as string, o]));
+  const ownPlace = (key: string): NavPlace | null => {
+    const o = own.get(key);
+    return o ? { key, to: `${base}/${key}`, labelKey: `door.own.${key}${o.variant ? `.${o.variant}` : ''}`, end: false } : null;
+  };
+  const place = (key: string, path: string, labelKey: string, end = false): NavPlace => ({ key, to: path ? `${base}/${path}` : base, labelKey, end });
+  const some = (list: Array<NavPlace | null>) => list.filter((x): x is NavPlace => x !== null);
+
+  const spec: Record<ModuleId, NavPlace[]> = {
+    home: shared.has('home') ? [place('home', '', 'door.block.home', true)] : [],
+    notifications: [place('notifications', `notifications?system=${encodeURIComponent(systemId)}`, MODULE_LABEL.notifications, true)],
+    announcements: [place('announcements', 'announcements', MODULE_LABEL.announcements, true)],
+    units: central && shared.has('people') ? [place('units', 'people/units', 'door.people.tab.units')] : [],
+    people: shared.has('people')
+      ? [
+          place('directory', 'people', 'door.people.tab.directory'),
+          ...(central ? [] : [place('organisation', 'people/units', 'door.people.tab.units')]),
+          place('appointments', 'people/appointments', 'door.people.tab.appointments'),
+          place('access', 'people/access', 'door.people.tab.access'),
+          ...some(['groups', 'couples', 'contacts', 'visits'].map(ownPlace)),
+        ]
+      : some(['groups', 'couples', 'contacts', 'visits'].map(ownPlace)),
+    work: shared.has('work')
+      ? [
+          place('tasks', 'work', 'door.work.tasks'),
+          place('programs', 'programs', 'door.plans.PROGRAM'),
+          place('events', 'events', 'door.plans.EVENT'),
+          place('projects', 'projects', 'door.plans.PROJECT'),
+        ]
+      : [],
+    schedule: [
+      ...(shared.has('schedule') ? [place('schedule', 'schedule', 'door.block.schedule')] : []),
+      ...some(['monthplan', 'teams', 'mine', 'watches', 'pulpit'].map(ownPlace)),
+    ],
+    ministry: some(['choirs', 'rehearsals', 'repertoire', 'oversight', 'sponsorship', 'roster'].map(ownPlace)),
+    // The money screens in the order of the design; My contribution is for every member of the system.
+    money: [
+      ...(shared.has('money')
+        ? [
+            place('plan', 'money/plan', 'door.money.plan'),
+            place('budget', 'money/budget', 'door.money.budget'),
+            place('accounting', 'money', 'door.money.accounting', true),
+            place('contributions', 'money/contributions', 'door.money.contributions'),
+            place('moneyreports', 'money/reports', 'door.money.reports'),
+          ]
+        : []),
+      place('mine', 'money/mine', 'door.money.mine'),
+    ],
+    reports: [...(shared.has('reports') ? [place('reports', 'reports', 'door.block.reports')] : []), ...some(['deaconreports'].map(ownPlace))],
+    governance: own.has('governance')
+      ? [
+          ...some(['central'].map(ownPlace)),
+          place('meetings', 'governance', 'door.gov.tab.meetings'),
+          place('decisions', 'governance/decisions', 'door.gov.tab.decisions'),
+          ...(central ? [place('collections', 'governance/collections', 'door.gov.tab.collections')] : []),
+          place('letters', 'governance/letters', 'door.gov.tab.letters'),
+        ]
+      : [],
+    // Every system has its own Settings; Central Administration also keeps the church-wide ones.
+    settings: [...some(['settings'].map(ownPlace)), place('preferences', 'preferences', central ? 'door.sset.mine' : 'door.own.settings')],
+  };
+  return MODULE_IDS.map((id) => ({ id, labelKey: MODULE_LABEL[id], to: spec[id][0]?.to ?? '', places: spec[id] })).filter((m) => m.places.length > 0);
+}
+
+/** Pages that belong to a module without being a menu entry of their own, by the first part of their address. */
+const EXTRA_PAGES: Record<string, ModuleId> = { 'deleted-work': 'work', collections: 'governance', 'money/contributions': 'money' };
+
+const pathOf = (to: string) => to.split('?')[0]!;
+const isUnder = (path: string, to: string, end: boolean) => path === to || (!end && path.startsWith(`${to}/`));
+
+/** The module and place that hold the page being shown. The most specific place wins, so one tab is lit at a time. */
+export function resolveActive(modules: NavModule[], pathname: string): { module: NavModule; place: NavPlace | null } | null {
+  let best: { module: NavModule; place: NavPlace } | null = null;
+  for (const m of modules) {
+    for (const p of m.places) {
+      const to = pathOf(p.to);
+      if (isUnder(pathname, to, p.end) && (!best || to.length > pathOf(best.place.to).length)) best = { module: m, place: p };
     }
   }
-  return MODULE_IDS.map((id) => {
-    const order = MODULE_BLOCKS[id];
-    const mine = places
-      .filter((p) => moduleOf(p.block) === id)
-      .sort((a, b) => (order.indexOf(a.block) + 1 || 99) - (order.indexOf(b.block) + 1 || 99));
-    return { id, to: mine[0]?.to ?? '', places: mine };
-  }).filter((m) => m.places.length > 0);
+  if (best) return best;
+  const parts = pathname.split('/');
+  const id = EXTRA_PAGES[`${parts[3] ?? ''}/${parts[4] ?? ''}`] ?? EXTRA_PAGES[parts[3] ?? ''];
+  const m = id ? modules.find((x) => x.id === id) : undefined;
+  return m ? { module: m, place: null } : null;
 }
 
-/** The module a path belongs to: Units is a page inside People, but has its own sidebar entry. */
-export function moduleForPath(modules: NavModule[], block: string, sub?: string): NavModule | undefined {
-  if (block === 'people' && sub === 'units') {
-    const units = modules.find((m) => m.id === 'units');
-    if (units) return units;
+/** Whether the person may even see this page: it must belong to one of their modules. */
+export function canSeePath(modules: NavModule[], pathname: string): boolean {
+  return resolveActive(modules, pathname) !== null;
+}
+
+/**
+ * The Portal's own sidebar, before any system: Home (the systems), Notifications and Announcements
+ * from every system, then Work, People, Schedule and Reports for each block the person holds in at
+ * least one system. Built only from the server's capabilities.
+ */
+export function buildPortalModules(caps: Capabilities | null): NavModule[] {
+  const one = (id: ModuleId, path: string, labelKey: string, end: boolean): NavModule => ({
+    id, labelKey, to: path, places: [{ key: id, to: path, labelKey, end }],
+  });
+  const mods: NavModule[] = [
+    one('home', '/portal', 'door.portal.nav.systems', true),
+    one('notifications', '/portal/notifications', MODULE_LABEL.notifications, false),
+    one('announcements', '/portal/announcements', MODULE_LABEL.announcements, false),
+  ];
+  for (const nav of buildPortalNav(caps)) {
+    if (nav.key === 'work' || nav.key === 'people' || nav.key === 'schedule' || nav.key === 'reports') {
+      mods.push(one(nav.key, `/portal/${nav.key}`, MODULE_LABEL[nav.key], false));
+    }
   }
-  return activeModule(modules, block);
-}
-
-/** Pages that live under a block without being a menu entry of their own. */
-const HIDDEN_PAGES: Record<string, string> = { 'deleted-work': 'work' };
-const ALWAYS_OPEN = ['notifications', 'announcements'];
-
-/** Whether the person may even see this page: its block must be one of their places. */
-export function canSeeBlock(modules: NavModule[], block: string): boolean {
-  if (ALWAYS_OPEN.includes(block)) return true;
-  const owner = HIDDEN_PAGES[block] ?? block;
-  return modules.some((m) => m.places.some((p) => p.block === owner));
-}
-
-/** The module that holds the page being shown (or none, for a page outside every module). */
-export function activeModule(modules: NavModule[], block: string): NavModule | undefined {
-  const owner = HIDDEN_PAGES[block] ?? block;
-  return modules.find((m) => m.places.some((p) => p.block === owner));
+  return mods;
 }

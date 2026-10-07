@@ -96,7 +96,8 @@ function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, ho
   if (systemId === EVANGELISM && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'pulpit', letters: modules.SCHEDULING });
   // The Church Leader (and anyone holding a church-wide office) sees the pulpit plan from Central Administration too.
   if (systemId === 'sys-main' && holdings.some((h) => h.scope === 'CHURCH' && h.letters.PEOPLE?.includes('W'))) own.push({ key: 'pulpit', letters: ['R', 'W'] });
-  if ((systemId === EVANGELISM || systemId === 'sys-main') && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'collections', letters: modules.GOVERNANCE });
+  // Collections (offerings counted at services) belong to Central Administration only.
+  if (systemId === 'sys-main' && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'collections', letters: modules.GOVERNANCE });
   if (systemId === MUSIC && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'monthplan', letters: modules.SCHEDULING });
   if ((systemId === MUSIC || systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'choirs', letters: modules.PEOPLE });
   if ((systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) {
@@ -147,12 +148,14 @@ meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
 /* ───────────── preferences (slice 1.4) ───────────── */
 
 const LANGUAGES = ['en', 'rw', 'fr'] as const;
+const THEMES = ['light', 'dark'] as const;
 
 /** Kept on the server so a person's choices follow them to every device. */
 meRouter.get('/preferences', requireAuth, async (req: AuthedRequest, res) => {
-  const pref = (await prisma.preference.findFirst({ where: { personId: req.auth!.personId } })) as { language?: string | null } | null;
+  const pref = (await prisma.preference.findFirst({ where: { personId: req.auth!.personId } })) as { language?: string | null; theme?: string | null } | null;
   res.json({
     language: pref?.language ?? null,
+    theme: pref?.theme ?? null,
     mutedSystems: await mutedSystemsOf(req.auth!.personId),
     languages: LANGUAGES,
   });
@@ -160,6 +163,7 @@ meRouter.get('/preferences', requireAuth, async (req: AuthedRequest, res) => {
 
 const prefSchema = z.object({
   language: z.enum(LANGUAGES).nullable().optional(),
+  theme: z.enum(THEMES).nullable().optional(),
   /** Systems whose "For information" notices are muted. Things waiting for you can never be muted. */
   mutedSystems: z.array(z.string().min(1).max(60)).max(40).optional(),
 });
@@ -170,6 +174,7 @@ meRouter.put('/preferences', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
   const data: Record<string, unknown> = {};
   if (parsed.data.language !== undefined) data.language = parsed.data.language;
+  if (parsed.data.theme !== undefined) data.theme = parsed.data.theme;
   if (parsed.data.mutedSystems !== undefined) {
     const known = new Set((await prisma.churchSystem.findMany({ select: { id: true } })).map((x: { id: string }) => x.id));
     const unknown = parsed.data.mutedSystems.filter((id) => !known.has(id));
@@ -177,8 +182,6 @@ meRouter.put('/preferences', requireAuth, async (req: AuthedRequest, res) => {
     data.mutedSystemsJson = JSON.stringify([...new Set(parsed.data.mutedSystems)].sort());
   }
   await prisma.preference.upsert({ where: { personId: me }, create: { personId: me, ...data }, update: data });
-  res.json({
-    language: (data.language as string | null | undefined) ?? ((await prisma.preference.findFirst({ where: { personId: me } })) as { language?: string | null } | null)?.language ?? null,
-    mutedSystems: await mutedSystemsOf(me),
-  });
+  const after = (await prisma.preference.findFirst({ where: { personId: me } })) as { language?: string | null; theme?: string | null } | null;
+  res.json({ language: after?.language ?? null, theme: after?.theme ?? null, mutedSystems: await mutedSystemsOf(me) });
 });

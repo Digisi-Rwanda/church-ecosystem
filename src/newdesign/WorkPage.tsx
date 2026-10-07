@@ -8,7 +8,6 @@ import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { sortWork } from './work';
-import { PlansList } from './PlansList';
 import { WorkCard, WorkForm } from './WorkParts';
 import { useLoad } from './useLoad';
 
@@ -24,7 +23,6 @@ export function WorkPage() {
   const [show, setShow] = useState<Show>('open');
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
-  const [kind, setKind] = useState<'light' | 'full'>('light');
   const allowed = lettersFor(capabilities, systemId, 'work').length > 0;
   const list = useLoad(() => fetchWork({ systemId, view, status: show, q: q.trim() || undefined }), `work|${systemId}|${view}|${show}|${q.trim()}`);
   const options = useLoad(fetchWorkOptions, 'work-options');
@@ -34,18 +32,7 @@ export function WorkPage() {
 
   return (
     <section className="door-block" aria-labelledby="door-work-title">
-      <h2 id="door-work-title">{t('door.block.work')}</h2>
-      <div className="door-row" role="group" aria-label={t('door.work.kind')}>
-        <button type="button" className={kind === 'light' ? 'btn sm' : 'btn ghost sm'} aria-pressed={kind === 'light'} onClick={() => setKind('light')}>
-          {t('door.work.kind.light')}
-        </button>
-        <button type="button" className={kind === 'full' ? 'btn sm' : 'btn ghost sm'} aria-pressed={kind === 'full'} onClick={() => setKind('full')}>
-          {t('door.work.kind.full')}
-        </button>
-      </div>
-      {kind === 'full' ? (
-        <PlansList systemId={systemId} />
-      ) : (
+      <h2 id="door-work-title">{t('door.work.tasks')}</h2>
       <>
       <div className="door-filters">
         <SelectField label={t('door.work.view')} name="w-view" value={view} onChange={(e) => setView(e.target.value as View)}>
@@ -79,7 +66,6 @@ export function WorkPage() {
         )}
       </LoadState>
       </>
-      )}
     </section>
   );
 }

@@ -1,9 +1,6 @@
 import { useT } from '../i18n/I18nContext';
 import { AnnouncementsStrip } from './AnnouncementsStrip';
-import { useFrontDoor } from './FrontDoorContext';
 import { GlanceDashboard } from './GlanceDashboard';
-import { myUnits } from './portalHome';
-import { SystemCards } from './SystemCards';
 import { UrgentTile } from './UrgentTile';
 
 /**
@@ -12,8 +9,6 @@ import { UrgentTile } from './UrgentTile';
  */
 export function ChurchHome({ systemId }: { systemId: string }) {
   const t = useT();
-  const { portal } = useFrontDoor();
-  const units = myUnits(portal);
   return (
     <section className="door-block" aria-labelledby="door-church-title">
       <div>
@@ -23,11 +18,6 @@ export function ChurchHome({ systemId }: { systemId: string }) {
       <AnnouncementsStrip />
       <UrgentTile systemId={systemId} />
       <GlanceDashboard systemId={systemId} />
-      <div>
-        <h3>{t('door.home.myUnits')}</h3>
-        <p className="muted">{t('door.home.myUnits.hint')}</p>
-        {units.length === 0 ? <p className="muted">{t('door.home.myUnits.none')}</p> : <SystemCards systems={units} />}
-      </div>
     </section>
   );
 }

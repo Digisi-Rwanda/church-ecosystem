@@ -1,59 +1,27 @@
-import { NavLink, Outlet } from 'react-router-dom';
-import { ThemeToggle } from '../components/ui/ThemeToggle';
+import { Outlet } from 'react-router-dom';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
-import { buildPortalNav } from './menu';
-import { badge } from './notices';
-import { useAnnouncementSummary } from './useAnnouncementSummary';
+import { buildPortalModules } from './menu';
+import { Shell } from './Shell';
 import { useNoticeSummary } from './useNoticeSummary';
-import { DoorBrand } from './DoorBrand';
-import { DoorMenu } from './DoorMenu';
 
-/** The Portal frame: who is signed in, and a bar for the blocks that span all my systems. */
+/**
+ * The Portal: the screen before the systems. A sidebar of Home (the systems), Notifications and
+ * Announcements from every system, and the shared blocks the person holds somewhere.
+ */
 export function PortalLayout() {
   const t = useT();
-  const { personName, capabilities, signOut } = useFrontDoor();
-  const nav = buildPortalNav(capabilities);
+  const { capabilities } = useFrontDoor();
   const { counts } = useNoticeSummary();
-  const announcements = useAnnouncementSummary();
-
   return (
-    <main className="door-page">
-      <header className="door-top">
-        <DoorBrand />
-        <DoorMenu className="door-portal-nav" label={t('door.portal.nav')}>
-          {nav.map((item) => (
-            <NavLink
-              key={item.key}
-              to={item.key === 'systems' ? '/portal' : `/portal/${item.key}`}
-              end={item.key === 'systems'}
-              className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}
-            >
-              {item.key === 'systems'
-                ? t('door.portal.nav.systems')
-                : item.key === 'announcements'
-                  ? t('door.portal.nav.announcements')
-                  : item.key === 'notifications'
-                    ? t('door.portal.nav.notifications')
-                    : t(`door.block.${item.key}` as const)}
-              {item.key === 'notifications' && counts && counts.unread > 0 && (
-                <span className="door-badge">{badge(counts.unread)}</span>
-              )}
-              {item.key === 'announcements' && announcements.unread > 0 && (
-                <span className="door-badge">{badge(announcements.unread)}</span>
-              )}
-            </NavLink>
-          ))}
-        </DoorMenu>
-        <div className="door-top-actions">
-          {personName && <span className="muted">{t('door.portal.welcome', { name: personName })}</span>}
-          <ThemeToggle />
-          <button type="button" className="btn secondary sm" onClick={signOut}>
-            {t('shell.signOut')}
-          </button>
-        </div>
-      </header>
+    <Shell
+      modules={buildPortalModules(capabilities)}
+      where={t('door.frame.portal')}
+      subtitle={t('door.frame.portal')}
+      notificationsTo="/portal/notifications"
+      notificationCount={counts?.unread ?? 0}
+    >
       <Outlet />
-    </main>
+    </Shell>
   );
 }

@@ -259,10 +259,10 @@ describe('summary and the Portal badge', () => {
 
 describe('preferences', () => {
   it('start empty, and are kept on the server', async () => {
-    expect((await get('p-member', '/api/me/preferences')).body).toMatchObject({ language: null, mutedSystems: [], languages: ['en', 'rw', 'fr'] });
-    const put = await request(app).put('/api/me/preferences').set(bearer('p-member')).send({ language: 'rw', mutedSystems: ['sys-youth'] });
-    expect(put.body).toEqual({ language: 'rw', mutedSystems: ['sys-youth'] });
-    expect((await get('p-member', '/api/me/preferences')).body).toMatchObject({ language: 'rw', mutedSystems: ['sys-youth'] });
+    expect((await get('p-member', '/api/me/preferences')).body).toMatchObject({ language: null, theme: null, mutedSystems: [], languages: ['en', 'rw', 'fr'] });
+    const put = await request(app).put('/api/me/preferences').set(bearer('p-member')).send({ language: 'rw', theme: 'dark', mutedSystems: ['sys-youth'] });
+    expect(put.body).toEqual({ language: 'rw', theme: 'dark', mutedSystems: ['sys-youth'] });
+    expect((await get('p-member', '/api/me/preferences')).body).toMatchObject({ language: 'rw', theme: 'dark', mutedSystems: ['sys-youth'] });
     expect((await get('p-pastor', '/api/me/preferences')).body.language).toBeNull();
   });
   it('refuse a language or a system that does not exist', async () => {
@@ -282,7 +282,7 @@ describe('preferences', () => {
   it('can be cleared again', async () => {
     await request(app).put('/api/me/preferences').set(bearer('p-member')).send({ mutedSystems: ['sys-youth'] });
     const r = await request(app).put('/api/me/preferences').set(bearer('p-member')).send({ mutedSystems: [], language: null });
-    expect(r.body).toEqual({ language: null, mutedSystems: [] });
+    expect(r.body).toEqual({ language: null, theme: null, mutedSystems: [] });
   });
 });
 

@@ -118,7 +118,8 @@ describe('own blocks', () => {
   it('Contacts, Pulpit and Collections appear in Evangelism; the Church Leader sees Pulpit in Central', async () => {
     const caps = await get('p-pastor', '/api/me/capabilities');
     const keys = (id: string) => caps.body.systems.find((s: any) => s.id === id)?.own.map((o: any) => o.key) ?? [];
-    expect(keys('sys-evangelism')).toEqual(expect.arrayContaining(['contacts', 'pulpit', 'collections']));
+    expect(keys('sys-evangelism')).toEqual(expect.arrayContaining(['contacts', 'pulpit']));
+    expect(keys('sys-evangelism')).not.toContain('collections');
     expect(keys('sys-main')).toEqual(expect.arrayContaining(['pulpit', 'collections']));
   });
 });

@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { createPlan, editPlan, type DirectoryPerson, type PlanDetail, type PlanOptions, type WorkVisibility } from '../api/frontDoorApi';
+import { createPlan, editPlan, PLAN_TYPES, type DirectoryPerson, type PlanDetail, type PlanOptions, type PlanType, type WorkVisibility } from '../api/frontDoorApi';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
@@ -12,18 +12,21 @@ export function PlanForm({
   options,
   systemId,
   existing,
+  planType: startType,
   onDone,
   onCancel,
 }: {
   options: PlanOptions;
   systemId: string;
   existing?: PlanDetail;
+  planType?: PlanType;
   onDone: (plan: PlanDetail) => void;
   onCancel: () => void;
 }) {
   const t = useT();
   const units = options.units.filter((u) => u.systemId === systemId);
   const [unitId, setUnitId] = useState(existing?.orgUnitId ?? (units.length === 1 ? units[0].id : ''));
+  const [planType, setPlanType] = useState<PlanType>(existing?.planType ?? startType ?? 'PROJECT');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [aim, setAim] = useState(existing?.aim ?? '');
   const [needs, setNeeds] = useState(existing?.needs ?? '');
@@ -51,7 +54,7 @@ export function PlanForm({
     const input = {
       title: title.trim(), aim: aim.trim(), needs: needs.trim() || null, location: location.trim() || null,
       startsOn: starts ? inputToDue(starts) : null, endsOn: ends ? inputToDue(ends) : null, leaderId: leader.id,
-      team: team.map((m) => ({ personId: m.personId, role: m.role })), beyondUnit: beyond, visibility,
+      team: team.map((m) => ({ personId: m.personId, role: m.role })), beyondUnit: beyond, visibility, planType,
     };
     setBusy(true);
     setError('');
@@ -80,6 +83,13 @@ export function PlanForm({
       <TextAreaField label={t('door.plan.form.aim')} name="p-aim" rows={3} value={aim} maxLength={options.limits.textMax} onChange={(e) => setAim(e.target.value)} />
       <TextAreaField label={t('door.plan.form.needs')} name="p-needs" rows={2} value={needs} maxLength={options.limits.textMax} onChange={(e) => setNeeds(e.target.value)} />
       <TextField label={t('door.plan.form.location')} name="p-loc" value={location} maxLength={options.limits.titleMax} onChange={(e) => setLocation(e.target.value)} />
+      <SelectField label={t('door.plan.type')} name="p-type" value={planType} onChange={(e) => setPlanType(e.target.value as PlanType)}>
+        {PLAN_TYPES.map((k) => (
+          <option key={k} value={k}>
+            {t(`door.plan.type.${k}` as 'door.plan.type.PROGRAM')}
+          </option>
+        ))}
+      </SelectField>
       <TextField label={t('door.plan.form.starts')} name="p-starts" type="date" value={starts} onChange={(e) => setStarts(e.target.value)} />
       <TextField label={t('door.plan.form.ends')} name="p-ends" type="date" value={ends} onChange={(e) => setEnds(e.target.value)} />
       <p>

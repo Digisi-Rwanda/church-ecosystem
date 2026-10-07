@@ -567,6 +567,7 @@ model NotificationRead {
 model Preference {
   personId          String   @id
   language          String?
+  theme             String?
   /// Systems whose "For information" notices the person has muted: ["sys-youth"].
   mutedSystemsJson  String   @default("[]")
   updatedAt         DateTime @updatedAt
@@ -749,6 +750,8 @@ model WorkPlan {
   /// CHURCH wide reach adds a Church Leader approval on top of the unit's own
   beyondUnit           Boolean   @default(false)
   visibility           String    @default("SYSTEM")
+  /// PROGRAM | EVENT | PROJECT
+  planType             String    @default("PROJECT")
   /// DRAFT | PENDING_APPROVAL | SETUP | RUNNING | CLOSING | ENDED | CANCELLED
   status               String    @default("DRAFT")
   /// JSON array of { levelKey, label, systemId, status, byId, at, note }
@@ -1409,4 +1412,121 @@ model MusicLog {
   changesJson String   @default("[]")
 
   @@index([periodKey])
+}
+
+/// The preferences of one system: unit details and money options, as JSON (slice 3.18).
+model SystemSetting {
+  id          String   @id @default(cuid())
+  systemId    String   @unique
+  detailsJson String   @default("{}")
+  moneyJson   String   @default("{}")
+  updatedById String?
+  updatedAt   DateTime @default(now())
+}
+
+/// Money block, Module 5 (slice 3.19). One planned amount per category per year; actuals come from MoneyEntry.
+model MoneyBudget {
+  id           String    @id @default(cuid())
+  systemId     String
+  year         Int
+  /// DRAFT | APPROVED
+  status       String    @default("DRAFT")
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([systemId, year])
+}
+
+model MoneyBudgetLine {
+  id          String   @id @default(cuid())
+  systemId    String
+  year        Int
+  /// INCOME | SPENDING
+  kind        String
+  category    String
+  planned     Int
+  note        String?
+  updatedById String
+  updatedAt   DateTime @default(now())
+
+  @@unique([systemId, year, kind, category])
+}
+
+/// The money action plan: planned activities with an estimated cost.
+model MoneyPlanItem {
+  id          String   @id @default(cuid())
+  systemId    String
+  year        Int
+  title       String
+  amount      Int
+  /// YYYY-MM, optional
+  dueMonth    String?
+  category    String?
+  /// PLANNED | DONE | DROPPED
+  status      String   @default("PLANNED")
+  note        String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId, year])
+}
+
+/// A contribution list: a team's list for a month, or the unit's (combined or recorded directly).
+model ContributionList {
+  id             String    @id @default(cuid())
+  systemId       String
+  /// TEAM | UNIT
+  level          String
+  typeCode       String
+  typeName       String
+  /// YYYY-MM
+  month          String
+  teamUnitId     String?
+  teamName       String?
+  /// DRAFT | SUBMITTED | COMBINED | APPROVED | RETURNED
+  status         String    @default("DRAFT")
+  /// JSON array of the team list ids a unit list was combined from
+  sourceListIds  String    @default("[]")
+  createdById    String
+  createdAt      DateTime  @default(now())
+  submittedAt    DateTime?
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+
+  @@index([systemId, month])
+}
+
+model ContributionLine {
+  id        String  @id @default(cuid())
+  listId    String
+  name      String
+  personId  String?
+  team      String?
+  amount    Int
+
+  @@index([listId])
+  @@index([personId])
+}
+
+/// A donation: recorded by the treasurer or vice president, approved by the president, then it is income.
+model Donation {
+  id           String    @id @default(cuid())
+  systemId     String
+  accountId    String
+  donorName    String
+  amount       Int
+  receivedOn   DateTime
+  note         String?
+  /// PENDING | APPROVED | REJECTED
+  status       String    @default("PENDING")
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+  entryId      String?
+
+  @@index([systemId, status])
 }

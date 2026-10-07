@@ -12,11 +12,11 @@ const SYSTEMS = [
   {
     id: 'sys-main',
     code: 'MAIN_CHURCH',
-    name: 'ADEPR Kacyiru — Main Church System',
-    shortName: 'Main Church',
+    name: 'ADEPR Kacyiru — Central Administration',
+    shortName: 'Central Administration',
     kind: 'MAIN',
     basePath: '/',
-    description: 'Identity and church-wide ops hub',
+    description: 'Church leadership: governance, oversight, reports received, collections, pulpit and settings',
   },
   {
     id: 'sys-choir',
