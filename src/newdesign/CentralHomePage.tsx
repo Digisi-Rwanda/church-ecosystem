@@ -4,6 +4,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
 import { needsAttention, orderOversight, urgentHref, urgentKey } from './central';
 import { useFrontDoor } from './FrontDoorContext';
+import { GlanceDashboard } from './GlanceDashboard';
 import { buildOwnMenu } from './menu';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
@@ -26,6 +27,7 @@ export function CentralHomePage() {
         <h2 id="door-central-title">{t('door.central.title')}</h2>
         <p className="muted">{t('door.central.intro')}</p>
       </div>
+      <GlanceDashboard systemId={systemId} />
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && (
           <>

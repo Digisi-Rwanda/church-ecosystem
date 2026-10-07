@@ -7182,3 +7182,21 @@ button.door-menu-link.active { background: var(--accent-soft); }
 }
 @media (max-width: 380px) { .door-tiles { grid-template-columns: 1fr; } }
 @media print { .door-frame-top { position: static; } }
+
+/* Home dashboards (slice 3.14) */
+.door-glance { display: grid; gap: 0.75rem; }
+.door-stats { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr)); gap: 0.6rem; }
+.door-stat { display: grid; gap: 0.2rem; padding: 0.75rem 0.9rem; text-decoration: none; color: inherit; min-width: 0; }
+a.door-stat:hover { border-color: var(--accent); }
+.door-stat-label { color: var(--ink-muted); font-size: 0.85rem; }
+.door-stat-value { font-size: 1.6rem; line-height: 1.15; font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.door-stat.warn { border-left: 4px solid var(--warn, #b45309); }
+.door-charts { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 0.75rem; }
+.door-charts .door-chart { padding: 0.75rem 0.9rem; border: 1px solid var(--line); border-radius: 0.75rem; background: var(--surface, transparent); min-width: 0; }
+.door-chart-table summary { cursor: pointer; font-size: 0.85rem; color: var(--ink-muted); }
+.door-chart-rows { border-collapse: collapse; width: 100%; font-size: 0.9rem; }
+.door-chart-rows th, .door-chart-rows td { text-align: left; padding: 0.15rem 0.4rem; border-bottom: 1px solid var(--line); }
+@media (max-width: 640px) {
+  .door-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .door-stat-value { font-size: 1.35rem; }
+}

@@ -1,6 +1,7 @@
 import { useT } from '../i18n/I18nContext';
 import { AnnouncementsStrip } from './AnnouncementsStrip';
 import { useFrontDoor } from './FrontDoorContext';
+import { GlanceDashboard } from './GlanceDashboard';
 import { myUnits } from './portalHome';
 import { SystemCards } from './SystemCards';
 import { UrgentTile } from './UrgentTile';
@@ -21,6 +22,7 @@ export function ChurchHome({ systemId }: { systemId: string }) {
       </div>
       <AnnouncementsStrip />
       <UrgentTile systemId={systemId} />
+      <GlanceDashboard systemId={systemId} />
       <div>
         <h3>{t('door.home.myUnits')}</h3>
         <p className="muted">{t('door.home.myUnits.hint')}</p>

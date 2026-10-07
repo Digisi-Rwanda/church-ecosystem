@@ -1462,6 +1462,24 @@ export const en = {
   'door.choirwork.err.exists': 'This is already recorded.',
   'door.choirwork.err.state': 'This can no longer be changed.',
 
+  'door.glance.title': 'At a glance',
+  'door.glance.work.open': 'Open work',
+  'door.glance.work.overdue': 'Work past its date',
+  'door.glance.people.members': 'People',
+  'door.glance.groups.active': 'Groups',
+  'door.glance.couples.active': 'Couples',
+  'door.glance.contacts.new': 'New contacts to reach',
+  'door.glance.contacts.following': 'Being followed up',
+  'door.glance.contacts.joined': 'Joined the church',
+  'door.glance.watches.active': 'Prayer watches',
+  'door.glance.money.income': 'Money in this month',
+  'door.glance.money.spent': 'Money spent this month',
+  'door.glance.money.balance': 'Balance',
+  'door.glance.money.pending': 'Spending waiting for approval',
+  'door.glance.chart.money.income': 'Money in, by month',
+  'door.glance.chart.money.spent': 'Money spent, by month',
+  'door.glance.chart.groups.attendance': 'People present at group meetings, by month',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

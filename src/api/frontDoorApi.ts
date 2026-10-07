@@ -1300,3 +1300,9 @@ export async function receivePledge(id: string, day: string): Promise<void> {
 export async function cancelPledge(id: string): Promise<void> {
   await apiFetch(`${CW}/pledges/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
 }
+
+/* ─── Home dashboards (slice 3.14) ─── */
+export interface GlanceTile { key: string; value: number; format: 'count' | 'rwf'; tone?: 'warn'; href?: string }
+export interface GlanceSeries { key: string; format: 'count' | 'rwf'; points: Array<{ label: string; value: number }> }
+export const fetchGlance = (systemId: string): Promise<{ systemId: string; tiles: GlanceTile[]; series: GlanceSeries[] }> =>
+  apiFetch(`/api/glance?systemId=${encodeURIComponent(systemId)}`);
