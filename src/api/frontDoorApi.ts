@@ -1071,3 +1071,36 @@ export async function addReportSchedule(input: { unitId: string; kind: ReportKin
 export async function stopReportSchedule(id: string): Promise<void> {
   await apiFetch(`${R}/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
+
+// ── Person 360 (slice 3.6) ──────────────────────────────────────────────────────
+export type P360Section = 'CONTACT' | 'EMPLOYMENT' | 'EDUCATION' | 'GIFT' | 'SKILL' | 'CALLING' | 'FAMILY' | 'BAPTISM' | 'MARRIAGE';
+export type P360Record = {
+  id: string; section: P360Section; data: Record<string, string | number>; status: 'CURRENT' | 'SUPERSEDED' | 'VOIDED';
+  recordedByName: string; recordedAt: string | null; voidReason: string | null; voidedByName: string | null; relatedName: string; programName: string; canChange: boolean;
+};
+export type P360Person = {
+  id: string; fullName: string; memberCode: string | null; status: string; archived: boolean; dateOfBirth: string | null; gender: string | null;
+  joinedChurchOn: string | null; phone: string | null; email: string | null; address: string | null; nationalId: string | null;
+};
+export type P360View = { person: P360Person; read: P360Section[]; write: P360Section[]; records: P360Record[] };
+export type P360Cohort = { id: string; name: string; cohortLabel: string; learners: Array<{ personId: string; name: string; baptised: boolean }> };
+const P3 = '/api/person360';
+export const fetchP360Access = (): Promise<{ read: P360Section[]; write: P360Section[]; allowed: boolean }> => apiFetch(`${P3}/access`);
+export const fetchP360 = (personId: string): Promise<P360View> => apiFetch(`${P3}/${encodeURIComponent(personId)}`);
+export async function addP360Record(personId: string, section: P360Section, data: Record<string, string | number>): Promise<void> {
+  await apiFetch(`${P3}/${encodeURIComponent(personId)}/records`, { method: 'POST', body: { section, data } });
+}
+export async function changeP360Record(id: string, data: Record<string, string | number>): Promise<void> {
+  await apiFetch(`${P3}/records/${encodeURIComponent(id)}`, { method: 'PATCH', body: { data } });
+}
+export async function voidP360Record(id: string, reason: string): Promise<void> {
+  await apiFetch(`${P3}/records/${encodeURIComponent(id)}/void`, { method: 'POST', body: { reason } });
+}
+export async function fetchP360History(id: string): Promise<P360Record[]> {
+  return (await apiFetch<{ history: P360Record[] }>(`${P3}/records/${encodeURIComponent(id)}/history`)).history;
+}
+export async function fetchP360Cohorts(): Promise<P360Cohort[]> {
+  return (await apiFetch<{ cohorts: P360Cohort[] }>(`${P3}/cohorts`)).cohorts;
+}
+export const recordBaptismCohort = (input: { programId: string; date: string; place?: string; baptisedBy?: string; personIds: string[] }): Promise<{ created: number; skipped: number }> =>
+  apiFetch(`${P3}/baptism-cohort`, { method: 'POST', body: input });

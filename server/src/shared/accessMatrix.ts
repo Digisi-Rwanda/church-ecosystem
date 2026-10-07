@@ -63,7 +63,7 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
   },
   CATECHIST: {
     PEOPLE: ['R', 'W'],
-    PERSON_360: ['R'],
+    PERSON_360: ['R', 'W'],
     MISSION: ['R', 'W', 'A'],
     SCHEDULING: ['R'],
     GOVERNANCE: ['R', 'W'],
@@ -72,7 +72,7 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
   },
   CHURCH_SECRETARY: {
     PEOPLE: ['R', 'W'],
-    PERSON_360: ['R'],
+    PERSON_360: ['R', 'W'],
     MISSION: ['R'],
     SCHEDULING: ['R'],
     GOVERNANCE: ['R', 'W', 'S'],

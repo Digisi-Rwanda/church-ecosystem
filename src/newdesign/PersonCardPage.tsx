@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   archivePerson,
+  fetchP360Access,
   fetchPerson,
   fetchStructure,
   unarchivePerson,
@@ -22,6 +23,7 @@ export function PersonCardPage() {
   const { systemId = '', personId = '' } = useParams();
   const canWrite = useCanWritePeople();
   const base = `/s/${systemId}/people`;
+  const p360 = useLoad(fetchP360Access, 'p360-access');
   const { loading, failed, data, reload } = useLoad(async () => {
     const [person, structure] = await Promise.all([fetchPerson(personId), fetchStructure()]);
     return { person, belonging: belongingOf(personId, structure, today()) };
@@ -37,6 +39,7 @@ export function PersonCardPage() {
           <>
             <PersonHeader person={data.person} />
             <PersonFacts person={data.person} />
+            {p360.data?.allowed && (<p><Link className="btn" to={`${base}/${personId}/360`}>{t('door.p360.open')}</Link>{p360.data.write.includes('BAPTISM') && <> <Link className="btn ghost" to={`${base}/baptism`}>{t('door.p360.cohort.title')}</Link></>}</p>)}
             <div className="panel">
               <h3>{t('door.people.belongs')}</h3>
               {data.belonging.memberships.length === 0 ? (

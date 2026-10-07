@@ -1,3 +1,5 @@
+import { BaptismCohortPage } from './BaptismCohortPage';
+import { Person360Page } from './Person360Page';
 import { ReportPage } from './ReportPage';
 import { ReportsPage } from './ReportsPage';
 import { CollectionsPage } from './CollectionsPage';
@@ -59,6 +61,8 @@ export function newDesignRoutes() {
             <Route path="units/:unitId" element={<UnitPage />} />
             <Route path="appointments" element={<AppointmentsPage />} />
             <Route path="access" element={<AccessPage />} />
+            <Route path="baptism" element={<BaptismCohortPage />} />
+            <Route path=":personId/360" element={<Person360Page />} />
             <Route path=":personId" element={<PersonCardPage />} />
           </Route>
           <Route path="governance" element={<GovernanceLayout />}>

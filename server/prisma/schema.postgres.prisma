@@ -900,3 +900,26 @@ model ReportSchedule {
 
   @@index([systemId, active])
 }
+
+/// Person 360: one history-keeping record per fact about a person (slice 3.6). Edits add a new record and
+/// mark the old one SUPERSEDED; mistakes are VOIDED with a reason. Nothing is overwritten or deleted.
+model PersonRecord {
+  id           String    @id @default(cuid())
+  personId     String
+  /// CONTACT | EMPLOYMENT | EDUCATION | GIFT | SKILL | CALLING | FAMILY | BAPTISM | MARRIAGE
+  section      String
+  dataJson     String    @default("{}")
+  /// CURRENT | SUPERSEDED | VOIDED
+  status       String    @default("CURRENT")
+  supersedesId String?
+  /// A baptism recorded from a programme cohort carries the programme
+  programId    String?
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  voidReason   String?
+  voidedById   String?
+  voidedAt     DateTime?
+
+  @@index([personId, section, status])
+  @@index([programId])
+}
