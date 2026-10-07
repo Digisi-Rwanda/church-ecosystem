@@ -1,5 +1,6 @@
 import { SHARED_BLOCKS, type AccessLetter, type SharedBlock } from '../../server/src/shared/vocabulary';
 import type { Capabilities, OwnBlock } from '../api/frontDoorApi';
+import { CHURCH_SYSTEM } from './portalHome';
 
 export type MenuItem = { block: SharedBlock; letters: AccessLetter[] };
 
@@ -91,11 +92,14 @@ export function buildOwnMenu(caps: Capabilities | null, systemId: string): OwnMe
  * together; its places become the sub-modules on the top bar. A module only exists for a person
  * who can open at least one of its places, and a place only exists for a person who can open it.
  */
-export const MODULE_IDS = ['home', 'people', 'serve', 'money', 'reports', 'admin'] as const;
+export const MODULE_IDS = ['home', 'notifications', 'announcements', 'units', 'people', 'serve', 'money', 'reports', 'admin'] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
 
 const MODULE_BLOCKS: Record<ModuleId, readonly string[]> = {
   home: ['home'],
+  notifications: ['notifications'],
+  announcements: ['announcements'],
+  units: ['units'],
   people: ['people', 'groups', 'couples', 'visits', 'watches', 'contacts', 'sponsorship', 'pulpit'],
   serve: ['work', 'schedule', 'monthplan', 'choirs', 'rehearsals', 'repertoire', 'roster', 'teams', 'mine'],
   money: ['money', 'collections'],
@@ -126,6 +130,16 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
       letters: o.letters,
     })),
   ];
+  // Everyone in a system has notifications and announcements; the church-wide system also shows its units to people who hold People access.
+  {
+    places.push(
+      { block: 'notifications', to: `/s/${systemId}/notifications?system=${encodeURIComponent(systemId)}`, labelKey: 'door.portal.nav.notifications', letters: [] },
+      { block: 'announcements', to: `/s/${systemId}/announcements`, labelKey: 'door.portal.nav.announcements', letters: [] },
+    );
+    if (systemId === CHURCH_SYSTEM && places.some((p) => p.block === 'people')) {
+      places.push({ block: 'units', to: `/s/${systemId}/people/units`, labelKey: 'door.people.tab.units', letters: [] });
+    }
+  }
   return MODULE_IDS.map((id) => {
     const order = MODULE_BLOCKS[id];
     const mine = places
@@ -135,11 +149,22 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
   }).filter((m) => m.places.length > 0);
 }
 
+/** The module a path belongs to: Units is a page inside People, but has its own sidebar entry. */
+export function moduleForPath(modules: NavModule[], block: string, sub?: string): NavModule | undefined {
+  if (block === 'people' && sub === 'units') {
+    const units = modules.find((m) => m.id === 'units');
+    if (units) return units;
+  }
+  return activeModule(modules, block);
+}
+
 /** Pages that live under a block without being a menu entry of their own. */
 const HIDDEN_PAGES: Record<string, string> = { 'deleted-work': 'work' };
+const ALWAYS_OPEN = ['notifications', 'announcements'];
 
 /** Whether the person may even see this page: its block must be one of their places. */
 export function canSeeBlock(modules: NavModule[], block: string): boolean {
+  if (ALWAYS_OPEN.includes(block)) return true;
   const owner = HIDDEN_PAGES[block] ?? block;
   return modules.some((m) => m.places.some((p) => p.block === owner));
 }

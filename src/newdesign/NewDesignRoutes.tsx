@@ -73,6 +73,8 @@ export function newDesignRoutes() {
         </Route>
         <Route path="/s/:systemId" element={<SystemFrame />}>
           <Route index element={<SystemBlockPage />} />
+          <Route path="notifications" element={<NotificationsPage />} />
+          <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="people" element={<PeopleLayout />}>
             <Route index element={<PeopleDirectoryPage />} />
             <Route path="new" element={<AddPersonPage />} />

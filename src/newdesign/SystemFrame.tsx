@@ -5,7 +5,8 @@ import { Icon } from '../components/ui/Icon';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
-import { activeModule, buildModules, canSeeBlock } from './menu';
+import { buildModules, canSeeBlock, moduleForPath } from './menu';
+import { useAnnouncementSummary } from './useAnnouncementSummary';
 import { badge } from './notices';
 import { churchWideLink } from './portalHome';
 import { useNoticeSummary } from './useNoticeSummary';
@@ -32,11 +33,13 @@ export function SystemFrame() {
   const setOpen = (v: boolean | ((x: boolean) => boolean)) => setOpenAt((cur) => ((typeof v === 'function' ? v(cur === location.pathname) : v) ? location.pathname : null));
   const toggleRef = useRef<HTMLButtonElement>(null);
 
-  const block = location.pathname.split('/')[3] || 'home';
-  const current = activeModule(modules, block);
+  const parts = location.pathname.split('/');
+  const block = parts[3] || 'home';
+  const current = moduleForPath(modules, block, parts[4]);
+  const announcements = useAnnouncementSummary();
   const allowed = capabilities === null || canSeeBlock(modules, block);
 
-  const place = current?.places.find((p) => p.block === block);
+  const place = current?.places.find((p) => p.block === (current.id === 'units' ? 'units' : block));
   const pageTitle = place && system ? `${t(place.labelKey as 'door.block.home')} · ${system.name}` : system?.name;
   useEffect(() => {
     if (pageTitle) document.title = pageTitle;
@@ -94,7 +97,7 @@ export function SystemFrame() {
         )}
         <DoorBrand subtitle={`${system.name} · ${t('door.portal.role', { role: system.role })}`} />
         <div className="door-top-actions">
-          <Link className="btn ghost sm" to={`/portal/notifications?system=${encodeURIComponent(systemId)}`}>
+          <Link className="btn ghost sm" to={`/s/${systemId}/notifications?system=${encodeURIComponent(systemId)}`}>
             {t('door.portal.nav.notifications')}
             {counts && (counts.bySystem[systemId] ?? 0) > 0 && <span className="door-badge">{badge(counts.bySystem[systemId] ?? 0)}</span>}
           </Link>
@@ -113,12 +116,14 @@ export function SystemFrame() {
                 <li key={m.id}>
                   <NavLink
                     to={m.to}
-                    end={m.id === 'home'}
+                    end={m.id === 'home' || m.id === 'units'}
                     className={() => `door-side-link${current?.id === m.id ? ' active' : ''}`}
                     aria-current={current?.id === m.id ? 'page' : undefined}
                   >
                     <Icon name={MODULE_ICON[m.id]} size={20} />
-                    <span>{t(`door.module.${m.id}` as 'door.module.home')}</span>
+                    <span>{t(m.id === 'notifications' || m.id === 'announcements' || m.id === 'units' ? (m.places[0]!.labelKey as 'door.block.home') : (`door.module.${m.id}` as 'door.module.home'))}</span>
+                    {m.id === 'notifications' && counts && (counts.bySystem[systemId] ?? 0) > 0 && <span className="door-badge">{badge(counts.bySystem[systemId] ?? 0)}</span>}
+                    {m.id === 'announcements' && announcements.unread > 0 && <span className="door-badge">{badge(announcements.unread)}</span>}
                   </NavLink>
                 </li>
               ))}

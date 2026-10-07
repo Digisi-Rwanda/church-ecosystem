@@ -91,8 +91,8 @@ describe('buildModules', () => {
   it('groups what the person can open and drops the rest completely', async () => {
     const { buildModules, canSeeBlock, activeModule } = await import('./menu');
     const mods = buildModules(caps, 'sys-a');
-    expect(mods.map((m) => m.id)).toEqual(['home', 'serve']);
-    expect(mods[1]!.places.map((p) => p.block)).toEqual(['work', 'schedule', 'roster']);
+    expect(mods.map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'serve']);
+    expect(mods[3]!.places.map((p) => p.block)).toEqual(['work', 'schedule', 'roster']);
     expect(mods.flatMap((m) => m.places.map((p) => p.block))).not.toContain('groups');
     expect(canSeeBlock(mods, 'money')).toBe(false);
     expect(canSeeBlock(mods, 'groups')).toBe(false);
@@ -100,8 +100,13 @@ describe('buildModules', () => {
     expect(activeModule(mods, 'roster')?.id).toBe('serve');
   });
 
-  it('is empty without capabilities', async () => {
-    const { buildModules } = await import('./menu');
-    expect(buildModules(null, 'sys-a')).toEqual([]);
+  it('gives the church-wide system a Units entry for people with People access', async () => {
+    const { buildModules, moduleForPath } = await import('./menu');
+    const c = { blockOrder: ['home', 'people'], systems: [{ id: 'sys-main', blocks: { ...none, home: ['R'], people: ['R'] }, own: [] }] } as unknown as Capabilities;
+    const mods = buildModules(c, 'sys-main');
+    expect(mods.map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'units', 'people']);
+    expect(moduleForPath(mods, 'people', 'units')?.id).toBe('units');
+    expect(moduleForPath(mods, 'people')?.id).toBe('people');
+    expect(buildModules(caps, 'sys-a').some((m) => m.id === 'units')).toBe(false);
   });
 });
