@@ -27,7 +27,7 @@ export async function loadPolicyContext(): Promise<PolicyContext> {
       prisma.membership.findMany(),
       prisma.position.findMany(),
       prisma.workTask.findMany({
-        where: { status: { in: ['TODO', 'IN_PROGRESS'] } },
+        where: { deletedAt: null, status: { in: ['TODO', 'IN_PROGRESS'] } },
       }),
       prisma.assignment.findMany({
         where: { status: 'ACTIVE' },

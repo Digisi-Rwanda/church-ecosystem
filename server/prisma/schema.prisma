@@ -387,6 +387,10 @@ model WorkTask {
   startDate          DateTime  @default(now())
   endDate            DateTime?
   outcomeNote        String?
+  /// Slice 3.2: the unit that owns the work, and a soft delete only an Administrator can undo.
+  orgUnitId          String?
+  deletedAt          DateTime?
+  deletedById        String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -673,4 +677,58 @@ model Letter {
   withdrawnReason String?
 
   @@index([systemId, createdAt])
+}
+
+model MonthPlan {
+  id            String    @id @default(cuid())
+  orgUnitId     String
+  systemId      String
+  /// YYYY-MM in church time (Kigali, UTC+2)
+  month         String
+  /// DRAFT | CONFIRMED | PUBLISHED
+  status        String    @default("DRAFT")
+  createdById   String
+  createdAt     DateTime  @default(now())
+  confirmedById String?
+  confirmedAt   DateTime?
+  publishedById String?
+  publishedAt   DateTime?
+
+  @@index([systemId, month])
+}
+
+model ScheduleSlot {
+  id          String    @id @default(cuid())
+  planId      String
+  orgUnitId   String
+  systemId    String
+  title       String
+  /// SERVICE | REHEARSAL | MEETING | OTHER
+  kind        String    @default("OTHER")
+  startsAt    DateTime
+  endsAt      DateTime?
+  location    String?
+  notes       String?
+  churchWide  Boolean   @default(false)
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([planId])
+  @@index([systemId, startsAt])
+}
+
+model SlotAssignment {
+  id            String    @id @default(cuid())
+  slotId        String
+  personId      String
+  role          String
+  /// ASSIGNED | DECLINED
+  status        String    @default("ASSIGNED")
+  declineReason String?
+  respondedAt   DateTime?
+  createdById   String
+  createdAt     DateTime  @default(now())
+
+  @@index([slotId])
+  @@index([personId])
 }

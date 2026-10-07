@@ -8,12 +8,17 @@ import { LoadState } from './LoadState';
 import { RANGES, cleanTypeList, daysProblem, orderSettings, sameValue, suggestCode, typeListProblem } from './settings';
 import { dayLabel } from './notices';
 import { useLoad } from './useLoad';
+import { fetchDeletedWork } from '../api/frontDoorApi';
+import { Link, useParams } from 'react-router-dom';
 
 /** Central Administration's six settings. Everyone who may read them sees all six; three offices change them. */
 export function SettingsPage() {
   const t = useT();
   const { data, loading, failed, reload } = useLoad(fetchSettings, 'settings');
   const [message, setMessage] = useState('');
+  const { systemId = '' } = useParams();
+  // Only an Administrator gets an answer here; for everyone else the link stays hidden.
+  const deleted = useLoad(fetchDeletedWork, 'settings-deleted-probe');
   const rows = orderSettings(data?.settings ?? []);
   const canChange = !!data?.canChange;
   return (
@@ -43,6 +48,11 @@ export function SettingsPage() {
             </li>
           ))}
         </ul>
+        {deleted.data && (
+          <p>
+            <Link to={`/s/${systemId}/deleted-work`}>{t('door.work.deleted.link')}</Link>
+          </p>
+        )}
       </LoadState>
     </section>
   );

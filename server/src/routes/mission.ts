@@ -290,7 +290,7 @@ missionRouter.get('/tasks', requireAuth, async (req: AuthedRequest, res) => {
   const systemId =
     typeof req.query.systemId === 'string' ? req.query.systemId : undefined;
   const tasks = await prisma.workTask.findMany({
-    where: systemId ? { systemId } : undefined,
+    where: systemId ? { systemId, deletedAt: null } : { deletedAt: null },
     orderBy: { startDate: 'desc' },
   });
   const visible = [];

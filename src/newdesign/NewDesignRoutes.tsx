@@ -5,6 +5,7 @@ import { AnnouncementsPage } from './AnnouncementsPage';
 import { AppointmentsPage } from './AppointmentsPage';
 import { CentralHomePage } from './CentralHomePage';
 import { DecisionsPage } from './DecisionsPage';
+import { DeletedWorkPage } from './DeletedWorkPage';
 import { LetterPage } from './LetterPage';
 import { LettersPage } from './LettersPage';
 import { GovernanceLayout } from './GovernanceLayout';
@@ -18,6 +19,7 @@ import { PeopleDirectoryPage } from './PeopleDirectoryPage';
 import { PeopleLayout } from './PeopleLayout';
 import { PersonCardPage } from './PersonCardPage';
 import { PreferencesPage } from './PreferencesPage';
+import { SchedulePage } from './SchedulePage';
 import { SettingsPage } from './SettingsPage';
 import { PortalBlockPage } from './PortalBlockPage';
 import { PortalLayout } from './PortalLayout';
@@ -25,6 +27,7 @@ import { PortalPage } from './PortalPage';
 import { SystemBlockPage } from './SystemBlockPage';
 import { SystemFrame } from './SystemFrame';
 import { UnitPage } from './UnitPage';
+import { WorkPage } from './WorkPage';
 
 /**
  * The new routes, to be placed inside <Routes>. Only added when the new-design
@@ -62,6 +65,9 @@ export function newDesignRoutes() {
           </Route>
           <Route path="central" element={<CentralHomePage />} />
           <Route path="settings" element={<SettingsPage />} />
+          <Route path="schedule" element={<SchedulePage />} />
+          <Route path="work" element={<WorkPage />} />
+          <Route path="deleted-work" element={<DeletedWorkPage />} />
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>
       </Route>

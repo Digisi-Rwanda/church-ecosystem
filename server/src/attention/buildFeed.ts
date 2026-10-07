@@ -153,6 +153,7 @@ export async function buildAttentionFeed(
   const tasks = await prisma.workTask.findMany({
     where: {
       ownerPersonId: personId,
+      deletedAt: null,
       status: { in: ['TODO', 'IN_PROGRESS'] },
     },
     orderBy: { dueDate: 'asc' },

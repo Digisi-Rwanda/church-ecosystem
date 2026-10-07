@@ -715,3 +715,175 @@ export type CentralOverview = { urgent: UrgentItem[]; urgentTotal: number; overs
 export async function fetchCentralOverview(): Promise<CentralOverview> {
   return apiFetch('/api/central/overview');
 }
+
+/* ───────────── Schedule (slice 3.1) ───────────── */
+
+export type PlanStatus = 'DRAFT' | 'CONFIRMED' | 'PUBLISHED';
+export type SlotKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
+export type AssignmentStatus = 'ASSIGNED' | 'DECLINED' | 'REPLACED';
+
+export type ScheduleAssignment = {
+  id: string;
+  personId: string;
+  personName: string;
+  role: string;
+  status: AssignmentStatus;
+  declineReason: string | null;
+  mine: boolean;
+};
+
+export type ScheduleSlot = {
+  id: string;
+  title: string;
+  kind: SlotKind;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  notes: string | null;
+  churchWide: boolean;
+  assignments: ScheduleAssignment[];
+};
+
+export type UnitPlan = {
+  unitId: string;
+  unitName: string;
+  plan: { id: string; status: PlanStatus; confirmedAt: string | null; publishedAt: string | null } | null;
+  slots: ScheduleSlot[];
+};
+
+export type MonthView = { month: string; systemId: string; canWrite: boolean; canConfirm: boolean; canPublish: boolean; units: UnitPlan[] };
+export type ScheduleOptions = {
+  units: Array<{ id: string; name: string; systemId: string }>;
+  kinds: SlotKind[];
+  limits: { titleMax: number; roleMax: number; noteMax: number };
+};
+export type SlotInput = {
+  title: string;
+  kind: SlotKind;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  notes: string | null;
+  churchWide: boolean;
+};
+export type ChurchSlot = { id: string; title: string; kind: SlotKind; startsAt: string; endsAt: string | null; location: string | null; unitName: string };
+export type Duty = {
+  assignmentId: string;
+  role: string;
+  slotId: string;
+  title: string;
+  kind: SlotKind;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  systemId: string;
+  unitName: string;
+};
+
+export const fetchScheduleOptions = (): Promise<ScheduleOptions> => apiFetch('/api/schedule/options');
+export const fetchMonth = (systemId: string, month: string): Promise<MonthView> =>
+  apiFetch(`/api/schedule/month?systemId=${encodeURIComponent(systemId)}&month=${encodeURIComponent(month)}`);
+export async function fetchChurchCalendar(month: string): Promise<ChurchSlot[]> {
+  const res = await apiFetch<{ slots: ChurchSlot[] }>(`/api/schedule/church?month=${encodeURIComponent(month)}`);
+  return res.slots;
+}
+export async function fetchMyDuties(): Promise<Duty[]> {
+  const res = await apiFetch<{ duties: Duty[] }>('/api/schedule/mine');
+  return res.duties;
+}
+export async function addSlot(unitId: string, input: SlotInput): Promise<void> {
+  await apiFetch('/api/schedule/slots', { method: 'POST', body: { unitId, ...input } });
+}
+export async function editSlot(id: string, input: SlotInput): Promise<void> {
+  await apiFetch(`/api/schedule/slots/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function removeSlot(id: string): Promise<void> {
+  await apiFetch(`/api/schedule/slots/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function assignToSlot(slotId: string, personId: string, role: string): Promise<void> {
+  await apiFetch(`/api/schedule/slots/${encodeURIComponent(slotId)}/assign`, { method: 'POST', body: { personId, role } });
+}
+export async function removeAssignment(id: string): Promise<void> {
+  await apiFetch(`/api/schedule/assignments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function declineAssignment(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/schedule/assignments/${encodeURIComponent(id)}/decline`, { method: 'POST', body: { reason } });
+}
+export async function replaceAssignment(id: string, personId: string): Promise<void> {
+  await apiFetch(`/api/schedule/assignments/${encodeURIComponent(id)}/replace`, { method: 'POST', body: { personId } });
+}
+export async function movePlan(id: string, action: 'confirm' | 'publish' | 'reopen'): Promise<void> {
+  await apiFetch(`/api/schedule/plans/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: {} });
+}
+
+/* ───────────── Light work (slice 3.2) ───────────── */
+
+export type WorkStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+export type WorkVisibility = 'PERSONS' | 'UNIT' | 'SYSTEM' | 'CHURCH';
+
+export type WorkItem = {
+  id: string;
+  title: string;
+  description: string;
+  ownerId: string;
+  ownerName: string;
+  helpers: Array<{ id: string; name: string }>;
+  systemId: string;
+  orgUnitId: string | null;
+  unitName: string;
+  status: WorkStatus;
+  visibility: WorkVisibility;
+  dueDate: string | null;
+  overdue: boolean;
+  outcomeNote: string | null;
+  contextLabel: string | null;
+  mine: boolean;
+  canManage: boolean;
+  canMove: boolean;
+  canDelete: boolean;
+};
+
+export type WorkOptions = {
+  units: Array<{ id: string; name: string; systemId: string }>;
+  visibilities: WorkVisibility[];
+  limits: { titleMax: number; textMax: number; noteMax: number; helpersMax: number };
+};
+
+export type WorkInput = {
+  title: string;
+  description: string | null;
+  ownerId: string;
+  helperIds: string[];
+  dueDate: string | null;
+  visibility: WorkVisibility;
+};
+
+export type DeletedWork = { id: string; title: string; status: WorkStatus; systemId: string; unitName: string; ownerName: string; deletedAt: string | null; deletedByName: string };
+
+export const fetchWorkOptions = (): Promise<WorkOptions> => apiFetch('/api/work/options');
+export async function fetchWork(opts: { systemId?: string; view?: 'mine' | 'all'; status?: 'open' | 'all' | WorkStatus; q?: string } = {}): Promise<WorkItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ items: WorkItem[] }>(`/api/work${qs.size ? `?${qs}` : ''}`);
+  return res.items;
+}
+export async function createWork(unitId: string, input: WorkInput): Promise<WorkItem> {
+  const res = await apiFetch<{ work: WorkItem }>('/api/work', { method: 'POST', body: { unitId, ...input } });
+  return res.work;
+}
+export async function editWork(id: string, input: WorkInput): Promise<void> {
+  await apiFetch(`/api/work/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function moveWork(id: string, status: WorkStatus, note?: string): Promise<void> {
+  await apiFetch(`/api/work/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status, note } });
+}
+export async function deleteWork(id: string): Promise<void> {
+  await apiFetch(`/api/work/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function fetchDeletedWork(): Promise<DeletedWork[]> {
+  const res = await apiFetch<{ items: DeletedWork[] }>('/api/work/deleted');
+  return res.items;
+}
+export async function restoreWork(id: string): Promise<void> {
+  await apiFetch(`/api/work/${encodeURIComponent(id)}/restore`, { method: 'POST', body: {} });
+}

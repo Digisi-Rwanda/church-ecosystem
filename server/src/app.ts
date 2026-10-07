@@ -15,6 +15,8 @@ import { accessRouter } from './routes/access.js';
 import { announcementsRouter } from './routes/announcements.js';
 import { governanceRouter } from './routes/governance.js';
 import { lettersRouter } from './routes/letters.js';
+import { scheduleRouter } from './routes/schedule.js';
+import { workRouter } from './routes/work.js';
 import { centralRouter } from './routes/central.js';
 import { settingsRouter } from './routes/settings.js';
 import { notificationsRouter } from './routes/notifications.js';
@@ -82,6 +84,8 @@ export function createApp() {
   app.use('/api/settings', settingsRouter);
   app.use('/api/governance', governanceRouter);
   app.use('/api/letters', lettersRouter);
+  app.use('/api/schedule', scheduleRouter);
+  app.use('/api/work', workRouter);
   app.use('/api/central', centralRouter);
   app.use('/api/authorize', authorizeRouter);
   app.use('/api/me', meRouter);

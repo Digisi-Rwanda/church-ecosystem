@@ -7129,3 +7129,8 @@ button.door-menu-link.active { background: var(--accent-soft); }
   .door-print-sheet { position: absolute; left: 0; top: 0; width: 100%; border: 0; padding: 0; }
   .door-no-print { display: none !important; }
 }
+
+/* Schedule (slice 3.1) */
+.door-slot { display: grid; gap: 0.4rem; list-style: none; }
+.door-slot .door-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
+.door-check { display: flex; align-items: center; gap: 0.5rem; }
