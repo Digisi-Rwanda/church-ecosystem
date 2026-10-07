@@ -78,10 +78,10 @@ export function systemsWithBlock(
     .map((s) => ({ systemId: s.id, letters: s.blocks[block] }));
 }
 
-export type OwnMenuItem = { block: OwnBlock; letters: AccessLetter[] };
+export type OwnMenuItem = { block: OwnBlock; letters: AccessLetter[]; variant?: string };
 
 /** A system's own blocks after the six shared ones (Governance, and Settings in Central Administration), from the server's answer. */
 export function buildOwnMenu(caps: Capabilities | null, systemId: string): OwnMenuItem[] {
   const own = caps?.systems.find((s) => s.id === systemId)?.own ?? [];
-  return own.filter((o) => o.letters.length > 0).map((o) => ({ block: o.key, letters: o.letters }));
+  return own.filter((o) => o.letters.length > 0).map((o) => ({ block: o.key, letters: o.letters, variant: o.variant }));
 }

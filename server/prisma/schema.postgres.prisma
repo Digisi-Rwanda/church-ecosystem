@@ -923,3 +923,50 @@ model PersonRecord {
   @@index([personId, section, status])
   @@index([programId])
 }
+
+/// A fellowship group, Sunday School class or age group inside a unit (slice 3.8).
+model UnitGroup {
+  id             String   @id @default(cuid())
+  orgUnitId      String
+  systemId       String
+  /// FELLOWSHIP | CLASS | AGE_GROUP
+  kind           String
+  name           String
+  leaderPersonId String?
+  ageFrom        Int?
+  ageTo          Int?
+  meetsOn        String?
+  /// ACTIVE | CLOSED
+  status         String   @default("ACTIVE")
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@index([systemId, status])
+}
+
+model GroupMember {
+  id        String    @id @default(cuid())
+  groupId   String
+  personId  String
+  joinedOn  DateTime  @default(now())
+  leftOn    DateTime?
+  /// ACTIVE | LEFT
+  status    String    @default("ACTIVE")
+
+  @@index([groupId, status])
+  @@index([personId])
+}
+
+/// One meeting of a group with who was present.
+model GroupSession {
+  id           String   @id @default(cuid())
+  groupId      String
+  heldOn       DateTime
+  /// JSON array of person ids who were present
+  presentJson  String   @default("[]")
+  note         String?
+  recordedById String
+  recordedAt   DateTime @default(now())
+
+  @@index([groupId, heldOn])
+}

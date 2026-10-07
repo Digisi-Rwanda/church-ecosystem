@@ -1,3 +1,5 @@
+import { GroupPage } from './GroupPage';
+import { GroupsPage } from './GroupsPage';
 import { BaptismCohortPage } from './BaptismCohortPage';
 import { Person360Page } from './Person360Page';
 import { ReportPage } from './ReportPage';
@@ -81,6 +83,8 @@ export function newDesignRoutes() {
           <Route path="money" element={<MoneyPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="reports/:reportId" element={<ReportPage />} />
+          <Route path="groups" element={<GroupsPage />} />
+          <Route path="groups/:groupId" element={<GroupPage />} />
           <Route path="deleted-work" element={<DeletedWorkPage />} />
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>

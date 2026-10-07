@@ -13,12 +13,12 @@ export type PortalSystem = {
 };
 
 /** A system's own blocks after the six shared ones. */
-export type OwnBlock = 'central' | 'governance' | 'settings';
+export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups';
 
 export type Capabilities = {
   personId: string;
   offices: Array<{ id: string; systemId: string | null; title: string; code: OfficeCode | null }>;
-  systems: Array<{ id: string; blocks: Record<SharedBlock, AccessLetter[]>; own?: Array<{ key: OwnBlock; letters: AccessLetter[] }> }>;
+  systems: Array<{ id: string; blocks: Record<SharedBlock, AccessLetter[]>; own?: Array<{ key: OwnBlock; letters: AccessLetter[]; variant?: string }> }>;
   blockOrder: SharedBlock[];
 };
 
@@ -1107,3 +1107,34 @@ export async function fetchP360Cohorts(): Promise<P360Cohort[]> {
 }
 export const recordBaptismCohort = (input: { programId: string; date: string; place?: string; baptisedBy?: string; personIds: string[] }): Promise<{ created: number; skipped: number }> =>
   apiFetch(`${P3}/baptism-cohort`, { method: 'POST', body: input });
+
+// ── Groups (slice 3.8) ──────────────────────────────────────────────────────────
+export type GroupKind = 'FELLOWSHIP' | 'CLASS' | 'AGE_GROUP';
+export type GroupOptions = { units: Array<{ id: string; name: string; systemId: string; kind: GroupKind }>; limits: { nameMax: number; meetsMax: number; noteMax: number } };
+export type GroupListItem = { id: string; name: string; status: 'ACTIVE' | 'CLOSED'; unitName: string; ageFrom: number | null; ageTo: number | null; meetsOn: string; leaderName: string; members: number; lastSessionOn: string | null };
+export type GroupDetail = {
+  group: { id: string; name: string; kind: GroupKind; systemId: string; status: 'ACTIVE' | 'CLOSED'; unitName: string; ageFrom: number | null; ageTo: number | null; meetsOn: string; leaderId: string | null; leaderName: string; canWrite: boolean };
+  members: Array<{ personId: string; name: string; joinedOn: string; age: number | null; outsideAge: boolean; came: number; of: number; rate: number }>;
+  sessions: Array<{ id: string; heldOn: string; present: number; note: string; names: string[] }>;
+};
+export type GroupInput = { name: string; leaderId?: string | null; ageFrom?: number | null; ageTo?: number | null; meetsOn?: string | null };
+const G = '/api/groups';
+export const fetchGroupOptions = (): Promise<GroupOptions> => apiFetch(`${G}/options`);
+export const fetchGroups = (systemId: string): Promise<{ kind: GroupKind; canWrite: boolean; groups: GroupListItem[] }> => apiFetch(`${G}?systemId=${encodeURIComponent(systemId)}`);
+export const fetchGroup = (id: string): Promise<GroupDetail> => apiFetch(`${G}/${encodeURIComponent(id)}`);
+export const createGroup = (unitId: string, input: GroupInput): Promise<{ id: string }> => apiFetch(G, { method: 'POST', body: { unitId, ...input } });
+export async function editGroup(id: string, input: GroupInput): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function closeGroup(id: string): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}/close`, { method: 'POST', body: {} });
+}
+export async function addGroupMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}/members`, { method: 'POST', body: { personId } });
+}
+export async function removeGroupMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}/members/${encodeURIComponent(personId)}`, { method: 'DELETE' });
+}
+export async function recordGroupSession(id: string, input: { heldOn: string; presentIds: string[]; note?: string | null }): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}/sessions`, { method: 'POST', body: input });
+}

@@ -74,7 +74,7 @@ export function SystemFrame() {
         ))}
         {ownMenu.map((item) => (
           <NavLink key={item.block} to={`/s/${systemId}/${item.block}`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
-            {t(`door.own.${item.block}` as const)}
+            {t(`door.own.${item.block}${item.variant ? `.${item.variant}` : ''}` as 'door.own.governance')}
           </NavLink>
         ))}
       </nav>
