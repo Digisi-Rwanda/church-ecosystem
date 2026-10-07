@@ -13,15 +13,6 @@ export type ServiceKind = (typeof SERVICE_KINDS)[number];
 export const NAME_MAX = 80;
 export const LABEL_MAX = 80;
 
-const ALLOWED: Record<ServiceKind, readonly ChoirRole[]> = {
-  SS1: ['PRIMARY', 'SECONDARY', 'CHILDREN'],
-  SS2: ['PRIMARY', 'SECONDARY'],
-  TUESDAY: ['PRIMARY', 'SECONDARY', 'WORSHIP'],
-  FRIDAY: ['PRIMARY', 'SECONDARY'],
-  IGABURO: ['PRIMARY', 'SECONDARY'],
-};
-export const roleMayServe = (role: string, kind: string): boolean => (ALLOWED[kind as ServiceKind] as readonly string[] | undefined)?.includes(role) ?? false;
-
 export const isMonth = (v: string) => /^\d{4}-(0[1-9]|1[0-2])$/.test(v);
 export const monthOf = (day: string) => day.slice(0, 7);
 

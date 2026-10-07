@@ -9,7 +9,7 @@ const BAR = 22;
 const STEP = 36;
 const FLOOR = 104;
 
-function MonthChart({ series, title }: { series: GlanceSeries; title: string }) {
+export function MonthChart({ series, title }: { series: GlanceSeries; title: string }) {
   const { locale } = useI18n();
   const top = Math.max(...series.points.map((p) => p.value), 1);
   const bars = chartBars(series.points.map((p) => p.value), top, 80);

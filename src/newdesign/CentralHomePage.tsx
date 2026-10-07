@@ -1,16 +1,63 @@
 import { Link } from 'react-router-dom';
-import { fetchCentralOverview } from '../api/frontDoorApi';
+import { fetchCentralOverview, fetchChurchCollections } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
 import { needsAttention, orderOversight, urgentHref, urgentKey } from './central';
 import { useFrontDoor } from './FrontDoorContext';
-import { GlanceDashboard } from './GlanceDashboard';
+import { GlanceDashboard, MonthChart } from './GlanceDashboard';
+import { formatRwf } from './money';
 import { buildOwnMenu } from './menu';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
 import { useParams } from 'react-router-dom';
+import { useI18n } from '../i18n/I18nContext';
 import { dayLabel } from './notices';
 import { kindKey } from './reports';
+
+/** Offerings counted at services across the church, read only. These are counts, never added to Money's figures. */
+function ChurchCollections() {
+  const t = useT();
+  const { locale } = useI18n();
+  const { data, loading, failed, reload } = useLoad(fetchChurchCollections, 'central-collections');
+  const day = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
+  return (
+    <div className="panel">
+      <h3>{t('door.central.coll.title')}</h3>
+      <p className="muted">{t('door.central.coll.hint')}</p>
+      <LoadState loading={loading} failed={failed} retry={reload}>
+        {data && (
+          <>
+            <p>
+              <strong>{formatRwf(data.totals.all)}</strong> · {t('door.central.coll.toConfirm', { count: String(data.totals.toConfirm) })} · {t('door.central.coll.toHandOver', { count: String(data.totals.toHandOver) })}
+            </p>
+            <MonthChart series={{ key: 'collections', format: 'rwf', points: data.months.map((m) => ({ label: m.month, value: m.total })) }} title={t('door.central.coll.byMonth')} />
+            <h4>{t('door.central.coll.byMinistry')}</h4>
+            {data.ministries.length === 0 ? <p className="muted">{t('door.central.coll.none')}</p> : (
+              <table className="door-chart-rows">
+                <tbody>
+                  {data.ministries.map((m) => (
+                    <tr key={m.systemId}>
+                      <th scope="row"><Link to={`/s/${m.systemId}/collections`}>{m.name}</Link></th>
+                      <td>{formatRwf(m.total)}</td>
+                      <td className="muted">{t('door.central.coll.counts', { count: String(m.count) })}</td>
+                      <td className={m.toConfirm + m.toHandOver > 0 ? 'door-error' : 'muted'}>{m.toConfirm + m.toHandOver > 0 ? t('door.central.coll.open', { confirm: String(m.toConfirm), hand: String(m.toHandOver) }) : ''}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+            <h4>{t('door.central.coll.missing')}</h4>
+            {data.missing.length === 0 ? <p className="muted">{t('door.central.coll.missingNone')}</p> : (
+              <ul className="door-list">
+                {data.missing.map((m) => <li key={m.date}>{day(m.date)} <span className="muted">· {m.kinds.map((k) => t(`door.music.kind.${k}` as 'door.music.kind.SS1')).join(', ')}</span></li>)}
+              </ul>
+            )}
+          </>
+        )}
+      </LoadState>
+    </div>
+  );
+}
 
 /** Central Administration home: Urgent, Oversight and Reports received, all read-only. */
 export function CentralHomePage() {
@@ -28,6 +75,7 @@ export function CentralHomePage() {
         <p className="muted">{t('door.central.intro')}</p>
       </div>
       <GlanceDashboard systemId={systemId} />
+      <ChurchCollections />
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && (
           <>

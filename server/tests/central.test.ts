@@ -90,3 +90,30 @@ describe('Central Administration overview', () => {
     expect(pres.own.map((o: any) => o.key)).not.toContain('central');
   });
 });
+
+describe('collections across the church', () => {
+  const count = (id: string, systemId: string, serviceOn: Date, amount: number, status = 'CONFIRMED', handedToId: string | null = null) =>
+    fake.__db.offeringCount.push({ id, orgUnitId: 'ou-choir', systemId, serviceOn, amount, status, handedToId });
+  beforeEach(() => { fake.__db.offeringCount ??= []; fake.__db.musicMonth ??= []; });
+  it('adds counted offerings by month and ministry, leaves out voided ones, and counts what is still open', async () => {
+    const d = new Date(); d.setUTCHours(0, 0, 0, 0);
+    count('c1', 'sys-choir', d, 10000, 'RECORDED');
+    count('c2', 'sys-choir', d, 5000, 'CONFIRMED');
+    count('c3', 'sys-main', d, 2000, 'CONFIRMED', 'p-treasurer');
+    count('c4', 'sys-main', d, 99999, 'VOIDED');
+    const r = (await get('p-pastor', '/api/central/collections')).body;
+    expect(r.totals).toEqual({ all: 17000, toConfirm: 1, toHandOver: 1 });
+    expect(r.months.at(-1)).toMatchObject({ total: 17000, count: 3 });
+    expect(r.ministries.find((m: any) => m.systemId === 'sys-choir')).toMatchObject({ total: 15000, toConfirm: 1, toHandOver: 1 });
+  });
+  it('lists recent past services with no count, and not the ones that have one', async () => {
+    const past = (n: number) => new Date(Date.now() - n * 86400000).toISOString().slice(0, 10);
+    fake.__db.musicMonth.push({ servicesJson: JSON.stringify([{ date: past(3), kind: 'SS1' }, { date: past(3), kind: 'SS2' }, { date: past(10), kind: 'TUESDAY' }, { date: past(10), kind: 'FRIDAY' }, { date: past(-5), kind: 'SS1' }]) });
+    count('c1', 'sys-main', new Date(`${past(10)}T00:00:00Z`), 1000);
+    const r = (await get('p-pastor', '/api/central/collections')).body;
+    expect(r.missing).toEqual([{ date: past(3), kinds: ['SS1', 'SS2'] }]);
+  });
+  it('is closed to people without Central access', async () => {
+    expect((await get('p-member', '/api/central/collections')).status).toBe(403);
+  });
+});

@@ -13,7 +13,7 @@ export type PortalSystem = {
 };
 
 /** A system's own blocks after the six shared ones. */
-export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship';
+export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports';
 
 export type Capabilities = {
   personId: string;
@@ -712,6 +712,14 @@ export type OversightRow = {
 
 export type CentralOverview = { urgent: UrgentItem[]; urgentTotal: number; oversight: OversightRow[]; reports: ReceivedReport[]; reportsLate?: LateReport[] };
 
+export type ChurchCollections = {
+  months: Array<{ month: string; total: number; count: number }>;
+  ministries: Array<{ systemId: string; name: string; total: number; count: number; toConfirm: number; toHandOver: number }>;
+  totals: { all: number; toConfirm: number; toHandOver: number };
+  missing: Array<{ date: string; kinds: string[] }>;
+};
+export const fetchChurchCollections = (): Promise<ChurchCollections> => apiFetch('/api/central/collections');
+
 export async function fetchCentralOverview(): Promise<CentralOverview> {
   return apiFetch('/api/central/overview');
 }
@@ -1213,12 +1221,8 @@ export type ChoirRole = 'PRIMARY' | 'SECONDARY' | 'CHILDREN' | 'WORSHIP';
 export type MusicServiceKind = 'SS1' | 'SS2' | 'TUESDAY' | 'FRIDAY' | 'IGABURO';
 export type ChoirItem = { id: string; name: string; role: ChoirRole; active: boolean; members: number; canWrite: boolean };
 export type ChoirDetail = { choir: { id: string; name: string; role: ChoirRole; active: boolean; canWrite: boolean }; members: Array<{ personId: string; name: string; joinedOn: string }> };
-export type MusicPlanView = {
-  id: string; periodKey: string; status: 'DRAFT' | 'PUBLISHED'; publishedAt: string | null;
-  services: Array<{ id: string; serviceOn: string; kind: MusicServiceKind; label: string; choirs: Array<{ choirId: string; name: string }> }>;
-};
 export type OversightView = {
-  month: string; planStatus: 'DRAFT' | 'PUBLISHED' | null;
+  month: string; planStatus: 'CONFIRMED' | 'PUBLISHED' | null;
   choirs: Array<{ id: string; name: string; role: ChoirRole; members: number; services: number; days: string[]; noMembers: boolean; notScheduled: boolean }>;
   emptyServices: Array<{ id: string; serviceOn: string; kind: MusicServiceKind }>;
 };
@@ -1237,24 +1241,45 @@ export async function addChoirMember(id: string, personId: string): Promise<void
 export async function removeChoirMember(id: string, personId: string): Promise<void> {
   await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/members/${encodeURIComponent(personId)}`, { method: 'DELETE' });
 }
-export const fetchMusicPlan = (month: string): Promise<{ canWrite: boolean; plan: MusicPlanView | null; choirs: Array<{ id: string; name: string; role: ChoirRole }> }> => apiFetch(`${MU}/plan?month=${month}`);
-export async function startMusicPlan(month: string): Promise<void> {
-  await apiFetch(`${MU}/plan`, { method: 'POST', body: { month } });
+export type MusicHorizonKey = 'MONTH' | 'QUARTER' | 'HALF' | 'YEAR';
+export type ScheduleUnitRef = { unitId: string; name: string; kind: ChoirRole };
+export type ScheduleService = { id: string; periodKey: string; date: string; kind: MusicServiceKind; label: string; units: ScheduleUnitRef[] };
+export type ScheduleState = {
+  canWrite: boolean;
+  months: Array<{ periodKey: string; state: 'CONFIRMED' | 'PUBLISHED'; version: number; confirmedAt: string | null; publishedAt: string | null; updatedAt: string | null }>;
+  drafts: Array<{ id: string; label: string; horizon: MusicHorizonKey; startMonth: string; months: string[]; warnings: number }>;
+  options: Record<string, Array<{ value: string; label: string }>>;
+  units: Array<{ id: string; name: string; kind: ChoirRole }>;
+};
+export type ScheduleDraftView = { id: string; label: string; horizon: MusicHorizonKey; warnings: string[]; months: Array<{ periodKey: string; decided: 'CONFIRMED' | 'PUBLISHED' | null }>; services: ScheduleService[] };
+export type ScheduleMonthView = { canWrite: boolean; periodKey: string; state: 'CONFIRMED' | 'PUBLISHED'; version: number; warnings: string[]; services: ScheduleService[] };
+export type ScheduleEdit = { serviceId: string; action: 'add' | 'remove' | 'replace'; unitId: string; toUnitId?: string | null };
+export type ScheduleLogEntry = { id: string; at: string; periodKey: string; stage: string; action: string; version: number; by: string; summary: string; changes: string[] };
+const MS = `${MU}/schedule`;
+export const fetchScheduleState = (): Promise<ScheduleState> => apiFetch(`${MS}/state`);
+export const fetchScheduleDraft = (id: string): Promise<ScheduleDraftView> => apiFetch(`${MS}/drafts/${encodeURIComponent(id)}`);
+export const fetchScheduleMonth = (month: string): Promise<ScheduleMonthView> => apiFetch(`${MS}/months/${encodeURIComponent(month)}`);
+export const fetchScheduleLog = (month?: string): Promise<{ entries: ScheduleLogEntry[] }> => apiFetch(`${MS}/log${month ? `?month=${encodeURIComponent(month)}` : ''}`);
+export async function generateScheduleDraft(horizon: MusicHorizonKey, start: string): Promise<{ id: string; warnings: string[] }> {
+  return apiFetch(`${MS}/drafts/generate`, { method: 'POST', body: { horizon, start } });
 }
-export async function addMusicService(planId: string, input: { serviceOn: string; kind: MusicServiceKind; label?: string | null }): Promise<void> {
-  await apiFetch(`${MU}/plan/${encodeURIComponent(planId)}/services`, { method: 'POST', body: input });
+export async function editScheduleDraft(id: string, edit: ScheduleEdit): Promise<{ warnings: string[] }> {
+  return apiFetch(`${MS}/drafts/${encodeURIComponent(id)}/edit`, { method: 'POST', body: edit });
 }
-export async function removeMusicService(serviceId: string): Promise<void> {
-  await apiFetch(`${MU}/services/${encodeURIComponent(serviceId)}`, { method: 'DELETE' });
+export async function discardScheduleDraft(id: string): Promise<void> {
+  await apiFetch(`${MS}/drafts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
-export async function assignChoir(serviceId: string, choirId: string): Promise<void> {
-  await apiFetch(`${MU}/services/${encodeURIComponent(serviceId)}/assignments`, { method: 'POST', body: { choirId } });
+export async function confirmScheduleDraft(id: string, months?: string[]): Promise<void> {
+  await apiFetch(`${MS}/drafts/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: { months } });
 }
-export async function unassignChoir(serviceId: string, choirId: string): Promise<void> {
-  await apiFetch(`${MU}/services/${encodeURIComponent(serviceId)}/assignments/${encodeURIComponent(choirId)}`, { method: 'DELETE' });
+export async function publishScheduleDraft(id: string): Promise<void> {
+  await apiFetch(`${MS}/drafts/${encodeURIComponent(id)}/publish`, { method: 'POST', body: {} });
 }
-export async function publishMusicPlan(planId: string): Promise<void> {
-  await apiFetch(`${MU}/plan/${encodeURIComponent(planId)}/publish`, { method: 'POST', body: {} });
+export async function publishScheduleMonths(months: string[]): Promise<void> {
+  await apiFetch(`${MS}/months/publish`, { method: 'POST', body: { months } });
+}
+export async function editScheduleMonth(month: string, edit: ScheduleEdit): Promise<{ warnings: string[]; version: number }> {
+  return apiFetch(`${MS}/months/${encodeURIComponent(month)}/edit`, { method: 'POST', body: edit });
 }
 export const fetchMusicOversight = (month: string): Promise<OversightView> => apiFetch(`${MU}/oversight?month=${month}`);
 
@@ -1306,3 +1331,88 @@ export interface GlanceTile { key: string; value: number; format: 'count' | 'rwf
 export interface GlanceSeries { key: string; format: 'count' | 'rwf'; points: Array<{ label: string; value: number }> }
 export const fetchGlance = (systemId: string): Promise<{ systemId: string; tiles: GlanceTile[]; series: GlanceSeries[] }> =>
   apiFetch(`/api/glance?systemId=${encodeURIComponent(systemId)}`);
+
+// ── Protocol (slice 3.16): the old team engine ─────────────────────────────────
+export type ProtocolOffice = 'PRESIDENT' | 'VP' | 'SECRETARY' | 'TREASURER' | 'COORDINATOR' | 'MEMBER';
+export type ProtocolServeDays = 'SUNDAY' | 'TUESDAY' | 'BOTH';
+export type ProtocolKind = 'SS1' | 'SS2' | 'TUESDAY' | 'IGABURO';
+export type ProtocolRosterStatus = 'ACTIVE' | 'INACTIVE' | 'LEAVE';
+export type ProtocolRole = 'MEMBER' | 'TEAM_LEADER' | 'VICE_LEADER';
+export type ProtocolAttendanceStatus = 'PRESENT' | 'HALF_PRESENT' | 'EXCUSED' | 'ABSENT';
+export type ProtocolStep = 'WAIT_MUSIC' | 'BUILD' | 'SEND' | 'WAIT_PRESIDENT' | 'DONE';
+export type ProtocolMemberRow = {
+  id: string; personId: string; name: string; office: ProtocolOffice; serveDays: ProtocolServeDays; status: ProtocolRosterStatus; unavailableDates: string[];
+  allowedServiceKinds: ProtocolKind[]; onlyServices: Array<{ date: string; kind: ProtocolKind }>; notes: string; choirs: string[];
+};
+export type ProtocolRosterPatch = Partial<{
+  office: ProtocolOffice; serveDays: ProtocolServeDays; status: ProtocolRosterStatus; unavailableDates: string[]; allowedServiceKinds: ProtocolKind[];
+  onlyServices: Array<{ date: string; kind: ProtocolKind }>; notes: string;
+}>;
+export type ProtocolTeamEntry = { id: string; personId: string; name: string; role: ProtocolRole; recommendedRole: ProtocolRole | null; slotKind: 'REGULAR' | 'EXTRA' | 'FILL_IN'; source: string; load: number };
+export type ProtocolServiceView = { id: string; date: string; kind: ProtocolKind; label: string; target: number; music: string[]; team: ProtocolTeamEntry[] };
+export type ProtocolIssueView = {
+  key: string; code: string; severity: 'BLOCKING' | 'WARNING'; message: string; serviceId: string | null; personId: string | null; overridden: boolean; canOverride: boolean;
+};
+export type ProtocolMonthView = {
+  month: string; step: ProtocolStep; status: 'OPEN' | 'DRAFT' | 'REVIEW' | 'PUBLISHED'; version: number; music: { state: 'CONFIRMED' | 'PUBLISHED'; version: number } | null;
+  builtOnMusicVersion: number | null; stale: string[]; notes: string[]; relax: { tuesday: boolean; reason: string | null }; rules: { target: number; hardMax: number; teamSize: number };
+  services: ProtocolServiceView[]; issues: ProtocolIssueView[]; overrides: Array<{ issueKey: string; reason: string; at: string }>; roster: Array<{ personId: string; name: string; load: number }>;
+  can: { build: boolean; edit: boolean; reopen: boolean; review: boolean };
+};
+export type ProtocolDuty = {
+  serviceId: string; date: string; kind: ProtocolKind; label: string; role: ProtocolRole; slotKind: string; attendance: ProtocolAttendanceStatus | null; absence: string | null;
+  swapOffers: Array<{ id: string; from: string }>;
+};
+export type ProtocolLeading = {
+  serviceId: string; date: string; kind: ProtocolKind; label: string;
+  team: Array<{ personId: string; name: string; role: ProtocolRole; slotKind: string; attendance: ProtocolAttendanceStatus | null; absence: { id: string; status: string; reason: string } | null }>;
+  fillIns: Array<{ id: string; excused: string; candidate: string; status: string }>;
+};
+export type ProtocolMine = {
+  duties: ProtocolDuty[]; leading: ProtocolLeading[]; fillInOffers: Array<{ id: string; serviceId: string; excused: string }>;
+  absencesToDecide: Array<{ id: string; serviceId: string; person: string; reason: string }>;
+  others: Array<{ serviceId: string; date: string; kind: ProtocolKind; label: string; team: Array<{ personId: string; name: string }> }>;
+  pool: Array<{ personId: string; name: string }>;
+};
+export type ProtocolReportParts = { challenges: string; solutions: string; issues: string; recommendations: string };
+export type ProtocolReportItem = ProtocolReportParts & { serviceId: string; date: string; kind: string; label: string; author: string; submittedAt: string | null };
+const PR = '/api/protocol';
+const prPost = async (path: string, body: object = {}): Promise<{ id?: string; version?: number }> => apiFetch(`${PR}${path}`, { method: 'POST', body });
+export const fetchProtocolRoster = (): Promise<{ canWrite: boolean; members: ProtocolMemberRow[] }> => apiFetch(`${PR}/roster`);
+export const addProtocolMember = (personId: string, office: ProtocolOffice = 'MEMBER', serveDays: ProtocolServeDays = 'BOTH') => prPost('/roster', { personId, office, serveDays });
+export async function patchProtocolMember(id: string, patch: ProtocolRosterPatch): Promise<void> {
+  await apiFetch(`${PR}/roster/${id}`, { method: 'PATCH', body: patch });
+}
+export const fetchProtocolMonths = (): Promise<{ months: Array<{ month: string; music: string | null; status: string; version: number }> }> => apiFetch(`${PR}/months`);
+export const fetchProtocolMonth = (month: string): Promise<ProtocolMonthView> => apiFetch(`${PR}/months/${month}`);
+export const generateProtocolTeams = (month: string) => prPost(`/months/${month}/generate`);
+export const addProtocolSlot = (month: string, serviceId: string, personId: string) => prPost(`/months/${month}/slots`, { serviceId, personId });
+export async function removeProtocolSlot(month: string, id: string): Promise<void> {
+  await apiFetch(`${PR}/months/${month}/slots/${id}`, { method: 'DELETE' });
+}
+export const replaceProtocolSlot = (month: string, id: string, personId: string) => prPost(`/months/${month}/slots/${id}/replace`, { personId });
+export const setProtocolRole = (month: string, id: string, role: ProtocolRole) => prPost(`/months/${month}/slots/${id}/role`, { role });
+export const approveProtocolRoles = (month: string) => prPost(`/months/${month}/roles/approve`);
+export const overrideProtocolIssue = (month: string, issueKey: string, reason: string) => prPost(`/months/${month}/overrides`, { issueKey, reason });
+export const relaxProtocolTuesday = (month: string, on: boolean, reason?: string) => prPost(`/months/${month}/relax`, { on, reason });
+export const acknowledgeProtocolMusic = (month: string) => prPost(`/months/${month}/acknowledge-music`);
+export const submitProtocolMonth = (month: string) => prPost(`/months/${month}/submit`);
+export const returnProtocolMonth = (month: string) => prPost(`/months/${month}/return`);
+export const publishProtocolMonth = (month: string) => prPost(`/months/${month}/publish`);
+export const fetchProtocolHistory = (month: string): Promise<{ versions: Array<{ version: number; publishedAt: string; by: string; slots: number }> }> => apiFetch(`${PR}/months/${month}/history`);
+export const fetchProtocolMine = (): Promise<ProtocolMine> => apiFetch(`${PR}/mine`);
+export const requestProtocolAbsence = (serviceId: string, reason: string) => prPost('/absences', { serviceId, reason });
+export const decideProtocolAbsence = (id: string, decision: 'EXCUSE' | 'DENY') => prPost(`/absences/${id}/decide`, { decision });
+export const offerProtocolFillIn = (serviceId: string, excusedPersonId: string, candidatePersonId: string) => prPost('/fillins', { serviceId, excusedPersonId, candidatePersonId });
+export const answerProtocolFillIn = (id: string, accept: boolean) => prPost(`/fillins/${id}/respond`, { accept });
+export const proposeProtocolSwap = (serviceId: string, targetPersonId: string) => prPost('/swaps', { serviceId, targetPersonId });
+export const answerProtocolSwap = (id: string, accept: boolean) => prPost(`/swaps/${id}/respond`, { accept });
+export const markProtocolAttendance = (serviceId: string, personId: string, status: ProtocolAttendanceStatus) => prPost(`/services/${serviceId}/attendance`, { personId, status });
+export const fetchProtocolScores = (month?: string): Promise<{ scores: Array<{ personId: string; name: string; points: number; services: number; absent: number }> }> =>
+  apiFetch(`${PR}/scores${month ? `?month=${month}` : ''}`);
+export const fetchProtocolServiceReport = (serviceId: string): Promise<{ service: { id: string; date: string; kind: string; label: string }; canWrite: boolean; report: (ProtocolReportParts & { submittedAt: string | null }) | null }> =>
+  apiFetch(`${PR}/services/${serviceId}/report`);
+export async function saveProtocolServiceReport(serviceId: string, parts: ProtocolReportParts): Promise<void> {
+  await apiFetch(`${PR}/services/${serviceId}/report`, { method: 'PUT', body: parts });
+}
+export const fetchProtocolReports = (month: string): Promise<{ month: string; reports: ProtocolReportItem[] }> => apiFetch(`${PR}/reports?month=${month}`);

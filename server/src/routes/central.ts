@@ -106,3 +106,61 @@ centralRouter.get('/overview', requireAuth, async (req: AuthedRequest, res) => {
     reportsLate: received.late,
   });
 });
+
+/**
+ * Collections across the church (slice 3.17): offerings counted at services, read only.
+ * Totals by month and by ministry, what is still to be confirmed or handed over, and recent services
+ * with no count at all. These are counted offerings, not money: nothing here is added to Money's figures.
+ */
+const MONTHS_BACK = 12;
+const GAP_DAYS = 56;
+const GAP_MAX = 30;
+interface CountRow { systemId: string; orgUnitId: string; serviceOn: Date | string; amount: number; status: string; handedToId?: string | null }
+interface MusicMonthRow { servicesJson: string }
+
+centralRouter.get('/collections', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const now = new Date();
+  const { data } = await loadAccessData(me);
+  if (!canRead(me, CENTRAL_SYSTEM, data, now)) return res.status(403).json({ error: 'You may not open Central Administration', code: 'NOT_ALLOWED' });
+  const systems = (await prisma.churchSystem.findMany()) as SystemRow[];
+  const readable = new Set(systems.filter((s) => canRead(me, s.id, data, now)).map((s) => s.id));
+  const nameOf = (id: string) => { const s = systems.find((x) => x.id === id); return s?.name || s?.shortName || id; };
+  const rows = ((await prisma.offeringCount.findMany()) as CountRow[]).filter((r) => readable.has(r.systemId) && r.status !== 'VOIDED');
+  const day = (v: Date | string) => (v instanceof Date ? v : new Date(v)).toISOString().slice(0, 10);
+
+  const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - (MONTHS_BACK - 1), 1));
+  const months: Array<{ month: string; total: number; count: number }> = [];
+  for (let i = 0; i < MONTHS_BACK; i++) months.push({ month: new Date(Date.UTC(first.getUTCFullYear(), first.getUTCMonth() + i, 1)).toISOString().slice(0, 7), total: 0, count: 0 });
+  for (const r of rows) {
+    const m = months.find((x) => x.month === day(r.serviceOn).slice(0, 7));
+    if (m) { m.total += r.amount; m.count += 1; }
+  }
+  const per = new Map<string, { systemId: string; name: string; total: number; count: number; toConfirm: number; toHandOver: number }>();
+  for (const r of rows) {
+    const cur = per.get(r.systemId) ?? { systemId: r.systemId, name: nameOf(r.systemId), total: 0, count: 0, toConfirm: 0, toHandOver: 0 };
+    cur.total += r.amount;
+    cur.count += 1;
+    if (r.status === 'RECORDED') cur.toConfirm += 1;
+    if (r.status === 'CONFIRMED' && !r.handedToId) cur.toHandOver += 1;
+    per.set(r.systemId, cur);
+  }
+  const today = day(now);
+  const from = day(new Date(now.getTime() - GAP_DAYS * 86400000));
+  const counted = new Set(rows.map((r) => day(r.serviceOn)));
+  const dates = new Map<string, Set<string>>();
+  for (const m of (await prisma.musicMonth.findMany()) as MusicMonthRow[]) {
+    try {
+      for (const s of JSON.parse(m.servicesJson) as Array<{ date: string; kind: string }>) {
+        if (s.date >= from && s.date < today && ['SS1', 'SS2', 'TUESDAY', 'IGABURO'].includes(s.kind)) dates.set(s.date, (dates.get(s.date) ?? new Set()).add(s.kind));
+      }
+    } catch { /* an unreadable month is skipped */ }
+  }
+  const missing = [...dates.entries()].filter(([d]) => !counted.has(d)).sort((a, b) => b[0].localeCompare(a[0])).slice(0, GAP_MAX).map(([date, kinds]) => ({ date, kinds: [...kinds].sort() }));
+  res.json({
+    months,
+    ministries: [...per.values()].sort((a, b) => b.total - a.total),
+    totals: { all: rows.reduce((n, r) => n + r.amount, 0), toConfirm: rows.filter((r) => r.status === 'RECORDED').length, toHandOver: rows.filter((r) => r.status === 'CONFIRMED' && !r.handedToId).length },
+    missing,
+  });
+});

@@ -1206,3 +1206,207 @@ model SponsorPledge {
 
   @@index([sponsorId])
 }
+
+/* ─── Protocol: the old team engine (slice 3.16) ─── */
+
+/// A person on the Protocol roster: office, which days they can serve and the limits their leader set.
+model ProtocolRoster {
+  id               String   @id @default(cuid())
+  personId         String   @unique
+  /// PRESIDENT | VP | SECRETARY | TREASURER | COORDINATOR | MEMBER
+  office           String   @default("MEMBER")
+  /// SUNDAY | TUESDAY | BOTH
+  serveDays        String   @default("BOTH")
+  /// ACTIVE | INACTIVE | LEAVE
+  status           String   @default("ACTIVE")
+  unavailableJson  String   @default("[]")
+  allowedKindsJson String   @default("[]")
+  onlyServicesJson String   @default("[]")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now())
+}
+
+/// One month of teams. Status OPEN, DRAFT, REVIEW, PUBLISHED; the version rises with each publish.
+model ProtocolPlan {
+  id                String    @id @default(cuid())
+  monthKey          String    @unique
+  status            String    @default("OPEN")
+  version           Int       @default(0)
+  notesJson         String    @default("[]")
+  generatedAt       DateTime?
+  submittedAt       DateTime?
+  submittedById     String?
+  reviewedAt        DateTime?
+  reviewedById      String?
+  publishedAt       DateTime?
+  publishedById     String?
+  musicVersionBuiltOn Int?
+  musicSnapshotJson String?
+  musicStaleNotified Boolean  @default(false)
+  overridesJson     String    @default("[]")
+  relaxTuesday      Boolean   @default(false)
+  relaxReason       String?
+  relaxedById       String?
+  relaxedAt         DateTime?
+  updatedAt         DateTime  @default(now())
+}
+
+/// A person on a service's team. Removed rows are deleted from the working plan; published versions keep a snapshot.
+model ProtocolSlot {
+  id               String @id @default(cuid())
+  monthKey         String
+  serviceId        String
+  personId         String
+  /// ENGINE | MANUAL | FILL_IN | SWAP
+  source           String @default("MANUAL")
+  /// MEMBER | TEAM_LEADER | VICE_LEADER
+  role             String @default("MEMBER")
+  recommendedRole  String?
+  roleStatus       String?
+  /// REGULAR | EXTRA | FILL_IN
+  slotKind         String @default("REGULAR")
+  replacedPersonId String?
+
+  @@index([monthKey])
+  @@index([serviceId])
+}
+
+/// An immutable snapshot of a month each time it is published.
+model ProtocolHistory {
+  id            String   @id @default(cuid())
+  monthKey      String
+  version       Int
+  publishedAt   DateTime @default(now())
+  publishedById String
+  slotsJson     String
+  notesJson     String   @default("[]")
+
+  @@unique([monthKey, version])
+}
+
+/// Present, half present, excused or absent: one row per person per service.
+model ProtocolAttendance {
+  id           String   @id @default(cuid())
+  serviceId    String
+  personId     String
+  status       String
+  slotKind     String?
+  notes        String?
+  recordedById String
+  recordedAt   DateTime @default(now())
+
+  @@unique([serviceId, personId])
+}
+
+/// A member asks their team leader to excuse them.
+model ProtocolAbsence {
+  id          String    @id @default(cuid())
+  serviceId   String
+  personId    String
+  reason      String
+  /// PENDING | EXCUSED | DENIED
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  decidedById String?
+  decidedAt   DateTime?
+
+  @@index([serviceId])
+}
+
+/// A leader offers an excused person's place to someone; the candidate accepts or declines.
+model ProtocolFillIn {
+  id               String    @id @default(cuid())
+  serviceId        String
+  excusedPersonId  String
+  candidatePersonId String
+  offeredById      String
+  /// PENDING | ACCEPTED | DECLINED | CANCELLED
+  status           String    @default("PENDING")
+  createdAt        DateTime  @default(now())
+  respondedAt      DateTime?
+
+  @@index([serviceId])
+}
+
+/// A member proposes to swap into another member's service; the other accepts or declines.
+model ProtocolSwapProposal {
+  id            String    @id @default(cuid())
+  serviceId     String
+  proposerId    String
+  targetId      String
+  /// PENDING | ACCEPTED | DECLINED | CANCELLED
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now())
+  respondedAt   DateTime?
+
+  @@index([serviceId])
+}
+
+/// What the team leader writes after a service; Deacon reads these. One per service.
+model ProtocolServiceReport {
+  id              String   @id @default(cuid())
+  serviceId       String   @unique
+  monthKey        String
+  authorId        String
+  challenges      String   @default("")
+  solutions       String   @default("")
+  issues          String   @default("")
+  recommendations String   @default("")
+  submittedAt     DateTime @default(now())
+
+  @@index([monthKey])
+}
+
+/* ─── Music schedule engine (slice 3.16) ─── */
+
+/// A generated or hand-edited choir schedule for one or more months, not yet confirmed. Documents, as in the old system.
+model MusicDraft {
+  id             String   @id @default(cuid())
+  label          String
+  /// MONTH | QUARTER | HALF | YEAR
+  horizon        String
+  startMonth     String
+  servicesJson   String
+  assignmentsJson String
+  warningsJson   String   @default("[]")
+  createdById    String
+  createdAt      DateTime @default(now())
+}
+
+/// A month the Music team has confirmed (Protocol may plan against it) or published (the choirs see it).
+model MusicMonth {
+  id              String    @id @default(cuid())
+  periodKey       String    @unique
+  /// CONFIRMED | PUBLISHED
+  state           String
+  version         Int       @default(1)
+  batchId         String?
+  batchHorizon    String?
+  servicesJson    String
+  assignmentsJson String
+  warningsJson    String    @default("[]")
+  confirmedAt     DateTime
+  confirmedById   String
+  publishedAt     DateTime?
+  publishedById   String?
+  updatedAt       DateTime
+  updatedById     String?
+}
+
+/// Every confirm, publish and edit of a month, kept for good.
+model MusicLog {
+  id          String   @id @default(cuid())
+  at          DateTime @default(now())
+  periodKey   String
+  /// CONFIRMED | PUBLISHED
+  stage       String
+  /// CONFIRMED | RECONFIRMED | PUBLISHED | EDITED
+  action      String
+  version     Int
+  byId        String
+  summary     String
+  changesJson String   @default("[]")
+
+  @@index([periodKey])
+}

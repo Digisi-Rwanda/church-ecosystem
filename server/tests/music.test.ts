@@ -2,17 +2,9 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
-import { isMonth, roleMayServe } from '../src/music/rules';
+import { isMonth } from '../src/music/rules';
 
 describe('music rules', () => {
-  it('who may serve where', () => {
-    expect(roleMayServe('CHILDREN', 'SS1')).toBe(true);
-    expect(roleMayServe('CHILDREN', 'SS2')).toBe(false);
-    expect(roleMayServe('WORSHIP', 'TUESDAY')).toBe(true);
-    expect(roleMayServe('WORSHIP', 'FRIDAY')).toBe(false);
-    expect(roleMayServe('PRIMARY', 'IGABURO')).toBe(true);
-    expect(roleMayServe('PRIMARY', 'NOPE')).toBe(false);
-  });
   it('months', () => {
     expect(isMonth('2026-10')).toBe(true);
     expect(isMonth('2026-13')).toBe(false);
@@ -31,7 +23,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'musicChoir', 'musicChoirMember', 'musicPlan', 'musicService', 'musicAssignment']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'musicChoir', 'musicChoirMember', 'musicPlan', 'musicService', 'musicAssignment', 'musicMonth', 'musicDraft', 'musicLog']) db[k] ??= [];
   for (const s of db.churchSystem) {
     s.code = s.id.replace('sys-', '').toUpperCase();
     s.name = s.id;
@@ -78,66 +70,13 @@ describe('choirs and the register', () => {
   });
 });
 
-describe('month plan', () => {
-  const start = async () => (await post(MUSIC_LEADER, '/api/music/plan', { month: '2026-10' })).body.id as string;
-  it('builds a month with the old rules and publishes it', async () => {
-    const elim = await choir();
-    const kids = await choir('Kids', 'CHILDREN');
-    const praise = await choir('Praise', 'WORSHIP');
-    const plan = await start();
-    expect((await post(MUSIC_LEADER, '/api/music/plan', { month: '2026-10' })).body.code).toBe('ALREADY_EXISTS');
-    const ss1 = (await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-10-11', kind: 'SS1' })).body.id;
-    const ss2 = (await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-10-11', kind: 'SS2' })).body.id;
-    const tue = (await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-10-13', kind: 'TUESDAY' })).body.id;
-    expect((await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-10-11', kind: 'SS1' })).body.code).toBe('ALREADY_EXISTS');
-    expect((await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-11-01', kind: 'SS1' })).body.code).toBe('OUTSIDE_MONTH');
-    expect((await post(MUSIC_LEADER, `/api/music/services/${ss1}/assignments`, { choirId: kids })).status).toBe(201);
-    expect((await post(MUSIC_LEADER, `/api/music/services/${ss2}/assignments`, { choirId: kids })).body.code).toBe('CHOIR_NOT_ALLOWED');
-    expect((await post(MUSIC_LEADER, `/api/music/services/${ss1}/assignments`, { choirId: kids })).body.code).toBe('ALREADY_EXISTS');
-    expect((await post(MUSIC_LEADER, `/api/music/services/${ss2}/assignments`, { choirId: praise })).body.code).toBe('CHOIR_NOT_ALLOWED');
-    expect((await post(MUSIC_LEADER, `/api/music/services/${tue}/assignments`, { choirId: praise })).status).toBe(201);
-    expect((await post(MUSIC_LEADER, `/api/music/services/${ss2}/assignments`, { choirId: elim })).status).toBe(201);
-    const view = (await get(MUSIC_LEADER, '/api/music/plan?month=2026-10')).body;
-    expect(view.plan.services.map((s: any) => s.kind)).toEqual(['SS1', 'SS2', 'TUESDAY']);
-    expect(view.plan.services[0].choirs[0].name).toBe('Kids');
-    expect((await post(MUSIC_LEADER, `/api/music/plan/${plan}/publish`)).status).toBe(200);
-  });
-  it('members read only published plans; drafts stay with planners', async () => {
-    const plan = await start();
-    await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-10-11', kind: 'SS2' });
-    const asMember = await get('p-member', '/api/music/plan?month=2026-10');
-    if (asMember.status === 200) {
-      expect(asMember.body.plan).toBeNull();
-      expect(asMember.body.canWrite).toBe(false);
-      await post(MUSIC_LEADER, `/api/music/plan/${plan}/publish`);
-      expect((await get('p-member', '/api/music/plan?month=2026-10')).body.plan.services).toHaveLength(1);
-    } else {
-      expect(asMember.status).toBe(404);
-    }
-    expect((await post('p-member', `/api/music/plan/${plan}/publish`)).status).toBeGreaterThanOrEqual(403);
-  });
-  it('an empty plan cannot be published; removing keeps history', async () => {
-    const plan = await start();
-    expect((await post(MUSIC_LEADER, `/api/music/plan/${plan}/publish`)).body.code).toBe('EMPTY_PLAN');
-    const elim = await choir();
-    const s = (await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-10-16', kind: 'FRIDAY' })).body.id;
-    await post(MUSIC_LEADER, `/api/music/services/${s}/assignments`, { choirId: elim });
-    expect((await del(MUSIC_LEADER, `/api/music/services/${s}/assignments/${elim}`)).status).toBe(200);
-    expect((await del(MUSIC_LEADER, `/api/music/services/${s}`)).status).toBe(200);
-    expect((await get(MUSIC_LEADER, '/api/music/plan?month=2026-10')).body.plan.services).toHaveLength(0);
-    expect(fake.__db.musicService).toHaveLength(1);
-  });
-});
-
 describe('oversight and menu', () => {
   it('flags choirs without members or without a service this month, and empty services', async () => {
     const elim = await choir('Elim');
     await choir('Quiet');
     await post(MUSIC_LEADER, `/api/music/choirs/${elim}/members`, { personId: 'p-member' });
-    const plan = (await post(MUSIC_LEADER, '/api/music/plan', { month: '2026-10' })).body.id;
-    const a = (await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-10-11', kind: 'SS2' })).body.id;
-    await post(MUSIC_LEADER, `/api/music/plan/${plan}/services`, { serviceOn: '2026-10-18', kind: 'SS2' });
-    await post(MUSIC_LEADER, `/api/music/services/${a}/assignments`, { choirId: elim });
+    const services = [{ id: 'msvc-2026-10-11-SS2', periodKey: '2026-10', date: '2026-10-11', kind: 'SS2', label: 'Sunday Service 2' }, { id: 'msvc-2026-10-18-SS2', periodKey: '2026-10', date: '2026-10-18', kind: 'SS2', label: 'Sunday Service 2' }];
+    fake.__db.musicMonth.push({ id: 'mm1', periodKey: '2026-10', state: 'PUBLISHED', version: 1, servicesJson: JSON.stringify(services), assignmentsJson: JSON.stringify([{ id: 'a1', serviceId: services[0].id, unitId: elim, source: 'ENGINE' }]), warningsJson: '[]' });
     const o = (await get(MUSIC_LEADER, '/api/music/oversight?month=2026-10')).body;
     const byName = Object.fromEntries(o.choirs.map((c: any) => [c.name, c]));
     expect(byName.Elim).toMatchObject({ members: 1, services: 1, noMembers: false, notScheduled: false });
