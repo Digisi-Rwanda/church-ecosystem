@@ -12,6 +12,7 @@ import { loadSettings } from '../settings/store.js';
 import { computeVacancies } from '../lib/appointments.js';
 import { canRead, mayApprove } from '../governance/rules.js';
 import { canSend } from '../letters/rules.js';
+import { reportsReceived } from './reports.js';
 
 export const centralRouter = Router();
 
@@ -96,11 +97,12 @@ centralRouter.get('/overview', requireAuth, async (req: AuthedRequest, res) => {
     }))
     .sort((a, b) => (a.systemId === CENTRAL_SYSTEM ? -1 : b.systemId === CENTRAL_SYSTEM ? 1 : a.name.localeCompare(b.name)));
 
+  const received = await reportsReceived(me, data, allUnits, now).catch(() => ({ reports: [], late: [] }));
   res.json({
     urgent: urgent.slice(0, URGENT_MAX),
     urgentTotal: urgent.length,
     oversight,
-    // Systems report in from Phase 3; until then the list is honestly empty.
-    reports: [] as unknown[],
+    reports: received.reports,
+    reportsLate: received.late,
   });
 });

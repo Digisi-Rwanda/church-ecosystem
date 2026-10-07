@@ -860,3 +860,43 @@ model OfferingCount {
 
   @@index([systemId, serviceOn])
 }
+
+/// A report composed from live records, then frozen when it is published (slice 3.5).
+model Report {
+  id            String    @id @default(cuid())
+  systemId      String
+  orgUnitId     String
+  /// MEETINGS | ATTENDANCE | MONEY | COLLECTIONS | PEOPLE_LIST | WORK_PLANS
+  kind          String
+  /// YYYY-MM (a month) or YYYY (a year)
+  periodKey     String
+  title         String
+  /// DRAFT | PUBLISHED
+  status        String    @default("DRAFT")
+  /// The figures. Rewritten while DRAFT; never again once PUBLISHED.
+  snapshotJson  String    @default("{}")
+  composedById  String
+  composedAt    DateTime  @default(now())
+  publishedById String?
+  publishedAt   DateTime?
+  deletedAt     DateTime?
+  deletedById   String?
+
+  @@index([systemId, status])
+  @@index([orgUnitId, kind, periodKey])
+}
+
+/// A report a unit owes every month, due on a day of the following month.
+model ReportSchedule {
+  id          String   @id @default(cuid())
+  systemId    String
+  orgUnitId   String
+  kind        String
+  /// Day of the following month (1-28)
+  dueDay      Int
+  active      Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId, active])
+}

@@ -7140,3 +7140,7 @@ button.door-menu-link.active { background: var(--accent-soft); }
 .door-steps li { counter-increment: step; font-size: 0.85rem; padding: 0.15rem 0.6rem; border-radius: 999px; background: var(--accent-soft); opacity: 0.6; }
 .door-steps li::before { content: counter(step) ". "; }
 .door-steps li.done { opacity: 1; font-weight: 600; }
+
+@media print {
+  .door-menu, .portal-nav, header, nav, .door-row .btn { display: none !important; }
+}

@@ -20,6 +20,7 @@ import { workRouter } from './routes/work.js';
 import { workPlansRouter } from './routes/workPlans.js';
 import { moneyRouter } from './routes/money.js';
 import { collectionsRouter } from './routes/collections.js';
+import { reportsRouter } from './routes/reports.js';
 import { centralRouter } from './routes/central.js';
 import { settingsRouter } from './routes/settings.js';
 import { notificationsRouter } from './routes/notifications.js';
@@ -92,6 +93,7 @@ export function createApp() {
   app.use('/api/work-plans', workPlansRouter);
   app.use('/api/money', moneyRouter);
   app.use('/api/collections', collectionsRouter);
+  app.use('/api/reports', reportsRouter);
   app.use('/api/central', centralRouter);
   app.use('/api/authorize', authorizeRouter);
   app.use('/api/me', meRouter);

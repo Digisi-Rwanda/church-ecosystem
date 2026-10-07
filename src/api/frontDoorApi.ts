@@ -710,7 +710,7 @@ export type OversightRow = {
   vacancies: number;
 };
 
-export type CentralOverview = { urgent: UrgentItem[]; urgentTotal: number; oversight: OversightRow[]; reports: unknown[] };
+export type CentralOverview = { urgent: UrgentItem[]; urgentTotal: number; oversight: OversightRow[]; reports: ReceivedReport[]; reportsLate?: LateReport[] };
 
 export async function fetchCentralOverview(): Promise<CentralOverview> {
   return apiFetch('/api/central/overview');
@@ -1023,4 +1023,51 @@ export async function voidCount(id: string, reason: string): Promise<void> {
 }
 export async function handOverCount(id: string, toPersonId: string): Promise<void> {
   await apiFetch(`${C}/${encodeURIComponent(id)}/handover`, { method: 'POST', body: { toPersonId } });
+}
+
+// ── Reports (slice 3.5) ─────────────────────────────────────────────────────────
+export type ReportKind = 'MEETINGS' | 'ATTENDANCE' | 'MONEY' | 'COLLECTIONS' | 'PEOPLE_LIST' | 'WORK_PLANS';
+export type ReportCellType = 'text' | 'date' | 'money' | 'number' | 'code' | 'percent';
+export type ReportCell = string | number | null;
+export type ReportSnapshot = {
+  version: 1; kind: ReportKind; periodKey: string; unitName: string;
+  summary: Array<{ key: string; value: ReportCell; type: ReportCellType }>;
+  tables: Array<{ key: string; columns: Array<{ key: string; type: ReportCellType }>; rows: ReportCell[][] }>;
+};
+export type ReportItem = {
+  id: string; systemId: string; unitName: string; kind: ReportKind; periodKey: string; title: string; status: 'DRAFT' | 'PUBLISHED';
+  composedByName: string; composedAt: string | null; publishedByName: string | null; publishedAt: string | null; canPublish: boolean; canEdit: boolean;
+};
+export type ReportDetail = ReportItem & { snapshot: ReportSnapshot | null };
+export type ReportOptions = {
+  units: Array<{ id: string; name: string; systemId: string; kinds: ReportKind[] }>;
+  kinds: ReportKind[];
+  schedulerUnits: Array<{ id: string; name: string; systemId: string }>;
+};
+export type ReportScheduleItem = { id: string; systemId: string; orgUnitId: string; unitName: string; kind: ReportKind; dueDay: number; periodKey: string; dueOn: string; state: 'RECEIVED' | 'DUE' | 'LATE' };
+export type ReceivedReport = { id: string; systemId: string; unitName: string; kind: ReportKind; periodKey: string; publishedAt: string | null };
+export type LateReport = { scheduleId: string; systemId: string; unitName: string; kind: ReportKind; periodKey: string; dueOn: string };
+const R = '/api/reports';
+export const fetchReportOptions = (): Promise<ReportOptions> => apiFetch(`${R}/options`);
+export async function fetchReports(opts: { systemId: string; kind?: string; period?: string; status?: string }): Promise<{ reports: ReportItem[]; canCompose: boolean }> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  return apiFetch(`${R}?${qs}`);
+}
+export async function fetchReport(id: string): Promise<ReportDetail> {
+  return (await apiFetch<{ report: ReportDetail }>(`${R}/${encodeURIComponent(id)}`)).report;
+}
+export const composeReport = (input: { unitId: string; kind: ReportKind; periodKey: string }): Promise<{ id: string }> => apiFetch(R, { method: 'POST', body: input });
+export async function reportStep(id: string, step: 'refresh' | 'publish'): Promise<void> {
+  await apiFetch(`${R}/${encodeURIComponent(id)}/${step}`, { method: 'POST', body: {} });
+}
+export async function discardReport(id: string): Promise<void> {
+  await apiFetch(`${R}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export const fetchReportSchedules = (systemId: string): Promise<{ schedules: ReportScheduleItem[]; canSchedule: boolean }> => apiFetch(`${R}/schedules?systemId=${encodeURIComponent(systemId)}`);
+export async function addReportSchedule(input: { unitId: string; kind: ReportKind; dueDay: number }): Promise<void> {
+  await apiFetch(`${R}/schedules`, { method: 'POST', body: input });
+}
+export async function stopReportSchedule(id: string): Promise<void> {
+  await apiFetch(`${R}/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }

@@ -1,3 +1,5 @@
+import { ReportPage } from './ReportPage';
+import { ReportsPage } from './ReportsPage';
 import { CollectionsPage } from './CollectionsPage';
 import { MoneyPage } from './MoneyPage';
 import { Route } from 'react-router-dom';
@@ -73,6 +75,8 @@ export function newDesignRoutes() {
           <Route path="work" element={<WorkPage />} />
           <Route path="work/plans/:planId" element={<PlanPage />} />
           <Route path="money" element={<MoneyPage />} />
+          <Route path="reports" element={<ReportsPage />} />
+          <Route path="reports/:reportId" element={<ReportPage />} />
           <Route path="deleted-work" element={<DeletedWorkPage />} />
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>

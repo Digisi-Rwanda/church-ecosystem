@@ -9,6 +9,7 @@ import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
 import { useParams } from 'react-router-dom';
 import { dayLabel } from './notices';
+import { kindKey } from './reports';
 
 /** Central Administration home: Urgent, Oversight and Reports received, all read-only. */
 export function CentralHomePage() {
@@ -83,7 +84,33 @@ export function CentralHomePage() {
             </div>
             <div className="panel">
               <h3>{t('door.central.reports')}</h3>
-              {data.reports.length === 0 ? <EmptyState title={t('door.central.reports.none')} detail={t('door.central.reports.noneDetail')} /> : null}
+              {(data.reportsLate ?? []).length > 0 && (
+                <>
+                  <h4>{t('door.central.reports.late')}</h4>
+                  <ul className="door-notices">
+                    {(data.reportsLate ?? []).map((l) => (
+                      <li key={l.scheduleId}>
+                        <Link to={`/s/${l.systemId}/reports`}>
+                          {t('door.central.reports.lateLine', { unit: l.unitName, kind: t(kindKey(l.kind)), period: l.periodKey, due: l.dueOn })}
+                        </Link>
+                      </li>
+                    ))}
+                  </ul>
+                </>
+              )}
+              {data.reports.length === 0 ? (
+                <EmptyState title={t('door.central.reports.none')} detail={t('door.central.reports.noneDetail')} />
+              ) : (
+                <ul className="door-notices">
+                  {data.reports.map((r) => (
+                    <li key={r.id}>
+                      <Link to={`/s/${r.systemId}/reports/${r.id}`}>
+                        {t(kindKey(r.kind))} · {r.periodKey} · {r.unitName}
+                      </Link>
+                    </li>
+                  ))}
+                </ul>
+              )}
             </div>
           </>
         )}
