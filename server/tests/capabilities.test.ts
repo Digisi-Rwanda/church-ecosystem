@@ -54,6 +54,13 @@ describe('GET /api/portal', () => {
     expect(r.body.systems[0].role).toBe('Church member');
     expect(r.body.systems[0].unreadCount).toBe(0);
   });
+  it('Central Administration is hidden from a member who belongs to another system, but not from leaders', async () => {
+    const youth = (await request(app).get('/api/portal').set(bearer('p-youth-member'))).body.systems.map((s: any) => s.id);
+    expect(youth).toContain('sys-youth');
+    expect(youth).not.toContain('sys-main');
+    const leader = (await request(app).get('/api/portal').set(bearer('p-pastor'))).body.systems.map((s: any) => s.id);
+    expect(leader).toContain('sys-main');
+  });
   it('a choir leader sees the choir with their own title', async () => {
     const r = await request(app).get('/api/portal').set(bearer('p-choir-leader'));
     const choir = r.body.systems.find((s: any) => s.id === 'sys-choir');

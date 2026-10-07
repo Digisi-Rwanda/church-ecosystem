@@ -35,16 +35,18 @@ async function standing(personId: string) {
   const memberships = ctx.memberships.filter((m) => m.personId === personId && isLive(m, now));
   const systems = await prisma.churchSystem.findMany({ orderBy: { code: 'asc' } });
   // The shared Finance system is being retired; it is never a place a person enters.
-  const enterable = systems.filter(
-    (s) =>
-      (s.kind ?? 'MINISTRY') !== 'SHARED' &&
-      grants.some((g) => g.systemId === s.id && g.resource === 'SYSTEM' && g.action === 'ENTER'),
-  );
   const access: AccessData = {
     positions: ctx.positions,
     memberships: ctx.memberships,
     delegations: await prisma.delegation.findMany({ where: { toPersonId: personId } }),
   };
+  // Central Administration is leadership only: a church member who belongs to some other system does not
+  // see it in the portal. A member with no other system keeps it, so the portal is never empty.
+  const holdsGrant = (id: string) => grants.some((g) => g.systemId === id && g.resource === 'SYSTEM' && g.action === 'ENTER');
+  const open = (s: { id: string; kind?: string | null }) => (s.kind ?? 'MINISTRY') !== 'SHARED' && holdsGrant(s.id);
+  const leader = liveHoldings(personId, access, now).some((h) => h.scope === 'CHURCH' || h.systemId === 'sys-main');
+  const hasOther = systems.some((s) => s.id !== 'sys-main' && open(s));
+  const enterable = systems.filter((s) => open(s) && (s.id !== 'sys-main' || leader || !hasOther));
   return { grants, positions, memberships, enterable, access };
 }
 
