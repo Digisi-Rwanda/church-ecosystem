@@ -38,6 +38,8 @@ export function SystemFrame() {
       modules={buildModules(capabilities, systemId)}
       where={system.name}
       subtitle={`${system.name} · ${t('door.portal.role', { role: system.role })}`}
+      brandSub={system.name}
+      roleLabel={system.role}
       backTo="/portal"
       notificationsTo={`/s/${systemId}/notifications?system=${encodeURIComponent(systemId)}`}
       notificationCount={counts?.bySystem[systemId] ?? 0}

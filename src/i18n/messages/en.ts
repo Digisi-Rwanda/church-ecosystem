@@ -1922,6 +1922,10 @@ export const en = {
   'door.settings.err.moves.order': 'The ages must rise: children, then youth, then Elderly (up to 100).',
   'door.settings.err.moves.trigger': 'Choose what sends a young person to the adult systems.',
 
+  'door.shell.group.money': 'Money & oversight',
+
+  'door.portal.greeting': 'Welcome, {name}',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

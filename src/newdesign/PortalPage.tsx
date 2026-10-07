@@ -10,15 +10,15 @@ import { SystemCards } from './SystemCards';
 /** The Portal: one card per system this person may enter, as the server answers. */
 export function PortalPage() {
   const t = useT();
-  const { status, portal, reload } = useFrontDoor();
+  const { status, portal, reload, personName } = useFrontDoor();
   // A person with exactly one system goes straight into it; everyone else sees the cards.
   const landing = status === 'in' ? landingPath(portal) : null;
   if (landing) return <Navigate to={landing} replace />;
 
   return (
     <>
-      <div>
-        <h1>{t('door.portal.title')}</h1>
+      <div className="door-greeting">
+        <h2>{t('door.portal.greeting', { name: personName })}</h2>
         <p className="muted">{t('door.portal.subtitle')}</p>
       </div>
 

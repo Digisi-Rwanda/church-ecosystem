@@ -11,13 +11,16 @@ import { useNoticeSummary } from './useNoticeSummary';
  */
 export function PortalLayout() {
   const t = useT();
-  const { capabilities } = useFrontDoor();
+  const { capabilities, portal } = useFrontDoor();
+  const roleLabel = portal.find((s) => s.role !== 'Member')?.role ?? portal[0]?.role;
   const { counts } = useNoticeSummary();
   return (
     <Shell
       modules={buildPortalModules(capabilities)}
       where={t('door.frame.portal')}
       subtitle={t('door.frame.portal')}
+      brandSub={t('door.frame.portal')}
+      roleLabel={roleLabel}
       notificationsTo="/portal/notifications"
       notificationCount={counts?.unread ?? 0}
     >
