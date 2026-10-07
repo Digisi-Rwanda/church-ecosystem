@@ -1697,6 +1697,19 @@ export const en = {
   'door.central.coll.missing': 'Recent services with no count',
   'door.central.coll.missingNone': 'Every recent service has a count.',
 
+  'door.module.home': 'Home',
+  'door.module.people': 'People and care',
+  'door.module.serve': 'Services and work',
+  'door.module.money': 'Money',
+  'door.module.reports': 'Reports and oversight',
+  'door.module.admin': 'Governance and settings',
+  'door.frame.modules': 'Modules',
+  'door.frame.submenu': '{module}: sections',
+  'door.frame.openMenu': 'Menu',
+  'door.frame.closeMenu': 'Close menu',
+  'door.frame.skip': 'Skip to the page content',
+  'door.frame.notFound': 'This page does not exist.',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

@@ -85,3 +85,67 @@ export function buildOwnMenu(caps: Capabilities | null, systemId: string): OwnMe
   const own = caps?.systems.find((s) => s.id === systemId)?.own ?? [];
   return own.filter((o) => o.letters.length > 0).map((o) => ({ block: o.key, letters: o.letters, variant: o.variant }));
 }
+
+/**
+ * Modules: the sidebar groups of a system. Each module holds the places (blocks) that belong
+ * together; its places become the sub-modules on the top bar. A module only exists for a person
+ * who can open at least one of its places, and a place only exists for a person who can open it.
+ */
+export const MODULE_IDS = ['home', 'people', 'serve', 'money', 'reports', 'admin'] as const;
+export type ModuleId = (typeof MODULE_IDS)[number];
+
+const MODULE_BLOCKS: Record<ModuleId, readonly string[]> = {
+  home: ['home'],
+  people: ['people', 'groups', 'couples', 'visits', 'watches', 'contacts', 'sponsorship', 'pulpit'],
+  serve: ['work', 'schedule', 'monthplan', 'choirs', 'rehearsals', 'repertoire', 'roster', 'teams', 'mine'],
+  money: ['money', 'collections'],
+  reports: ['reports', 'oversight', 'deaconreports', 'central'],
+  admin: ['governance', 'settings'],
+};
+
+export type NavPlace = { block: string; to: string; labelKey: string; letters: AccessLetter[] };
+export type NavModule = { id: ModuleId; to: string; places: NavPlace[] };
+
+function moduleOf(block: string): ModuleId {
+  return MODULE_IDS.find((id) => MODULE_BLOCKS[id].includes(block)) ?? 'admin';
+}
+
+/** Sidebar modules with their top-bar places, built only from what the server said the person may open. */
+export function buildModules(caps: Capabilities | null, systemId: string): NavModule[] {
+  const places: NavPlace[] = [
+    ...buildMenu(caps, systemId).map((m) => ({
+      block: m.block as string,
+      to: m.block === 'home' ? `/s/${systemId}` : `/s/${systemId}/${m.block}`,
+      labelKey: `door.block.${m.block}`,
+      letters: m.letters,
+    })),
+    ...buildOwnMenu(caps, systemId).map((o) => ({
+      block: o.block as string,
+      to: `/s/${systemId}/${o.block}`,
+      labelKey: `door.own.${o.block}${o.variant ? `.${o.variant}` : ''}`,
+      letters: o.letters,
+    })),
+  ];
+  return MODULE_IDS.map((id) => {
+    const order = MODULE_BLOCKS[id];
+    const mine = places
+      .filter((p) => moduleOf(p.block) === id)
+      .sort((a, b) => (order.indexOf(a.block) + 1 || 99) - (order.indexOf(b.block) + 1 || 99));
+    return { id, to: mine[0]?.to ?? '', places: mine };
+  }).filter((m) => m.places.length > 0);
+}
+
+/** Pages that live under a block without being a menu entry of their own. */
+const HIDDEN_PAGES: Record<string, string> = { 'deleted-work': 'work' };
+
+/** Whether the person may even see this page: its block must be one of their places. */
+export function canSeeBlock(modules: NavModule[], block: string): boolean {
+  const owner = HIDDEN_PAGES[block] ?? block;
+  return modules.some((m) => m.places.some((p) => p.block === owner));
+}
+
+/** The module that holds the page being shown (or none, for a page outside every module). */
+export function activeModule(modules: NavModule[], block: string): NavModule | undefined {
+  const owner = HIDDEN_PAGES[block] ?? block;
+  return modules.find((m) => m.places.some((p) => p.block === owner));
+}

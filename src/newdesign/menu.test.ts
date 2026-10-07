@@ -72,3 +72,36 @@ describe('Portal bar', () => {
     expect(systemsWithBlock(null, portal, 'work')).toEqual([]);
   });
 });
+
+describe('buildModules', () => {
+  const caps = {
+    blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'],
+    systems: [
+      {
+        id: 'sys-a',
+        blocks: { ...none, home: ['R'], work: ['R'], schedule: ['R'] },
+        own: [
+          { key: 'roster', letters: ['R'] },
+          { key: 'groups', letters: [] },
+        ],
+      },
+    ],
+  } as unknown as Capabilities;
+
+  it('groups what the person can open and drops the rest completely', async () => {
+    const { buildModules, canSeeBlock, activeModule } = await import('./menu');
+    const mods = buildModules(caps, 'sys-a');
+    expect(mods.map((m) => m.id)).toEqual(['home', 'serve']);
+    expect(mods[1]!.places.map((p) => p.block)).toEqual(['work', 'schedule', 'roster']);
+    expect(mods.flatMap((m) => m.places.map((p) => p.block))).not.toContain('groups');
+    expect(canSeeBlock(mods, 'money')).toBe(false);
+    expect(canSeeBlock(mods, 'groups')).toBe(false);
+    expect(canSeeBlock(mods, 'deleted-work')).toBe(true);
+    expect(activeModule(mods, 'roster')?.id).toBe('serve');
+  });
+
+  it('is empty without capabilities', async () => {
+    const { buildModules } = await import('./menu');
+    expect(buildModules(null, 'sys-a')).toEqual([]);
+  });
+});

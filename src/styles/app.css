@@ -7201,3 +7201,55 @@ a.door-stat:hover { border-color: var(--accent); }
   .door-stat-value { font-size: 1.35rem; }
 }
 .door-steps li.current { opacity: 1; font-weight: 700; outline: 2px solid var(--accent, #2f6f4f); }
+
+/* Shell: sidebar for modules, top bar for sub-modules (slice 3.18) */
+.door-frame { max-width: 82rem; }
+.door-skip { position: absolute; left: -999px; top: 0; z-index: 60; padding: 0.6rem 1rem; background: var(--accent); color: #fff; border-radius: var(--radius); }
+.door-skip:focus { left: 0.75rem; top: 0.5rem; }
+.door-burger { display: none; }
+.door-shell { display: grid; grid-template-columns: 15rem minmax(0, 1fr); gap: 1.25rem; align-items: start; }
+.door-shell-main { display: grid; gap: 0.75rem; min-width: 0; }
+.door-side { position: sticky; top: 4.5rem; align-self: start; }
+.door-side-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.2rem; }
+.door-side-link { display: flex; align-items: center; gap: 0.7rem; min-height: 2.75rem; padding: 0.5rem 0.85rem; border-radius: var(--radius); text-decoration: none; color: inherit; }
+.door-side-link:hover { background: var(--accent-soft); }
+.door-side-link.active { background: var(--accent-soft); color: var(--accent-on-soft); font-weight: 600; box-shadow: inset 3px 0 0 var(--accent); }
+.door-side-link:focus-visible, .door-menu-link:focus-visible, .door-burger:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.door-subbar { position: sticky; top: 3.75rem; z-index: 10; background: var(--surface-1, var(--surface-2)); }
+.door-subbar .door-menu-link.active { box-shadow: inset 0 -2px 0 var(--accent); border-radius: var(--radius) var(--radius) 0 0; }
+.door-frame-body:focus { outline: none; }
+.door-scrim { display: none; }
+@media (max-width: 860px) {
+  .door-shell { grid-template-columns: minmax(0, 1fr); gap: 0.5rem; }
+  .door-burger { display: inline-flex; align-items: center; gap: 0.4rem; min-height: 2.5rem; }
+  .door-churchwide { display: none; }
+  .door-side { position: fixed; z-index: 50; top: 0; bottom: 0; left: 0; width: min(18rem, 85vw); padding: 4rem 0.75rem 1rem; background: var(--surface-2); border-right: 1px solid var(--line); box-shadow: 0 0 2rem rgba(0, 0, 0, 0.25); transform: translateX(-105%); visibility: hidden; transition: transform 0.18s ease, visibility 0s linear 0.18s; overflow-y: auto; }
+  .door-side.open { transform: none; visibility: visible; transition: transform 0.18s ease; }
+  .door-scrim { display: block; position: fixed; inset: 0; z-index: 40; border: 0; background: rgba(0, 0, 0, 0.45); cursor: pointer; }
+  .door-subbar { top: 3.4rem; }
+  .door-menu-link { min-height: 2.75rem; }
+}
+@media (prefers-reduced-motion: reduce) { .door-side, .door-side.open { transition: none; } }
+@media print { .door-side, .door-burger, .door-scrim, .door-skip { display: none !important; } .door-shell { display: block; } }
+
+/* Phone and accessibility polish for every screen (slice 3.18) */
+.btn:focus-visible, .door-check input:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible, summary:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.door-check { display: flex; align-items: center; gap: 0.5rem; min-height: 2.25rem; }
+.door-check input[type="checkbox"], .door-check input[type="radio"] { width: 1.15rem; height: 1.15rem; flex: none; }
+.door-frame-body > .panel, .door-block > .panel { padding: 1rem; }
+.door-frame-body h2 { margin: 0; font-family: var(--font-display); letter-spacing: -0.01em; }
+.door-frame-body h3 { margin: 0 0 0.5rem; }
+@media (max-width: 640px) {
+  .door-frame-body .btn, .door-block .btn { min-height: 2.75rem; }
+  .door-frame-body input, .door-frame-body select, .door-frame-body textarea { min-height: 2.75rem; font-size: 1rem; }
+  .door-check { min-height: 2.75rem; }
+  .door-filters, .door-toolbar { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0.6rem; }
+  .door-filters > *, .door-toolbar > * { min-width: 0; }
+  table.door-stack, table.door-stack tbody, table.door-stack tr, table.door-stack td, table.door-stack th[scope="row"] { display: block; width: 100%; }
+  table.door-stack thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+  table.door-stack tr { padding: 0.6rem 0; border-bottom: 1px solid var(--line); }
+  table.door-stack th[scope="row"] { text-align: left; font-weight: 700; padding: 0.2rem 0; }
+  table.door-stack td { display: flex; justify-content: space-between; gap: 1rem; padding: 0.2rem 0; border: 0; text-align: right; }
+  table.door-stack td::before { content: attr(data-label); font-weight: 600; text-align: left; color: var(--muted, inherit); }
+  .door-table-wrap { overflow-x: visible; padding: 0; margin: 0; }
+}

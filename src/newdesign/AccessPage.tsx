@@ -109,7 +109,7 @@ function Explanation({ data, canLookUp }: { data: AccessExplanation; canLookUp: 
           <div className="panel" key={s.id}>
             <h3>{s.name}</h3>
             <div className="door-table-wrap">
-              <table className="door-table">
+              <table className="door-table door-stack">
                 <thead>
                   <tr>
                     <th>{t('door.access.col.module')}</th>
@@ -121,10 +121,10 @@ function Explanation({ data, canLookUp }: { data: AccessExplanation; canLookUp: 
                   {MODULE_KEYS.filter((k) => s.letters[k].length > 0).map((k) => (
                     <tr key={k}>
                       <th scope="row">{t(`door.module.${k}` as const)}</th>
-                      <td>
+                      <td data-label={t('door.access.col.letters')}>
                         <LetterChips letters={s.letters[k]} />
                       </td>
-                      <td className="muted">{whyText(s.why[k], t)}</td>
+                      <td className="muted" data-label={t('door.access.col.why')}>{whyText(s.why[k], t)}</td>
                     </tr>
                   ))}
                 </tbody>

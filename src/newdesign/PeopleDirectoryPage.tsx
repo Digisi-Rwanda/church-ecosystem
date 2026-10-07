@@ -58,7 +58,7 @@ export function PeopleDirectoryPage() {
           <EmptyState variant="no-results" title={t('door.people.none')} detail={t('door.people.noneDetail')} />
         ) : (
           <div className="panel door-table-wrap">
-            <table className="table">
+            <table className="table door-stack">
               <thead>
                 <tr>
                   <th>{t('door.people.col.code')}</th>
@@ -70,14 +70,14 @@ export function PeopleDirectoryPage() {
               <tbody>
                 {(data ?? []).map((p) => (
                   <tr key={p.id}>
-                    <td>{p.memberCode ?? '—'}</td>
-                    <td>
+                    <td data-label={t('door.people.col.code')}>{p.memberCode ?? '—'}</td>
+                    <td data-label={t('door.people.col.name')}>
                       <Link to={`${base}/${p.id}`}>{p.fullName}</Link>
                     </td>
-                    <td>
+                    <td data-label={t('door.people.col.status')}>
                       <StatusPill status={p.status}>{t(`door.status.${p.status}` as const)}</StatusPill>
                     </td>
-                    <td>{p.phone ?? '—'}</td>
+                    <td data-label={t('door.people.col.phone')}>{p.phone ?? '—'}</td>
                   </tr>
                 ))}
               </tbody>

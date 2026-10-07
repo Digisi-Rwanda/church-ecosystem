@@ -97,7 +97,7 @@ export function ReportPage() {
                       <p className="muted">{t('door.reports.noRows')}</p>
                     ) : (
                       <div className="door-table-wrap">
-                        <table className="door-table">
+                        <table className="door-table door-stack">
                           <thead>
                             <tr>
                               {tbl.columns.map((c) => (
@@ -111,7 +111,7 @@ export function ReportPage() {
                             {tbl.rows.map((row, i) => (
                               <tr key={i}>
                                 {row.map((v, j) => (
-                                  <td key={j}>{tbl.columns[j].type === 'code' && v ? t(`door.reports.val.${String(v)}` as 'door.reports.val.HELD') : cellText(v, tbl.columns[j].type)}</td>
+                                  <td key={j} data-label={t(`door.reports.col.${tbl.columns[j].key}` as 'door.reports.col.name')}>{tbl.columns[j].type === 'code' && v ? t(`door.reports.val.${String(v)}` as 'door.reports.val.HELD') : cellText(v, tbl.columns[j].type)}</td>
                                 ))}
                               </tr>
                             ))}
