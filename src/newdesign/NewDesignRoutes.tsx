@@ -1,3 +1,10 @@
+import { RehearsalsPage } from './RehearsalsPage';
+import { RepertoirePage } from './RepertoirePage';
+import { SponsorshipPage } from './SponsorshipPage';
+import { ChoirPage } from './ChoirPage';
+import { ChoirsPage } from './ChoirsPage';
+import { MonthPlanPage } from './MonthPlanPage';
+import { OversightPage } from './OversightPage';
 import { ContactPage } from './ContactPage';
 import { ContactsPage } from './ContactsPage';
 import { PulpitPage } from './PulpitPage';
@@ -98,6 +105,13 @@ export function newDesignRoutes() {
           <Route path="contacts/:contactId" element={<ContactPage />} />
           <Route path="pulpit" element={<PulpitPage />} />
           <Route path="collections" element={<CollectionsPage />} />
+          <Route path="choirs" element={<ChoirsPage />} />
+          <Route path="choirs/:choirId" element={<ChoirPage />} />
+          <Route path="monthplan" element={<MonthPlanPage />} />
+          <Route path="oversight" element={<OversightPage />} />
+          <Route path="rehearsals" element={<RehearsalsPage />} />
+          <Route path="repertoire" element={<RepertoirePage />} />
+          <Route path="sponsorship" element={<SponsorshipPage />} />
           <Route path="deleted-work" element={<DeletedWorkPage />} />
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>

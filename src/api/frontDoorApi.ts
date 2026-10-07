@@ -13,7 +13,7 @@ export type PortalSystem = {
 };
 
 /** A system's own blocks after the six shared ones. */
-export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections';
+export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship';
 
 export type Capabilities = {
   personId: string;
@@ -1206,4 +1206,97 @@ export async function createGuest(input: { name: string; church?: string | null;
 }
 export async function archiveGuest(id: string): Promise<void> {
   await apiFetch(`${EV}/pulpit/guests/${encodeURIComponent(id)}/archive`, { method: 'POST', body: {} });
+}
+
+// ── Music ministry (slice 3.12) ─────────────────────────────────────────────────
+export type ChoirRole = 'PRIMARY' | 'SECONDARY' | 'CHILDREN' | 'WORSHIP';
+export type MusicServiceKind = 'SS1' | 'SS2' | 'TUESDAY' | 'FRIDAY' | 'IGABURO';
+export type ChoirItem = { id: string; name: string; role: ChoirRole; active: boolean; members: number; canWrite: boolean };
+export type ChoirDetail = { choir: { id: string; name: string; role: ChoirRole; active: boolean; canWrite: boolean }; members: Array<{ personId: string; name: string; joinedOn: string }> };
+export type MusicPlanView = {
+  id: string; periodKey: string; status: 'DRAFT' | 'PUBLISHED'; publishedAt: string | null;
+  services: Array<{ id: string; serviceOn: string; kind: MusicServiceKind; label: string; choirs: Array<{ choirId: string; name: string }> }>;
+};
+export type OversightView = {
+  month: string; planStatus: 'DRAFT' | 'PUBLISHED' | null;
+  choirs: Array<{ id: string; name: string; role: ChoirRole; members: number; services: number; days: string[]; noMembers: boolean; notScheduled: boolean }>;
+  emptyServices: Array<{ id: string; serviceOn: string; kind: MusicServiceKind }>;
+};
+const MU = '/api/music';
+export const fetchChoirs = (): Promise<{ canManage: boolean; choirs: ChoirItem[] }> => apiFetch(`${MU}/choirs`);
+export const fetchChoir = (id: string): Promise<ChoirDetail> => apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`);
+export async function createChoir(input: { name: string; role: ChoirRole }): Promise<void> {
+  await apiFetch(`${MU}/choirs`, { method: 'POST', body: input });
+}
+export async function setChoirActive(id: string, active: boolean): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/active`, { method: 'POST', body: { active } });
+}
+export async function addChoirMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/members`, { method: 'POST', body: { personId } });
+}
+export async function removeChoirMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/members/${encodeURIComponent(personId)}`, { method: 'DELETE' });
+}
+export const fetchMusicPlan = (month: string): Promise<{ canWrite: boolean; plan: MusicPlanView | null; choirs: Array<{ id: string; name: string; role: ChoirRole }> }> => apiFetch(`${MU}/plan?month=${month}`);
+export async function startMusicPlan(month: string): Promise<void> {
+  await apiFetch(`${MU}/plan`, { method: 'POST', body: { month } });
+}
+export async function addMusicService(planId: string, input: { serviceOn: string; kind: MusicServiceKind; label?: string | null }): Promise<void> {
+  await apiFetch(`${MU}/plan/${encodeURIComponent(planId)}/services`, { method: 'POST', body: input });
+}
+export async function removeMusicService(serviceId: string): Promise<void> {
+  await apiFetch(`${MU}/services/${encodeURIComponent(serviceId)}`, { method: 'DELETE' });
+}
+export async function assignChoir(serviceId: string, choirId: string): Promise<void> {
+  await apiFetch(`${MU}/services/${encodeURIComponent(serviceId)}/assignments`, { method: 'POST', body: { choirId } });
+}
+export async function unassignChoir(serviceId: string, choirId: string): Promise<void> {
+  await apiFetch(`${MU}/services/${encodeURIComponent(serviceId)}/assignments/${encodeURIComponent(choirId)}`, { method: 'DELETE' });
+}
+export async function publishMusicPlan(planId: string): Promise<void> {
+  await apiFetch(`${MU}/plan/${encodeURIComponent(planId)}/publish`, { method: 'POST', body: {} });
+}
+export const fetchMusicOversight = (month: string): Promise<OversightView> => apiFetch(`${MU}/oversight?month=${month}`);
+
+// ── Choir work (slice 3.13) ─────────────────────────────────────────────────────
+export type RehearsalView = {
+  canWrite: boolean;
+  members: Array<{ personId: string; name: string; came: number; of: number; rate: number }>;
+  rehearsals: Array<{ id: string; heldOn: string; present: number; note: string }>;
+};
+export type SongItem = { id: string; title: string; composer: string; songKey: string; lastSungOn: string | null };
+export type PledgeItem = { id: string; amount: number; pledgedOn: string; receivedOn: string | null; note: string; status: 'PLEDGED' | 'RECEIVED' };
+export type SponsorItem = { id: string; name: string; kind: 'PERSON' | 'ORGANISATION'; contact: string; pledges: PledgeItem[] };
+const CW = '/api/choir';
+const q = (choirId: string) => `choirId=${encodeURIComponent(choirId)}`;
+export const fetchChoirChoices = (forRepertoire = false): Promise<{ choirs: Array<{ id: string; name: string }> }> => apiFetch(`${CW}/choirs${forRepertoire ? '?for=repertoire' : ''}`);
+export const fetchRehearsals = (choirId: string): Promise<RehearsalView> => apiFetch(`${CW}/rehearsals?${q(choirId)}`);
+export async function recordRehearsal(input: { choirId: string; heldOn: string; presentIds: string[]; note?: string | null }): Promise<void> {
+  await apiFetch(`${CW}/rehearsals`, { method: 'POST', body: input });
+}
+export const fetchSongs = (choirId: string): Promise<{ canWrite: boolean; songs: SongItem[] }> => apiFetch(`${CW}/songs?${q(choirId)}`);
+export async function addSong(input: { choirId: string; title: string; composer?: string | null; songKey?: string | null }): Promise<void> {
+  await apiFetch(`${CW}/songs`, { method: 'POST', body: input });
+}
+export async function markSongSung(id: string, day: string): Promise<void> {
+  await apiFetch(`${CW}/songs/${encodeURIComponent(id)}/sung`, { method: 'POST', body: { day } });
+}
+export async function retireSong(id: string): Promise<void> {
+  await apiFetch(`${CW}/songs/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });
+}
+export const fetchSponsors = (choirId: string): Promise<{ canWrite: boolean; totals: { pledged: number; received: number }; sponsors: SponsorItem[] }> => apiFetch(`${CW}/sponsors?${q(choirId)}`);
+export async function addSponsor(input: { choirId: string; name: string; kind: 'PERSON' | 'ORGANISATION'; contact?: string | null }): Promise<void> {
+  await apiFetch(`${CW}/sponsors`, { method: 'POST', body: input });
+}
+export async function endSponsor(id: string): Promise<void> {
+  await apiFetch(`${CW}/sponsors/${encodeURIComponent(id)}/end`, { method: 'POST', body: {} });
+}
+export async function addPledge(sponsorId: string, input: { amount: number; pledgedOn: string; note?: string | null }): Promise<void> {
+  await apiFetch(`${CW}/sponsors/${encodeURIComponent(sponsorId)}/pledges`, { method: 'POST', body: input });
+}
+export async function receivePledge(id: string, day: string): Promise<void> {
+  await apiFetch(`${CW}/pledges/${encodeURIComponent(id)}/received`, { method: 'POST', body: { day } });
+}
+export async function cancelPledge(id: string): Promise<void> {
+  await apiFetch(`${CW}/pledges/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
 }

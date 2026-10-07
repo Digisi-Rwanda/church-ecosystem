@@ -1,4 +1,5 @@
 import { COUPLES, ELDERLY, INTERCESSORS } from '../caring/rules.js';
+import { MUSIC } from '../music/rules.js';
 import { EVANGELISM } from '../evangelism/rules.js';
 import { KIND_BY_SYSTEM } from '../groups/rules.js';
 import { Router } from 'express';
@@ -83,7 +84,7 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
  * for the offices that run it (they change settings; Administrators only read them).
  */
 function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, holdings: ReturnType<typeof liveHoldings>) {
-  const own: Array<{ key: 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections'; letters: AccessLetter[]; variant?: string }> = [];
+  const own: Array<{ key: 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship'; letters: AccessLetter[]; variant?: string }> = [];
   // Central Administration home (slice 2.4): the main church's leaders see the whole church at a glance.
   if (systemId === 'sys-main' && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'central', letters: modules.GOVERNANCE });
   if ((modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'governance', letters: modules.GOVERNANCE });
@@ -96,6 +97,14 @@ function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, ho
   // The Church Leader (and anyone holding a church-wide office) sees the pulpit plan from Central Administration too.
   if (systemId === 'sys-main' && holdings.some((h) => h.scope === 'CHURCH' && h.letters.PEOPLE?.includes('W'))) own.push({ key: 'pulpit', letters: ['R', 'W'] });
   if ((systemId === EVANGELISM || systemId === 'sys-main') && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'collections', letters: modules.GOVERNANCE });
+  if (systemId === MUSIC && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'monthplan', letters: modules.SCHEDULING });
+  if ((systemId === MUSIC || systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'choirs', letters: modules.PEOPLE });
+  if ((systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) {
+    own.push({ key: 'rehearsals', letters: modules.PEOPLE });
+    own.push({ key: 'sponsorship', letters: modules.PEOPLE });
+  }
+  if ((systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'repertoire', letters: modules.SCHEDULING });
+  if (systemId === MUSIC && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'oversight', letters: modules.PEOPLE });
   if (systemId === 'sys-main') {
     const offices = holdings.filter((h) => h.via === 'OFFICE').map((h) => h.office as string);
     if (offices.some((o) => (SETTINGS_EDITORS as readonly string[]).includes(o))) own.push({ key: 'settings', letters: ['R', 'W'] });

@@ -1085,3 +1085,124 @@ model PulpitSlot {
 
   @@index([serviceOn])
 }
+
+/// A choir or worship team of the Music ministry (the register of who sings is MusicChoirMember).
+model MusicChoir {
+  id          String   @id @default(cuid())
+  name        String
+  /// PRIMARY | SECONDARY | CHILDREN | WORSHIP
+  role        String
+  /// The choir's own system (sys-choir or sys-worship), whose leaders may manage its register
+  systemId    String?
+  orgUnitId   String?
+  active      Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+}
+
+model MusicChoirMember {
+  id       String   @id @default(cuid())
+  choirId  String
+  personId String
+  /// ACTIVE | LEFT
+  status   String   @default("ACTIVE")
+  joinedOn DateTime @default(now())
+
+  @@index([choirId, status])
+  @@index([personId])
+}
+
+/// The month plan: one per month, DRAFT until published.
+model MusicPlan {
+  id          String    @id @default(cuid())
+  /// YYYY-MM
+  periodKey   String    @unique
+  /// DRAFT | PUBLISHED
+  status      String    @default("DRAFT")
+  publishedAt DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+}
+
+model MusicService {
+  id        String   @id @default(cuid())
+  planId    String
+  serviceOn DateTime
+  /// SS1 | SS2 | TUESDAY | FRIDAY | IGABURO
+  kind      String
+  label     String?
+  /// ACTIVE | REMOVED
+  status    String   @default("ACTIVE")
+
+  @@index([planId])
+}
+
+model MusicAssignment {
+  id        String @id @default(cuid())
+  serviceId String
+  choirId   String
+  /// ACTIVE | REMOVED
+  status    String @default("ACTIVE")
+
+  @@index([serviceId])
+}
+
+/// One rehearsal of a choir with who came.
+model ChoirRehearsal {
+  id           String   @id @default(cuid())
+  choirId      String
+  heldOn       DateTime
+  /// JSON array of person ids who were present
+  presentJson  String   @default("[]")
+  note         String?
+  recordedById String
+  recordedAt   DateTime @default(now())
+
+  @@index([choirId, heldOn])
+}
+
+model ChoirSong {
+  id          String    @id @default(cuid())
+  choirId     String
+  title       String
+  composer    String?
+  songKey     String?
+  lastSungOn  DateTime?
+  /// ACTIVE | RETIRED
+  status      String    @default("ACTIVE")
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([choirId])
+}
+
+/// A sponsor of a choir. Pledges here are kept apart from Money, like Collections.
+model ChoirSponsor {
+  id          String   @id @default(cuid())
+  choirId     String
+  name        String
+  /// PERSON | ORGANISATION
+  kind        String   @default("PERSON")
+  contact     String?
+  /// ACTIVE | ENDED
+  status      String   @default("ACTIVE")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([choirId])
+}
+
+model SponsorPledge {
+  id           String    @id @default(cuid())
+  sponsorId    String
+  amount       Int
+  pledgedOn    DateTime
+  receivedOn   DateTime?
+  note         String?
+  /// PLEDGED | RECEIVED | CANCELLED
+  status       String    @default("PLEDGED")
+  recordedById String
+  recordedAt   DateTime  @default(now())
+
+  @@index([sponsorId])
+}

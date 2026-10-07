@@ -25,6 +25,8 @@ import { person360Router } from './routes/person360.js';
 import { groupsRouter } from './routes/groups.js';
 import { caringRouter } from './routes/caring.js';
 import { evangelismRouter } from './routes/evangelism.js';
+import { musicRouter } from './routes/music.js';
+import { choirWorkRouter } from './routes/choirWork.js';
 import { centralRouter } from './routes/central.js';
 import { settingsRouter } from './routes/settings.js';
 import { notificationsRouter } from './routes/notifications.js';
@@ -102,6 +104,8 @@ export function createApp() {
   app.use('/api/groups', groupsRouter);
   app.use('/api/caring', caringRouter);
   app.use('/api/evangelism', evangelismRouter);
+  app.use('/api/music', musicRouter);
+  app.use('/api/choir', choirWorkRouter);
   app.use('/api/central', centralRouter);
   app.use('/api/authorize', authorizeRouter);
   app.use('/api/me', meRouter);
