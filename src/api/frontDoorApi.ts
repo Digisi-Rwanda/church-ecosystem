@@ -841,6 +841,8 @@ export type WorkItem = {
   canManage: boolean;
   canMove: boolean;
   canDelete: boolean;
+  planId: string | null;
+  canUpgrade: boolean;
 };
 
 export type WorkOptions = {
@@ -877,6 +879,7 @@ export async function editWork(id: string, input: WorkInput): Promise<void> {
 export async function moveWork(id: string, status: WorkStatus, note?: string): Promise<void> {
   await apiFetch(`/api/work/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status, note } });
 }
+export const upgradeWork = (id: string): Promise<{ planId: string }> => apiFetch(`/api/work/${encodeURIComponent(id)}/upgrade`, { method: 'POST', body: {} });
 export async function deleteWork(id: string): Promise<void> {
   await apiFetch(`/api/work/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
@@ -1026,7 +1029,7 @@ export async function handOverCount(id: string, toPersonId: string): Promise<voi
 }
 
 // ── Reports (slice 3.5) ─────────────────────────────────────────────────────────
-export type ReportKind = 'MEETINGS' | 'ATTENDANCE' | 'MONEY' | 'COLLECTIONS' | 'PEOPLE_LIST' | 'WORK_PLANS';
+export type ReportKind = 'MEETINGS' | 'ATTENDANCE' | 'MONEY' | 'COLLECTIONS' | 'PEOPLE_LIST' | 'WORK_PLANS' | 'BAPTISMS' | 'MARRIAGES';
 export type ReportCellType = 'text' | 'date' | 'money' | 'number' | 'code' | 'percent';
 export type ReportCell = string | number | null;
 export type ReportSnapshot = {

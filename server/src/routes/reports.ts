@@ -9,7 +9,7 @@ import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { notifySafely } from '../lib/notify.js';
 import type { AccessData } from '../capabilities/engine.js';
-import { KINDS, buildSnapshot, periodOk, scheduleStatus, type ReportKind, type Sources } from '../reports/builders.js';
+import { CHURCH_WIDE, KINDS, buildSnapshot, periodOk, scheduleStatus, type ReportKind, type Sources } from '../reports/builders.js';
 import { canCompose, canPublish, canReadReports, canReadSource } from '../reports/access.js';
 
 export const reportsRouter = Router();
@@ -47,7 +47,7 @@ async function audit(actorId: string, systemId: string, action: string, detail: 
 /** Everything a builder may need for one unit, read once. */
 async function sourcesFor(unit: UnitRow): Promise<Sources> {
   const all = async <T>(m: { findMany: () => Promise<unknown> }) => (await m.findMany()) as T[];
-  const [meetings, decisions, accounts, entries, counts, memberships, positions, plans, people] = await Promise.all([
+  const [meetings, decisions, accounts, entries, counts, memberships, positions, plans, people, personRecords, programs] = await Promise.all([
     all<Sources['meetings'][number]>(prisma.meeting as never),
     all<Sources['decisions'][number]>(prisma.decision as never),
     all<Sources['accounts'][number]>(prisma.moneyAccount as never),
@@ -57,10 +57,12 @@ async function sourcesFor(unit: UnitRow): Promise<Sources> {
     all<Sources['positions'][number]>(prisma.position as never),
     all<Sources['plans'][number]>(prisma.workPlan as never),
     all<{ id: string; fullName: string; status?: string; archivedAt?: Date | null }>(prisma.person as never),
+    all<Sources['personRecords'][number]>(prisma.personRecord as never),
+    all<Sources['programs'][number]>(prisma.program as never),
   ]);
   return {
     unitId: unit.id, systemId: unit.systemId ?? '', names: new Map(people.map((p) => [p.id, p.fullName])),
-    meetings, decisions, accounts, entries, counts, memberships, positions, plans,
+    meetings, decisions, accounts, entries, counts, memberships, positions, plans, personRecords, programs,
     activePeople: new Set(people.filter((p) => !p.archivedAt && (!p.status || p.status === 'ACTIVE')).map((p) => p.id)),
   };
 }
@@ -133,6 +135,7 @@ reportsRouter.post('/schedules', requireAuth, async (req: AuthedRequest, res) =>
   const unit = c.units.find((u) => u.id === parsed.data.unitId);
   if (!unit?.systemId) return fail(res, 404, 'NOT_FOUND', 'Unit not found');
   if (!canPublish(me, unit.systemId, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not set schedules here');
+  if (CHURCH_WIDE.includes(parsed.data.kind) && unit.systemId !== 'sys-main') return fail(res, 400, 'BAD_INPUT', 'This report belongs to the main church');
   const dup = ((await prisma.reportSchedule.findMany()) as ScheduleRow[]).some((s) => s.active && s.orgUnitId === unit.id && s.kind === parsed.data.kind);
   if (dup) return fail(res, 409, 'ALREADY_EXISTS', 'This report is already scheduled for this unit');
   const row = (await prisma.reportSchedule.create({ data: { systemId: unit.systemId, orgUnitId: unit.id, kind: parsed.data.kind, dueDay: parsed.data.dueDay, active: true, createdById: me } })) as ScheduleRow;

@@ -1,9 +1,11 @@
 import { useState, type FormEvent } from 'react';
+import { Link, useNavigate } from 'react-router-dom';
 import {
   createWork,
   deleteWork,
   editWork,
   moveWork,
+  upgradeWork,
   type DirectoryPerson,
   type WorkItem,
   type WorkOptions,
@@ -134,7 +136,9 @@ export function WorkCard({ item, options, systemId, onChange }: { item: WorkItem
   const [closing, setClosing] = useState<'DONE' | 'CANCELLED' | null>(null);
   const [note, setNote] = useState('');
   const [deleting, setDeleting] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
   const [error, setError] = useState('');
+  const navigate = useNavigate();
 
   const run = async (job: () => Promise<void>) => {
     setError('');
@@ -143,6 +147,7 @@ export function WorkCard({ item, options, systemId, onChange }: { item: WorkItem
       setClosing(null);
       setNote('');
       setDeleting(false);
+      setUpgrading(false);
       onChange();
     } catch (err) {
       setError(t(workErrorKey(errorCode(err)) as 'door.people.actionFailed'));
@@ -176,6 +181,7 @@ export function WorkCard({ item, options, systemId, onChange }: { item: WorkItem
         </p>
         {item.description && <p>{item.description}</p>}
         {item.outcomeNote && <p>{t('door.work.outcome', { note: item.outcomeNote })}</p>}
+        {item.planId && (<p><Link to={`/s/${item.systemId}/work/plans/${item.planId}`}>{t('door.work.upgrade.open')}</Link></p>)}
         <div className="door-row">
           {workActions(item).map((a) => (
             <button
@@ -196,6 +202,7 @@ export function WorkCard({ item, options, systemId, onChange }: { item: WorkItem
               {t('door.work.form.edit')}
             </button>
           )}
+          {item.canUpgrade && !upgrading && (<button type="button" className="btn ghost sm" onClick={() => setUpgrading(true)}>{t('door.work.upgrade')}</button>)}
           {item.canDelete && !deleting && (
             <button type="button" className="btn ghost sm" onClick={() => setDeleting(true)}>
               {t('door.work.delete')}
@@ -215,6 +222,7 @@ export function WorkCard({ item, options, systemId, onChange }: { item: WorkItem
             </div>
           </div>
         )}
+        {upgrading && (<div className="door-form" role="alertdialog" aria-label={t('door.work.upgrade')}><p>{t('door.work.upgrade.warn')}</p><div className="door-row"><button type="button" className="btn sm" onClick={() => void run(async () => { const r = await upgradeWork(item.id); navigate(`/s/${item.systemId}/work/plans/${r.planId}`); })}>{t('door.work.upgrade.confirm')}</button><button type="button" className="btn ghost sm" onClick={() => setUpgrading(false)}>{t('door.settings.cancel')}</button></div></div>)}
         {deleting && (
           <div className="door-form" role="alertdialog" aria-label={t('door.work.delete')}>
             <p>{t('door.work.deleteWarn')}</p>

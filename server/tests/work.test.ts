@@ -56,7 +56,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'workPlan']) db[k] ??= [];
   for (const s of db.churchSystem) {
     s.code = s.id.replace('sys-', '').toUpperCase();
     s.name = s.id;
@@ -190,5 +190,34 @@ describe('deleting is soft: gone for the user, kept for an Administrator', () =>
     await del('p-choir-leader', `/api/work/${id}`);
     const r = await get('p-choir-leader', '/api/mission/tasks');
     expect(JSON.stringify(r.body)).not.toContain('Print the booklets');
+  });
+});
+
+describe('turning light work into a full plan', () => {
+  it('builds a draft plan from the task and closes the task with a pointer', async () => {
+    const id = await create({ description: 'Prepare and print', helperIds: ['p-vp'], dueDate: '2026-11-20T21:59:00Z' });
+    const r = await post('p-choir-leader', `/api/work/${id}/upgrade`);
+    expect(r.status).toBe(201);
+    const plan = fake.__db.workPlan.find((p: any) => p.id === r.body.planId);
+    expect(plan).toMatchObject({ title: 'Print the booklets', aim: 'Prepare and print', status: 'DRAFT', leaderPersonId: 'p-choir-member', orgUnitId: 'ou-choir' });
+    expect(JSON.parse(plan.teamJson)).toEqual([{ personId: 'p-vp', role: 'Helper' }]);
+    const w = (await get('p-choir-leader', `/api/work/${id}`)).body.work;
+    expect(w.status).toBe('CANCELLED');
+    expect(w.planId).toBe(r.body.planId);
+    expect(fake.__db.auditEvent.some((e: any) => e.action === 'WORK_UPGRADED')).toBe(true);
+  });
+  it('only open work, only once, only for people who may plan', async () => {
+    const id = await create();
+    expect((await post('p-choir-member', `/api/work/${id}/upgrade`)).status).toBe(403);
+    expect((await post('p-choir-leader', `/api/work/${id}/upgrade`)).status).toBe(201);
+    expect((await post('p-choir-leader', `/api/work/${id}/upgrade`)).status).toBe(409);
+    const done = await create({ title: 'Other' });
+    await post('p-choir-leader', `/api/work/${done}/status`, { status: 'DONE', note: 'ok' });
+    expect((await post('p-choir-leader', `/api/work/${done}/upgrade`)).status).toBe(409);
+  });
+  it('the list offers the step only where it can work', async () => {
+    const id = await create();
+    const w = (await get('p-choir-leader', '/api/work?systemId=sys-choir&view=all&status=open')).body.items.find((x: any) => x.id === id);
+    expect(w.canUpgrade).toBe(true);
   });
 });

@@ -5,7 +5,7 @@ import { bearer, seedWorld } from './world';
 import { buildSnapshot, inPeriod, periodOk, scheduleStatus, type Sources } from '../src/reports/builders';
 
 const src = (o: Partial<Sources> = {}): Sources => ({
-  unitId: 'u', systemId: 's', names: new Map([['a', 'Alice'], ['b', 'Bob']]), meetings: [], decisions: [], accounts: [], entries: [], counts: [], memberships: [], positions: [], plans: [],
+  unitId: 'u', systemId: 's', names: new Map([['a', 'Alice'], ['b', 'Bob']]), meetings: [], decisions: [], accounts: [], entries: [], counts: [], memberships: [], positions: [], plans: [], personRecords: [], programs: [],
   activePeople: new Set(['a', 'b']), ...o,
 });
 const val = (s: ReturnType<typeof buildSnapshot>, k: string) => s.summary.find((x) => x.key === k)?.value;
@@ -68,6 +68,24 @@ describe('report builders', () => {
     }));
     expect(s.tables[0].rows).toEqual([['Alice', 'Treasurer', '2020-01-01']]);
   });
+  it('baptisms and marriages: by the date on the record, with cohort and spouse', () => {
+    const rec = (personId: string, section: string, d: object, programId?: string) => ({ personId, section, dataJson: JSON.stringify(d), status: 'CURRENT', programId });
+    const base = {
+      programs: [{ id: 'pg', name: 'Class 2026' }],
+      personRecords: [
+        rec('a', 'BAPTISM', { date: '2026-10-04', place: 'Kacyiru' }, 'pg'),
+        rec('b', 'BAPTISM', { date: '2026-09-27' }),
+        rec('a', 'MARRIAGE', { date: '2026-10-10', spousePersonId: 'b', place: 'Church' }),
+        { ...rec('b', 'BAPTISM', { date: '2026-10-05' }), status: 'VOIDED' },
+      ],
+    };
+    const b = buildSnapshot('BAPTISMS', '2026-10', 'Church', src(base));
+    expect(val(b, 'baptised')).toBe(1);
+    expect(b.tables[0].rows[0]).toEqual(['Alice', '2026-10-04', 'Kacyiru', '', 'Class 2026']);
+    const m = buildSnapshot('MARRIAGES', '2026-10', 'Church', src(base));
+    expect(m.tables[0].rows[0]).toEqual(['Alice', 'Bob', '2026-10-10', 'Church', '']);
+    expect(val(buildSnapshot('BAPTISMS', '2026', 'Church', src(base)), 'baptised')).toBe(2);
+  });
   it('schedule: last month is due on the day of this month', () => {
     expect(scheduleStatus(10, false, new Date('2026-10-05T10:00:00Z'))).toEqual({ periodKey: '2026-09', dueOn: '2026-10-10', state: 'DUE' });
     expect(scheduleStatus(10, false, new Date('2026-10-11T10:00:00Z')).state).toBe('LATE');
@@ -87,7 +105,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'meeting', 'decision', 'moneyAccount', 'moneyEntry', 'offeringCount', 'workPlan', 'report', 'reportSchedule']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'meeting', 'decision', 'moneyAccount', 'moneyEntry', 'offeringCount', 'workPlan', 'report', 'reportSchedule', 'personRecord', 'program']) db[k] ??= [];
   for (const s of db.churchSystem) {
     s.code = s.id.replace('sys-', '').toUpperCase();
     s.name = s.id;
@@ -107,6 +125,17 @@ beforeEach(async () => {
 });
 
 const compose = (as = 'p-vp', o: object = {}) => post(as, '/api/reports', { unitId: 'ou-choir', kind: 'MEETINGS', periodKey: '2026-10', ...o });
+
+describe('person 360 reports', () => {
+  it('only the church system, and marriage only for the church leader', async () => {
+    fake.__db.position.push({ id: 'pos-sec', personId: 'p-sec', systemId: 'sys-main', orgUnitId: 'ou-church', title: 'Church Secretary', office: 'CHURCH_SECRETARY', status: 'ACTIVE', startDate: new Date('2022-01-01') });
+    fake.__db.person.push({ id: 'p-sec', fullName: 'Secretary', status: 'ACTIVE' });
+    expect((await compose('p-pastor', { unitId: 'ou-church', kind: 'MARRIAGES' })).status).toBe(201);
+    expect((await compose('p-sec', { unitId: 'ou-church', kind: 'MARRIAGES' })).status).toBe(403);
+    expect((await compose('p-sec', { unitId: 'ou-church', kind: 'BAPTISMS' })).status).toBe(201);
+    expect((await compose('p-vp', { kind: 'BAPTISMS' })).status).toBe(403);
+  });
+});
 
 describe('reports routes', () => {
   it('a vice president composes a draft; only the president publishes; then it is frozen', async () => {

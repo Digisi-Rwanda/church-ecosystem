@@ -3,10 +3,10 @@ import type { WorkItem, WorkStatus } from '../api/frontDoorApi';
 export const workStatusKey = (s: WorkStatus) => `door.work.status.${s}` as const;
 
 /** The step buttons a person is offered on one item. */
-export function workActions(w: Pick<WorkItem, 'status' | 'canMove' | 'canManage'>): Array<'start' | 'done' | 'cancel' | 'reopen' | 'back'> {
+export function workActions(w: Pick<WorkItem, 'status' | 'canMove' | 'canManage'> & { planId?: string | null }): Array<'start' | 'done' | 'cancel' | 'reopen' | 'back'> {
   if (w.status === 'TODO') return w.canMove ? ['start', 'done', 'cancel'] : [];
   if (w.status === 'IN_PROGRESS') return w.canMove ? ['done', 'back', 'cancel'] : [];
-  return w.canManage ? ['reopen'] : [];
+  return w.canManage && !w.planId ? ['reopen'] : [];
 }
 
 /** Open work first, soonest due first; undated last; closed work after. */

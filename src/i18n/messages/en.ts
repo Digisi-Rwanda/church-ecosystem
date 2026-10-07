@@ -1122,6 +1122,24 @@ export const en = {
   'door.p360.cohort.record': 'Record {count} baptisms',
   'door.p360.cohort.done': 'Recorded {created}; skipped {skipped}.',
 
+  'door.reports.kind.BAPTISMS': 'Baptisms',
+  'door.reports.kind.MARRIAGES': 'Marriages',
+  'door.reports.sum.BAPTISMS.baptised': 'People baptised',
+  'door.reports.sum.BAPTISMS.cohorts': 'Cohorts',
+  'door.reports.sum.MARRIAGES.married': 'Marriages recorded',
+  'door.reports.tbl.BAPTISMS.baptisms': 'Baptisms',
+  'door.reports.tbl.MARRIAGES.marriages': 'Marriages',
+  'door.reports.col.place': 'Place',
+  'door.reports.col.baptisedBy': 'Baptised by',
+  'door.reports.col.cohort': 'Cohort',
+  'door.reports.col.spouse': 'Spouse',
+  'door.reports.col.blessedBy': 'Blessed by',
+
+  'door.work.upgrade': 'Make it a full plan',
+  'door.work.upgrade.warn': 'This opens a full plan as a draft with the same owner, helpers and due date. This task closes and points to the plan.',
+  'door.work.upgrade.confirm': 'Make the plan',
+  'door.work.upgrade.open': 'Became a full plan: open it',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

@@ -14,6 +14,7 @@ import {
   HELPERS_MAX, NOTE_MAX, STATUSES, TEXT_MAX, TITLE_MAX, VISIBILITIES, canDelete, canManage, canMove, canSee, canWriteIn,
   helpersOf, moveProblem, visibilityOf, type WorkRow,
 } from '../work/rules.js';
+import { canWritePlan } from '../work/plan.js';
 
 export const workRouter = Router();
 
@@ -23,7 +24,7 @@ const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v
 
 interface Row extends WorkRow {
   title: string; description?: string | null; contextLabel?: string | null; dueDate?: Date | string | null;
-  outcomeNote?: string | null; startDate?: Date | string | null; deletedById?: string | null;
+  outcomeNote?: string | null; startDate?: Date | string | null; deletedById?: string | null; contextType?: string | null; contextId?: string | null;
 }
 interface UnitRow { id: string; name: string; systemId?: string | null }
 
@@ -69,10 +70,12 @@ async function shapeAll(rows: Row[], c: Ctx, me: string) {
     overdue: !!r.dueDate && ['TODO', 'IN_PROGRESS'].includes(r.status) && new Date(r.dueDate).getTime() < now,
     outcomeNote: r.outcomeNote ?? null,
     contextLabel: r.contextLabel ?? null,
+    planId: r.contextType === 'PLAN' ? r.contextId ?? null : null,
     mine: r.ownerPersonId === me || helpersOf(r).includes(me),
     canManage: canManage(r, me, c.data),
     canMove: canMove(r, me, c.data),
     canDelete: canDelete(r, me, c.data),
+    canUpgrade: ['TODO', 'IN_PROGRESS'].includes(r.status) && !!r.orgUnitId && r.contextType !== 'PLAN' && canManage(r, me, c.data) && canWritePlan(me, r.systemId ?? 'sys-main', c.data),
   }));
 }
 
@@ -253,6 +256,35 @@ workRouter.post('/:id/status', requireAuth, async (req: AuthedRequest, res) => {
   })) as Row;
   await audit(me, r.systemId ?? 'sys-main', 'WORK_MOVED', `“${r.title}”: ${r.status} → ${to}`, { workId: r.id, from: r.status, to });
   res.json({ work: (await shapeAll([row], c, me))[0] });
+});
+
+/**
+ * Turn a light task into a full plan. The plan starts as a draft built from the task (owner leads,
+ * helpers join the team, the due date ends it); the task is closed with a note and points to the plan.
+ */
+workRouter.post('/:id/upgrade', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, r } = got;
+  if (!canManage(r, me, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not change this work');
+  if (!['TODO', 'IN_PROGRESS'].includes(r.status) || r.contextType === 'PLAN') return fail(res, 409, 'WRONG_STATE', 'Only open work can become a plan');
+  const systemId = r.systemId ?? 'sys-main';
+  if (!r.orgUnitId) return fail(res, 400, 'UNIT_HAS_NO_SYSTEM', 'This work has no unit yet');
+  if (!canWritePlan(me, systemId, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not plan work here');
+  const plan = (await prisma.workPlan.create({
+    data: {
+      orgUnitId: r.orgUnitId, systemId, title: r.title, aim: r.description?.trim() || r.title, needs: null, location: null, startsOn: null,
+      endsOn: r.dueDate ? new Date(r.dueDate) : null, leaderPersonId: r.ownerPersonId,
+      teamJson: JSON.stringify(helpersOf(r).map((personId) => ({ personId, role: 'Helper' }))), beyondUnit: false, visibility: visibilityOf(r.visibility),
+      status: 'DRAFT', approvalsJson: '[]', createdById: me,
+    },
+  })) as { id: string };
+  await prisma.workTask.update({
+    where: { id: r.id },
+    data: { status: 'CANCELLED', outcomeNote: 'Became a full plan', endDate: new Date(), contextType: 'PLAN', contextId: plan.id },
+  });
+  await audit(me, systemId, 'WORK_UPGRADED', `“${r.title}” became a full plan`, { workId: r.id, planId: plan.id });
+  res.status(201).json({ planId: plan.id });
 });
 
 /** To the person it looks permanent: the item disappears. The row stays, marked deleted, for an Administrator. */

@@ -3,18 +3,23 @@
  * figures and some tables. Pure, so every figure is testable. Money and offering counts are
  * built by different builders from different records and never appear in the same report.
  */
-export const KINDS = ['MEETINGS', 'ATTENDANCE', 'MONEY', 'COLLECTIONS', 'PEOPLE_LIST', 'WORK_PLANS'] as const;
+export const KINDS = ['MEETINGS', 'ATTENDANCE', 'MONEY', 'COLLECTIONS', 'PEOPLE_LIST', 'WORK_PLANS', 'BAPTISMS', 'MARRIAGES'] as const;
 export type ReportKind = (typeof KINDS)[number];
 
 /** The module and letter a person must hold in the system to compose a report of this kind. */
-export const SOURCE: Record<ReportKind, 'GOVERNANCE' | 'MONEY' | 'PEOPLE' | 'MISSION'> = {
+export const SOURCE: Record<ReportKind, 'GOVERNANCE' | 'MONEY' | 'PEOPLE' | 'MISSION' | 'PERSON_360'> = {
   MEETINGS: 'GOVERNANCE',
   ATTENDANCE: 'GOVERNANCE',
   MONEY: 'MONEY',
   COLLECTIONS: 'GOVERNANCE',
   PEOPLE_LIST: 'PEOPLE',
   WORK_PLANS: 'MISSION',
+  BAPTISMS: 'PERSON_360',
+  MARRIAGES: 'PERSON_360',
 };
+
+/** Church-wide reports made from Person 360: composed only in the main church's own system. */
+export const CHURCH_WIDE: ReportKind[] = ['BAPTISMS', 'MARRIAGES'];
 
 export type CellType = 'text' | 'date' | 'money' | 'number' | 'code' | 'percent';
 export type Cell = string | number | null;
@@ -46,6 +51,8 @@ export interface Sources {
   memberships: Array<{ personId: string; orgUnitId?: string | null; systemId?: string | null; type: string; status: string; startDate: D; endDate?: D | null }>;
   positions: Array<{ personId: string; orgUnitId?: string | null; title: string; status: string }>;
   plans: Array<{ orgUnitId: string; title: string; status: string; leaderPersonId: string; outcome?: string | null; reportPublishedAt?: D | null; deletedAt?: D | null }>;
+  personRecords: Array<{ personId: string; section: string; dataJson: string; status: string; programId?: string | null }>;
+  programs: Array<{ id: string; name: string }>;
   /** People whose records exist: used to skip anyone archived. */
   activePeople: Set<string>;
 }
@@ -193,8 +200,56 @@ function workPlans(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'
   };
 }
 
+const data = (r: { dataJson: string }): Record<string, unknown> => {
+  try {
+    return JSON.parse(r.dataJson);
+  } catch {
+    return {};
+  }
+};
+
+function baptisms(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
+  const rows = s.personRecords
+    .filter((r) => r.section === 'BAPTISM' && r.status === 'CURRENT')
+    .map((r) => ({ r, d: data(r) }))
+    .filter(({ d }) => typeof d.date === 'string' && String(d.date).startsWith(key))
+    .sort((a, b) => String(a.d.date).localeCompare(String(b.d.date)) || (s.names.get(a.r.personId) ?? '').localeCompare(s.names.get(b.r.personId) ?? ''));
+  const cohorts = new Set(rows.map(({ r }) => r.programId).filter(Boolean));
+  return {
+    summary: [
+      { key: 'baptised', value: rows.length, type: 'number' },
+      { key: 'cohorts', value: cohorts.size, type: 'number' },
+    ],
+    tables: [
+      {
+        key: 'baptisms',
+        columns: [{ key: 'name', type: 'text' }, { key: 'date', type: 'date' }, { key: 'place', type: 'text' }, { key: 'baptisedBy', type: 'text' }, { key: 'cohort', type: 'text' }],
+        rows: rows.map(({ r, d }) => [s.names.get(r.personId) ?? '—', String(d.date), String(d.place ?? ''), String(d.baptisedBy ?? ''), s.programs.find((p) => p.id === r.programId)?.name ?? '']),
+      },
+    ],
+  };
+}
+
+function marriages(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
+  const rows = s.personRecords
+    .filter((r) => r.section === 'MARRIAGE' && r.status === 'CURRENT')
+    .map((r) => ({ r, d: data(r) }))
+    .filter(({ d }) => typeof d.date === 'string' && String(d.date).startsWith(key))
+    .sort((a, b) => String(a.d.date).localeCompare(String(b.d.date)));
+  return {
+    summary: [{ key: 'married', value: rows.length, type: 'number' }],
+    tables: [
+      {
+        key: 'marriages',
+        columns: [{ key: 'name', type: 'text' }, { key: 'spouse', type: 'text' }, { key: 'date', type: 'date' }, { key: 'place', type: 'text' }, { key: 'blessedBy', type: 'text' }],
+        rows: rows.map(({ r, d }) => [s.names.get(r.personId) ?? '—', (d.spousePersonId ? s.names.get(String(d.spousePersonId)) : '') || String(d.spouseName ?? ''), String(d.date), String(d.place ?? ''), String(d.blessedBy ?? '')]),
+      },
+    ],
+  };
+}
+
 export function buildSnapshot(kind: ReportKind, periodKey: string, unitName: string, s: Sources): Snapshot {
-  const make = { MEETINGS: meetings, ATTENDANCE: attendance, MONEY: money, COLLECTIONS: collections, PEOPLE_LIST: peopleList, WORK_PLANS: workPlans }[kind];
+  const make = { MEETINGS: meetings, ATTENDANCE: attendance, MONEY: money, COLLECTIONS: collections, PEOPLE_LIST: peopleList, WORK_PLANS: workPlans, BAPTISMS: baptisms, MARRIAGES: marriages }[kind];
   return { version: 1, kind, periodKey, unitName, ...make(s, periodKey) };
 }
 
