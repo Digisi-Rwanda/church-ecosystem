@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { fetchDeletedWork, restoreWork } from '../api/frontDoorApi';
+import { fetchDeletedPlans, fetchDeletedWork, restorePlan, restoreWork } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
@@ -9,7 +9,10 @@ import { useLoad } from './useLoad';
 export function DeletedWorkPage() {
   const t = useT();
   const { locale } = useI18n();
-  const list = useLoad(fetchDeletedWork, 'work-deleted');
+  const list = useLoad(async () => {
+    const [light, full] = await Promise.all([fetchDeletedWork(), fetchDeletedPlans()]);
+    return [...light.map((d) => ({ ...d, plan: false })), ...full.map((d) => ({ ...d, plan: true }))].sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
+  }, 'work-deleted');
   const [error, setError] = useState('');
   if (list.failed) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
   const when = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
@@ -43,7 +46,7 @@ export function DeletedWorkPage() {
                     onClick={async () => {
                       setError('');
                       try {
-                        await restoreWork(d.id);
+                        await (d.plan ? restorePlan(d.id) : restoreWork(d.id));
                         list.reload();
                       } catch {
                         setError(t('door.people.actionFailed'));

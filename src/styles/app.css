@@ -7134,3 +7134,9 @@ button.door-menu-link.active { background: var(--accent-soft); }
 .door-slot { display: grid; gap: 0.4rem; list-style: none; }
 .door-slot .door-list li { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; }
 .door-check { display: flex; align-items: center; gap: 0.5rem; }
+
+/* Full work (slice 3.3) */
+.door-steps { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.4rem; counter-reset: step; }
+.door-steps li { counter-increment: step; font-size: 0.85rem; padding: 0.15rem 0.6rem; border-radius: 999px; background: var(--accent-soft); opacity: 0.6; }
+.door-steps li::before { content: counter(step) ". "; }
+.door-steps li.done { opacity: 1; font-weight: 600; }

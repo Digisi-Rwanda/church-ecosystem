@@ -25,6 +25,9 @@ export function GovernanceLayout() {
         <NavLink to={`${base}/decisions`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
           {t('door.gov.tab.decisions')}
         </NavLink>
+        <NavLink to={`${base}/collections`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
+          {t('door.gov.tab.collections')}
+        </NavLink>
         <NavLink to={`${base}/letters`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
           {t('door.gov.tab.letters')}
         </NavLink>

@@ -732,3 +732,131 @@ model SlotAssignment {
   @@index([slotId])
   @@index([personId])
 }
+
+model WorkPlan {
+  id                   String    @id @default(cuid())
+  orgUnitId            String
+  systemId             String
+  title                String
+  aim                  String    @default("")
+  needs                String?
+  location             String?
+  startsOn             DateTime?
+  endsOn               DateTime?
+  leaderPersonId       String
+  /// JSON array of { personId, role }
+  teamJson             String    @default("[]")
+  /// CHURCH wide reach adds a Church Leader approval on top of the unit's own
+  beyondUnit           Boolean   @default(false)
+  visibility           String    @default("SYSTEM")
+  /// DRAFT | PENDING_APPROVAL | SETUP | RUNNING | CLOSING | ENDED | CANCELLED
+  status               String    @default("DRAFT")
+  /// JSON array of { levelKey, label, systemId, status, byId, at, note }
+  approvalsJson        String    @default("[]")
+  rejectedReason       String?
+  cancelReason         String?
+  planningSummary      String?
+  executionSummary     String?
+  outcome              String?
+  reportComposedById   String?
+  reportComposedAt     DateTime?
+  reportPublishedById  String?
+  reportPublishedAt    DateTime?
+  /// The frozen report, written once when it is published
+  reportJson           String?
+  createdById          String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+  deletedById          String?
+
+  @@index([systemId, status])
+  @@index([leaderPersonId])
+}
+
+model WorkPlanNote {
+  id        String   @id @default(cuid())
+  planId    String
+  authorId  String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([planId])
+}
+
+model WorkPlanCheck {
+  id          String    @id @default(cuid())
+  planId      String
+  label       String
+  done        Boolean   @default(false)
+  doneById    String?
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([planId])
+}
+
+model MoneyAccount {
+  id          String   @id @default(cuid())
+  orgUnitId   String
+  systemId    String
+  name        String
+  /// ACTIVE | CLOSED
+  status      String   @default("ACTIVE")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId, status])
+}
+
+/// Money is never deleted. Income is recorded; spending waits for approval; either can be voided with a reason (spending only before it is approved).
+model MoneyEntry {
+  id           String    @id @default(cuid())
+  accountId    String
+  orgUnitId    String
+  systemId     String
+  /// INCOME | SPENDING
+  kind         String
+  /// Whole Rwandan francs
+  amount       Int
+  occurredOn   DateTime
+  category     String
+  note         String?
+  /// RECORDED (income) | PENDING_APPROVAL | APPROVED | REJECTED (spending) | VOIDED
+  status       String
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+
+  @@index([accountId, status])
+  @@index([systemId, occurredOn])
+}
+
+/// Offerings counted at a service. A count record only: it carries no link to any MoneyEntry,
+/// because the treasurer records what was handed over in Money on their own.
+model OfferingCount {
+  id            String    @id @default(cuid())
+  orgUnitId     String
+  systemId      String
+  serviceOn     DateTime
+  label         String
+  /// OFFERING | THANKSGIVING | SPECIAL
+  kind          String    @default("OFFERING")
+  amount        Int
+  /// JSON array of person ids who counted
+  countersJson  String    @default("[]")
+  note          String?
+  /// RECORDED | CONFIRMED | VOIDED
+  status        String    @default("RECORDED")
+  recordedById  String
+  recordedAt    DateTime  @default(now())
+  confirmedById String?
+  confirmedAt   DateTime?
+  handedToId    String?
+  handedAt      DateTime?
+  voidReason    String?
+
+  @@index([systemId, serviceOn])
+}

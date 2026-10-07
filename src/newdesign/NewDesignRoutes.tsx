@@ -1,3 +1,5 @@
+import { CollectionsPage } from './CollectionsPage';
+import { MoneyPage } from './MoneyPage';
 import { Route } from 'react-router-dom';
 import { AccessPage } from './AccessPage';
 import { AddPersonPage } from './AddPersonPage';
@@ -21,6 +23,7 @@ import { PersonCardPage } from './PersonCardPage';
 import { PreferencesPage } from './PreferencesPage';
 import { SchedulePage } from './SchedulePage';
 import { SettingsPage } from './SettingsPage';
+import { PlanPage } from './PlanPage';
 import { PortalBlockPage } from './PortalBlockPage';
 import { PortalLayout } from './PortalLayout';
 import { PortalPage } from './PortalPage';
@@ -60,6 +63,7 @@ export function newDesignRoutes() {
             <Route index element={<MeetingsPage />} />
             <Route path="meetings/:meetingId" element={<MeetingPage />} />
             <Route path="decisions" element={<DecisionsPage />} />
+            <Route path="collections" element={<CollectionsPage />} />
             <Route path="letters" element={<LettersPage />} />
             <Route path="letters/:letterId" element={<LetterPage />} />
           </Route>
@@ -67,6 +71,8 @@ export function newDesignRoutes() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="work" element={<WorkPage />} />
+          <Route path="work/plans/:planId" element={<PlanPage />} />
+          <Route path="money" element={<MoneyPage />} />
           <Route path="deleted-work" element={<DeletedWorkPage />} />
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>

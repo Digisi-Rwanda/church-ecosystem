@@ -887,3 +887,140 @@ export async function fetchDeletedWork(): Promise<DeletedWork[]> {
 export async function restoreWork(id: string): Promise<void> {
   await apiFetch(`/api/work/${encodeURIComponent(id)}/restore`, { method: 'POST', body: {} });
 }
+
+/* ───────────── Full work (slice 3.3) ───────────── */
+
+export type WorkPlanStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'SETUP' | 'RUNNING' | 'CLOSING' | 'ENDED' | 'CANCELLED';
+
+export type PlanFlags = {
+  canEdit: boolean; canSubmit: boolean; canWithdraw: boolean; canApprove: boolean; canReopen: boolean; canStart: boolean; canClose: boolean;
+  canCancel: boolean; canDelete: boolean; canNote: boolean; canCheck: boolean; canAddCheck: boolean; canCompose: boolean; canPublish: boolean;
+};
+
+export type PlanItem = PlanFlags & {
+  id: string; title: string; status: WorkPlanStatus; systemId: string; orgUnitId: string; unitName: string; leaderId: string; leaderName: string;
+  startsOn: string | null; endsOn: string | null; visibility: WorkVisibility; beyondUnit: boolean; mine: boolean; waitingLevel: string | null;
+};
+
+export type PlanDetail = PlanItem & {
+  aim: string; needs: string; location: string; createdByName: string;
+  team: Array<{ personId: string; name: string; role: string }>;
+  levels: Array<{ levelKey: 'UNIT' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null; note: string | null }>;
+  rejectedReason: string | null; cancelReason: string | null;
+  notes: Array<{ id: string; authorName: string; text: string; at: string | null }>;
+  checks: Array<{ id: string; label: string; done: boolean; doneAt: string | null }>;
+  report: { planningSummary: string; executionSummary: string; outcome: string; composedAt: string | null; publishedAt: string | null; frozen: boolean };
+};
+
+export type PlanInput = {
+  title: string; aim: string; needs: string | null; location: string | null; startsOn: string | null; endsOn: string | null;
+  leaderId: string; team: Array<{ personId: string; role: string }>; beyondUnit: boolean; visibility: WorkVisibility;
+};
+export type PlanOptions = {
+  units: Array<{ id: string; name: string; systemId: string }>;
+  visibilities: WorkVisibility[];
+  limits: { titleMax: number; textMax: number; noteMax: number; teamMax: number; roleMax: number; checksMax: number };
+};
+
+const P = '/api/work-plans';
+const planBody = async (p: Promise<{ plan: PlanDetail }>): Promise<PlanDetail> => (await p).plan;
+export const fetchPlanOptions = (): Promise<PlanOptions> => apiFetch(`${P}/options`);
+export async function fetchPlans(opts: { systemId?: string; view?: 'mine' | 'all'; status?: string; q?: string } = {}): Promise<PlanItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ items: PlanItem[] }>(`${P}${qs.size ? `?${qs}` : ''}`);
+  return res.items;
+}
+export const fetchPlan = (id: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}`));
+export const createPlan = (unitId: string, input: PlanInput) => planBody(apiFetch(P, { method: 'POST', body: { unitId, ...input } }));
+export const editPlan = (id: string, input: PlanInput) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}`, { method: 'PATCH', body: input }));
+export async function deletePlan(id: string): Promise<void> {
+  await apiFetch(`${P}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export const planStep = (id: string, step: 'submit' | 'withdraw' | 'reopen' | 'start' | 'close' | 'publish' | 'approve', body: object = {}) =>
+  planBody(apiFetch(`${P}/${encodeURIComponent(id)}/${step}`, { method: 'POST', body }));
+export const rejectPlan = (id: string, reason: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } }));
+export const cancelPlan = (id: string, reason: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } }));
+export const addPlanNote = (id: string, text: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/notes`, { method: 'POST', body: { text } }));
+export const addPlanCheck = (id: string, label: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks`, { method: 'POST', body: { label } }));
+export const tickPlanCheck = (id: string, checkId: string, done: boolean) =>
+  planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'PATCH', body: { done } }));
+export const removePlanCheck = (id: string, checkId: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'DELETE' }));
+export const saveReport = (id: string, body: { planningSummary: string; executionSummary: string; outcome: string }) =>
+  planBody(apiFetch(`${P}/${encodeURIComponent(id)}/report`, { method: 'PUT', body }));
+export async function fetchDeletedPlans(): Promise<DeletedWork[]> {
+  const res = await apiFetch<{ items: DeletedWork[] }>(`${P}/deleted`);
+  return res.items;
+}
+export async function restorePlan(id: string): Promise<void> {
+  await apiFetch(`${P}/${encodeURIComponent(id)}/restore`, { method: 'POST', body: {} });
+}
+
+// ── Money and Collections (slice 3.4) ───────────────────────────────────────────
+export type MoneyEntryKind = 'INCOME' | 'SPENDING';
+export type MoneyStatus = 'RECORDED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'VOIDED';
+export type MoneyOptions = {
+  units: Array<{ id: string; name: string; systemId: string }>;
+  categories: string[];
+  limits: { nameMax: number; noteMax: number; amountMax: number };
+};
+export type MoneyAccountItem = {
+  id: string; name: string; status: 'ACTIVE' | 'CLOSED'; orgUnitId: string; unitName: string;
+  income: number; spent: number; pending: number; balance: number;
+};
+export type MoneyAccounts = { canRecord: boolean; canApprove: boolean; accounts: MoneyAccountItem[] };
+export type MoneyEntryItem = {
+  id: string; accountId: string; accountName: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note: string;
+  status: MoneyStatus; recordedByName: string; recordedAt: string | null; decidedByName: string | null; decisionNote: string | null;
+  canDecide: boolean; canVoid: boolean;
+};
+export type MoneyEntryInput = { accountId: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note?: string | null };
+const M = '/api/money';
+export const fetchMoneyOptions = (): Promise<MoneyOptions> => apiFetch(`${M}/options`);
+export const fetchMoneyAccounts = (systemId: string): Promise<MoneyAccounts> => apiFetch(`${M}/accounts?systemId=${encodeURIComponent(systemId)}`);
+export async function fetchMoneyEntries(opts: { systemId: string; accountId?: string; status?: string; kind?: string; month?: string }): Promise<MoneyEntryItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  return (await apiFetch<{ entries: MoneyEntryItem[] }>(`${M}/entries?${qs}`)).entries;
+}
+export async function openMoneyAccount(unitId: string, name: string): Promise<void> {
+  await apiFetch(`${M}/accounts`, { method: 'POST', body: { unitId, name } });
+}
+export async function closeMoneyAccount(id: string): Promise<void> {
+  await apiFetch(`${M}/accounts/${encodeURIComponent(id)}/close`, { method: 'POST', body: {} });
+}
+export async function recordMoneyEntry(input: MoneyEntryInput): Promise<void> {
+  await apiFetch(`${M}/entries`, { method: 'POST', body: input });
+}
+export async function decideMoneyEntry(id: string, approve: boolean, reason?: string): Promise<void> {
+  await apiFetch(`${M}/entries/${encodeURIComponent(id)}/${approve ? 'approve' : 'reject'}`, { method: 'POST', body: { reason } });
+}
+export async function voidMoneyEntry(id: string, reason: string): Promise<void> {
+  await apiFetch(`${M}/entries/${encodeURIComponent(id)}/void`, { method: 'POST', body: { reason } });
+}
+
+export type CountKind = 'OFFERING' | 'THANKSGIVING' | 'SPECIAL';
+export type CountStatus = 'RECORDED' | 'CONFIRMED' | 'VOIDED';
+export type CountItem = {
+  id: string; systemId: string; unitName: string; serviceOn: string; label: string; kind: CountKind; amount: number; note: string; status: CountStatus;
+  counters: Array<{ id: string; name: string }>; recordedByName: string; confirmedByName: string | null; handedToName: string | null; handedAt: string | null;
+  voidReason: string | null; canConfirm: boolean; canVoid: boolean; canHandOver: boolean;
+};
+export type CountOptions = { units: Array<{ id: string; name: string; systemId: string }>; kinds: CountKind[]; limits: { noteMax: number; amountMax: number } };
+export type CountInput = { unitId: string; serviceOn: string; label: string; kind: CountKind; amount: number; counterIds: string[]; note?: string | null };
+const C = '/api/collections';
+export const fetchCountOptions = (): Promise<CountOptions> => apiFetch(`${C}/options`);
+export const fetchCounts = (systemId: string, status?: string): Promise<{ counts: CountItem[]; canWrite: boolean }> =>
+  apiFetch(`${C}?systemId=${encodeURIComponent(systemId)}${status ? `&status=${status}` : ''}`);
+export async function recordCount(input: CountInput): Promise<void> {
+  await apiFetch(C, { method: 'POST', body: input });
+}
+export async function confirmCount(id: string): Promise<void> {
+  await apiFetch(`${C}/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: {} });
+}
+export async function voidCount(id: string, reason: string): Promise<void> {
+  await apiFetch(`${C}/${encodeURIComponent(id)}/void`, { method: 'POST', body: { reason } });
+}
+export async function handOverCount(id: string, toPersonId: string): Promise<void> {
+  await apiFetch(`${C}/${encodeURIComponent(id)}/handover`, { method: 'POST', body: { toPersonId } });
+}
