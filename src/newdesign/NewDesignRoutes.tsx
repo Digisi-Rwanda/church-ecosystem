@@ -1,3 +1,9 @@
+import { ContactPage } from './ContactPage';
+import { ContactsPage } from './ContactsPage';
+import { PulpitPage } from './PulpitPage';
+import { CouplesPage } from './CouplesPage';
+import { VisitsPage } from './VisitsPage';
+import { WatchesPage } from './WatchesPage';
 import { GroupPage } from './GroupPage';
 import { GroupsPage } from './GroupsPage';
 import { BaptismCohortPage } from './BaptismCohortPage';
@@ -85,6 +91,13 @@ export function newDesignRoutes() {
           <Route path="reports/:reportId" element={<ReportPage />} />
           <Route path="groups" element={<GroupsPage />} />
           <Route path="groups/:groupId" element={<GroupPage />} />
+          <Route path="couples" element={<CouplesPage />} />
+          <Route path="visits" element={<VisitsPage />} />
+          <Route path="watches" element={<WatchesPage />} />
+          <Route path="contacts" element={<ContactsPage />} />
+          <Route path="contacts/:contactId" element={<ContactPage />} />
+          <Route path="pulpit" element={<PulpitPage />} />
+          <Route path="collections" element={<CollectionsPage />} />
           <Route path="deleted-work" element={<DeletedWorkPage />} />
           <Route path=":block" element={<SystemBlockPage />} />
         </Route>

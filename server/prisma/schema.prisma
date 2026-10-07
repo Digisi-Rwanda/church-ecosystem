@@ -970,3 +970,118 @@ model GroupSession {
 
   @@index([groupId, heldOn])
 }
+
+/// Two people shown as a pair in the Couples ministry.
+model CouplePair {
+  id          String    @id @default(cuid())
+  systemId    String
+  personAId   String
+  personBId   String
+  marriedOn   DateTime?
+  /// ACTIVE | ENDED
+  status      String    @default("ACTIVE")
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([systemId, status])
+}
+
+/// A visit to an elderly person; private to those who may change People records in Elderly.
+model VisitLog {
+  id            String   @id @default(cuid())
+  systemId      String
+  elderPersonId String
+  visitedOn     DateTime
+  /// JSON array of visitor person ids
+  visitorsJson  String   @default("[]")
+  note          String?
+  recordedById  String
+  recordedAt    DateTime @default(now())
+
+  @@index([systemId, visitedOn])
+  @@index([elderPersonId])
+}
+
+/// A weekly prayer watch of the Intercessors.
+model PrayerWatch {
+  id          String   @id @default(cuid())
+  systemId    String
+  name        String
+  /// 0 = Sunday … 6 = Saturday
+  weekday     Int
+  startTime   String
+  endTime     String
+  /// ACTIVE | CLOSED
+  status      String   @default("ACTIVE")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId, status])
+}
+
+model PrayerWatchMember {
+  id       String @id @default(cuid())
+  watchId  String
+  personId String
+  /// ACTIVE | LEFT
+  status   String @default("ACTIVE")
+
+  @@index([watchId, status])
+}
+
+/// A person met through evangelism, followed up until they join or the contact is closed.
+model EvangelismContact {
+  id           String   @id @default(cuid())
+  fullName     String
+  phone        String?
+  howMet       String?
+  metOn        DateTime @default(now())
+  assignedToId String?
+  /// NEW | FOLLOWING | JOINED | CLOSED
+  status       String   @default("NEW")
+  note         String?
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+}
+
+model ContactFollowUp {
+  id           String    @id @default(cuid())
+  contactId    String
+  doneOn       DateTime
+  note         String
+  nextOn       DateTime?
+  recordedById String
+  recordedAt   DateTime  @default(now())
+
+  @@index([contactId])
+}
+
+model GuestPreacher {
+  id          String   @id @default(cuid())
+  name        String
+  church      String?
+  phone       String?
+  note        String?
+  /// ACTIVE | ARCHIVED
+  status      String   @default("ACTIVE")
+  createdById String
+  createdAt   DateTime @default(now())
+}
+
+/// One service in the preaching plan: a member or a guest preaches.
+model PulpitSlot {
+  id               String   @id @default(cuid())
+  serviceOn        DateTime
+  preacherPersonId String?
+  guestId          String?
+  theme            String?
+  bibleText        String?
+  /// PLANNED | DONE | CANCELLED
+  status           String   @default("PLANNED")
+  createdById      String
+  createdAt        DateTime @default(now())
+
+  @@index([serviceOn])
+}

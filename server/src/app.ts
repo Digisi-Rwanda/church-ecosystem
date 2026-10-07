@@ -23,6 +23,8 @@ import { collectionsRouter } from './routes/collections.js';
 import { reportsRouter } from './routes/reports.js';
 import { person360Router } from './routes/person360.js';
 import { groupsRouter } from './routes/groups.js';
+import { caringRouter } from './routes/caring.js';
+import { evangelismRouter } from './routes/evangelism.js';
 import { centralRouter } from './routes/central.js';
 import { settingsRouter } from './routes/settings.js';
 import { notificationsRouter } from './routes/notifications.js';
@@ -98,6 +100,8 @@ export function createApp() {
   app.use('/api/reports', reportsRouter);
   app.use('/api/person360', person360Router);
   app.use('/api/groups', groupsRouter);
+  app.use('/api/caring', caringRouter);
+  app.use('/api/evangelism', evangelismRouter);
   app.use('/api/central', centralRouter);
   app.use('/api/authorize', authorizeRouter);
   app.use('/api/me', meRouter);

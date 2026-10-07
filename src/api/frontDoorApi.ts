@@ -13,7 +13,7 @@ export type PortalSystem = {
 };
 
 /** A system's own blocks after the six shared ones. */
-export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups';
+export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections';
 
 export type Capabilities = {
   personId: string;
@@ -1137,4 +1137,73 @@ export async function removeGroupMember(id: string, personId: string): Promise<v
 }
 export async function recordGroupSession(id: string, input: { heldOn: string; presentIds: string[]; note?: string | null }): Promise<void> {
   await apiFetch(`${G}/${encodeURIComponent(id)}/sessions`, { method: 'POST', body: input });
+}
+
+// ── Caring ministries (slice 3.9) ───────────────────────────────────────────────
+export type CouplePairItem = { id: string; aId: string; aName: string; bId: string; bName: string; marriedOn: string | null };
+export type VisitItem = { id: string; elderId: string; elderName: string; visitedOn: string; visitorNames: string[]; note: string };
+export type WatchItem = { id: string; name: string; weekday: number; startTime: string; endTime: string; members: Array<{ personId: string; name: string }> };
+const CARE = '/api/caring';
+export const fetchCouples = (): Promise<{ canWrite: boolean; pairs: CouplePairItem[] }> => apiFetch(`${CARE}/couples`);
+export async function addCouple(input: { aId: string; bId: string; marriedOn?: string | null }): Promise<void> {
+  await apiFetch(`${CARE}/couples`, { method: 'POST', body: input });
+}
+export async function endCouple(id: string): Promise<void> {
+  await apiFetch(`${CARE}/couples/${encodeURIComponent(id)}/end`, { method: 'POST', body: {} });
+}
+export const fetchVisits = (): Promise<{ visits: VisitItem[] }> => apiFetch(`${CARE}/visits`);
+export async function recordVisit(input: { elderId: string; visitedOn: string; visitorIds: string[]; note?: string | null }): Promise<void> {
+  await apiFetch(`${CARE}/visits`, { method: 'POST', body: input });
+}
+export const fetchWatches = (): Promise<{ canWrite: boolean; watches: WatchItem[] }> => apiFetch(`${CARE}/watches`);
+export async function createWatch(input: { name: string; weekday: number; startTime: string; endTime: string }): Promise<void> {
+  await apiFetch(`${CARE}/watches`, { method: 'POST', body: input });
+}
+export async function closeWatch(id: string): Promise<void> {
+  await apiFetch(`${CARE}/watches/${encodeURIComponent(id)}/close`, { method: 'POST', body: {} });
+}
+export async function addWatchMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${CARE}/watches/${encodeURIComponent(id)}/members`, { method: 'POST', body: { personId } });
+}
+export async function removeWatchMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${CARE}/watches/${encodeURIComponent(id)}/members/${encodeURIComponent(personId)}`, { method: 'DELETE' });
+}
+
+// ── Evangelism (slice 3.10) ─────────────────────────────────────────────────────
+export type ContactStatus = 'NEW' | 'FOLLOWING' | 'JOINED' | 'CLOSED';
+export type ContactItem = { id: string; fullName: string; phone: string; howMet: string; metOn: string; status: ContactStatus; assignedToId: string | null; assignedName: string; lastFollowUpOn: string | null; nextOn: string | null; overdue: boolean };
+export type ContactDetail = {
+  contact: { id: string; fullName: string; phone: string; howMet: string; metOn: string; status: ContactStatus; note: string; assignedToId: string | null; assignedName: string; canWrite: boolean };
+  followUps: Array<{ id: string; doneOn: string; note: string; nextOn: string | null; byName: string }>;
+};
+export type ContactInput = { fullName: string; phone?: string | null; howMet?: string | null; metOn?: string | null; assignedToId?: string | null; note?: string | null };
+export type PulpitSlotItem = { id: string; serviceOn: string; theme: string; bibleText: string; status: 'PLANNED' | 'DONE' | 'CANCELLED'; preacherId: string | null; guestId: string | null; preacherName: string; isGuest: boolean };
+export type GuestItem = { id: string; name: string; church: string; phone: string; note: string; visits: number; lastVisitOn: string | null };
+export type PulpitSlotInput = { serviceOn?: string; personId?: string | null; guestId?: string | null; theme?: string | null; bibleText?: string | null; status?: 'PLANNED' | 'DONE' | 'CANCELLED' };
+const EV = '/api/evangelism';
+export const fetchContacts = (status = ''): Promise<{ canWrite: boolean; contacts: ContactItem[] }> => apiFetch(`${EV}/contacts${status ? `?status=${status}` : ''}`);
+export const fetchContact = (id: string): Promise<ContactDetail> => apiFetch(`${EV}/contacts/${encodeURIComponent(id)}`);
+export const createContact = (input: ContactInput): Promise<{ id: string }> => apiFetch(`${EV}/contacts`, { method: 'POST', body: input });
+export async function followUpContact(id: string, input: { doneOn: string; note: string; nextOn?: string | null }): Promise<void> {
+  await apiFetch(`${EV}/contacts/${encodeURIComponent(id)}/followups`, { method: 'POST', body: input });
+}
+export async function setContactStatus(id: string, status: ContactStatus): Promise<void> {
+  await apiFetch(`${EV}/contacts/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status } });
+}
+export async function assignContact(id: string, personId: string | null): Promise<void> {
+  await apiFetch(`${EV}/contacts/${encodeURIComponent(id)}/assign`, { method: 'POST', body: { personId } });
+}
+export const fetchPulpit = (): Promise<{ canWrite: boolean; canSeeGuests: boolean; slots: PulpitSlotItem[] }> => apiFetch(`${EV}/pulpit/slots`);
+export async function createPulpitSlot(input: PulpitSlotInput): Promise<void> {
+  await apiFetch(`${EV}/pulpit/slots`, { method: 'POST', body: input });
+}
+export async function changePulpitSlot(id: string, input: PulpitSlotInput): Promise<void> {
+  await apiFetch(`${EV}/pulpit/slots/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export const fetchGuests = (): Promise<{ canWrite: boolean; guests: GuestItem[] }> => apiFetch(`${EV}/pulpit/guests`);
+export async function createGuest(input: { name: string; church?: string | null; phone?: string | null; note?: string | null }): Promise<void> {
+  await apiFetch(`${EV}/pulpit/guests`, { method: 'POST', body: input });
+}
+export async function archiveGuest(id: string): Promise<void> {
+  await apiFetch(`${EV}/pulpit/guests/${encodeURIComponent(id)}/archive`, { method: 'POST', body: {} });
 }

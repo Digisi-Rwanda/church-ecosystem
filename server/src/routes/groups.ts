@@ -29,7 +29,6 @@ async function ctx(me: string) {
   const { data, units } = await loadAccessData(me);
   return { data, units: units as UnitRow[] };
 }
-type Ctx = Awaited<ReturnType<typeof ctx>>;
 async function audit(actorId: string, systemId: string, action: string, detail: string, meta: object) {
   await prisma.auditEvent.create({ data: { at: new Date(), actorId, systemId, action, resource: 'PEOPLE', detail, metaJson: JSON.stringify(meta) } });
 }

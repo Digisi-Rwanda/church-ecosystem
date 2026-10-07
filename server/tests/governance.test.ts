@@ -311,7 +311,7 @@ describe('the Governance and Settings blocks in the menu', () => {
     expect((await own('p-pastor', 'sys-youth')).map((o: any) => o.key)).toEqual(['governance', 'groups']);
   });
   it('Settings shows only in Central Administration, to the three offices (write) and Administrators (read)', async () => {
-    expect((await own('p-pastor', 'sys-main')).map((o: any) => o.key)).toEqual(['central', 'governance', 'settings']);
+    expect((await own('p-pastor', 'sys-main')).map((o: any) => o.key)).toEqual(['central', 'governance', 'pulpit', 'collections', 'settings']);
     expect((await own('p-cat', 'sys-main')).find((o: any) => o.key === 'settings').letters).toEqual(['R', 'W']);
     expect((await own('p-sec', 'sys-main')).map((o: any) => o.key)).toContain('settings');
     expect((await own('p-choir-leader', 'sys-main')) ?? []).toEqual([]);
