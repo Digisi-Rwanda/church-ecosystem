@@ -13,6 +13,7 @@ export const SETTING_KEYS = [
   'meetings.types',
   'access.termReminderDays',
   'access.delegationMaxDays',
+  'moves.rules',
 ] as const;
 export type SettingKey = (typeof SETTING_KEYS)[number];
 
@@ -30,6 +31,18 @@ export interface ChurchProfile {
   email: string;
 }
 
+/** When the Due to move list shows a person: the ages and which triggers apply for the adult systems. */
+export interface MoveRules {
+  /** Children stay in Children up to and including this age. */
+  childMaxAge: number;
+  /** Youth stay in Youth up to and including this age. */
+  youthMaxAge: number;
+  /** From this age a person is due to move to Elderly. */
+  elderlyFromAge: number;
+  /** What sends a young person to Men, Women or Couples: age, marriage, or either. */
+  adultTrigger: 'AGE' | 'MARRIAGE' | 'EITHER';
+}
+
 export interface SettingValues {
   'church.profile': ChurchProfile;
   'church.language': 'en' | 'rw' | 'fr';
@@ -37,6 +50,7 @@ export interface SettingValues {
   'meetings.types': TypeItem[];
   'access.termReminderDays': number;
   'access.delegationMaxDays': number;
+  'moves.rules': MoveRules;
 }
 
 /** The six letter types a church starts with; the Letters desk (2.3) offers these. */
@@ -65,6 +79,7 @@ export const DEFAULTS: SettingValues = {
   'meetings.types': DEFAULT_MEETING_TYPES,
   'access.termReminderDays': 60,
   'access.delegationMaxDays': 90,
+  'moves.rules': { childMaxAge: 12, youthMaxAge: 35, elderlyFromAge: 60, adultTrigger: 'EITHER' },
 };
 
 export const LIST_MAX = 30;
@@ -106,6 +121,17 @@ const SCHEMAS: Record<SettingKey, z.ZodType> = {
   'meetings.types': typeList,
   'access.termReminderDays': z.number().int().min(TERM_REMINDER_RANGE.min).max(TERM_REMINDER_RANGE.max),
   'access.delegationMaxDays': z.number().int().min(DELEGATION_RANGE.min).max(DELEGATION_RANGE.max),
+  'moves.rules': z
+    .object({
+      childMaxAge: z.number().int().min(1).max(30),
+      youthMaxAge: z.number().int().min(10).max(60),
+      elderlyFromAge: z.number().int().min(40).max(100),
+      adultTrigger: z.enum(['AGE', 'MARRIAGE', 'EITHER']),
+    })
+    .superRefine((v, ctx) => {
+      if (v.childMaxAge >= v.youthMaxAge) ctx.addIssue({ code: 'custom', message: 'The children limit must be lower than the youth limit', path: ['childMaxAge'] });
+      if (v.youthMaxAge >= v.elderlyFromAge) ctx.addIssue({ code: 'custom', message: 'The youth limit must be lower than the age for Elderly', path: ['youthMaxAge'] });
+    }),
 };
 
 export type Checked<K extends SettingKey> = { ok: true; value: SettingValues[K] } | { ok: false; message: string };

@@ -17,6 +17,7 @@ import { VisitsPage } from './VisitsPage';
 import { WatchesPage } from './WatchesPage';
 import { GroupPage } from './GroupPage';
 import { GroupsPage } from './GroupsPage';
+import { MovesPage } from './MovesPage';
 import { BaptismCohortPage } from './BaptismCohortPage';
 import { Person360Page } from './Person360Page';
 import { ReportPage } from './ReportPage';
@@ -123,6 +124,7 @@ export function newDesignRoutes() {
           <Route path="groups" element={<GroupsPage />} />
           <Route path="groups/:groupId" element={<GroupPage />} />
           <Route path="couples" element={<CouplesPage />} />
+          <Route path="moves" element={<MovesPage />} />
           <Route path="visits" element={<VisitsPage />} />
           <Route path="watches" element={<WatchesPage />} />
           <Route path="contacts" element={<ContactsPage />} />

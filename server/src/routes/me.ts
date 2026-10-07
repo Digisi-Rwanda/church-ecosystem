@@ -1,3 +1,4 @@
+import { canConfirmMove, isMoveSystem } from '../moves/rules.js';
 import { COUPLES, ELDERLY, INTERCESSORS } from '../caring/rules.js';
 import { MUSIC } from '../music/rules.js';
 import { EVANGELISM } from '../evangelism/rules.js';
@@ -84,11 +85,12 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
  * for the offices that run it (they change settings; Administrators only read them).
  */
 function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, holdings: ReturnType<typeof liveHoldings>) {
-  const own: Array<{ key: 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports'; letters: AccessLetter[]; variant?: string }> = [];
+  const own: Array<{ key: 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves'; letters: AccessLetter[]; variant?: string }> = [];
   // Central Administration home (slice 2.4): the main church's leaders see the whole church at a glance.
   if (systemId === 'sys-main' && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'central', letters: modules.GOVERNANCE });
   if ((modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'governance', letters: modules.GOVERNANCE });
   if (systemId in KIND_BY_SYSTEM && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'groups', letters: modules.PEOPLE, variant: KIND_BY_SYSTEM[systemId] });
+  if (isMoveSystem(systemId) && (modules.PEOPLE ?? []).includes('W') && canConfirmMove(holdings, systemId)) own.push({ key: 'moves', letters: modules.PEOPLE });
   if (systemId === COUPLES && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'couples', letters: modules.PEOPLE });
   if (systemId === ELDERLY && (modules.PEOPLE ?? []).includes('W')) own.push({ key: 'visits', letters: modules.PEOPLE });
   if (systemId === INTERCESSORS && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'watches', letters: modules.SCHEDULING });

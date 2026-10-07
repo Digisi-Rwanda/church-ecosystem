@@ -1,4 +1,4 @@
-import type { SettingKey, SettingRow, TypeItem } from '../api/frontDoorApi';
+import type { MoveRules, SettingKey, SettingRow, TypeItem } from '../api/frontDoorApi';
 
 export const SETTING_ORDER: SettingKey[] = [
   'church.profile',
@@ -7,6 +7,7 @@ export const SETTING_ORDER: SettingKey[] = [
   'meetings.types',
   'access.termReminderDays',
   'access.delegationMaxDays',
+  'moves.rules',
 ];
 
 export const RANGES = {
@@ -59,3 +60,15 @@ export function daysProblem(key: 'access.termReminderDays' | 'access.delegationM
 }
 
 export const sameValue = (a: unknown, b: unknown): boolean => JSON.stringify(a) === JSON.stringify(b);
+
+/** The move rules from the form's text boxes, or the first thing wrong with them. The server checks again. */
+export function moveRulesProblem(raw: { childMaxAge: string; youthMaxAge: string; elderlyFromAge: string; adultTrigger: string }): { ok: true; value: MoveRules } | { ok: false; problem: 'whole' | 'order' | 'trigger' } {
+  const num = (s: string) => (s.trim() !== '' && Number.isInteger(Number(s)) ? Number(s) : null);
+  const c = num(raw.childMaxAge);
+  const y = num(raw.youthMaxAge);
+  const e = num(raw.elderlyFromAge);
+  if (c === null || y === null || e === null) return { ok: false, problem: 'whole' };
+  if (raw.adultTrigger !== 'AGE' && raw.adultTrigger !== 'MARRIAGE' && raw.adultTrigger !== 'EITHER') return { ok: false, problem: 'trigger' };
+  if (!(c >= 1 && c < y && y < e && e <= 100)) return { ok: false, problem: 'order' };
+  return { ok: true, value: { childMaxAge: c, youthMaxAge: y, elderlyFromAge: e, adultTrigger: raw.adultTrigger } };
+}

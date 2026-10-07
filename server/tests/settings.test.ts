@@ -4,9 +4,9 @@ import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
 import { DEFAULTS, DEFAULT_LETTER_TYPES, DEFAULT_MEETING_TYPES, SETTING_KEYS, check, resolve } from '../src/settings/catalog';
 
-describe('the six settings', () => {
-  it('there are exactly six, each with a default', () => {
-    expect(SETTING_KEYS).toHaveLength(6);
+describe('the seven settings', () => {
+  it('there are exactly seven, each with a default', () => {
+    expect(SETTING_KEYS).toHaveLength(7);
     for (const k of SETTING_KEYS) expect(DEFAULTS[k]).toBeDefined();
     expect(DEFAULT_LETTER_TYPES).toHaveLength(6);
     expect(DEFAULT_MEETING_TYPES.map((t) => t.code)).toContain('BOARD');

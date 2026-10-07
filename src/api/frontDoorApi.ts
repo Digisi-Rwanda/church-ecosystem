@@ -13,7 +13,7 @@ export type PortalSystem = {
 };
 
 /** A system's own blocks after the six shared ones. */
-export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports';
+export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves';
 
 export type Capabilities = {
   personId: string;
@@ -474,7 +474,10 @@ export type SettingValues = {
   'meetings.types': TypeItem[];
   'access.termReminderDays': number;
   'access.delegationMaxDays': number;
+  'moves.rules': MoveRules;
 };
+
+export type MoveRules = { childMaxAge: number; youthMaxAge: number; elderlyFromAge: number; adultTrigger: 'AGE' | 'MARRIAGE' | 'EITHER' };
 export type SettingKey = keyof SettingValues;
 
 export type SettingRow = {
@@ -496,6 +499,19 @@ export async function saveSetting(key: SettingKey, value: unknown): Promise<void
 
 export async function resetSetting(key: SettingKey): Promise<void> {
   await apiFetch(`/api/settings/${encodeURIComponent(key)}`, { method: 'DELETE' });
+}
+
+/* ── Due to move ── */
+
+export type MoveReason = 'AGE_YOUTH' | 'AGE_ADULT' | 'AGE_ELDERLY' | 'MARRIAGE';
+export type DueToMove = { personId: string; fullName: string; age: number | null; reason: MoveReason; toSystemId: string; toName: string };
+
+export async function fetchDueToMove(systemId: string): Promise<{ canConfirm: boolean; rules: MoveRules; due: DueToMove[] }> {
+  return apiFetch(`/api/moves?systemId=${encodeURIComponent(systemId)}`);
+}
+
+export async function confirmMove(body: { personId: string; fromSystemId: string; toSystemId: string }): Promise<void> {
+  await apiFetch('/api/moves/confirm', { method: 'POST', body });
 }
 
 /* ── Governance (slice 2.2) ── */

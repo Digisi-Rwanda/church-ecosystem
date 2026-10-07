@@ -9,7 +9,7 @@ import { UrgentTile } from './UrgentTile';
 const SHARED_ICON: Record<string, IconName> = { people: 'users', work: 'task', schedule: 'calendar', money: 'wallet', reports: 'chart' };
 const OWN_ICON: Record<string, IconName> = {
   central: 'building', governance: 'board', settings: 'settings', groups: 'users', couples: 'users', visits: 'pastoral',
-  watches: 'hand', contacts: 'user', pulpit: 'pastoral', collections: 'wallet', monthplan: 'calendar', choirs: 'users', oversight: 'chart', rehearsals: 'calendar', repertoire: 'folder', sponsorship: 'hand', roster: 'users', teams: 'calendar', mine: 'task', deaconreports: 'folder',
+  watches: 'hand', contacts: 'user', pulpit: 'pastoral', collections: 'wallet', monthplan: 'calendar', choirs: 'users', oversight: 'chart', rehearsals: 'calendar', repertoire: 'folder', sponsorship: 'hand', roster: 'users', teams: 'calendar', mine: 'task', deaconreports: 'folder', moves: 'users',
 };
 
 /**

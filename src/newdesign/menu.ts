@@ -134,9 +134,9 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
           ...(central ? [] : [place('organisation', 'people/units', 'door.people.tab.units')]),
           place('appointments', 'people/appointments', 'door.people.tab.appointments'),
           place('access', 'people/access', 'door.people.tab.access'),
-          ...some(['groups', 'couples', 'contacts', 'visits'].map(ownPlace)),
+          ...some(['groups', 'couples', 'contacts', 'visits', 'moves'].map(ownPlace)),
         ]
-      : some(['groups', 'couples', 'contacts', 'visits'].map(ownPlace)),
+      : some(['groups', 'couples', 'contacts', 'visits', 'moves'].map(ownPlace)),
     work: shared.has('work')
       ? [
           place('tasks', 'work', 'door.work.tasks'),

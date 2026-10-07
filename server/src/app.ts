@@ -24,6 +24,7 @@ import { collectionsRouter } from './routes/collections.js';
 import { reportsRouter } from './routes/reports.js';
 import { person360Router } from './routes/person360.js';
 import { groupsRouter } from './routes/groups.js';
+import { movesRouter } from './routes/moves.js';
 import { caringRouter } from './routes/caring.js';
 import { glanceRouter } from './routes/glance.js';
 import { protocolRouter } from './routes/protocol.js';
@@ -109,6 +110,7 @@ export function createApp() {
   app.use('/api/reports', reportsRouter);
   app.use('/api/person360', person360Router);
   app.use('/api/groups', groupsRouter);
+  app.use('/api/moves', movesRouter);
   app.use('/api/caring', caringRouter);
   app.use('/api/glance', glanceRouter);
   app.use('/api/protocol', protocolRouter);

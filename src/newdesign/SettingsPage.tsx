@@ -1,11 +1,11 @@
 import { useState, type FormEvent } from 'react';
-import { fetchSettings, resetSetting, saveSetting, type ChurchProfile, type SettingKey, type SettingRow, type TypeItem } from '../api/frontDoorApi';
+import { fetchSettings, resetSetting, saveSetting, type ChurchProfile, type MoveRules, type SettingKey, type SettingRow, type TypeItem } from '../api/frontDoorApi';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { ENABLED_LOCALES, LOCALE_NAMES } from '../i18n/locales';
 import { govErrorKey, errorCode } from './governance';
 import { LoadState } from './LoadState';
-import { RANGES, cleanTypeList, daysProblem, orderSettings, sameValue, suggestCode, typeListProblem } from './settings';
+import { RANGES, cleanTypeList, daysProblem, moveRulesProblem, orderSettings, sameValue, suggestCode, typeListProblem } from './settings';
 import { dayLabel } from './notices';
 import { useLoad } from './useLoad';
 import { fetchDeletedWork } from '../api/frontDoorApi';
@@ -69,6 +69,10 @@ function summary(row: SettingRow, t: ReturnType<typeof useT>): string {
     case 'letters.types':
     case 'meetings.types':
       return (row.value as TypeItem[]).map((i) => i.name).join(', ');
+    case 'moves.rules': {
+      const m = row.value as MoveRules;
+      return t('door.settings.moves.rules.summary', { child: String(m.childMaxAge), youth: String(m.youthMaxAge), elderly: String(m.elderlyFromAge), trigger: t(`door.settings.moves.trigger.${m.adultTrigger}` as const) });
+    }
     default:
       return t('door.settings.days', { count: String(row.value) });
   }
@@ -148,7 +152,9 @@ function Editor({ row, busy, onSave, onCancel, setError }: { row: SettingRow; bu
   const [profile, setProfile] = useState<ChurchProfile>(row.value as ChurchProfile);
   const [language, setLanguage] = useState(String(row.value));
   const [types, setTypes] = useState<TypeItem[]>(Array.isArray(row.value) ? (row.value as TypeItem[]) : []);
-  const [days, setDays] = useState(String(row.value));
+  const [days, setDays] = useState(typeof row.value === 'number' ? String(row.value) : '');
+  const mv = key === 'moves.rules' ? (row.value as MoveRules) : null;
+  const [moves, setMoves] = useState({ childMaxAge: String(mv?.childMaxAge ?? ''), youthMaxAge: String(mv?.youthMaxAge ?? ''), elderlyFromAge: String(mv?.elderlyFromAge ?? ''), adultTrigger: mv?.adultTrigger ?? 'EITHER' });
   const [newName, setNewName] = useState('');
 
   const submit = (e: FormEvent) => {
@@ -165,6 +171,11 @@ function Editor({ row, busy, onSave, onCancel, setError }: { row: SettingRow; bu
       if (problem) return setError(t(`door.settings.err.${problem}` as const));
       return onSave(cleanTypeList(types));
     }
+    if (key === 'moves.rules') {
+      const r = moveRulesProblem(moves);
+      if (!r.ok) return setError(t(`door.settings.err.moves.${r.problem}` as const));
+      return onSave(r.value);
+    }
     const k = key as 'access.termReminderDays' | 'access.delegationMaxDays';
     const n = daysProblem(k, days);
     if (n === null) return setError(t('door.settings.err.days', { min: String(RANGES[k].min), max: String(RANGES[k].max) }));
@@ -172,7 +183,7 @@ function Editor({ row, busy, onSave, onCancel, setError }: { row: SettingRow; bu
   };
 
   const unchanged = sameValue(
-    key === 'church.profile' ? profile : key === 'church.language' ? language : key === 'letters.types' || key === 'meetings.types' ? cleanTypeList(types) : Number(days),
+    key === 'church.profile' ? profile : key === 'church.language' ? language : key === 'letters.types' || key === 'meetings.types' ? cleanTypeList(types) : key === 'moves.rules' ? { childMaxAge: Number(moves.childMaxAge), youthMaxAge: Number(moves.youthMaxAge), elderlyFromAge: Number(moves.elderlyFromAge), adultTrigger: moves.adultTrigger } : Number(days),
     row.value,
   );
 
@@ -223,6 +234,20 @@ function Editor({ row, busy, onSave, onCancel, setError }: { row: SettingRow; bu
               {t('door.settings.types.add')}
             </button>
           </div>
+        </>
+      )}
+      {key === 'moves.rules' && (
+        <>
+          <TextField label={t('door.settings.moves.childMaxAge')} name="mv-child" type="number" inputMode="numeric" value={moves.childMaxAge} onChange={(e) => setMoves({ ...moves, childMaxAge: e.target.value })} />
+          <TextField label={t('door.settings.moves.youthMaxAge')} name="mv-youth" type="number" inputMode="numeric" value={moves.youthMaxAge} onChange={(e) => setMoves({ ...moves, youthMaxAge: e.target.value })} />
+          <TextField label={t('door.settings.moves.elderlyFromAge')} name="mv-elderly" type="number" inputMode="numeric" value={moves.elderlyFromAge} onChange={(e) => setMoves({ ...moves, elderlyFromAge: e.target.value })} />
+          <SelectField label={t('door.settings.moves.adultTrigger')} name="mv-trigger" value={moves.adultTrigger} onChange={(e) => setMoves({ ...moves, adultTrigger: e.target.value as MoveRules['adultTrigger'] })}>
+            {(['EITHER', 'AGE', 'MARRIAGE'] as const).map((v) => (
+              <option key={v} value={v}>
+                {t(`door.settings.moves.trigger.${v}` as const)}
+              </option>
+            ))}
+          </SelectField>
         </>
       )}
       {(key === 'access.termReminderDays' || key === 'access.delegationMaxDays') && (
