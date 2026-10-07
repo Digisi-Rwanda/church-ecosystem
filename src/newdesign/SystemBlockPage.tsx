@@ -5,7 +5,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { isSharedBlock, lettersFor } from './menu';
 import { ChurchHome } from './ChurchHome';
 import { CHURCH_SYSTEM } from './portalHome';
-import { UrgentTile } from './UrgentTile';
+import { SystemHome } from './SystemHome';
 
 /**
  * One of the six shared blocks of a system. The blocks are empty frames for now: each
@@ -37,11 +37,11 @@ export function SystemBlockPage() {
   }
 
   if (block === 'home' && systemId === CHURCH_SYSTEM) return <ChurchHome systemId={systemId} />;
+  if (block === 'home') return <SystemHome systemId={systemId} systemName={systemName} />;
 
   return (
     <section className="door-block" aria-labelledby="door-block-title">
       <h2 id="door-block-title">{blockName}</h2>
-      {block === 'home' && <UrgentTile systemId={systemId} />}
       <div className="panel">
         <h3>{t('door.block.letters')}</h3>
         <ul className="door-letters">

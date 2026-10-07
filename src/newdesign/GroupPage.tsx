@@ -8,6 +8,8 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { TextAreaField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
+import { AttendanceChart } from './AttendanceChart';
+import { shortDay } from './charts';
 import { agesLabel, groupErrorKey, needsFollowUp, wholeOrNull } from './groups';
 import { GroupFields } from './GroupsPage';
 import { LoadState } from './LoadState';
@@ -192,6 +194,7 @@ export function GroupPage() {
                 </ul>
               </div>
             )}
+            <AttendanceChart points={[...data.data!.sessions].reverse().map((x) => ({ label: shortDay(x.heldOn, locale), value: x.present }))} total={members.length} />
             <div className="panel">
               <h3>{t('door.groups.sessionsTitle')}</h3>
               {data.data!.sessions.length === 0 ? (

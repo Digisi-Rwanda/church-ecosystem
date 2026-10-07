@@ -7,6 +7,8 @@ import { buildMenu, buildOwnMenu } from './menu';
 import { badge } from './notices';
 import { churchWideLink } from './portalHome';
 import { useNoticeSummary } from './useNoticeSummary';
+import { DoorBrand } from './DoorBrand';
+import { DoorMenu } from './DoorMenu';
 
 /**
  * One frame for every system: a header, and a menu of the shared blocks the person
@@ -46,10 +48,7 @@ export function SystemFrame() {
             {t('door.frame.churchWide')}
           </Link>
         )}
-        <div className="door-frame-title">
-          <strong>{system.name}</strong>
-          <span className="muted">{t('door.portal.role', { role: system.role })}</span>
-        </div>
+        <DoorBrand subtitle={`${system.name} · ${t('door.portal.role', { role: system.role })}`} />
         <div className="door-top-actions">
           <Link className="btn ghost sm" to={`/portal/notifications?system=${encodeURIComponent(systemId)}`}>
             {t('door.portal.nav.notifications')}
@@ -61,7 +60,7 @@ export function SystemFrame() {
           </button>
         </div>
       </header>
-      <nav className="door-menu" aria-label={t('door.frame.menu')}>
+      <DoorMenu label={t('door.frame.menu')}>
         {menu.map((item) => (
           <NavLink
             key={item.block}
@@ -72,12 +71,13 @@ export function SystemFrame() {
             {t(`door.block.${item.block}` as const)}
           </NavLink>
         ))}
+        {ownMenu.length > 0 && <span className="door-menu-sep" aria-hidden="true" />}
         {ownMenu.map((item) => (
           <NavLink key={item.block} to={`/s/${systemId}/${item.block}`} className={({ isActive }) => `door-menu-link${isActive ? ' active' : ''}`}>
             {t(`door.own.${item.block}${item.variant ? `.${item.variant}` : ''}` as 'door.own.governance')}
           </NavLink>
         ))}
-      </nav>
+      </DoorMenu>
       <div className="door-frame-body">
         <Outlet />
       </div>

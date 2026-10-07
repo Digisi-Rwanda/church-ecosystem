@@ -6,6 +6,8 @@ import { buildPortalNav } from './menu';
 import { badge } from './notices';
 import { useAnnouncementSummary } from './useAnnouncementSummary';
 import { useNoticeSummary } from './useNoticeSummary';
+import { DoorBrand } from './DoorBrand';
+import { DoorMenu } from './DoorMenu';
 
 /** The Portal frame: who is signed in, and a bar for the blocks that span all my systems. */
 export function PortalLayout() {
@@ -18,7 +20,8 @@ export function PortalLayout() {
   return (
     <main className="door-page">
       <header className="door-top">
-        <nav className="door-menu door-portal-nav" aria-label={t('door.portal.nav')}>
+        <DoorBrand />
+        <DoorMenu className="door-portal-nav" label={t('door.portal.nav')}>
           {nav.map((item) => (
             <NavLink
               key={item.key}
@@ -41,7 +44,7 @@ export function PortalLayout() {
               )}
             </NavLink>
           ))}
-        </nav>
+        </DoorMenu>
         <div className="door-top-actions">
           {personName && <span className="muted">{t('door.portal.welcome', { name: personName })}</span>}
           <ThemeToggle />

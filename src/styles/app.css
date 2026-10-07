@@ -7144,3 +7144,41 @@ button.door-menu-link.active { background: var(--accent-soft); }
 @media print {
   .door-menu, .portal-nav, header, nav, .door-row .btn { display: none !important; }
 }
+
+/* Look and feel, phone polish (slice 3.11) */
+.door-frame-top { position: sticky; top: 0; z-index: 20; background: var(--surface-2); border-bottom: 1px solid var(--line); margin: 0 -1rem; padding: 0.6rem 1rem; }
+.door-top { align-items: center; }
+.door-brand { display: flex; align-items: center; gap: 0.65rem; min-width: 0; }
+.door-brand-logo { width: 2.5rem; height: 2.5rem; object-fit: contain; flex: none; }
+.door-brand-text { display: grid; min-width: 0; line-height: 1.2; }
+.door-brand-text strong { font-family: var(--font-display); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.door-brand-text .muted { font-size: 0.8rem; overflow-wrap: anywhere; }
+.door-menu { position: relative; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; scrollbar-width: none; align-items: center; }
+.door-menu::-webkit-scrollbar { display: none; }
+.door-menu-link { scroll-snap-align: center; min-height: 2.5rem; display: inline-flex; align-items: center; }
+.door-menu-sep { flex: none; width: 1px; align-self: stretch; margin: 0.35rem 0.25rem; background: var(--line-strong); }
+.door-tiles { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.85rem; grid-template-columns: repeat(auto-fill, minmax(13rem, 1fr)); }
+.door-tiles > li { min-width: 0; }
+.door-tile { display: grid; gap: 0.3rem; align-content: start; text-decoration: none; color: inherit; height: 100%; }
+.door-tile:hover { border-color: var(--accent); }
+.door-tile:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.door-tile .muted { font-size: 0.875rem; }
+.door-tile-icon { display: inline-grid; place-items: center; width: 2.5rem; height: 2.5rem; border-radius: 0.75rem; background: var(--accent-soft); color: var(--accent-on-soft); }
+.door-chart { margin: 0; display: grid; gap: 0.35rem; }
+.door-chart figcaption { font-weight: 600; }
+.door-chart svg { width: 100%; max-width: 28rem; height: auto; }
+.door-block > .panel, .door-frame-body .panel { min-width: 0; overflow-wrap: anywhere; }
+@media (max-width: 640px) {
+  .door-frame, .door-page { padding-left: 0.75rem; padding-right: 0.75rem; }
+  .door-frame-top { margin: 0 -0.75rem; padding: 0.5rem 0.75rem; }
+  .door-form { max-width: none; }
+  .door-form .btn, .door-row > .btn { min-height: 2.75rem; }
+  .door-row { align-items: stretch; }
+  .door-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.6rem; }
+  .door-tile { padding: 0.75rem; }
+  .door-top-actions { width: 100%; justify-content: space-between; }
+  .door-brand-logo { width: 2.1rem; height: 2.1rem; }
+  .door-table-wrap { margin: 0 -0.75rem; }
+}
+@media (max-width: 380px) { .door-tiles { grid-template-columns: 1fr; } }
+@media print { .door-frame-top { position: static; } }

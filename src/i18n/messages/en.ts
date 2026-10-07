@@ -1331,6 +1331,24 @@ export const en = {
   'door.evang.err.dayTaken': 'That day already has a service planned.',
   'door.evang.err.onePreacher': 'Choose a member or a guest, not both.',
 
+  'door.tile.intro': 'Where would you like to go?',
+  'door.tile.people': 'Members, units, appointments and access.',
+  'door.tile.work': 'Tasks and plans for this ministry.',
+  'door.tile.schedule': 'Services, rehearsals and who serves when.',
+  'door.tile.money': 'Accounts, entries and what needs approval.',
+  'door.tile.reports': 'Reports to read, send and publish.',
+  'door.tile.own.central': 'The whole church at a glance.',
+  'door.tile.own.governance': 'Meetings, decisions and letters.',
+  'door.tile.own.settings': 'How the system behaves.',
+  'door.tile.own.groups': 'Groups, members and attendance.',
+  'door.tile.own.couples': 'Couples of the church, shown as pairs.',
+  'door.tile.own.visits': 'Visits to elderly members.',
+  'door.tile.own.watches': 'Weekly prayer watches and who keeps them.',
+  'door.tile.own.contacts': 'People met through outreach and their follow-up.',
+  'door.tile.own.pulpit': 'The preaching plan and guest preachers.',
+  'door.tile.own.collections': 'Offerings counted at services.',
+  'door.chart.attendance': 'Attendance at recent meetings',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;
