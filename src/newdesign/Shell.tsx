@@ -9,6 +9,7 @@ import { resolveActive, type NavModule } from './menu';
 import { badge } from './notices';
 import { useAnnouncementSummary } from './useAnnouncementSummary';
 import { DoorMenu } from './DoorMenu';
+import { warm } from './warm';
 import { MODULE_ICON } from './moduleIcons';
 
 function weekOfLabel(locale: string, d = new Date()) {
@@ -131,6 +132,9 @@ export function Shell({
                     to={m.to}
                     end={m.places.length === 1 && m.places[0]!.end}
                     onClick={close}
+                    onMouseEnter={() => warm(m.to)}
+                    onFocus={() => warm(m.to)}
+                    onTouchStart={() => warm(m.to)}
                     className={() => (current?.id === m.id ? 'active' : undefined)}
                     aria-current={current?.id === m.id ? 'page' : undefined}
                   >

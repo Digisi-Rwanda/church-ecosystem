@@ -16,6 +16,7 @@ import { formatRwf } from './money';
 import { PlanForm } from './PlanForm';
 import { PLAN_STEPS, phaseOf, planActions, planErrorKey, planStatusKey, stepIndex } from './plans';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | null;
 
@@ -61,7 +62,7 @@ export function PlanPage() {
             <Link to={`/s/${systemId}/work`}>← {t('door.block.work')}</Link>
           </p>
           <div className="door-row">
-            <h2 id="door-plan-title">{p.title}</h2>
+            <PageHeader id="door-plan-title" title={p.title} />
             <span className="door-chip">{t(planStatusKey(p.status))}</span>
             <span className="door-chip">{t(`door.work.visibility.${p.visibility}` as const)}</span>
           </div>

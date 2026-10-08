@@ -5,6 +5,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { buildMenu, buildOwnMenu } from './menu';
 import { LeaderDashboard } from './Dashboard';
 import { UrgentTile } from './UrgentTile';
+import { PageHeader } from './kit';
 
 const SHARED_ICON: Record<string, IconName> = { people: 'users', work: 'task', schedule: 'calendar', money: 'wallet', reports: 'chart' };
 const OWN_ICON: Record<string, IconName> = {
@@ -40,7 +41,7 @@ export function SystemHome({ systemId, systemName }: { systemId: string; systemN
         fallback={
           <>
             <div>
-              <h2 id="door-home-title">{systemName}</h2>
+              <PageHeader id="door-home-title" title={systemName} />
               <p className="muted">{t('door.tile.intro')}</p>
             </div>
         <ul className="door-tiles">

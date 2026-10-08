@@ -5,6 +5,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { shiftMonth, thisMonth } from './music';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const PARTS = ['challenges', 'solutions', 'issues', 'recommendations'] as const;
 
@@ -19,7 +20,7 @@ export function ProtocolReportsPage() {
   return (
     <section className="door-block" aria-labelledby="door-preports-title">
       <div>
-        <h2 id="door-preports-title">{t('door.own.deaconreports')}</h2>
+        <PageHeader id="door-preports-title" title={t('door.own.deaconreports')} />
         <p className="muted">{t('door.protocol.reports.deaconIntro')}</p>
       </div>
       <div className="door-row">

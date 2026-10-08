@@ -5,6 +5,7 @@ import { useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { membersOf, officeHoldersOf, unitPath } from './structure';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -38,7 +39,7 @@ export function UnitPage() {
           <>
             <header className="door-person-head">
               <div>
-                <h2>{unit.name}</h2>
+                <PageHeader title={unit.name} />
                 <p className="muted">{unit.code ? t('door.units.code', { code: unit.code }) : t('door.units.noCode')}</p>
               </div>
               <span className="door-chip">{t(`door.kind.${unit.kind}` as const)}</span>

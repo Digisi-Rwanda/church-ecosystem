@@ -15,6 +15,7 @@ import { useParams } from 'react-router-dom';
 import { useI18n } from '../i18n/I18nContext';
 import { dayLabel } from './notices';
 import { kindKey } from './reports';
+import { PageHeader } from './kit';
 
 /** Offerings counted at services across the church, read only. These are counts, never added to Money's figures. */
 function ChurchCollections() {
@@ -74,7 +75,7 @@ export function CentralHomePage() {
   return (
     <section className="door-block" aria-labelledby="door-central-title">
       <div>
-        <h2 id="door-central-title">{t('door.central.title')}</h2>
+        <PageHeader id="door-central-title" title={t('door.central.title')} />
         <p className="muted">{t('door.central.intro')}</p>
       </div>
       <LeaderDashboard systemId={systemId} systemName={t('door.central.title')} />

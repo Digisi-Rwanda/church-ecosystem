@@ -8,6 +8,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The Couples block: married couples shown as pairs. */
 export function CouplesPage() {
@@ -39,7 +40,7 @@ export function CouplesPage() {
   return (
     <section className="door-block" aria-labelledby="door-couples-title">
       <div>
-        <h2 id="door-couples-title">{t('door.own.couples')}</h2>
+        <PageHeader id="door-couples-title" title={t('door.own.couples')} />
         <p className="muted">{t('door.caring.couples.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}

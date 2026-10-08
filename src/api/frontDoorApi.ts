@@ -1,5 +1,6 @@
 import type { AccessLetter, ModuleKey, OfficeCode, SharedBlock, UnitKind } from '../../server/src/shared/vocabulary';
-import { apiFetch } from './client';
+import { apiMe, type ApiMeResponse } from './authApi';
+import { ApiError, apiFetch } from './client';
 
 export type PortalSystem = {
   id: string;
@@ -29,6 +30,28 @@ export async function fetchPortal(): Promise<PortalSystem[]> {
 
 export async function fetchCapabilities(): Promise<Capabilities> {
   return apiFetch<Capabilities>('/api/me/capabilities');
+}
+
+/** Who is signed in, their systems and what they may do: the three things the shell needs, in one answer. */
+export type Bootstrap = {
+  me: ApiMeResponse;
+  portal: { systems: PortalSystem[] };
+  capabilities: Capabilities;
+};
+
+/**
+ * One request for the shell's data. A server that does not have it yet (an older deployment) answers
+ * with a plain not found, and the three separate requests are made instead, so the two can be deployed in any order.
+ */
+export async function fetchBootstrap(): Promise<{ me: ApiMeResponse; systems: PortalSystem[]; capabilities: Capabilities }> {
+  try {
+    const b = await apiFetch<Bootstrap>('/api/me/bootstrap');
+    return { me: b.me, systems: b.portal.systems, capabilities: b.capabilities };
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 404) throw e;
+  }
+  const [me, systems, capabilities] = await Promise.all([apiMe(), fetchPortal(), fetchCapabilities()]);
+  return { me, systems, capabilities };
 }
 
 /* ── People, units and offices (slice 1.2) ── */

@@ -7,6 +7,7 @@ import { LoadState } from './LoadState';
 import { SECTION_ORDER, SINGLE_SECTIONS, sectionKey } from './person360';
 import { RecordCard, RecordForm } from './Person360Parts';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The whole person: basics, then each section of what the church knows, with history kept. */
 export function Person360Page() {
@@ -29,7 +30,7 @@ export function Person360Page() {
           <>
             <header className="door-person-head">
               <div>
-                <h2>{v.person.fullName}</h2>
+                <PageHeader title={v.person.fullName} />
                 <p className="muted">
                   {v.person.memberCode ?? '—'} · {t('door.p360.title')}
                 </p>

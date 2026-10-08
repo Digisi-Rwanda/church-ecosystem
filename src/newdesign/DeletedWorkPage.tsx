@@ -4,6 +4,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** For Administrators only: work that people deleted, which can be brought back. The server decides who may open it. */
 export function DeletedWorkPage() {
@@ -19,7 +20,7 @@ export function DeletedWorkPage() {
   return (
     <section className="door-block" aria-labelledby="door-deleted-title">
       <div>
-        <h2 id="door-deleted-title">{t('door.work.deleted.title')}</h2>
+        <PageHeader id="door-deleted-title" title={t('door.work.deleted.title')} />
         <p className="muted">{t('door.work.deleted.intro')}</p>
       </div>
       {error && (

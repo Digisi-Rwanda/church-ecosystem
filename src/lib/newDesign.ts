@@ -17,3 +17,8 @@ export function isNewDoorPath(pathname: string): boolean {
     pathname.startsWith('/s/')
   );
 }
+
+/** True when the address belongs to the new app; everything else is opened by the old app, which loads only then. */
+export function belongsToNewApp(pathname: string, newDesign: boolean): boolean {
+  return newDesign && (pathname === '/' || pathname === '/login' || isNewDoorPath(pathname));
+}

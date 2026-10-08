@@ -15,6 +15,7 @@ import { LoadState } from './LoadState';
 import { useCanWritePeople } from './usePeopleAccess';
 import { belongingOf } from './structure';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -89,7 +90,7 @@ function PersonHeader({ person }: { person: DirectoryPerson }) {
   return (
     <header className="door-person-head">
       <div>
-        <h2>{person.fullName}</h2>
+        <PageHeader title={person.fullName} />
         <p className="muted">{person.memberCode ?? '—'}</p>
       </div>
       <StatusPill status={person.status}>{t(`door.status.${person.status}` as const)}</StatusPill>

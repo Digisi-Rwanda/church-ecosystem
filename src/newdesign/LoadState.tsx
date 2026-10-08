@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react';
 import { EmptyState } from '../components/ui/EmptyState';
-import { Spinner } from '../components/ui/Spinner';
 import { useT } from '../i18n/I18nContext';
+import { PageSkeleton } from './kit';
 
 /** The same three states on every screen that loads from the server: loading, failed, or the content. */
 export function LoadState({
@@ -17,11 +17,7 @@ export function LoadState({
 }) {
   const t = useT();
   if (loading) {
-    return (
-      <div className="door-center" role="status">
-        <Spinner size="lg" label={t('door.people.loading')} />
-      </div>
-    );
+    return <PageSkeleton header={false} />;
   }
   if (failed) {
     return (

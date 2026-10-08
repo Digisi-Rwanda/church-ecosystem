@@ -11,6 +11,7 @@ import { currentMonth, queueFirst } from './money';
 import { PlanVsActual, YearSelect } from './MoneyBlockParts';
 import { AccountCard, AccountForm, EntryForm, EntryRow } from './MoneyParts';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The Money block: accounts with balances, entries, and the president's approval queue. */
 export function MoneyPage() {
@@ -37,7 +38,7 @@ export function MoneyPage() {
   return (
     <section className="door-block" aria-labelledby="door-money-title">
       <div>
-        <h2 id="door-money-title">{t('door.money.accounting')}</h2>
+        <PageHeader id="door-money-title" title={t('door.money.accounting')} purpose={t('door.purpose.money')} />
         <p className="muted">{accounts.data?.canRecord ? t('door.money.intro.treasurer') : t('door.money.intro.view')}</p>
         <p className="muted">{t('door.money.apart')}</p>
         {accounts.data && !accounts.data.canRecord && <p className="muted">{t('door.money.hint.notTreasurer')}</p>}

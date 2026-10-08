@@ -7,6 +7,7 @@ import { ENABLED_LOCALES, LOCALE_NAMES, isEnabledLocale } from '../i18n/locales'
 import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** Preferences: kept on the server, so they follow the person to every device. */
 export function PreferencesPage() {
@@ -46,7 +47,7 @@ export function PreferencesPage() {
       <Link className="btn ghost sm door-back" to="/portal/notifications">
         {t('door.notices.back')}
       </Link>
-      <h2 id="door-prefs-title">{t('door.prefs.title')}</h2>
+      <PageHeader id="door-prefs-title" title={t('door.prefs.title')} />
       <LoadState loading={loading} failed={failed} retry={reload}>
         <div className="panel door-form">
           <SelectField label={t('door.prefs.language')} name="language" value={language} onChange={(e) => setLanguage(e.target.value)} hint={t('door.prefs.languageHint')}>

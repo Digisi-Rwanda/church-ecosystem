@@ -19,6 +19,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { MAX_TYPES, cleanMoney, suggestTypeCode, toDraft, typesProblem, type TypeDraft } from './systemSettings';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /**
  * Settings of ONE system: how it looks for me, which of its news I hear, and (for those who
@@ -32,7 +33,7 @@ export function SystemSettingsPage() {
   return (
     <section className="door-block" aria-labelledby="door-sset-title">
       <div>
-        <h2 id="door-sset-title">{t('door.sset.title')}</h2>
+        <PageHeader id="door-sset-title" title={t('door.sset.title')} />
         <p className="muted">{t('door.sset.intro')}</p>
       </div>
       <LoadState loading={sys.loading} failed={sys.failed} retry={sys.reload}>

@@ -12,6 +12,17 @@ export default defineConfig(({ mode }) => {
   }
   return {
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      output: {
+        // The libraries change rarely: kept apart so a visitor's browser keeps them when only our code changes.
+        manualChunks(id: string) {
+          if (/node_modules[\\/](react|react-dom|react-router|react-router-dom|scheduler)[\\/]/.test(id)) return 'vendor';
+          return undefined;
+        },
+      },
+    },
+  },
   test: {
     environment: 'node',
     include: ['src/**/*.test.ts'],

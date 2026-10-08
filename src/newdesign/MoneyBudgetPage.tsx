@@ -8,6 +8,7 @@ import { LoadState } from './LoadState';
 import { categoryKey, formatRwf, moneyErrorKey } from './money';
 import { YearSelect } from './MoneyBlockParts';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The budget of one unit for one year: a planned amount per kind of money. Totals are computed. */
 export function MoneyBudgetPage() {
@@ -28,7 +29,7 @@ export function MoneyBudgetPage() {
   return (
     <section className="door-block" aria-labelledby="door-budget-title">
       <div>
-        <h2 id="door-budget-title">{t('door.money.budget')}</h2>
+        <PageHeader id="door-budget-title" title={t('door.money.budget')} purpose={t('door.purpose.budget')} />
         <p className="muted">{t('door.money.budget.intro')}</p>
       </div>
       <YearSelect year={year} onChange={setYear} />

@@ -1,68 +1,71 @@
-import { RehearsalsPage } from './RehearsalsPage';
-import { RepertoirePage } from './RepertoirePage';
-import { SponsorshipPage } from './SponsorshipPage';
-import { ProtocolMinePage } from './ProtocolMinePage';
-import { ProtocolReportsPage } from './ProtocolReportsPage';
-import { ProtocolRosterPage } from './ProtocolRosterPage';
-import { ProtocolTeamsPage } from './ProtocolTeamsPage';
-import { ChoirPage } from './ChoirPage';
-import { ChoirsPage } from './ChoirsPage';
-import { MonthPlanPage } from './MonthPlanPage';
-import { OversightPage } from './OversightPage';
-import { ContactPage } from './ContactPage';
-import { ContactsPage } from './ContactsPage';
-import { PulpitPage } from './PulpitPage';
-import { CouplesPage } from './CouplesPage';
-import { VisitsPage } from './VisitsPage';
-import { WatchesPage } from './WatchesPage';
-import { GroupPage } from './GroupPage';
-import { GroupsPage } from './GroupsPage';
-import { MovesPage } from './MovesPage';
-import { BaptismCohortPage } from './BaptismCohortPage';
-import { Person360Page } from './Person360Page';
-import { ReportPage } from './ReportPage';
-import { ReportsPage } from './ReportsPage';
-import { CollectionsPage } from './CollectionsPage';
-import { MoneyPage } from './MoneyPage';
-import { MyContributionPage } from './MyContributionPage';
-import { ContributionsPage } from './ContributionsPage';
-import { MoneyReportsPage } from './MoneyReportsPage';
-import { MoneyPlanPage } from './MoneyPlanPage';
-import { MoneyBudgetPage } from './MoneyBudgetPage';
 import { Route } from 'react-router-dom';
-import { AccessPage } from './AccessPage';
-import { AddPersonPage } from './AddPersonPage';
-import { AnnouncementsPage } from './AnnouncementsPage';
-import { AppointmentsPage } from './AppointmentsPage';
-import { CentralHomePage } from './CentralHomePage';
-import { DecisionsPage } from './DecisionsPage';
-import { DeletedWorkPage } from './DeletedWorkPage';
-import { LetterPage } from './LetterPage';
-import { LettersPage } from './LettersPage';
+import {
+  AccessPage,
+  AddPersonPage,
+  AnnouncementsPage,
+  AppointmentsPage,
+  BaptismCohortPage,
+  CentralHomePage,
+  ChoirPage,
+  ChoirsPage,
+  CollectionsPage,
+  ContactPage,
+  ContactsPage,
+  ContributionsPage,
+  CouplesPage,
+  DecisionsPage,
+  DeletedWorkPage,
+  GroupPage,
+  GroupsPage,
+  LetterPage,
+  LettersPage,
+  MeetingPage,
+  MeetingsPage,
+  MoneyBudgetPage,
+  MoneyPage,
+  MoneyPlanPage,
+  MoneyReportsPage,
+  MonthPlanPage,
+  MovesPage,
+  MyContributionPage,
+  NotificationsPage,
+  OrgTreePage,
+  OversightPage,
+  PeopleDirectoryPage,
+  Person360Page,
+  PersonCardPage,
+  PlanPage,
+  PlansPage,
+  PortalBlockPage,
+  PortalPage,
+  PortalWorkPage,
+  PreferencesPage,
+  ProtocolMinePage,
+  ProtocolReportsPage,
+  ProtocolRosterPage,
+  ProtocolTeamsPage,
+  PulpitPage,
+  RehearsalsPage,
+  RepertoirePage,
+  ReportPage,
+  ReportsPage,
+  SchedulePage,
+  SettingsPage,
+  SponsorshipPage,
+  SystemBlockPage,
+  SystemSettingsPage,
+  UnitPage,
+  VisitsPage,
+  WatchesPage,
+  WorkPage,
+} from './pages';
 import { GovernanceLayout } from './GovernanceLayout';
-import { MeetingPage } from './MeetingPage';
-import { MeetingsPage } from './MeetingsPage';
 import { NewDesignLayout, RequireSignedIn } from './NewDesignGuards';
 import { NewSignInPage } from './NewSignInPage';
-import { NotificationsPage } from './NotificationsPage';
-import { OrgTreePage } from './OrgTreePage';
-import { PeopleDirectoryPage } from './PeopleDirectoryPage';
 import { PeopleLayout } from './PeopleLayout';
-import { PersonCardPage } from './PersonCardPage';
-import { PreferencesPage } from './PreferencesPage';
-import { SchedulePage } from './SchedulePage';
-import { SettingsPage } from './SettingsPage';
-import { PlansPage } from './PlansPage';
-import { PortalWorkPage } from './PortalWorkPage';
-import { PlanPage } from './PlanPage';
-import { PortalBlockPage } from './PortalBlockPage';
 import { PortalLayout } from './PortalLayout';
-import { PortalPage } from './PortalPage';
-import { SystemBlockPage } from './SystemBlockPage';
 import { SystemFrame } from './SystemFrame';
-import { SystemSettingsPage } from './SystemSettingsPage';
-import { UnitPage } from './UnitPage';
-import { WorkPage } from './WorkPage';
+
 
 /**
  * The new routes, to be placed inside <Routes>. Only added when the new-design

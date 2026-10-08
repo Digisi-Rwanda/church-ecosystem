@@ -5,6 +5,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { shiftMonth, thisMonth } from './music';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** Music oversight: for the month, how each choir is doing, and what needs attention. */
 export function OversightPage() {
@@ -18,7 +19,7 @@ export function OversightPage() {
   return (
     <section className="door-block" aria-labelledby="door-over-title">
       <div>
-        <h2 id="door-over-title">{t('door.own.oversight')}</h2>
+        <PageHeader id="door-over-title" title={t('door.own.oversight')} />
         <p className="muted">{t('door.music.over.intro')}</p>
       </div>
       <div className="door-row">

@@ -5,6 +5,7 @@ import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const KINDS: UnitRecord['kind'][] = ['CENTRAL', 'MINISTRY', 'ORGANISATION', 'TEAM'];
 
@@ -20,7 +21,7 @@ export function OrgTreePage() {
   const mine = new Set(portal.map((s) => s.id));
   return (
     <div className="door-block">
-      <h2>{t('door.units.title')}</h2>
+      <PageHeader title={t('door.units.title')} purpose={t('door.purpose.units')} />
       <LoadState loading={loading} failed={failed} retry={reload}>
         {units.length === 0 ? (
           <EmptyState title={t('door.units.none')} />

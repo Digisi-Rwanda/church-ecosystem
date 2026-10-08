@@ -3,6 +3,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { isPortalBlock, systemsWithBlock } from './menu';
+import { PageHeader } from './kit';
 
 /**
  * A Portal bar item. A shared block lists the systems where the person holds it, each a
@@ -22,7 +23,7 @@ export function PortalBlockPage() {
   return (
     <section className="door-block" aria-labelledby="door-portal-block">
       <div>
-        <h2 id="door-portal-block">{t('door.portal.block.title', { block: blockName })}</h2>
+        <PageHeader id="door-portal-block" title={t('door.portal.block.title', { block: blockName })} />
         <p className="muted">{t('door.portal.block.subtitle')}</p>
       </div>
       {where.length === 0 ? (

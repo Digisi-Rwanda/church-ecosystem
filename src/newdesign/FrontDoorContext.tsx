@@ -7,15 +7,9 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { apiLogin, apiMe } from '../api/authApi';
+import { apiLogin } from '../api/authApi';
 import { ApiError, getApiToken, setApiToken } from '../api/client';
-import {
-  fetchCapabilities,
-  fetchPortal,
-  type Capabilities,
-  type PortalSystem,
-} from '../api/frontDoorApi';
-import { authService } from '../services';
+import { fetchBootstrap, type Capabilities, type PortalSystem } from '../api/frontDoorApi';
 import { clearLoadCache } from './useLoad';
 
 type Status = 'checking' | 'out' | 'loading' | 'in' | 'error';
@@ -49,7 +43,7 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
     // Already signed in: refresh quietly, without blanking the screen.
     setStatus((s) => (s === 'in' ? s : 'loading'));
     try {
-      const [me, systems, caps] = await Promise.all([apiMe(), fetchPortal(), fetchCapabilities()]);
+      const { me, systems, capabilities: caps } = await fetchBootstrap();
       setPersonName(me.person.preferredName || me.person.fullName);
       setPortal(systems);
       setCapabilities(caps);
@@ -88,8 +82,9 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     clearLoadCache();
-    authService.logout(); // also clears the token and anything the old app kept
     setApiToken(null);
+    // Clear whatever the old app kept for this browser. It is loaded only now, so the new app never carries it.
+    void import('../services').then((m) => m.authService.logout());
     setPortal([]);
     setCapabilities(null);
     setPersonName('');

@@ -2008,6 +2008,37 @@ export const en = {
   'door.dash.choirs.members': 'Singers',
   'door.dash.choirs.sing': '{count} singers',
 
+  'door.access.adminOnly': 'The Access page is for the church Administrators.',
+
+  'kit.loading': 'Loading',
+  'kit.cancel': 'Cancel',
+  'kit.save': 'Save',
+  'kit.saving': 'Saving…',
+  'kit.confirm': 'Confirm',
+  'kit.working': 'Working…',
+  'kit.close': 'Close',
+
+  'door.purpose.PROGRAM': 'Regular activities your ministry runs through the year.',
+  'door.purpose.EVENT': 'One-off gatherings with a date, a place and a budget.',
+  'door.purpose.PROJECT': 'Bigger pieces of work that run over several weeks or months.',
+  'door.purpose.work': 'What is assigned to people, and what is done.',
+  'door.purpose.money': 'Money coming in and going out, with the approvals in between.',
+  'door.purpose.moneyPlan': 'The year’s money plan, by program, event and project.',
+  'door.purpose.budget': 'What is set aside for the year, and what has been spent against it.',
+  'door.purpose.moneyReports': 'Money reports, by plan and by period.',
+  'door.purpose.reports': 'Reports your system owes, and the ones already sent.',
+  'door.purpose.schedule': 'Who serves, and when.',
+  'door.purpose.notices': 'What waits for you, and what is only for your information.',
+  'door.purpose.announce': 'Messages for the church, with who they are for and until when.',
+  'door.purpose.settings': 'The rules the church works by. Changes are recorded.',
+  'door.purpose.access': 'Who can open what. Visible to Administrators only.',
+  'door.purpose.appointments': 'Who holds each office, and the offices that are vacant.',
+  'door.purpose.units': 'How the church is organised, from the church down to each group.',
+  'door.purpose.gov': 'Meetings, decisions and letters.',
+  'door.purpose.choirs': 'The choirs, their members and how they serve.',
+  'door.purpose.roster': 'The people who serve in Protocol.',
+  'door.purpose.teams': 'The monthly teams and who is on each service.',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

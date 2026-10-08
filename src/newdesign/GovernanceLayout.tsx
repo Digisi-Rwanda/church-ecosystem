@@ -3,6 +3,8 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { buildOwnMenu } from './menu';
+import { PageHeader } from './kit';
+import { RouteSuspense } from './kit/RouteSuspense';
 
 /** Governance inside a system: Meetings and the Decision register. Shown only to holders of a Governance letter. */
 export function GovernanceLayout() {
@@ -14,10 +16,12 @@ export function GovernanceLayout() {
   return (
     <section className="door-block" aria-labelledby="door-gov-title">
       <div>
-        <h2 id="door-gov-title">{t('door.gov.title')}</h2>
+        <PageHeader id="door-gov-title" title={t('door.gov.title')} purpose={t('door.purpose.gov')} />
         <p className="muted">{t('door.gov.intro')}</p>
       </div>
-      <Outlet />
+      <RouteSuspense>
+        <Outlet />
+      </RouteSuspense>
     </section>
   );
 }

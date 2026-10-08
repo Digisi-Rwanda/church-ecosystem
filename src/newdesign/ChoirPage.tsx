@@ -8,6 +8,7 @@ import { LoadState } from './LoadState';
 import { musicErrorKey } from './music';
 import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** One choir's register: who sings in it. */
 export function ChoirPage() {
@@ -34,7 +35,7 @@ export function ChoirPage() {
         {c && (
           <>
             <div>
-              <h2 id="door-choir-title">{c.name} {!c.active && <span className="door-chip">{t('door.music.retired')}</span>}</h2>
+              <PageHeader id="door-choir-title" title={<>{c.name} {!c.active && <span className="door-chip">{t('door.music.retired')}</span>}</>} />
               <p className="muted">{t(`door.music.role.${c.role}` as 'door.music.role.PRIMARY')} · {t('door.music.members', { count: String(data.data!.members.length) })}</p>
             </div>
             {error && <p className="door-error" role="alert">{error}</p>}

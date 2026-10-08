@@ -6,6 +6,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { buildModules } from './menu';
 import { useNoticeSummary } from './useNoticeSummary';
 import { Shell } from './Shell';
+import { RouteSuspense } from './kit/RouteSuspense';
 
 /**
  * One frame for every system. A sidebar lists the modules, a top bar lists the places of the
@@ -60,7 +61,9 @@ export function SystemFrame() {
       notificationsTo={`/s/${systemId}/notifications?system=${encodeURIComponent(systemId)}`}
       notificationCount={counts?.bySystem[systemId] ?? 0}
     >
-      <Outlet />
+      <RouteSuspense>
+        <Outlet />
+      </RouteSuspense>
     </Shell>
   );
 }

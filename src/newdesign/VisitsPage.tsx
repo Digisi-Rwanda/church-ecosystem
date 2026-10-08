@@ -8,6 +8,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -39,7 +40,7 @@ export function VisitsPage() {
   return (
     <section className="door-block" aria-labelledby="door-visits-title">
       <div>
-        <h2 id="door-visits-title">{t('door.own.visits')}</h2>
+        <PageHeader id="door-visits-title" title={t('door.own.visits')} />
         <p className="muted">{t('door.caring.visits.intro')}</p>
       </div>
       {!form && (

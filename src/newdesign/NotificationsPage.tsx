@@ -13,6 +13,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { badge, dayLabel, safeHref, unreadKeys, withRead } from './notices';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 type Tab = 'waiting' | 'info';
 
@@ -72,7 +73,7 @@ export function NotificationsPage() {
   return (
     <section className="door-block" aria-labelledby="door-notices-title">
       <div className="door-row">
-        <h2 id="door-notices-title">{t('door.notices.title')}</h2>
+        <PageHeader id="door-notices-title" title={t('door.notices.title')} purpose={t('door.purpose.notices')} />
         <Link className="btn ghost sm" to="/portal/notifications/preferences">
           {t('door.notices.preferences')}
         </Link>

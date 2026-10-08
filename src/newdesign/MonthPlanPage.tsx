@@ -11,6 +11,7 @@ import { LoadState } from './LoadState';
 import { musicErrorKey, scheduleErrorText, servicesOfMonth } from './music';
 import { ScheduleServiceCard } from './ScheduleServiceCard';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const HORIZONS: MusicHorizonKey[] = ['MONTH', 'QUARTER', 'HALF', 'YEAR'];
 type View = { kind: 'home' } | { kind: 'draft'; id: string } | { kind: 'month'; key: string };
@@ -89,7 +90,7 @@ function DraftView({ id, state, back }: { id: string; state: ScheduleState; back
         {d && (
           <>
             <div>
-              <h2 id="door-draft-title">{t('door.music.sched.draftTitle', { label: d.label })}</h2>
+              <PageHeader id="door-draft-title" title={t('door.music.sched.draftTitle', { label: d.label })} />
               <p className="muted">{t('door.music.sched.draftHint')}</p>
             </div>
             <Warnings list={live.length ? live : d.warnings} />
@@ -153,7 +154,7 @@ function MonthView({ month, state, back, reloadState }: { month: string; state: 
         {m && (
           <>
             <div>
-              <h2 id="door-month-title">{monthName}</h2>
+              <PageHeader id="door-month-title" title={monthName} />
               <p className="muted"><span className="door-chip">{t(`door.music.sched.state.${m.state}` as 'door.music.sched.state.CONFIRMED')}</span> v{m.version}</p>
               {m.canWrite && <p className="muted">{m.state === 'PUBLISHED' ? t('door.music.sched.editPublishedHint') : t('door.music.sched.editConfirmedHint')}</p>}
             </div>
@@ -214,7 +215,7 @@ export function MonthPlanPage() {
   return (
     <section className="door-block" aria-labelledby="door-plan-title">
       <div>
-        <h2 id="door-plan-title">{t('door.own.monthplan')}</h2>
+        <PageHeader id="door-plan-title" title={t('door.own.monthplan')} />
         <p className="muted">{t('door.music.sched.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}

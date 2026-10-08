@@ -6,6 +6,7 @@ import { isSharedBlock, lettersFor } from './menu';
 import { ChurchHome } from './ChurchHome';
 import { CHURCH_SYSTEM } from './portalHome';
 import { SystemHome } from './SystemHome';
+import { PageHeader } from './kit';
 
 /**
  * One of the six shared blocks of a system. The blocks are empty frames for now: each
@@ -41,7 +42,7 @@ export function SystemBlockPage() {
 
   return (
     <section className="door-block" aria-labelledby="door-block-title">
-      <h2 id="door-block-title">{blockName}</h2>
+      <PageHeader id="door-block-title" title={blockName} />
       <div className="panel">
         <h3>{t('door.block.letters')}</h3>
         <ul className="door-letters">

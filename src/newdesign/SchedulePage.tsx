@@ -20,6 +20,7 @@ import { CHURCH_SYSTEM } from './portalHome';
 import { addMonths, dayHeading, dayOf, groupByDay, monthLabel, planActions, planStatusKey, scheduleErrorKey, thisMonth, timeRange } from './schedule';
 import { SlotCard, SlotForm } from './ScheduleParts';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The Schedule block: my duties, the church calendar (on the church-wide home), and this system's month plans. */
 export function SchedulePage() {
@@ -34,7 +35,7 @@ export function SchedulePage() {
   if (!allowed) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
   return (
     <section className="door-block" aria-labelledby="door-sched-title">
-      <h2 id="door-sched-title">{t('door.block.schedule')}</h2>
+      <PageHeader id="door-sched-title" title={t('door.block.schedule')} purpose={t('door.purpose.schedule')} />
       <div className="door-row">
         <button type="button" className="btn secondary sm" onClick={() => setMonth(addMonths(month, -1))} aria-label={t('door.sched.prev')}>
           ‹

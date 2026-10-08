@@ -100,9 +100,10 @@ authRouter.post('/login', async (req, res) => {
   });
 });
 
-authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
+/** Who is signed in: the account, the person and their active memberships and offices. Null when the account is gone. */
+export async function loadMe(accountId: string) {
   const account = await prisma.account.findUnique({
-    where: { id: req.auth!.sub },
+    where: { id: accountId },
     include: {
       person: {
         include: {
@@ -112,11 +113,8 @@ authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
       },
     },
   });
-  if (!account) {
-    res.status(404).json({ error: 'Account not found' });
-    return;
-  }
-  res.json({
+  if (!account) return null;
+  return {
     account: {
       id: account.id,
       username: account.username,
@@ -125,7 +123,16 @@ authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
     person: account.person,
     memberships: account.person.memberships,
     positions: account.person.positions,
-  });
+  };
+}
+
+authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
+  const me = await loadMe(req.auth!.sub);
+  if (!me) {
+    res.status(404).json({ error: 'Account not found' });
+    return;
+  }
+  res.json(me);
 });
 
 const changePasswordSchema = z.object({

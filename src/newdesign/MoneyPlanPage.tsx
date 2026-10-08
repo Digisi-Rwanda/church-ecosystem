@@ -9,6 +9,7 @@ import { LoadState } from './LoadState';
 import { categoryKey, formatRwf, moneyErrorKey, parseAmount } from './money';
 import { PlanSelect, YearSelect } from './MoneyBlockParts';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The money action plan: what the unit plans to do this year and what it should cost. */
 export function MoneyPlanPage() {
@@ -79,7 +80,7 @@ export function MoneyPlanPage() {
   return (
     <section className="door-block" aria-labelledby="door-mplan-title">
       <div>
-        <h2 id="door-mplan-title">{t('door.money.plan')}</h2>
+        <PageHeader id="door-mplan-title" title={t('door.money.plan')} purpose={t('door.purpose.moneyPlan')} />
         <p className="muted">{t('door.money.plan.intro')}</p>
       </div>
       <YearSelect year={year} onChange={setYear} />

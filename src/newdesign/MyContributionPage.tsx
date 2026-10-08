@@ -8,6 +8,7 @@ import { formatRwf } from './money';
 import { YearSelect } from './MoneyBlockParts';
 import { listStatusKey } from './moneyBlock';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** A member's own view of what they have given. Members have no claims here; only what they gave. */
 export function MyContributionPage() {
@@ -18,7 +19,7 @@ export function MyContributionPage() {
   return (
     <section className="door-block" aria-labelledby="door-mine-title">
       <div>
-        <h2 id="door-mine-title">{t('door.money.mine')}</h2>
+        <PageHeader id="door-mine-title" title={t('door.money.mine')} />
         <p className="muted">{t('door.money.mine.intro')}</p>
       </div>
       <YearSelect year={year} onChange={setYear} />

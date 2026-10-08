@@ -13,13 +13,17 @@ import {
   type DirectoryPerson,
 } from '../api/frontDoorApi';
 import { ApiError } from '../api/client';
+import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { MODULE_KEYS } from '../../server/src/shared/accessMatrix';
 import type { AccessLetter, ModuleKey, OfficeCode } from '../../server/src/shared/vocabulary';
 import { accessErrorKey, lettersText } from './access';
+import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
+import { isAdministrator } from './menu';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 type Tab = 'mine' | 'rules' | 'delegation' | 'audit';
 const bodyCode = (e: unknown): string | undefined =>
@@ -28,13 +32,20 @@ const bodyCode = (e: unknown): string | undefined =>
 /** Access explained: what I hold and why, the rules for every office, lending letters, and the audit trail. */
 export function AccessPage() {
   const t = useT();
+  const { capabilities } = useFrontDoor();
+  if (!isAdministrator(capabilities)) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} detail={t('door.access.adminOnly')} />;
+  return <AccessBody />;
+}
+
+function AccessBody() {
+  const t = useT();
   const [tab, setTab] = useState<Tab>('mine');
   const me = useLoad(fetchMyAccess, 'access|me');
   const canAudit = !!me.data?.powers.canReadAudit;
   const tabs: Tab[] = ['mine', 'rules', 'delegation', ...(canAudit ? (['audit'] as Tab[]) : [])];
   return (
     <div className="door-block">
-      <h2>{t('door.access.title')}</h2>
+      <PageHeader title={t('door.access.title')} purpose={t('door.purpose.access')} />
       <p className="muted">{t('door.access.intro')}</p>
       <nav className="door-menu" aria-label={t('door.access.tabs')}>
         {tabs.map((k) => (

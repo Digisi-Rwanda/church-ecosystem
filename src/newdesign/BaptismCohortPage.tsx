@@ -8,6 +8,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { p360ErrorKey } from './person360';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** Baptism is usually done in a programme: pick the cohort, tick who was baptised, set the day. */
 export function BaptismCohortPage() {
@@ -46,7 +47,7 @@ export function BaptismCohortPage() {
       <Link className="btn ghost sm door-back" to={`/s/${systemId}/people`}>
         {t('door.people.back')}
       </Link>
-      <h2>{t('door.p360.cohort.title')}</h2>
+      <PageHeader title={t('door.p360.cohort.title')} />
       <p className="muted">{t('door.p360.cohort.intro')}</p>
       <LoadState loading={load.loading} failed={load.failed} retry={load.reload}>
         {(load.data ?? []).length === 0 ? (

@@ -9,6 +9,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -48,7 +49,7 @@ export function ContactPage() {
         {c && (
           <>
             <div>
-              <h2 id="door-contact-title">{c.fullName} <span className="door-chip">{t(`door.evang.status.${c.status}` as 'door.evang.status.NEW')}</span></h2>
+              <PageHeader id="door-contact-title" title={<>{c.fullName} <span className="door-chip">{t(`door.evang.status.${c.status}` as 'door.evang.status.NEW')}</span></>} />
               <p className="muted">{[c.phone, c.howMet, t('door.evang.contacts.metOnDay', { day: fmt(c.metOn) })].filter(Boolean).join(' · ')}</p>
               <p className="muted">{c.assignedName ? t('door.evang.contacts.assignedTo', { name: c.assignedName }) : t('door.evang.contacts.unassigned')}</p>
               {c.note && <p>{c.note}</p>}

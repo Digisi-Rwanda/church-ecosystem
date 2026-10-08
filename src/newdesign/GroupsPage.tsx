@@ -10,6 +10,7 @@ import { agesLabel, groupErrorKey, kindKey, sortGroups, wholeOrNull } from './gr
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The fields of a group, shared by the create form here and the edit form on the group's own page. */
 export function GroupFields({ values, onChange, nameMax, meetsMax }: {
@@ -110,7 +111,7 @@ export function GroupsPage() {
   return (
     <section className="door-block" aria-labelledby="door-groups-title">
       <div>
-        <h2 id="door-groups-title">{t(kindKey(kind, 'title'))}</h2>
+        <PageHeader id="door-groups-title" title={t(kindKey(kind, 'title'))} />
         <p className="muted">{t(kindKey(kind, 'intro'))}</p>
       </div>
       {list.data?.canWrite && options.data && !form && (

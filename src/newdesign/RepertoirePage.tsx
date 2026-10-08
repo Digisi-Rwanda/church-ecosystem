@@ -8,6 +8,7 @@ import { ChoirSelect } from './ChoirSelect';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -86,7 +87,7 @@ export function RepertoirePage() {
   return (
     <section className="door-block" aria-labelledby="door-rep-title">
       <div>
-        <h2 id="door-rep-title">{t('door.own.repertoire')}</h2>
+        <PageHeader id="door-rep-title" title={t('door.own.repertoire')} />
         <p className="muted">{t('door.choirwork.song.intro')}</p>
       </div>
       <ChoirSelect value={choir} onChange={setChoir} forRepertoire>{(id) => <Songs key={id} choirId={id} />}</ChoirSelect>

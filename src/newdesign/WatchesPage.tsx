@@ -8,6 +8,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The Intercessors' prayer roster: weekly watches and who keeps each one. Everyone who can enter may read it. */
 export function WatchesPage() {
@@ -38,7 +39,7 @@ export function WatchesPage() {
   return (
     <section className="door-block" aria-labelledby="door-watches-title">
       <div>
-        <h2 id="door-watches-title">{t('door.own.watches')}</h2>
+        <PageHeader id="door-watches-title" title={t('door.own.watches')} />
         <p className="muted">{t('door.caring.watches.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}

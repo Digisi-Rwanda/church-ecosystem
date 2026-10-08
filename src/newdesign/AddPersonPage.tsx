@@ -5,6 +5,7 @@ import { ApiError } from '../api/client';
 import { TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { useCanWritePeople } from './usePeopleAccess';
+import { PageHeader } from './kit';
 
 type Candidate = { id: string; fullName: string; memberCode: string | null };
 
@@ -57,7 +58,7 @@ export function AddPersonPage() {
       <Link className="btn ghost sm door-back" to={base}>
         {t('door.people.back')}
       </Link>
-      <h2>{t('door.people.form.title')}</h2>
+      <PageHeader title={t('door.people.form.title')} />
       <form className="panel door-form" onSubmit={onSubmit} noValidate>
         <TextField label={t('door.people.form.fullName')} name="fullName" value={form.fullName} onChange={set('fullName')} required />
         <TextField label={t('door.people.form.phone')} name="phone" type="tel" value={form.phone} onChange={set('phone')} />

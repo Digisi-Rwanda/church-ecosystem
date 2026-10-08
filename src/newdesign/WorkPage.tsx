@@ -10,6 +10,7 @@ import { lettersFor } from './menu';
 import { sortWork } from './work';
 import { WorkCard, WorkForm } from './WorkParts';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 type View = 'mine' | 'all';
 type Show = 'open' | 'DONE' | 'all';
@@ -32,7 +33,7 @@ export function WorkPage() {
 
   return (
     <section className="door-block" aria-labelledby="door-work-title">
-      <h2 id="door-work-title">{t('door.work.tasks')}</h2>
+      <PageHeader id="door-work-title" title={t('door.work.tasks')} purpose={t('door.purpose.work')} />
       <>
       <div className="door-filters">
         <SelectField label={t('door.work.view')} name="w-view" value={view} onChange={(e) => setView(e.target.value as View)}>

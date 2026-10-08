@@ -9,6 +9,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { formatRwf, parseAmount } from './money';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -136,7 +137,7 @@ export function SponsorshipPage() {
   return (
     <section className="door-block" aria-labelledby="door-sp-title">
       <div>
-        <h2 id="door-sp-title">{t('door.own.sponsorship')}</h2>
+        <PageHeader id="door-sp-title" title={t('door.own.sponsorship')} />
         <p className="muted">{t('door.choirwork.sp.intro')}</p>
       </div>
       <ChoirSelect value={choir} onChange={setChoir}>{(id) => <Sponsors key={id} choirId={id} />}</ChoirSelect>

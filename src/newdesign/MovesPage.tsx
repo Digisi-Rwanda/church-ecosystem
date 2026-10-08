@@ -7,6 +7,7 @@ import { errorCode } from './governance';
 import { groupErrorKey } from './groups';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** Due to move: who is due to change system, by the ages and trigger Central Administration set. The president or secretary confirms. */
 export function MovesPage() {
@@ -33,7 +34,7 @@ export function MovesPage() {
   return (
     <section className="door-block" aria-labelledby="door-moves-title">
       <div>
-        <h2 id="door-moves-title">{t('door.own.moves')}</h2>
+        <PageHeader id="door-moves-title" title={t('door.own.moves')} />
         <p className="muted">{t('door.moves.intro')}</p>
       </div>
       {done && <p className="door-ok" role="status">{done}</p>}

@@ -149,7 +149,7 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
   const { locale } = useI18n();
   const day = (iso: string | null) => (iso ? shortDay(iso.slice(0, 10), locale) : '');
   return (
-    <div className="dash-lists">
+    <>
       <Panel title={t('door.dash.events.title')} to={`/s/${systemId}/events`}>
         {data.events.length === 0 ? (
           <p className="muted">{t('door.dash.events.none')}</p>
@@ -239,7 +239,7 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
           </ul>
         )}
       </Panel>
-    </div>
+    </>
   );
 }
 
@@ -326,8 +326,10 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
           )}
         </div>
       )}
-      <DashboardOverview data={data} systemId={systemId} />
-      <Lists data={data} systemId={systemId} />
+      <div className="dash-masonry">
+        <DashboardOverview data={data} systemId={systemId} />
+        <Lists data={data} systemId={systemId} />
+      </div>
     </div>
   );
 }

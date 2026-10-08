@@ -4,6 +4,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { buildPortalModules } from './menu';
 import { Shell } from './Shell';
 import { useNoticeSummary } from './useNoticeSummary';
+import { RouteSuspense } from './kit/RouteSuspense';
 
 /**
  * The Portal: the screen before the systems. A sidebar of Home (the systems), Notifications and
@@ -24,7 +25,9 @@ export function PortalLayout() {
       notificationsTo="/portal/notifications"
       notificationCount={counts?.unread ?? 0}
     >
-      <Outlet />
+      <RouteSuspense>
+        <Outlet />
+      </RouteSuspense>
     </Shell>
   );
 }

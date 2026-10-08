@@ -19,6 +19,7 @@ import { accessErrorKey, groupByUnit, officesFor, sortVacancies } from './access
 import { LoadState } from './LoadState';
 import { flattenTree } from './structure';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const bodyCode = (e: unknown): string | undefined =>
   e instanceof ApiError ? (e.body as { code?: string } | undefined)?.code : undefined;
@@ -47,7 +48,7 @@ export function AppointmentsPage() {
 
   return (
     <div className="door-block">
-      <h2>{t('door.access.appointments.title')}</h2>
+      <PageHeader title={t('door.access.appointments.title')} purpose={t('door.purpose.appointments')} />
       <p className="muted">{t('door.access.appointments.intro')}</p>
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && (

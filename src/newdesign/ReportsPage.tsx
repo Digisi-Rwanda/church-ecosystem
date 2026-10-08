@@ -13,6 +13,7 @@ import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { kindKey, lastMonth, periodLabel, reportErrorKey, sortReports, stateKey } from './reports';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportOptions; systemId: string; onDone: (id: string) => void; onCancel: () => void }) {
   const t = useT();
@@ -152,7 +153,7 @@ export function ReportsPage() {
   return (
     <section className="door-block" aria-labelledby="door-reports-title">
       <div>
-        <h2 id="door-reports-title">{t('door.block.reports')}</h2>
+        <PageHeader id="door-reports-title" title={t('door.block.reports')} purpose={t('door.purpose.reports')} />
         <p className="muted">{t('door.reports.intro')}</p>
       </div>
       <div className="door-row" role="group" aria-label={t('door.reports.tabs')}>

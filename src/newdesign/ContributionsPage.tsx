@@ -11,6 +11,7 @@ import { LoadState } from './LoadState';
 import { currentMonth, moneyErrorKey } from './money';
 import { listsInOrder } from './moneyBlock';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /**
  * Contribution lists: a team leader records the team's list and submits it to the treasurer; the treasurer
@@ -42,7 +43,7 @@ export function ContributionsPage() {
   return (
     <section className="door-block" aria-labelledby="door-clists-title">
       <div>
-        <h2 id="door-clists-title">{t('door.money.contributions')}</h2>
+        <PageHeader id="door-clists-title" title={t('door.money.contributions')} />
         <p className="muted">{t('door.money.contributions.intro')}</p>
       </div>
       <TextField label={t('door.money.month')} name="cl-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />

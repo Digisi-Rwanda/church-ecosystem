@@ -44,7 +44,7 @@ export function DashboardOverview({ data, systemId }: { data: Dashboard; systemI
   const base = `/s/${systemId}`;
   const day = (iso: string | null) => (iso ? shortDay(iso.slice(0, 10), locale) : '');
   return (
-    <div className="dash-lists">
+    <>
       {o.schedule && (
         <Card title={t('door.block.schedule')} to={`${base}/schedule`}>
           {o.schedule.next.length === 0 ? (
@@ -145,6 +145,6 @@ export function DashboardOverview({ data, systemId }: { data: Dashboard; systemI
           )}
         </Card>
       )}
-    </div>
+    </>
   );
 }

@@ -12,6 +12,7 @@ import { AttendanceChart } from './AttendanceChart';
 import { shortDay } from './charts';
 import { agesLabel, groupErrorKey, needsFollowUp, wholeOrNull } from './groups';
 import { GroupFields } from './GroupsPage';
+import { PageHeader } from './kit';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
@@ -78,13 +79,13 @@ export function GroupPage() {
       <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>
         {g && (
           <>
-            <div>
-              <h2 id="door-group-title">
-                {g.name} {g.status === 'CLOSED' && <span className="door-chip">{t('door.groups.closed')}</span>}
-              </h2>
-              <p className="muted">{[g.unitName, agesLabel(g.ageFrom, g.ageTo, t as never), g.meetsOn].filter(Boolean).join(' · ')}</p>
-              {g.leaderName && <p className="muted">{t('door.groups.leader', { name: g.leaderName })}</p>}
-            </div>
+            <PageHeader
+              id="door-group-title"
+              title={g.name}
+              meta={g.status === 'CLOSED' ? <span className="door-chip">{t('door.groups.closed')}</span> : undefined}
+              purpose={[g.unitName, agesLabel(g.ageFrom, g.ageTo, t as never), g.meetsOn].filter(Boolean).join(' · ')}
+            />
+            {g.leaderName && <p className="muted">{t('door.groups.leader', { name: g.leaderName })}</p>}
             {error && (
               <p className="door-error" role="alert">
                 {error}

@@ -1,12 +1,13 @@
-import { Suspense } from 'react';
+import { Suspense, useEffect } from 'react';
 import { Navigate, Outlet, useLocation } from 'react-router-dom';
-import { Spinner } from '../components/ui/Spinner';
+import { ShellSkeleton } from './kit';
+import { warmCommon } from './warm';
 import { FrontDoorProvider, useFrontDoor } from './FrontDoorContext';
 
 export function NewDesignLayout() {
   return (
     <FrontDoorProvider>
-      <Suspense fallback={<div className="route-loading" role="status">…</div>}>
+      <Suspense fallback={<ShellSkeleton />}>
         <Outlet />
       </Suspense>
     </FrontDoorProvider>
@@ -17,12 +18,11 @@ export function NewDesignLayout() {
 export function RequireSignedIn() {
   const { status } = useFrontDoor();
   const location = useLocation();
+  useEffect(() => {
+    if (status === 'in') warmCommon();
+  }, [status]);
   if (status === 'checking' || status === 'loading') {
-    return (
-      <div className="door-center">
-        <Spinner size="lg" />
-      </div>
-    );
+    return <ShellSkeleton />;
   }
   if (status === 'out') return <Navigate to="/signin" replace state={{ from: location }} />;
   return <Outlet />;

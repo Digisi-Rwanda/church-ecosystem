@@ -6,6 +6,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { planStatusKey } from './plans';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The Portal's Work: everything assigned to me or planned with me, from every system, each linking into its system. */
 export function PortalWorkPage() {
@@ -17,7 +18,7 @@ export function PortalWorkPage() {
   return (
     <section className="door-block" aria-labelledby="door-pwork-title">
       <div>
-        <h2 id="door-pwork-title">{t('door.portal.work.title')}</h2>
+        <PageHeader id="door-pwork-title" title={t('door.portal.work.title')} />
         <p className="muted">{t('door.portal.work.subtitle')}</p>
       </div>
       <h3>{t('door.work.tasks')}</h3>

@@ -8,6 +8,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { musicErrorKey, ROLES } from './music';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The choir register: every choir the person may see, and a way into each one's singers. */
 export function ChoirsPage() {
@@ -36,7 +37,7 @@ export function ChoirsPage() {
   return (
     <section className="door-block" aria-labelledby="door-choirs-title">
       <div>
-        <h2 id="door-choirs-title">{t('door.own.choirs')}</h2>
+        <PageHeader id="door-choirs-title" title={t('door.own.choirs')} purpose={t('door.purpose.choirs')} />
         <p className="muted">{t('door.music.choirs.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}

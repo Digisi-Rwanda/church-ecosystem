@@ -7325,3 +7325,90 @@ a.dash-kpi:hover { border-color: var(--accent); }
 .dash-stats dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
 .dash-stats .warn dd { color: var(--warn); }
 .dash-lists { align-items: start; }
+/* Panels flow into columns, so there are no empty gaps between panels of different heights. */
+.dash-masonry { column-width: 280px; column-gap: 12px; }
+.dash-masonry > .dash-panel { break-inside: avoid; margin: 0 0 12px; display: grid; }
+
+/* ═══ Design kit (phase 1) ═══════════════════════════════════════════════════════
+   Tokens first, then the parts every page is built from. Pages carry no values of
+   their own: spacing, type, radius and shadow come from these names.            */
+:root {
+  /* spacing, 4px scale */
+  --sp-1: 0.25rem; --sp-2: 0.5rem; --sp-3: 0.75rem; --sp-4: 1rem; --sp-5: 1.5rem; --sp-6: 2rem;
+  /* type scale, six steps */
+  --fs-xs: 0.75rem; --fs-sm: 0.84rem; --fs-md: 0.95rem; --fs-lg: 1.15rem; --fs-xl: 1.5rem; --fs-2xl: 2rem;
+  /* named roles that read from the brand colours */
+  --role-surface: var(--surface-2); --role-ink: var(--ink); --role-quiet: var(--ink-muted);
+  --role-accent: var(--accent); --role-success: var(--success); --role-warn: var(--warn); --role-danger: var(--danger);
+  /* two radii, three shadows */
+  --r-1: var(--radius-sm); --r-2: var(--radius);
+  --sh-1: var(--shadow-xs); --sh-2: var(--shadow-sm); --sh-3: var(--shadow-lg);
+}
+
+/* Page header */
+.page-head { display: grid; gap: var(--sp-2); }
+.page-head-row { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--sp-4); flex-wrap: wrap; }
+.page-head-text { display: grid; gap: var(--sp-1); min-width: 0; flex: 1 1 16rem; }
+.page-head h2 { margin: 0; font-size: var(--fs-xl); line-height: 1.2; font-family: var(--font-display); letter-spacing: -0.02em; overflow-wrap: anywhere; }
+.page-purpose { margin: 0; color: var(--role-quiet); font-size: var(--fs-md); max-width: 60ch; }
+.page-meta { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.page-actions { display: flex; flex-wrap: wrap; gap: var(--sp-2); align-items: center; }
+.page-back { font-size: var(--fs-sm); }
+.door-block .page-head h2 { font-size: var(--fs-xl); }
+
+/* Rows */
+.row-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; background: var(--role-surface); border: 1px solid var(--line); border-radius: var(--r-2); overflow: hidden; }
+.list-row { display: flex; align-items: center; gap: var(--sp-3); padding: 0; border-bottom: 1px solid var(--line); min-width: 0; }
+.list-row:last-child { border-bottom: 0; }
+.list-row-main { display: flex; align-items: center; gap: var(--sp-3); padding: var(--sp-3) var(--sp-4); flex: 1 1 auto; min-width: 0; color: inherit; text-decoration: none; min-height: 3rem; }
+a.list-row-main:hover { background: var(--paper); }
+a.list-row-main:focus-visible { outline: none; box-shadow: inset var(--focus-ring); }
+.list-row-avatar, .list-row-lead { flex: none; width: 2.25rem; height: 2.25rem; border-radius: 999px; display: grid; place-items: center; background: var(--accent-soft); color: var(--accent-on-soft); font-weight: 700; font-size: var(--fs-xs); }
+.list-row-text { display: grid; gap: 2px; min-width: 0; flex: 1 1 auto; }
+.list-row-title { font-weight: 600; font-size: var(--fs-md); overflow-wrap: anywhere; }
+.list-row-detail { color: var(--role-quiet); font-size: var(--fs-sm); overflow-wrap: anywhere; }
+.list-row-status { flex: none; }
+.list-row-action { flex: none; padding-right: var(--sp-3); }
+.skeleton-row .list-row-main { cursor: default; }
+
+/* Status chip: words carry the meaning, colour backs them up */
+.status-chip { display: inline-flex; align-items: center; gap: 0.35rem; padding: 0.1rem 0.6rem; border-radius: 999px; font-size: var(--fs-xs); font-weight: 600; line-height: 1.5; background: var(--paper-2); color: var(--ink); white-space: nowrap; }
+.status-chip-dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: currentColor; opacity: 0.8; }
+.chip-info { background: var(--info-soft); color: var(--accent-on-soft); }
+.chip-success { background: var(--success-soft); color: var(--success); }
+.chip-warn { background: var(--warn-soft); color: var(--warn); }
+.chip-danger { background: var(--danger-soft); color: var(--danger); }
+
+/* Loading shapes */
+.page-skeleton { gap: var(--sp-4); }
+.skeleton-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); gap: var(--sp-3); }
+.skeleton-card { display: grid; gap: var(--sp-2); padding: var(--sp-4); }
+.shell-skeleton { min-height: 100vh; display: grid; grid-template-rows: auto 1fr; background: var(--paper); }
+.shell-skeleton-bar { padding: var(--sp-3) var(--sp-4); border-bottom: 1px solid var(--line); background: var(--role-surface); }
+.shell-skeleton-body { display: grid; grid-template-columns: 14rem 1fr; gap: var(--sp-4); padding: var(--sp-4); }
+.shell-skeleton-side { display: grid; gap: var(--sp-3); align-content: start; }
+.shell-skeleton-main { min-width: 0; }
+@media (max-width: 760px) { .shell-skeleton-body { grid-template-columns: 1fr; } .shell-skeleton-side { display: none; } }
+
+/* Side panel footer and confirm dialog */
+.panel-footer-actions, .confirm-actions { display: flex; justify-content: flex-end; gap: var(--sp-2); flex-wrap: wrap; }
+.confirm-root { position: fixed; inset: 0; z-index: 90; display: grid; place-items: center; padding: var(--sp-4); }
+.confirm-backdrop { position: absolute; inset: 0; border: 0; background: color-mix(in srgb, #000 45%, transparent); cursor: default; }
+.confirm-box { position: relative; background: var(--role-surface); border: 1px solid var(--line); border-radius: var(--r-2); box-shadow: var(--sh-3); padding: var(--sp-5); max-width: 28rem; width: 100%; display: grid; gap: var(--sp-3); }
+.confirm-box h3 { margin: 0; font-size: var(--fs-lg); }
+.confirm-box p { margin: 0; color: var(--role-quiet); }
+
+/* Button order: one filled primary per page (the header's or the form's). Inside lists and
+   rows, a plain .btn is drawn as the quiet outlined step, so rows never compete with the page's main action. */
+.row-list .btn:not(.ghost):not(.danger):not(.secondary),
+.door-list .btn:not(.ghost):not(.danger):not(.secondary),
+.door-notices .btn:not(.ghost):not(.danger):not(.secondary),
+.dash-row .btn:not(.ghost):not(.danger):not(.secondary) {
+  background: var(--surface-2); color: var(--ink); border-color: var(--line-strong); box-shadow: none;
+}
+.row-list .btn:not(.ghost):not(.danger):not(.secondary):hover:not(:disabled),
+.door-list .btn:not(.ghost):not(.danger):not(.secondary):hover:not(:disabled),
+.door-notices .btn:not(.ghost):not(.danger):not(.secondary):hover:not(:disabled),
+.dash-row .btn:not(.ghost):not(.danger):not(.secondary):hover:not(:disabled) { background: var(--paper); border-color: var(--line-strong); color: var(--ink); }
+
+@media (prefers-reduced-motion: reduce) { .skeleton { animation: none; } .btn { transition: none; } }

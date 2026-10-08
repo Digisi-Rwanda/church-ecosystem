@@ -3,6 +3,7 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { lettersFor } from './menu';
+import { RouteSuspense } from './kit/RouteSuspense';
 
 /** The People block of a system: Directory and Organisation, for those who hold access to People. */
 export function PeopleLayout() {
@@ -16,7 +17,9 @@ export function PeopleLayout() {
   }
   return (
     <section className="door-block">
-      <Outlet />
+      <RouteSuspense>
+        <Outlet />
+      </RouteSuspense>
     </section>
   );
 }

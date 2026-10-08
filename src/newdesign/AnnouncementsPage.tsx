@@ -16,6 +16,7 @@ import { LoadState } from './LoadState';
 import { announceErrorKey, audienceKinds, buildAudience, canCompose, dayOf, errorCode, formReady, markedRead, unreadIds } from './announcements';
 import { dayLabel } from './notices';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 /** The audience line under a post, in words a member understands. */
 export function AudienceLine({ item }: { item: AnnouncementItem }) {
@@ -62,7 +63,7 @@ export function AnnouncementsPage() {
     <section className="door-block" aria-labelledby="door-announce-title">
       <div className="door-row">
         <div>
-          <h2 id="door-announce-title">{t('door.announce.title')}</h2>
+          <PageHeader id="door-announce-title" title={t('door.announce.title')} purpose={t('door.purpose.announce')} />
           <p className="muted">{t('door.announce.intro')}</p>
         </div>
         <div className="door-row">

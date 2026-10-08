@@ -108,7 +108,9 @@ describe('buildModules', () => {
     const caps = mk(sys('sys-main', { home: ['R'], people: ['R'], work: ['R'] }, [{ key: 'settings', letters: ['R'] }]), sys('sys-a', { people: ['R'] }));
     const portal = buildModules(caps, 'sys-main').map((m) => m.id);
     expect(portal).toEqual(['home', 'notifications', 'announcements', 'units', 'people', 'work', 'money', 'settings']);
-    expect(buildModules(caps, 'sys-main').find((m) => m.id === 'people')!.places.map((p) => p.key)).toEqual(['directory', 'appointments', 'access']);
+    expect(buildModules(caps, 'sys-main').find((m) => m.id === 'people')!.places.map((p) => p.key)).toEqual(['directory', 'appointments']);
+    const admin = { ...caps, offices: [{ id: 'o1', systemId: 'sys-media', title: 'Administrator', code: 'ADMINISTRATOR' as const }] };
+    expect(buildModules(admin, 'sys-main').find((m) => m.id === 'people')!.places.map((p) => p.key)).toEqual(['directory', 'appointments', 'access']);
     const other = buildModules(caps, 'sys-a');
     expect(other.some((m) => m.id === 'units')).toBe(false);
     expect(other.find((m) => m.id === 'people')!.places.map((p) => p.key)).toContain('organisation');

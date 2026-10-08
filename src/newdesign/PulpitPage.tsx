@@ -11,6 +11,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -175,7 +176,7 @@ export function PulpitPage() {
   return (
     <section className="door-block" aria-labelledby="door-pulpit-title">
       <div>
-        <h2 id="door-pulpit-title">{t('door.own.pulpit')}</h2>
+        <PageHeader id="door-pulpit-title" title={t('door.own.pulpit')} />
         <p className="muted">{t('door.evang.pulpit.intro')}</p>
       </div>
       {canWrite && !form && (

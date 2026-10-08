@@ -10,6 +10,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { ATTENDANCE, canAsk, canMark, protocolErrorKey } from './protocol';
 import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
 
 type Act = (job: () => Promise<unknown>) => void;
 const EMPTY: ProtocolReportParts = { challenges: '', solutions: '', issues: '', recommendations: '' };
@@ -126,7 +127,7 @@ export function ProtocolMinePage() {
   return (
     <section className="door-block" aria-labelledby="door-mine-title">
       <div>
-        <h2 id="door-mine-title">{t('door.own.mine')}</h2>
+        <PageHeader id="door-mine-title" title={t('door.own.mine')} />
         <p className="muted">{t('door.protocol.mine.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}

@@ -4,6 +4,7 @@ import { discardReport, fetchReport, reportStep, type ReportDetail } from '../ap
 import { EmptyState } from '../components/ui/EmptyState';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
+import { PageHeader } from './kit';
 import { LoadState } from './LoadState';
 import { cellText, kindKey, periodLabel, reportErrorKey } from './reports';
 import { useLoad } from './useLoad';
@@ -36,13 +37,13 @@ export function ReportPage() {
       <LoadState loading={load.loading} failed={load.failed} retry={load.reload}>
         {r && (
           <>
+            <PageHeader
+              id="door-report-title"
+              title={<>{t(kindKey(r.kind))} · {periodLabel(r.periodKey, locale)}</>}
+              purpose={r.unitName}
+              meta={<span className={`door-chip${r.status === 'DRAFT' ? ' warn' : ''}`}>{t(`door.reports.status.${r.status}` as const)}</span>}
+            />
             <div>
-              <h2 id="door-report-title">
-                {t(kindKey(r.kind))} · {periodLabel(r.periodKey, locale)}
-              </h2>
-              <p className="muted">
-                {r.unitName} · <span className={`door-chip${r.status === 'DRAFT' ? ' warn' : ''}`}>{t(`door.reports.status.${r.status}` as const)}</span>
-              </p>
               <p className="muted">
                 {r.status === 'DRAFT'
                   ? t('door.reports.composedBy', { name: r.composedByName, date: when(r.composedAt) })

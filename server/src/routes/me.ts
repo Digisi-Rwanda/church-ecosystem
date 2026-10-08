@@ -7,6 +7,7 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
+import { loadMe } from './auth.js';
 import { buildEffectiveAccess } from '../policy/evaluate.js';
 import { loadPolicyContext } from '../policy/loadContext.js';
 import type { Position } from '../policy/types.js';
@@ -63,11 +64,12 @@ function roleLabel(
   return member?.label ?? 'Member';
 }
 
+type Standing = Awaited<ReturnType<typeof standing>>;
+
 /** The portal: one card per system this person may enter. */
-portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
-  const s = await standing(req.auth!.personId);
-  const counts = countNotices(await loadNotices(req.auth!.personId));
-  res.json({
+async function buildPortal(personId: string, s: Standing) {
+  const counts = countNotices(await loadNotices(personId));
+  return {
     systems: s.enterable.map((sys) => ({
       id: sys.id,
       code: sys.code,
@@ -77,7 +79,12 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
       role: roleLabel(sys.id, s.positions, s.memberships),
       unreadCount: counts.bySystem[sys.id] ?? 0,
     })),
-  });
+  };
+}
+
+portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
+  const personId = req.auth!.personId;
+  res.json(await buildPortal(personId, await standing(personId)));
 });
 
 
@@ -124,11 +131,10 @@ function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, ho
 }
 
 /** What this person may do, so the app can show or hide screens. The server checks again on every call. */
-meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
-  const s = await standing(req.auth!.personId);
-  const holdings = liveHoldings(req.auth!.personId, s.access, new Date());
-  res.json({
-    personId: req.auth!.personId,
+function buildCapabilities(personId: string, s: Standing) {
+  const holdings = liveHoldings(personId, s.access, new Date());
+  return {
+    personId,
     offices: s.positions
       .map((p) => ({
         id: p.id,
@@ -138,7 +144,7 @@ meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
       }))
       .sort((a, b) => a.id.localeCompare(b.id)),
     systems: s.enterable.map((sys) => {
-      const modules = lettersInSystem(req.auth!.personId, sys.id, s.access, new Date(), holdings);
+      const modules = lettersInSystem(personId, sys.id, s.access, new Date(), holdings);
       return {
         id: sys.id,
         blocks: blocksFromModules(modules),
@@ -146,7 +152,23 @@ meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
       };
     }),
     blockOrder: SHARED_BLOCKS,
-  });
+  };
+}
+
+meRouter.get('/capabilities', requireAuth, async (req: AuthedRequest, res) => {
+  const personId = req.auth!.personId;
+  res.json(buildCapabilities(personId, await standing(personId)));
+});
+
+/**
+ * Everything the app needs the moment someone signs in or opens it, in one call: who they are, the
+ * systems they may enter, and what they may do in each. The three older calls remain and answer the same.
+ */
+meRouter.get('/bootstrap', requireAuth, async (req: AuthedRequest, res) => {
+  const personId = req.auth!.personId;
+  const [me, s] = await Promise.all([loadMe(req.auth!.sub), standing(personId)]);
+  if (!me) return res.status(404).json({ error: 'Account not found' });
+  res.json({ me, portal: await buildPortal(personId, s), capabilities: buildCapabilities(personId, s) });
 });
 
 /* ───────────── preferences (slice 1.4) ───────────── */

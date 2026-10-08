@@ -10,6 +10,7 @@ import { dayLabel } from './notices';
 import { useLoad } from './useLoad';
 import { fetchDeletedWork } from '../api/frontDoorApi';
 import { Link, useParams } from 'react-router-dom';
+import { PageHeader } from './kit';
 
 /** Central Administration's six settings. Everyone who may read them sees all six; three offices change them. */
 export function SettingsPage() {
@@ -24,7 +25,7 @@ export function SettingsPage() {
   return (
     <section className="door-block" aria-labelledby="door-settings-title">
       <div>
-        <h2 id="door-settings-title">{t('door.settings.title')}</h2>
+        <PageHeader id="door-settings-title" title={t('door.settings.title')} purpose={t('door.purpose.settings')} />
         <p className="muted">{t('door.settings.intro')}</p>
         {data && !canChange && <p className="muted">{t('door.settings.readOnly')}</p>}
       </div>

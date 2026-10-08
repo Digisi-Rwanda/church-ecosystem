@@ -107,6 +107,9 @@ const MODULE_LABEL: Record<ModuleId, string> = {
   reports: 'door.block.reports', governance: 'door.own.governance', settings: 'door.own.settings',
 };
 
+/** The Access page (who holds which office, the rules, lending) is for the church's Administrators only. */
+export const isAdministrator = (caps: Capabilities | null): boolean => !!caps?.offices?.some((o) => o.code === 'ADMINISTRATOR');
+
 /** Central Administration: the leadership system. It is where the church's organisation (Units) lives. */
 export const isCentralSystem = (systemId: string) => systemId === CHURCH_SYSTEM;
 
@@ -114,6 +117,7 @@ export const isCentralSystem = (systemId: string) => systemId === CHURCH_SYSTEM;
 export function buildModules(caps: Capabilities | null, systemId: string): NavModule[] {
   const base = `/s/${systemId}`;
   const central = isCentralSystem(systemId);
+  const admin = isAdministrator(caps);
   const shared = new Set(buildMenu(caps, systemId).map((m) => m.block as string));
   const own = new Map(buildOwnMenu(caps, systemId).map((o) => [o.block as string, o]));
   const ownPlace = (key: string): NavPlace | null => {
@@ -133,7 +137,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
           place('directory', 'people', 'door.people.tab.directory'),
           ...(central ? [] : [place('organisation', 'people/units', 'door.people.tab.units')]),
           place('appointments', 'people/appointments', 'door.people.tab.appointments'),
-          place('access', 'people/access', 'door.people.tab.access'),
+          ...(admin ? [place('access', 'people/access', 'door.people.tab.access')] : []),
           ...some(['groups', 'couples', 'contacts', 'visits', 'moves'].map(ownPlace)),
         ]
       : some(['groups', 'couples', 'contacts', 'visits', 'moves'].map(ownPlace)),
