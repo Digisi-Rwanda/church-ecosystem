@@ -7494,3 +7494,6 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
   .panel, .door-card, .page-head { break-inside: avoid; box-shadow: none !important; }
   body { background: #fff !important; color: #000 !important; }
 }
+
+/* Sub-menus scroll away with the page like any other part of it; they never float over the content. */
+.door-subbar, .door-frame-top { position: static !important; top: auto !important; z-index: auto; }

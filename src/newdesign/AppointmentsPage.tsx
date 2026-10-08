@@ -56,7 +56,7 @@ export function AppointmentsPage() {
             <VacancyPanel
               vacancies={data.vac.vacancies}
               conflicts={data.vac.conflicts}
-              admins={data.vac.administrators}
+              admins={systemId === 'sys-main' ? data.vac.administrators : undefined}
               onFill={canAct ? (unitId, office) => setPrefill({ unitId, office }) : undefined}
             />
             {message && (
@@ -141,19 +141,20 @@ function VacancyPanel({
 }: {
   vacancies: Vacancy[];
   conflicts: Array<{ unitId: string; unitName: string; office: OfficeCode }>;
-  admins: { count: number; minimum: number };
+  /** The church-wide Administrator count: shown in Central Administration only. */
+  admins?: { count: number; minimum: number };
   onFill?: (unitId: string, office: OfficeCode) => void;
 }) {
   const t = useT();
   const sorted = sortVacancies(vacancies);
-  const short = admins.count < admins.minimum;
+  const short = !!admins && admins.count < admins.minimum;
   if (sorted.length === 0 && conflicts.length === 0 && !short) {
     return <p className="door-ok">{t('door.access.vacancies.none')}</p>;
   }
   return (
     <div className="panel door-attention" role="region" aria-label={t('door.access.vacancies.title')}>
       <h3>{t('door.access.vacancies.title')}</h3>
-      {short && <p className="door-warn">{t('door.access.vacancies.admins', { count: String(admins.count), minimum: String(admins.minimum) })}</p>}
+      {short && <p className="door-warn">{t('door.access.vacancies.admins', { count: String(admins?.count ?? 0), minimum: String(admins?.minimum ?? 0) })}</p>}
       {conflicts.map((c) => (
         <p key={`${c.unitId}|${c.office}`} className="door-warn">
           {t('door.access.vacancies.conflict', { office: t(`door.office.${c.office}` as const), unit: c.unitName })}
