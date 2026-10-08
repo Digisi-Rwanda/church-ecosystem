@@ -1926,6 +1926,13 @@ export const en = {
 
   'door.portal.greeting': 'Welcome, {name}',
 
+  'door.units.inside': '{count} inside',
+  'door.units.openSystem': 'Open its system in a new tab',
+  'door.units.group.CENTRAL': 'Central',
+  'door.units.group.MINISTRY': 'Ministries',
+  'door.units.group.ORGANISATION': 'Organisations',
+  'door.units.group.TEAM': 'Teams and offices',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;
