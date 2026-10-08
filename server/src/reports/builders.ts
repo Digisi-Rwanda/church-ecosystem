@@ -46,7 +46,8 @@ export interface Sources {
   meetings: Array<{ orgUnitId: string; title: string; scheduledAt: D; status: string; attendeesJson?: string | null }>;
   decisions: Array<{ orgUnitId: string; title: string; status: string; createdAt: D }>;
   accounts: Array<{ id: string; orgUnitId: string; name: string }>;
-  entries: Array<{ accountId: string; orgUnitId: string; kind: string; amount: number; occurredOn: D; category: string; note?: string | null; status: string }>;
+  entries: Array<{ accountId: string; orgUnitId: string; systemId?: string | null; kind: string; amount: number; occurredOn: D; category: string; note?: string | null; status: string }>;
+  budgetLines: Array<{ systemId: string; year: number; kind: string; category: string; planned: number }>;
   counts: Array<{ orgUnitId: string; serviceOn: D; label: string; kind: string; amount: number; status: string; handedToId?: string | null }>;
   memberships: Array<{ personId: string; orgUnitId?: string | null; systemId?: string | null; type: string; status: string; startDate: D; endDate?: D | null }>;
   positions: Array<{ personId: string; orgUnitId?: string | null; title: string; status: string }>;
@@ -125,6 +126,20 @@ function money(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
   const entries = s.entries
     .filter((e) => e.orgUnitId === s.unitId && inPeriod(e.occurredOn, key) && (e.status === 'RECORDED' || e.status === 'APPROVED'))
     .sort((a, b) => +new Date(a.occurredOn) - +new Date(b.occurredOn));
+  // Budget against actual: the system's budget for the year of the period, with this period and the year so far.
+  const year = Number(key.slice(0, 4));
+  const lines = (s.budgetLines ?? []).filter((l) => l.systemId === s.systemId && l.year === year);
+  const mine = (s.entries ?? []).filter((e) => e.systemId === s.systemId);
+  const actualOf = (kind: string, category: string, inRange: (d: D) => boolean) =>
+    sum(mine.filter((e) => e.kind === kind && e.category === category && inRange(e.occurredOn) && e.status === (kind === 'INCOME' ? 'RECORDED' : 'APPROVED')).map((e) => e.amount));
+  const throughPeriod = (d: D) => String(day(d)).slice(0, 4) === String(year) && !before(d, `${year}-01`) && (key.length === 4 || day(d)!.slice(0, 7) <= key);
+  const budgetRows: Cell[][] = lines
+    .sort((a, b) => a.kind.localeCompare(b.kind) || a.category.localeCompare(b.category))
+    .map((l) => {
+      const inPer = actualOf(l.kind, l.category, (d) => inPeriod(d, key));
+      const ytd = actualOf(l.kind, l.category, throughPeriod);
+      return [l.kind, l.category, inPer, ytd, l.planned, ytd - l.planned] as Cell[];
+    });
   return {
     summary: [
       { key: 'income', value: tIn, type: 'money' },
@@ -134,6 +149,9 @@ function money(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
     ],
     tables: [
       { key: 'accounts', columns: [{ key: 'account', type: 'text' }, { key: 'opening', type: 'money' }, { key: 'income', type: 'money' }, { key: 'spent', type: 'money' }, { key: 'closing', type: 'money' }, { key: 'pending', type: 'money' }], rows },
+      ...(budgetRows.length > 0
+        ? [{ key: 'budget', columns: [{ key: 'kind', type: 'code' as const }, { key: 'category', type: 'code' as const }, { key: 'period', type: 'money' as const }, { key: 'yearToDate', type: 'money' as const }, { key: 'planned', type: 'money' as const }, { key: 'difference', type: 'money' as const }], rows: budgetRows }]
+        : []),
       {
         key: 'entries',
         columns: [{ key: 'date', type: 'date' }, { key: 'kind', type: 'code' }, { key: 'category', type: 'code' }, { key: 'amount', type: 'money' }, { key: 'note', type: 'text' }],

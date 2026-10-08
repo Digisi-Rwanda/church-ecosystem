@@ -5,7 +5,7 @@ import { bearer, seedWorld } from './world';
 import { buildSnapshot, inPeriod, periodOk, scheduleStatus, type Sources } from '../src/reports/builders';
 
 const src = (o: Partial<Sources> = {}): Sources => ({
-  unitId: 'u', systemId: 's', names: new Map([['a', 'Alice'], ['b', 'Bob']]), meetings: [], decisions: [], accounts: [], entries: [], counts: [], memberships: [], positions: [], plans: [], personRecords: [], programs: [],
+  unitId: 'u', systemId: 's', names: new Map([['a', 'Alice'], ['b', 'Bob']]), meetings: [], decisions: [], accounts: [], entries: [], budgetLines: [], counts: [], memberships: [], positions: [], plans: [], personRecords: [], programs: [],
   activePeople: new Set(['a', 'b']), ...o,
 });
 const val = (s: ReturnType<typeof buildSnapshot>, k: string) => s.summary.find((x) => x.key === k)?.value;
@@ -32,6 +32,22 @@ describe('report builders', () => {
     expect(s.tables[0].rows[0]).toEqual(['Fund', 1000, 500, 200, 1300, 300]);
     expect(val(s, 'closing')).toBe(1300);
     expect(JSON.stringify(s)).not.toContain('85000');
+  });
+  it('money: the budget table sets the year’s plan against this period and the year so far, only when a budget exists', () => {
+    const entries = [
+      { accountId: 'x', orgUnitId: 'u', systemId: 's', kind: 'SPENDING', amount: 200, occurredOn: '2026-10-03T00:00:00Z', category: 'SUPPLIES', status: 'APPROVED' },
+      { accountId: 'x', orgUnitId: 'u', systemId: 's', kind: 'SPENDING', amount: 100, occurredOn: '2026-03-03T00:00:00Z', category: 'SUPPLIES', status: 'APPROVED' },
+      { accountId: 'x', orgUnitId: 'u', systemId: 's', kind: 'SPENDING', amount: 50, occurredOn: '2026-11-03T00:00:00Z', category: 'SUPPLIES', status: 'APPROVED' },
+      { accountId: 'x', orgUnitId: 'u', systemId: 'other', kind: 'SPENDING', amount: 999, occurredOn: '2026-10-03T00:00:00Z', category: 'SUPPLIES', status: 'APPROVED' },
+    ];
+    const none = buildSnapshot('MONEY', '2026-10', 'Choir', src({ accounts: [{ id: 'x', orgUnitId: 'u', name: 'Fund' }], entries }));
+    expect(none.tables.map((x) => x.key)).toEqual(['accounts', 'entries']);
+    const withBudget = buildSnapshot('MONEY', '2026-10', 'Choir', src({
+      accounts: [{ id: 'x', orgUnitId: 'u', name: 'Fund' }], entries,
+      budgetLines: [{ systemId: 's', year: 2026, kind: 'SPENDING', category: 'SUPPLIES', planned: 1000 }, { systemId: 's', year: 2025, kind: 'SPENDING', category: 'AID', planned: 5 }],
+    }));
+    const t = withBudget.tables.find((x) => x.key === 'budget')!;
+    expect(t.rows).toEqual([['SPENDING', 'SUPPLIES', 200, 300, 1000, -700]]);
   });
   it('collections: only confirmed counts add up, voided ones vanish, money never appears', () => {
     const s = buildSnapshot('COLLECTIONS', '2026-10', 'Choir', src({

@@ -303,7 +303,7 @@ export const budgetLinesTarget: ImportTarget<BudgetRow, BudgetCtx> = {
   save: (r, _c, systemId) => saveBudgetLine({ systemId, year: r.year, kind: r.kind, category: r.category, planned: r.planned, note: r.note }),
 };
 
-interface PlanItemCtx { categories: string[]; existing: Set<string> }
+interface PlanItemCtx { categories: string[]; existing: Set<string>; lines: Map<number, string[]> }
 interface PlanItemRow { year: number; title: string; amount: number; dueMonth: string | null; category: string | null; note: string | null }
 export const planItemsTarget: ImportTarget<PlanItemRow, PlanItemCtx> = {
   key: 'planItems',
@@ -312,7 +312,7 @@ export const planItemsTarget: ImportTarget<PlanItemRow, PlanItemCtx> = {
     { key: 'title', header: 'Title', aliases: ['activity', 'izina', 'titre'], required: true, example: 'Buy chairs' },
     { key: 'amount', header: 'Estimated cost', aliases: ['amount', 'cost', 'amafaranga', 'montant'], required: true, example: '300000' },
     { key: 'month', header: 'Due month', aliases: ['due', 'month', 'ukwezi', 'mois'], example: '2026-12' },
-    { key: 'category', header: 'Category', aliases: ['icyiciro', 'catégorie'], example: '' },
+    { key: 'category', header: 'Category', aliases: ['icyiciro', 'catégorie'], required: true, example: 'SUPPLIES' },
     { key: 'year', header: 'Year', aliases: ['umwaka', 'année'], example: String(new Date().getFullYear()) },
     { key: 'note', header: 'Note', aliases: ['ibisobanuro', 'remarque'], example: '' },
   ],
@@ -320,8 +320,12 @@ export const planItemsTarget: ImportTarget<PlanItemRow, PlanItemCtx> = {
     const wanted = [...new Set(records.map((r) => year(r.year ?? '')).filter((y): y is number => y !== null))];
     const [options, ...plans] = await Promise.all([fetchMoneyOptions(), ...wanted.map((y) => fetchMoneyPlan(systemId, y))]);
     const existing = new Set<string>();
-    wanted.forEach((y, i) => plans[i]!.items.forEach((it) => existing.add(k(y, it.title))));
-    return { categories: options.categories, existing };
+    const lines = new Map<number, string[]>();
+    wanted.forEach((y, i) => {
+      plans[i]!.items.forEach((it) => existing.add(k(y, it.title)));
+      lines.set(y, plans[i]!.budgetCategories);
+    });
+    return { categories: options.categories, existing, lines };
   },
   judge(v, ctx) {
     const label = v.title ?? '';
@@ -335,12 +339,11 @@ export const planItemsTarget: ImportTarget<PlanItemRow, PlanItemCtx> = {
       dueMonth = parseMonth(v.month);
       if (!dueMonth) return fail(label, 'badDate', 'Due month', v.month);
     }
-    let category: string | null = null;
-    if (v.category) {
-      const cat = matchName(ctx.categories.map((c) => ({ c })), (x) => x.c, v.category);
-      if (cat.kind !== 'one') return fail(label, 'badChoice', 'Category', v.category);
-      category = cat.item.c;
-    }
+    // Every activity is tied to a spending line of that year's budget, so a category is required and must have one.
+    if (!v.category) return required(label, 'Category');
+    const cat = matchName((ctx.lines.get(y) ?? []).map((c) => ({ c })), (x) => x.c, v.category);
+    if (cat.kind !== 'one') return fail(label, 'badChoice', 'Category', v.category);
+    const category = cat.item.c;
     return { label: `${y} · ${label}`, row: { year: y, title: label, amount, dueMonth, category, note: v.note || null }, duplicate: ctx.existing.has(k(y, label)) };
   },
   same: (r) => k(r.year, r.title),

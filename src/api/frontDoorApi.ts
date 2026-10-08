@@ -1090,22 +1090,43 @@ export async function voidMoneyEntry(id: string, reason: string): Promise<void> 
 export type BudgetKind = 'INCOME' | 'SPENDING';
 const qs = (o: Record<string, string | number>) => new URLSearchParams(Object.entries(o).map(([k, v]) => [k, String(v)])).toString();
 
-export type BudgetLineItem = { id: string; kind: BudgetKind; category: string; planned: number; note: string };
+export type BudgetActivity = { id: string; title: string; amount: number; status: string; dueMonth: string | null; planId: string | null };
+export type BudgetLineItem = { id: string; kind: BudgetKind; category: string; planned: number; note: string; committed: number; actual: number; activities: BudgetActivity[] };
 export type BudgetView = {
   year: number; status: 'DRAFT' | 'APPROVED'; approvedAt: string | null; canWrite: boolean; canApprove: boolean; categories: string[];
   lines: BudgetLineItem[]; totals: { income: number; spending: number; net: number };
+  unlinked: { count: number; amount: number };
+  submission: { submittedAt: string | null; submittedByName: string } | null;
+  canSubmit: boolean; isCentral: boolean;
 };
 export const fetchBudget = (systemId: string, year: number): Promise<BudgetView> => apiFetch(`${M}/budget?${qs({ systemId, year })}`);
 export async function saveBudgetLine(b: { systemId: string; year: number; kind: BudgetKind; category: string; planned: number; note?: string | null }): Promise<void> {
   await apiFetch(`${M}/budget/lines`, { method: 'PUT', body: b });
 }
+export async function submitBudget(systemId: string, year: number): Promise<void> {
+  await apiFetch(`${M}/budget/submit`, { method: 'POST', body: { systemId, year } });
+}
+export type BudgetTotals = { incomePlanned: number; incomeActual: number; spendingPlanned: number; spendingCommitted: number; spendingActual: number };
+export type ChurchBudget = {
+  year: number;
+  systems: Array<{
+    systemId: string; name: string; own: boolean; submittedAt: string | null; submittedByName: string; totals: BudgetTotals;
+    lines: Array<{ kind: BudgetKind; category: string; planned: number; committed: number; actual: number }>;
+    activities: Array<{ title: string; category: string; dueMonth: string | null; amount: number; status: string; planTitle: string | null }>;
+  }>;
+  missing: Array<{ systemId: string; name: string }>;
+  totals: BudgetTotals;
+  byCategory: Array<{ kind: BudgetKind; category: string; planned: number; committed: number; actual: number }>;
+};
+/** Central's view of the budgets the systems sent, with the church-wide totals. */
+export const fetchChurchBudget = (year: number): Promise<ChurchBudget> => apiFetch(`${M}/budget/church?${qs({ systemId: 'sys-main', year })}`);
 export async function setBudgetApproval(systemId: string, year: number, approve: boolean): Promise<void> {
   await apiFetch(`${M}/budget/${approve ? 'approve' : 'reopen'}`, { method: 'POST', body: { systemId, year } });
 }
 
 export type MoneyPlanStatus = 'PLANNED' | 'DONE' | 'DROPPED';
 export type MoneyPlanItemView = { id: string; title: string; amount: number; dueMonth: string; category: string; status: MoneyPlanStatus; note: string; planId: string | null; planTitle: string | null };
-export type MoneyPlanView = { year: number; canWrite: boolean; categories: string[]; items: MoneyPlanItemView[]; totals: { planned: number; done: number; budgetSpending: number } };
+export type MoneyPlanView = { year: number; canWrite: boolean; categories: string[]; budgetCategories: string[]; items: MoneyPlanItemView[]; totals: { planned: number; done: number; budgetSpending: number } };
 export const fetchMoneyPlan = (systemId: string, year: number): Promise<MoneyPlanView> => apiFetch(`${M}/plan?${qs({ systemId, year })}`);
 export async function addMoneyPlanItem(b: { systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; note?: string | null; planId?: string | null }): Promise<void> {
   await apiFetch(`${M}/plan`, { method: 'POST', body: b });

@@ -23,6 +23,10 @@ const ERROR_KEYS: Record<string, string> = {
   NOTHING_TO_COMBINE: 'door.money.err.nothingToCombine',
   LINE_NAME: 'door.money.lines.err.name',
   ACCOUNT: 'door.money.err.account',
+  NO_BUDGET_LINE: 'door.money.err.noBudgetLine',
+  LINE_IN_USE: 'door.money.err.lineInUse',
+  BUDGET_NOT_APPROVED: 'door.money.err.budgetNotApproved',
+  CATEGORY_REQUIRED: 'door.money.err.categoryRequired',
 };
 export const moneyErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
 

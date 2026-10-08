@@ -1470,6 +1470,18 @@ model MoneyBudgetLine {
   @@unique([systemId, year, kind, category])
 }
 
+/// A unit's approved budget sent to Central as a frozen report. Append-only; the newest per system and year counts.
+model MoneyBudgetSubmission {
+  id            String   @id @default(cuid())
+  systemId      String
+  year          Int
+  snapshotJson  String
+  submittedById String
+  submittedAt   DateTime @default(now())
+
+  @@index([systemId, year])
+}
+
 /// The money action plan: planned activities with an estimated cost.
 model MoneyPlanItem {
   id          String   @id @default(cuid())

@@ -38,8 +38,8 @@ export function MoneyPlanPage() {
   const add = async (e: FormEvent) => {
     e.preventDefault();
     const n = amount.trim() === '' ? 0 : parseAmount(amount);
-    if (!title.trim() || n === null) return setError(t('door.money.form.incomplete'));
-    if (await run(() => addMoneyPlanItem({ systemId, year, title: title.trim(), amount: n, dueMonth: month || null, category: category || null, planId: planId || null }))) {
+    if (!title.trim() || n === null || !category) return setError(t(!category ? 'door.money.err.categoryRequired' : 'door.money.form.incomplete'));
+    if (await run(() => addMoneyPlanItem({ systemId, year, title: title.trim(), amount: n, dueMonth: month || null, category, planId: planId || null }))) {
       setTitle('');
       setAmount('');
       setMonth('');
@@ -57,7 +57,7 @@ export function MoneyPlanPage() {
         <p className="muted">
           {formatRwf(i.amount)}
           {i.dueMonth && ` · ${i.dueMonth}`}
-          {i.category && ` · ${t(categoryKey(i.category) as 'door.money.cat.OTHER')}`}
+          {i.category ? ` · ${t(categoryKey(i.category) as 'door.money.cat.OTHER')}` : ` · ${t('door.money.plan.notTied')}`}
           {i.planTitle && ` · ${i.planTitle}`}
         </p>
         {data?.canWrite && i.status === 'PLANNED' && (
@@ -103,9 +103,10 @@ export function MoneyPlanPage() {
                 <TextField label={t('door.money.plan.title')} name="mp-title" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />
                 <TextField label={t('door.money.plan.cost')} name="mp-cost" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
                 <TextField label={t('door.money.plan.month')} name="mp-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-                <SelectField label={t('door.money.col.category')} name="mp-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
-                  <option value="">{t('door.money.plan.noCategory')}</option>
-                  {data.categories.map((c) => (
+                {data.budgetCategories.length === 0 && <p className="door-error" role="status">{t('door.money.plan.needLine')}</p>}
+                <SelectField label={t('door.money.plan.chooseLine')} name="mp-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
+                  <option value="">{t('door.gov.meeting.choose')}</option>
+                  {data.budgetCategories.map((c) => (
                     <option key={c} value={c}>
                       {t(categoryKey(c) as 'door.money.cat.OTHER')}
                     </option>

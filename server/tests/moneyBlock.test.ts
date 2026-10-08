@@ -2,7 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
-import { accounting, combine, counts, goalGroups, linesProblem, moneyByPlan, yearOf } from '../src/money/block';
+import { accounting, budgetSnapshot, budgetUsage, combineBudgets, combine, counts, goalGroups, linesProblem, moneyByPlan, yearOf } from '../src/money/block';
 
 describe('money block rules', () => {
   it('planned and actual side by side; totals are computed', () => {
@@ -36,6 +36,29 @@ describe('money block rules', () => {
     expect(r.find((x) => x.planId === 'a')).toEqual({ planId: 'a', planned: 500, income: 200, spending: 400, pending: 50 });
     expect(r.find((x) => x.planId === 'b')).toEqual({ planId: 'b', planned: 100, income: 0, spending: 0, pending: 0 });
     expect(r).toHaveLength(2);
+  });
+  it('budget lines carry what activities commit to them and what was recorded; loose activities are counted apart', () => {
+    const lines = [
+      { id: 'l1', kind: 'SPENDING', category: 'SUPPLIES', planned: 1000 }, { id: 'l2', kind: 'INCOME', category: 'DONATION', planned: 500 },
+    ];
+    const items = [
+      { id: 'a', title: 'Chairs', amount: 400, status: 'PLANNED', category: 'SUPPLIES' }, { id: 'b', title: 'Dropped', amount: 300, status: 'DROPPED', category: 'SUPPLIES' },
+      { id: 'c', title: 'Loose', amount: 70, status: 'PLANNED', category: 'TRANSPORT' }, { id: 'd', title: 'No line', amount: 30, status: 'DONE', category: null },
+    ];
+    const entries = [
+      { kind: 'SPENDING', amount: 250, status: 'APPROVED', category: 'SUPPLIES', occurredOn: '2026-03-01' },
+      { kind: 'SPENDING', amount: 99, status: 'PENDING_APPROVAL', category: 'SUPPLIES', occurredOn: '2026-03-01' },
+      { kind: 'INCOME', amount: 200, status: 'RECORDED', category: 'DONATION', occurredOn: '2026-03-01' },
+      { kind: 'INCOME', amount: 900, status: 'RECORDED', category: 'DONATION', occurredOn: '2025-03-01' },
+    ];
+    const u = budgetUsage(lines, items, entries, 2026);
+    expect(u.lines.map((l) => [l.category, l.planned, l.committed, l.actual, l.activities.length])).toEqual([['SUPPLIES', 1000, 400, 250, 1], ['DONATION', 500, 0, 200, 0]]);
+    expect(u.unlinked).toEqual({ count: 2, amount: 100 });
+    const snap = budgetSnapshot(u, 2026, new Map());
+    expect(snap.totals).toEqual({ incomePlanned: 500, incomeActual: 200, spendingPlanned: 1000, spendingCommitted: 400, spendingActual: 250 });
+    const all = combineBudgets([{ systemId: 'a', snapshot: snap }, { systemId: 'b', snapshot: snap }]);
+    expect(all.totals.spendingPlanned).toBe(2000);
+    expect(all.byCategory.find((r) => r.category === 'SUPPLIES')).toMatchObject({ planned: 2000, committed: 800, actual: 500 });
   });
   it('a day belongs to the year it is in Kigali', () => {
     expect(yearOf('2026-12-31T23:30:00Z')).toBe(2027);
@@ -147,16 +170,47 @@ describe('budget', () => {
 });
 
 describe('action plan and accounting', () => {
+  const line = (category: string, planned = 400000) => put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'SPENDING', category, planned });
   it('plans activities with a cost, and a dropped one leaves the total', async () => {
+    await line('SUPPLIES');
+    await line('TRANSPORT', 100000);
     const a = (await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'New uniforms', amount: 300000, dueMonth: '2026-11', category: 'SUPPLIES' })).body.id;
-    await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Tour fuel', amount: 50000 });
+    await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Tour fuel', amount: 50000, category: 'TRANSPORT' });
     expect((await get('p-ctr', `/api/money/plan?${S}&year=2026`)).body.totals.planned).toBe(350000);
     expect((await patch('p-ctr', `/api/money/plan/${a}`, { status: 'DROPPED' })).status).toBe(200);
     const r = await get('p-ctr', `/api/money/plan?${S}&year=2026`);
     expect(r.body.totals.planned).toBe(50000);
     expect(r.body.items).toHaveLength(2);
-    expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'x', amount: 1, dueMonth: '2026-13' })).status).toBe(400);
+    expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'x', amount: 1, dueMonth: '2026-13', category: 'SUPPLIES' })).status).toBe(400);
     expect((await patch('p-choir-leader', `/api/money/plan/${a}`, { title: 'Nope' })).status).toBe(403);
+  });
+  it('every activity must be tied to a spending line of the budget', async () => {
+    const plan = (body: object) => post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Chairs', amount: 1000, ...body });
+    expect((await plan({})).status).toBe(400);
+    expect((await plan({ category: 'SUPPLIES' })).status).toBe(409);
+    expect((await get('p-ctr', `/api/money/plan?${S}&year=2026`)).body.budgetCategories).toEqual([]);
+    await line('SUPPLIES');
+    const id = (await plan({ category: 'SUPPLIES' })).body.id;
+    expect((await get('p-ctr', `/api/money/plan?${S}&year=2026`)).body.budgetCategories).toEqual(['SUPPLIES']);
+    expect((await patch('p-ctr', `/api/money/plan/${id}`, { category: null })).status).toBe(400);
+    expect((await patch('p-ctr', `/api/money/plan/${id}`, { category: 'TRANSPORT' })).status).toBe(409);
+    // a line with live activities cannot be removed
+    expect((await line('SUPPLIES', 0)).status).toBe(409);
+    await patch('p-ctr', `/api/money/plan/${id}`, { status: 'DROPPED' });
+    expect((await line('SUPPLIES', 0)).status).toBe(200);
+  });
+  it('the budget shows committed and recorded per line, and what is not tied to any line', async () => {
+    await line('SUPPLIES', 10000);
+    await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Chairs', amount: 4000, category: 'SUPPLIES' });
+    const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Fund' })).body.id;
+    const sp = (await post('p-ctr', '/api/money/entries', { accountId: acc, kind: 'SPENDING', amount: 1500, occurredOn: '2026-10-05', category: 'SUPPLIES' })).body.id;
+    await post('p-choir-leader', `/api/money/entries/${sp}/approve`);
+    // an old activity with no category is shown as not tied
+    fake.__db.moneyPlanItem.push({ id: 'old', systemId: 'sys-choir', year: 2026, title: 'Old', amount: 700, status: 'PLANNED', category: null, createdById: 'p-ctr' });
+    const r = (await get('p-ctr', `/api/money/budget?${S}&year=2026`)).body;
+    expect(r.lines[0]).toMatchObject({ category: 'SUPPLIES', planned: 10000, committed: 4000, actual: 1500 });
+    expect(r.lines[0].activities.map((a: any) => a.title)).toEqual(['Chairs']);
+    expect(r.unlinked).toEqual({ count: 1, amount: 700 });
   });
   it('accounting reads planned against what was recorded and approved', async () => {
     await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'DONATION', planned: 50000 });
@@ -169,6 +223,52 @@ describe('action plan and accounting', () => {
     r = await get('p-ctr', `/api/money/accounting?${S}&year=2026`);
     expect(r.body.spending.actual).toBe(8000);
     expect(r.body.net.actual).toBe(12000);
+  });
+});
+
+describe('sending the budget to Central', () => {
+  const sendable = async () => {
+    await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'DONATION', planned: 5000 });
+    await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'SPENDING', category: 'SUPPLIES', planned: 3000 });
+  };
+  const submit = (as: string) => post(as, '/api/money/budget/submit', { systemId: 'sys-choir', year: 2026 });
+  it('only an approved budget goes, and only by the president', async () => {
+    await sendable();
+    expect((await submit('p-choir-leader')).status).toBe(409);
+    await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 });
+    expect((await submit('p-ctr')).status).toBe(403);
+    expect((await submit('p-choir-member')).status).toBe(404);
+    expect((await submit('p-choir-leader')).status).toBe(201);
+    const view = (await get('p-choir-leader', `/api/money/budget?${S}&year=2026`)).body;
+    expect(view.submission.submittedAt).toBeTruthy();
+    expect(view.canSubmit).toBe(true);
+  });
+  it('Central sees the newest copy of each system and the church-wide totals, and others see nothing', async () => {
+    await sendable();
+    await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 });
+    await submit('p-choir-leader');
+    expect((await get('p-choir-leader', '/api/money/budget/church?systemId=sys-main&year=2026')).status).toBe(404);
+    expect((await get('p-choir-member', '/api/money/budget/church?systemId=sys-main&year=2026')).status).toBe(404);
+    const central = await get('p-pastor', '/api/money/budget/church?systemId=sys-main&year=2026');
+    expect(central.status).toBe(200);
+    expect(central.body.systems.map((x: any) => x.systemId)).toEqual(['sys-choir']);
+    expect(central.body.totals).toMatchObject({ incomePlanned: 5000, spendingPlanned: 3000 });
+    expect(central.body.missing.map((x: any) => x.systemId)).toContain('sys-youth');
+    // each unit opens up to its lines and the activities tied to them
+    expect(central.body.systems[0].lines.map((l: any) => l.category)).toEqual(['DONATION', 'SUPPLIES']);
+    expect(central.body.systems[0].activities).toEqual([]);
+  });
+  it('Central Administration’s own budget is read live and counts in the overall total, with its activities', async () => {
+    fake.__db.moneyBudgetLine.push({ id: 'bl-main', systemId: 'sys-main', year: 2026, kind: 'SPENDING', category: 'SUPPLIES', planned: 7000, updatedById: 'p-pastor' });
+    fake.__db.moneyPlanItem.push({ id: 'pi-main', systemId: 'sys-main', year: 2026, title: 'Sound system', amount: 2000, status: 'PLANNED', category: 'SUPPLIES', createdById: 'p-pastor' });
+    await sendable();
+    await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 });
+    await submit('p-choir-leader');
+    const r = (await get('p-pastor', '/api/money/budget/church?systemId=sys-main&year=2026')).body;
+    expect(r.systems.map((x: any) => [x.systemId, x.own])).toEqual([['sys-main', true], ['sys-choir', false]]);
+    expect(r.systems[0].activities.map((a: any) => a.title)).toEqual(['Sound system']);
+    expect(r.totals.spendingPlanned).toBe(10000);
+    expect(r.totals.spendingCommitted).toBe(2000);
   });
 });
 
@@ -294,6 +394,8 @@ describe('money tied to a program, project or event', () => {
       { id: 'wp-other', systemId: 'sys-youth', title: 'Youth camp', planType: 'PROGRAM', status: 'RUNNING' },
     );
     db.moneyAccount.push({ id: 'acc1', orgUnitId: 'ou-choir', systemId: 'sys-choir', name: 'Cash', status: 'ACTIVE' });
+    db.moneyBudgetLine ??= [];
+    db.moneyBudgetLine.push({ id: 'bl-event', systemId: 'sys-choir', year: 2026, kind: 'SPENDING', category: 'EVENT', planned: 5000, updatedById: 'p-ctr' });
   });
   const entry = (planId: string | null, kind = 'INCOME', amount = 1000) =>
     post('p-ctr', '/api/money/entries', { accountId: 'acc1', kind, amount, occurredOn: '2026-05-10', category: 'EVENT', planId });
@@ -307,15 +409,15 @@ describe('money tied to a program, project or event', () => {
     expect((await entry('wp1')).status).toBe(201);
     expect((await entry('wp-other')).status).toBe(400);
     expect((await entry('nope')).status).toBe(400);
-    expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Hire sound', amount: 300, planId: 'wp1' })).status).toBe(201);
-    expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Bad', amount: 1, planId: 'wp-other' })).status).toBe(400);
+    expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Hire sound', amount: 300, category: 'EVENT', planId: 'wp1' })).status).toBe(201);
+    expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Bad', amount: 1, category: 'EVENT', planId: 'wp-other' })).status).toBe(400);
     const list = await get('p-ctr', `/api/money/entries?${S}`);
     expect(list.body.entries[0]).toMatchObject({ planId: 'wp1', planTitle: 'Christmas concert' });
     const plan = await get('p-ctr', `/api/money/plan?${S}&year=2026`);
     expect(plan.body.items[0]).toMatchObject({ planId: 'wp1', planTitle: 'Christmas concert' });
   });
   it('the plan shows what it costs and earns, and the report lists every plan', async () => {
-    await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Hire sound', amount: 300, planId: 'wp1' });
+    await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Hire sound', amount: 300, category: 'EVENT', planId: 'wp1' });
     await entry('wp1', 'INCOME', 1000);
     const sp = await entry('wp1', 'SPENDING', 400);
     const m1 = await get('p-ctr', `/api/money/plan-money?${S}&planId=wp1`);

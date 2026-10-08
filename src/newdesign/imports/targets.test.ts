@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { checkAll, mapHeaders, parseCsv, toRecords } from './engine';
-import { TARGETS, isTargetKey, groupMembersTarget, moneyEntriesTarget, protocolRosterTarget, tasksTarget } from './targets';
+import { TARGETS, isTargetKey, groupMembersTarget, moneyEntriesTarget, planItemsTarget, protocolRosterTarget, tasksTarget } from './targets';
 
 const people = [
   { id: 'p1', fullName: 'Aline Mukamana', memberCode: 'M-00001', phone: '0788111222' },
@@ -18,6 +18,15 @@ describe('import targets', () => {
     expect(Object.keys(TARGETS)).toHaveLength(11);
     expect(isTargetKey('tasks')).toBe(true);
     expect(isTargetKey('nope')).toBe(false);
+  });
+
+  it('plan activities: a category is required and must be a spending line of that year’s budget', () => {
+    const ctx = { categories: ['SUPPLIES', 'AID'], existing: new Set<string>(), lines: new Map([[2026, ['SUPPLIES']]]) };
+    const out = run(planItemsTarget, 'Title,Estimated cost,Category,Year\nChairs,5000,SUPPLIES,2026\nNo line,100,,2026\nWrong line,100,AID,2026\nNo budget year,100,SUPPLIES,2027', ctx);
+    expect(out.map((r) => r.state)).toEqual(['OK', 'ERROR', 'ERROR', 'ERROR']);
+    expect(out[1]!.issue).toMatchObject({ code: 'required', field: 'Category' });
+    expect(out[2]!.issue).toMatchObject({ code: 'badChoice', field: 'Category' });
+    expect(out[0]!.row).toMatchObject({ category: 'SUPPLIES' });
   });
 
   it('tasks: resolves the owner, needs a unit when there are several, skips what exists, explains the rest', () => {

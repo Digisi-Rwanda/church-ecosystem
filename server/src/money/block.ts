@@ -127,3 +127,79 @@ export function moneyByPlan(items: PlanLinkedItem[], entries: PlanLinkedEntry[])
   }
   return [...rows.values()];
 }
+
+/* ───────────── budget lines tied to activities ───────────── */
+
+export interface PlanItemLike { id: string; title: string; amount: number; status: string; category?: string | null; dueMonth?: string | null; planId?: string | null }
+export interface BudgetLineRow extends BudgetLineLike { id: string; note?: string | null }
+export interface LineUsage {
+  id: string; kind: 'INCOME' | 'SPENDING'; category: string; planned: number;
+  /** Cost of the activities tied to this line (spending lines only; dropped activities do not count). */
+  committed: number;
+  /** Money really recorded in the year: income recorded, spending approved. */
+  actual: number;
+  /** The activities tied to this line, spending lines only. */
+  activities: Array<{ id: string; title: string; amount: number; status: string; dueMonth: string | null; planId: string | null }>;
+}
+
+/**
+ * Every budget line with what is committed to it by activities and what was really recorded. An activity
+ * belongs to the spending line of its category; one with no category, or whose category has no spending
+ * line, is "unlinked" and counted apart so nothing is hidden.
+ */
+export function budgetUsage(lines: BudgetLineRow[], items: PlanItemLike[], entries: EntryLike[], year: number) {
+  const live = items.filter((i) => i.status !== 'DROPPED');
+  const spendingCats = new Set(lines.filter((l) => l.kind === 'SPENDING').map((l) => l.category));
+  const rows: LineUsage[] = lines.map((l) => {
+    const acts = l.kind === 'SPENDING' ? live.filter((i) => i.category === l.category) : [];
+    const counts = l.kind === 'INCOME' ? 'RECORDED' : 'APPROVED';
+    const actual = entries
+      .filter((e) => e.kind === l.kind && e.status === counts && e.category === l.category && yearOf(e.occurredOn) === year)
+      .reduce((s, e) => s + e.amount, 0);
+    return {
+      id: l.id, kind: l.kind as 'INCOME' | 'SPENDING', category: l.category, planned: l.planned,
+      committed: acts.reduce((s, i) => s + i.amount, 0), actual,
+      activities: acts.map((i) => ({ id: i.id, title: i.title, amount: i.amount, status: i.status, dueMonth: i.dueMonth ?? null, planId: i.planId ?? null })),
+    };
+  });
+  const loose = live.filter((i) => !i.category || !spendingCats.has(i.category));
+  return { lines: rows, unlinked: { count: loose.length, amount: loose.reduce((s, i) => s + i.amount, 0) } };
+}
+
+export interface BudgetSnapshot {
+  version: 1; year: number;
+  totals: { incomePlanned: number; incomeActual: number; spendingPlanned: number; spendingCommitted: number; spendingActual: number };
+  lines: Array<{ kind: 'INCOME' | 'SPENDING'; category: string; planned: number; committed: number; actual: number }>;
+  activities: Array<{ title: string; category: string; dueMonth: string | null; amount: number; status: string; planTitle: string | null }>;
+}
+
+/** The frozen copy a unit sends to Central: lines, what is committed and recorded, and the activities. */
+export function budgetSnapshot(usage: ReturnType<typeof budgetUsage>, year: number, planTitles: Map<string, string>): BudgetSnapshot {
+  const sumOf = (kind: string, f: (l: LineUsage) => number) => usage.lines.filter((l) => l.kind === kind).reduce((s, l) => s + f(l), 0);
+  return {
+    version: 1, year,
+    totals: {
+      incomePlanned: sumOf('INCOME', (l) => l.planned), incomeActual: sumOf('INCOME', (l) => l.actual),
+      spendingPlanned: sumOf('SPENDING', (l) => l.planned), spendingCommitted: sumOf('SPENDING', (l) => l.committed), spendingActual: sumOf('SPENDING', (l) => l.actual),
+    },
+    lines: usage.lines.map((l) => ({ kind: l.kind, category: l.category, planned: l.planned, committed: l.committed, actual: l.actual })),
+    activities: usage.lines.flatMap((l) => l.activities.map((a) => ({ title: a.title, category: l.category, dueMonth: a.dueMonth, amount: a.amount, status: a.status, planTitle: a.planId ? planTitles.get(a.planId) ?? null : null }))),
+  };
+}
+
+/** Church-wide totals from each unit's latest submitted snapshot: by system and by category. */
+export function combineBudgets(snaps: Array<{ systemId: string; snapshot: BudgetSnapshot }>) {
+  const t = { incomePlanned: 0, incomeActual: 0, spendingPlanned: 0, spendingCommitted: 0, spendingActual: 0 };
+  const byCategory = new Map<string, { kind: 'INCOME' | 'SPENDING'; category: string; planned: number; committed: number; actual: number }>();
+  for (const { snapshot } of snaps) {
+    for (const k of Object.keys(t) as Array<keyof typeof t>) t[k] += snapshot.totals[k];
+    for (const l of snapshot.lines) {
+      const key = `${l.kind}|${l.category}`;
+      const cur = byCategory.get(key) ?? { kind: l.kind, category: l.category, planned: 0, committed: 0, actual: 0 };
+      cur.planned += l.planned; cur.committed += l.committed; cur.actual += l.actual;
+      byCategory.set(key, cur);
+    }
+  }
+  const rows = [...byCategory.values()].sort((a, b) => a.kind.localeCompare(b.kind) || order(a.category) - order(b.category));
+  return { totals: t, byCategory: rows };
+}

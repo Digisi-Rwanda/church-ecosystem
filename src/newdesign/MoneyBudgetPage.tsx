@@ -1,13 +1,14 @@
 import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { fetchBudget, saveBudgetLine, setBudgetApproval, type BudgetKind, type BudgetView } from '../api/frontDoorApi';
+import { fetchBudget, fetchChurchBudget, saveBudgetLine, setBudgetApproval, submitBudget, type BudgetKind, type BudgetView } from '../api/frontDoorApi';
 import { SelectField, TextField } from '../components/ui/Field';
-import { useT } from '../i18n/I18nContext';
+import { useFormat, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { categoryKey, formatRwf, moneyErrorKey } from './money';
 import { YearSelect } from './MoneyBlockParts';
+import { SystemLink } from './SystemLink';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
 
@@ -43,12 +44,24 @@ export function MoneyBudgetPage() {
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && (
           <>
+            <div className="door-budget-total">
+              <strong>{t('door.money.budget.total')}</strong>
+              <span>{t('door.money.kind.INCOME')}: {formatRwf(data.totals.income)}</span>
+              <span>{t('door.money.kind.SPENDING')}: {formatRwf(data.totals.spending)}</span>
+              <span>{t('door.money.net')}: {formatRwf(data.totals.net)}</span>
+            </div>
             <p>
               <span className={`door-chip${data.status === 'DRAFT' ? ' warn' : ''}`}>{t(`door.money.budget.status.${data.status}` as 'door.money.budget.status.DRAFT')}</span>
             </p>
             {(['INCOME', 'SPENDING'] as const).map((kind) => (
               <BudgetSide key={kind} kind={kind} data={data} systemId={systemId} year={year} run={run} />
             ))}
+            {data.unlinked.count > 0 && (
+              <p className="door-error" role="status">
+                {t('door.money.budget.unlinked', { count: data.unlinked.count, amount: formatRwf(data.unlinked.amount) })}{' '}
+                <SystemLink from={systemId} to={`/s/${systemId}/money/plan`}>{t('door.money.plan')}</SystemLink>
+              </p>
+            )}
             <p>
               <strong>{t('door.money.net')}</strong> {formatRwf(data.totals.net)}
             </p>
@@ -62,6 +75,8 @@ export function MoneyBudgetPage() {
                 {t('door.money.budget.reopen')}
               </button>
             )}
+            <SendToCentral data={data} run={() => run(() => submitBudget(systemId, year))} />
+            {data.isCentral && <ChurchBudgets year={year} refreshKey={data.submission?.submittedAt ?? ''} />}
           </>
         )}
       </LoadState>
@@ -85,16 +100,45 @@ function BudgetSide({ kind, data, systemId, year, run }: { kind: BudgetKind; dat
     <div className="panel door-form" style={{ maxWidth: 'none' }}>
       <h3>{t(`door.money.kind.${kind}` as 'door.money.kind.INCOME')}</h3>
       {lines.length === 0 && <p className="muted">{t('door.money.budget.noLines')}</p>}
-      {lines.map((l) => (
-        <div key={l.id} className="door-row">
-          <span className="door-check-label">{t(categoryKey(l.category) as 'door.money.cat.OTHER')}</span>
-          {data.canWrite ? (
-            <TextField label={t('door.money.col.planned')} name={`b-${kind}-${l.category}`} inputMode="numeric" defaultValue={String(l.planned)} onBlur={(e) => e.target.value !== String(l.planned) && void save(l.category, e.target.value)} />
-          ) : (
-            <span>{formatRwf(l.planned)}</span>
-          )}
-        </div>
-      ))}
+      {lines.map((l) => {
+        const over = kind === 'SPENDING' && l.committed > l.planned;
+        const used = l.planned > 0 ? Math.min(100, Math.round(((kind === 'SPENDING' ? l.committed : l.actual) / l.planned) * 100)) : 0;
+        return (
+          <div key={l.id} className="door-budget-line">
+            <div className="door-row">
+              <span className="door-check-label">{t(categoryKey(l.category) as 'door.money.cat.OTHER')}</span>
+              {data.canWrite ? (
+                <TextField label={t('door.money.col.planned')} name={`b-${kind}-${l.category}`} inputMode="numeric" defaultValue={String(l.planned)} onBlur={(e) => e.target.value !== String(l.planned) && void save(l.category, e.target.value)} />
+              ) : (
+                <span>{formatRwf(l.planned)}</span>
+              )}
+              {over && <span className="door-chip warn">{t('door.money.budget.over', { amount: formatRwf(l.committed - l.planned) })}</span>}
+            </div>
+            <progress className="door-progress" max={100} value={used} aria-label={t('door.money.col.progress')} />
+            <p className="muted">
+              {kind === 'SPENDING' && <>{t('door.money.col.committed')}: {formatRwf(l.committed)} · {t('door.money.col.left')}: {formatRwf(Math.max(0, l.planned - l.committed))} · </>}
+              {t('door.money.col.actual')}: {formatRwf(l.actual)}
+            </p>
+            {kind === 'SPENDING' && (
+              <details>
+                <summary>{t('door.money.budget.activities')} ({l.activities.length})</summary>
+                {l.activities.length === 0 ? (
+                  <p className="muted">{t('door.money.budget.noActivities')}</p>
+                ) : (
+                  <ul>
+                    {l.activities.map((a) => (
+                      <li key={a.id}>
+                        {a.title} · {formatRwf(a.amount)}
+                        {a.dueMonth ? ` · ${a.dueMonth}` : ''} · {t(`door.money.plan.status.${a.status}` as 'door.money.plan.status.PLANNED')}
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </details>
+            )}
+          </div>
+        );
+      })}
       {data.canWrite && free.length > 0 && (
         <div className="door-row">
           <SelectField label={t('door.money.col.category')} name={`b-new-${kind}`} value={cat} onChange={(e) => setCat(e.target.value)}>
@@ -123,6 +167,98 @@ function BudgetSide({ kind, data, systemId, year, run }: { kind: BudgetKind; dat
       <p>
         <strong>{t('door.money.total')}</strong> {formatRwf(sum)}
       </p>
+    </div>
+  );
+}
+
+/** Sending the approved budget to Central as a report: nothing is approved there. */
+function SendToCentral({ data, run }: { data: BudgetView; run: () => Promise<void> }) {
+  const t = useT();
+  const f = useFormat();
+  if (data.isCentral) return null;
+  return (
+    <div className="panel door-form" style={{ maxWidth: 'none' }}>
+      <h3>{t('door.money.budget.submit')}</h3>
+      <p className="muted">{t('door.money.budget.submitHint')}</p>
+      <p>{t('door.money.budget.sends', { total: formatRwf(data.totals.spending), lines: data.lines.length, activities: data.lines.reduce((n, l) => n + l.activities.length, 0) })}</p>
+      <p>
+        {data.submission?.submittedAt
+          ? t('door.money.budget.submitted', { date: f.date(data.submission.submittedAt), name: data.submission.submittedByName })
+          : t('door.money.budget.notSent')}
+      </p>
+      {data.status !== 'APPROVED' && <p className="muted">{t('door.money.budget.approveFirst')}</p>}
+      {data.canSubmit && (
+        <button type="button" className="btn" onClick={() => void run()}>
+          {data.submission ? t('door.money.budget.submitAgain') : t('door.money.budget.submit')}
+        </button>
+      )}
+    </div>
+  );
+}
+
+/** Central only: the overall budget, then each unit (Central Administration first) opening up to its lines and their activities. */
+function ChurchBudgets({ year, refreshKey }: { year: number; refreshKey: string }) {
+  const t = useT();
+  const f = useFormat();
+  const { loading, failed, data } = useLoad(() => fetchChurchBudget(year), `church-budget|${year}|${refreshKey}`);
+  if (loading || failed || !data) return null;
+  const T = data.totals;
+  return (
+    <div className="panel door-form" style={{ maxWidth: 'none' }}>
+      <h3>{t('door.money.budget.church.title')}</h3>
+      <p className="muted">{t('door.money.budget.church.intro')}</p>
+      {data.systems.length === 0 ? (
+        <p className="muted">{t('door.money.budget.church.none')}</p>
+      ) : (
+        <>
+          <div className="door-budget-total">
+            <strong>{t('door.money.budget.church.total')}</strong>
+            <span>{t('door.money.kind.INCOME')}: {formatRwf(T.incomePlanned)} ({t('door.money.col.actual')} {formatRwf(T.incomeActual)})</span>
+            <span>{t('door.money.kind.SPENDING')}: {formatRwf(T.spendingPlanned)} · {t('door.money.col.committed')} {formatRwf(T.spendingCommitted)} · {t('door.money.col.actual')} {formatRwf(T.spendingActual)}</span>
+            <span>{t('door.money.net')}: {formatRwf(T.incomePlanned - T.spendingPlanned)}</span>
+          </div>
+          {data.systems.map((x) => (
+            <details key={x.systemId} className="door-unit-budget">
+              <summary>
+                <strong>{x.own ? t('door.money.budget.church.own', { name: x.name }) : x.name}</strong>
+                {' · '}{t('door.money.kind.INCOME')} {formatRwf(x.totals.incomePlanned)} · {t('door.money.kind.SPENDING')} {formatRwf(x.totals.spendingPlanned)} · {t('door.money.net')} {formatRwf(x.totals.incomePlanned - x.totals.spendingPlanned)}
+                {x.submittedAt ? ` · ${t('door.money.budget.church.sentOn', { date: f.date(x.submittedAt) })}` : ''}
+              </summary>
+              {(['INCOME', 'SPENDING'] as const).map((kind) => {
+                const lines = x.lines.filter((l) => l.kind === kind);
+                if (lines.length === 0) return null;
+                return (
+                  <div key={kind}>
+                    <h4>{t(`door.money.kind.${kind}` as 'door.money.kind.INCOME')}</h4>
+                    {lines.map((l) => {
+                      const acts = kind === 'SPENDING' ? x.activities.filter((a) => a.category === l.category) : [];
+                      return (
+                        <div key={l.category} className="door-budget-line">
+                          <p>
+                            <strong>{t(categoryKey(l.category) as 'door.money.cat.OTHER')}</strong> · {t('door.money.col.planned')} {formatRwf(l.planned)}
+                            {kind === 'SPENDING' ? ` · ${t('door.money.col.committed')} ${formatRwf(l.committed)}` : ''} · {t('door.money.col.actual')} {formatRwf(l.actual)}
+                          </p>
+                          {acts.length > 0 && (
+                            <ul>
+                              {acts.map((a, i) => (
+                                <li key={i}>
+                                  {a.title} · {formatRwf(a.amount)}
+                                  {a.dueMonth ? ` · ${a.dueMonth}` : ''}{a.planTitle ? ` · ${a.planTitle}` : ''}
+                                </li>
+                              ))}
+                            </ul>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </details>
+          ))}
+        </>
+      )}
+      {data.missing.length > 0 && <p className="muted">{t('door.money.budget.church.missing', { names: data.missing.map((m) => m.name).join(', ') })}</p>}
     </div>
   );
 }
