@@ -32,26 +32,33 @@ export function SystemHome({ systemId, systemName }: { systemId: string; systemN
     })),
   ];
   return (
-    <section className="door-block" aria-labelledby="door-home-title">
-      <div>
-        <h2 id="door-home-title">{systemName}</h2>
-        <p className="muted">{t('door.tile.intro')}</p>
-      </div>
+    <section className="door-block" aria-label={systemName}>
       <UrgentTile systemId={systemId} />
-      <LeaderDashboard systemId={systemId} systemName={systemName} />
-      <ul className="door-tiles">
-        {tiles.map((x) => (
-          <li key={x.key}>
-            <Link className="panel door-tile" to={x.to}>
-              <span className="door-tile-icon" aria-hidden="true">
-                <Icon name={x.icon} size={22} />
-              </span>
-              <strong>{x.title}</strong>
-              <span className="muted">{x.text}</span>
-            </Link>
-          </li>
-        ))}
-      </ul>
+      <LeaderDashboard
+        systemId={systemId}
+        systemName={systemName}
+        fallback={
+          <>
+            <div>
+              <h2 id="door-home-title">{systemName}</h2>
+              <p className="muted">{t('door.tile.intro')}</p>
+            </div>
+        <ul className="door-tiles">
+          {tiles.map((x) => (
+            <li key={x.key}>
+              <Link className="panel door-tile" to={x.to}>
+                <span className="door-tile-icon" aria-hidden="true">
+                  <Icon name={x.icon} size={22} />
+                </span>
+                <strong>{x.title}</strong>
+                <span className="muted">{x.text}</span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+          </>
+        }
+      />
     </section>
   );
 }

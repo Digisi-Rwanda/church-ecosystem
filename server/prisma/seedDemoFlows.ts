@@ -14,14 +14,14 @@ import type { PrismaClient } from '@prisma/client';
 const DAY = 24 * 3600 * 1000;
 const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 
-const CHOIRS: Array<{ orgId: string; role: 'PRIMARY' | 'SECONDARY' | 'CHILDREN' }> = [
-  { orgId: 'ou-choir-ijwi', role: 'PRIMARY' },
-  { orgId: 'ou-choir-elbethel', role: 'PRIMARY' },
-  { orgId: 'ou-choir-integuza', role: 'PRIMARY' },
-  { orgId: 'ou-choir-elim', role: 'SECONDARY' },
-  { orgId: 'ou-choir-beulah', role: 'SECONDARY' },
-  { orgId: 'ou-choir-yerusalemu', role: 'SECONDARY' },
-  { orgId: 'ou-choir-hope', role: 'CHILDREN' },
+const CHOIRS: Array<{ orgId: string; name: string; role: 'PRIMARY' | 'SECONDARY' | 'CHILDREN' }> = [
+  { orgId: 'ou-choir-ijwi', name: "Ijwi ry' umwami Yesu", role: 'PRIMARY' },
+  { orgId: 'ou-choir-elbethel', name: "El bethel", role: 'PRIMARY' },
+  { orgId: 'ou-choir-integuza', name: "Integuza", role: 'PRIMARY' },
+  { orgId: 'ou-choir-elim', name: "Elim", role: 'SECONDARY' },
+  { orgId: 'ou-choir-beulah', name: "Beulah", role: 'SECONDARY' },
+  { orgId: 'ou-choir-yerusalemu', name: "Yerusalemu", role: 'SECONDARY' },
+  { orgId: 'ou-choir-hope', name: "Hope", role: 'CHILDREN' },
 ];
 
 const MINISTRIES = [
@@ -45,15 +45,14 @@ export async function seedSchedulingDemo(db: Db): Promise<{ choirs: number; memb
   const existing = (await db.musicChoir.findMany()) as Array<{ id: string; name: string }>;
   const choirIdOf = new Map<string, string>();
   for (const c of CHOIRS) {
-    const name = nameOf.get(c.orgId);
-    if (!name) continue;
+    const name = nameOf.get(c.orgId) ?? c.name;
     const have = existing.find((e) => e.name.toLowerCase() === name.toLowerCase());
     if (have) {
       choirIdOf.set(c.orgId, have.id);
       continue;
     }
     const id = `demo-choir-${c.orgId}`;
-    if (await ensure(db.musicChoir as never, id, { name, role: c.role, systemId: 'sys-choir', orgUnitId: c.orgId, active: true, createdById: 'p-music-leader' })) out.choirs++;
+    if (await ensure(db.musicChoir as never, id, { name, role: c.role, systemId: 'sys-choir', orgUnitId: nameOf.has(c.orgId) ? c.orgId : null, active: true, createdById: 'p-music-leader' })) out.choirs++;
     choirIdOf.set(c.orgId, id);
   }
   const memberships = (await db.membership.findMany()) as Array<{ id: string; personId: string; type: string; orgUnitId?: string | null; status: string }>;

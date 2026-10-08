@@ -100,4 +100,16 @@ describe('leader dashboard', () => {
     const y = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
     expect(y.body.members === null).toBe(!keys(y).includes('members'));
   });
+  it('gives an overview of each part the letters open, with money only in a ministry', async () => {
+    const now = new Date();
+    fake.__db.moneyEntry.push(
+      { id: 'o1', accountId: 'a', orgUnitId: 'u', systemId: 'sys-youth', kind: 'INCOME', amount: 9000, occurredOn: now, category: 'DONATION', status: 'RECORDED', recordedById: 'x' },
+      { id: 'o2', accountId: 'a', orgUnitId: 'u', systemId: 'sys-youth', kind: 'SPENDING', amount: 4000, occurredOn: now, category: 'SUPPLIES', status: 'PENDING_APPROVAL', recordedById: 'x' },
+    );
+    const y = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
+    expect(y.body.overview.work).toMatchObject({ openTasks: expect.any(Number), plansRunning: expect.any(Number) });
+    expect(y.body.overview.money).toMatchObject({ balance: 9000, pendingCount: 1, pendingAmount: 4000 });
+    const c = await get('p-pastor', '/api/dashboard?systemId=sys-main');
+    expect(c.body.overview.money).toBeUndefined();
+  });
 });

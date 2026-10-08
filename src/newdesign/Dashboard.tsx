@@ -4,6 +4,7 @@ import { Icon, type IconName } from '../components/ui/Icon';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { chartBars, compactNumber, roundedTopBar, shortDay, shortMonth } from './charts';
 import { useFrontDoor } from './FrontDoorContext';
+import { DashboardOverview } from './DashboardOverview';
 import { GlanceDashboard } from './GlanceDashboard';
 import { formatRwf } from './money';
 import { SystemLink } from './SystemLink';
@@ -247,13 +248,20 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
  * church for Central Administration). The server answers only for leaders and only with what their
  * letters allow, so anyone else — or a failure — gets the plain figures instead.
  */
-export function LeaderDashboard({ systemId, systemName }: { systemId: string; systemName: string }) {
+export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: string; systemName: string; fallback?: React.ReactNode }) {
   const t = useT();
   const { locale } = useI18n();
   const { personName } = useFrontDoor();
   const { data, loading } = useLoad(() => fetchDashboard(systemId), `dash|${systemId}`);
   if (loading) return null;
-  if (!data) return <GlanceDashboard systemId={systemId} />;
+  if (!data) {
+    return (
+      <>
+        <GlanceDashboard systemId={systemId} />
+        {fallback}
+      </>
+    );
+  }
 
   const date = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
   const second = data.second;
@@ -318,6 +326,7 @@ export function LeaderDashboard({ systemId, systemName }: { systemId: string; sy
           )}
         </div>
       )}
+      <DashboardOverview data={data} systemId={systemId} />
       <Lists data={data} systemId={systemId} />
     </div>
   );

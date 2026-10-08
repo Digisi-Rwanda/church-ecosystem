@@ -1478,6 +1478,16 @@ export type Dashboard = {
   kpis: DashKpi[];
   attendance: DashPoint[] | null;
   second: { kind: 'giving' | 'money'; series: Array<{ key: 'giving' | 'income' | 'spent'; points: DashPoint[] }> } | null;
+  /** Each part appears only when this person's access opens it. */
+  overview: {
+    people?: { members: number; joinedThisMonth: number; units: number };
+    work?: { openTasks: number; plansRunning: number; plansWaiting: number; plansDraft: number };
+    schedule?: { next: Array<{ id: string; title: string; kind: string; startsAt: string | null }> };
+    money?: { balance: number; incomeMonth: number; spentMonth: number; pendingCount: number; pendingAmount: number; plannedYear: number; spentYear: number };
+    governance?: { nextMeeting: { id: string; title: string; at: string | null } | null; decisionsWaiting: number; lettersOpen: number };
+    monthPlan?: { planned: boolean; next: Array<{ date: string; kind: string; choirs: string[] }> };
+    choirs?: { count: number; members: number; list: Array<{ name: string; members: number }> };
+  };
   events: Array<{ id: string; title: string; startsOn: string | null; planType: string; href: string }>;
   /** null = this person's access does not open that part, so the page leaves it out. */
   members: Array<{ personId: string; name: string; joinedOn: string; href: string }> | null;

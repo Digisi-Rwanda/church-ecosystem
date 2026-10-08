@@ -20,8 +20,8 @@ beforeEach(() => {
 describe('demo flows seed', () => {
   it('adds choirs, members, the protocol roster and a full money-and-work year', async () => {
     const r = await seedDemoFlows(fake as never);
-    expect(r.scheduling.choirs).toBe(3);
-    expect(db.musicChoir.map((c: { role: string }) => c.role).sort()).toEqual(['CHILDREN', 'PRIMARY', 'SECONDARY']);
+    expect(r.scheduling.choirs).toBe(7);
+    expect(db.musicChoir.map((c: { role: string }) => c.role).sort()).toEqual(['CHILDREN', 'PRIMARY', 'PRIMARY', 'PRIMARY', 'SECONDARY', 'SECONDARY', 'SECONDARY']);
     expect(db.musicChoirMember).toHaveLength(1);
     expect(db.protocolRoster.map((p: { personId: string; office: string }) => [p.personId, p.office]).sort()).toEqual([['p-b', 'MEMBER'], ['p-proto-boss', 'PRESIDENT']]);
     expect(r.money.ministries).toBe(3);

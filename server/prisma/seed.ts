@@ -550,17 +550,19 @@ async function main() {
       posAdded++;
     }
     console.log(`  demo church: ${ouAdded} org units, ${peopleAdded} people, ${memAdded} memberships, ${posAdded} positions added`);
-    if (process.env.SEED_DEMO_FLOWS !== 'false') {
-      try {
-        const f = await seedDemoFlows(prisma);
-        console.log(`  demo flows: ${f.scheduling.choirs} choirs, ${f.scheduling.members} choir members, ${f.scheduling.roster} protocol people, ${f.money.ministries} ministries with ${f.money.plans} plans and ${f.money.entries} money entries added`);
-      } catch (err) {
-        console.warn('  demo flows skipped:', err instanceof Error ? err.message : err);
-      }
-    }
     } catch (err) {
       // Never stop the server from starting over demo data.
       console.warn('  demo church roster skipped:', err instanceof Error ? err.message : err);
+    }
+  }
+
+  // Demo choirs, protocol roster and a money-and-work year, on any deployment that is not live.
+  if (process.env.APP_ENV !== 'production' && process.env.SEED_DEMO_FLOWS !== 'false') {
+    try {
+      const f = await seedDemoFlows(prisma);
+      console.log(`  demo flows: ${f.scheduling.choirs} choirs, ${f.scheduling.members} choir members, ${f.scheduling.roster} protocol people, ${f.money.ministries} ministries with ${f.money.plans} plans and ${f.money.entries} money entries added`);
+    } catch (err) {
+      console.warn('  demo flows skipped:', err instanceof Error ? err.message : err);
     }
   }
 

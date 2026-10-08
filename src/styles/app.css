@@ -7318,3 +7318,10 @@ a.dash-kpi:hover { border-color: var(--accent); }
 .dash-chip { justify-self: start; font-size: 0.72rem; padding: 1px 8px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-on-soft); }
 .dash-avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 0.8rem; font-weight: 700; }
 .dash-flag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 8px; border-radius: var(--radius-pill); background: var(--warn-soft); color: var(--warn); }
+.dash-stats { margin: 0; display: grid; gap: 6px; }
+.dash-stats > div { display: flex; justify-content: space-between; gap: 12px; padding: 6px 0; border-bottom: 1px solid var(--line); }
+.dash-stats > div:last-child { border-bottom: 0; }
+.dash-stats dt { color: var(--ink-muted); font-size: 0.88rem; }
+.dash-stats dd { margin: 0; font-weight: 600; text-align: right; overflow-wrap: anywhere; }
+.dash-stats .warn dd { color: var(--warn); }
+.dash-lists { align-items: start; }
