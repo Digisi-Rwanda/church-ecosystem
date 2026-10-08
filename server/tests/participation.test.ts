@@ -107,7 +107,8 @@ describe('who may see belonging and authority', () => {
   it('everyone sees the structure; a member sees only their own memberships', async () => {
     const r = await as('p-member').get('/api/participation/records');
     expect(r.status).toBe(200);
-    expect(r.body.orgUnits.length).toBeGreaterThan(0);
+    // Firm walls: a church member sees Central's structure and their own systems', never another system's.
+    expect(r.body.orgUnits.every((u: any) => !u.systemId || u.systemId === 'sys-main')).toBe(true);
     expect(r.body.memberships.every((m: any) => m.personId === 'p-member')).toBe(true);
   });
   it('others\' positions show who holds which office, but not the authority flags', async () => {
@@ -117,12 +118,13 @@ describe('who may see belonging and authority', () => {
     expect(pastor).not.toHaveProperty('systemRole');
     expect(pastor).not.toHaveProperty('grantsAllSystems');
   });
-  it('the Church Leader and the Catechist see everyone\'s records in full', async () => {
-    for (const who of ['p-pastor', 'p-catechist']) {
-      const r = await as(who).get('/api/participation/records');
-      expect(r.body.memberships.length, who).toBe(db().membership.length);
-      expect(r.body.positions.find((p: any) => p.id === 'pos-pastor').systemRole, who).toBe('CHURCH_LEADER');
-    }
+  it('the Church Leader sees everyone\'s records in full; the Catechist only those inside their reach', async () => {
+    const lead = await as('p-pastor').get('/api/participation/records');
+    expect(lead.body.memberships.length).toBe(db().membership.length);
+    expect(lead.body.positions.find((p: any) => p.id === 'pos-pastor').systemRole).toBe('CHURCH_LEADER');
+    const cat = await as('p-catechist').get('/api/participation/records');
+    expect(cat.body.memberships.length).toBeLessThan(db().membership.length);
+    expect(cat.body.memberships.every((m: any) => !m.systemId || m.systemId === 'sys-main')).toBe(true);
   });
   it('a ministry president does not see other people\'s memberships', async () => {
     const r = await as('p-choir-leader').get('/api/participation/records');

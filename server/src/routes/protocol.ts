@@ -344,10 +344,24 @@ protocolRouter.get('/months/:month', requireAuth, async (req: AuthedRequest, res
   });
 });
 
+/** One build per month at a time: a second click (or a retry while the first still runs) would double every duty. */
+const building = new Set<string>();
+
 protocolRouter.post('/months/:month/generate', requireAuth, async (req: AuthedRequest, res) => {
   const g = await gateCoordinator(req, res);
   const month = g && monthParam(req, res);
   if (!g || !month) return;
+  if (building.has(month)) return fail(res, 409, 'BUSY', 'The teams for this month are being built. Wait a moment and look again.');
+  building.add(month);
+  try {
+    await generateMonth(req, res, g, month);
+  } finally {
+    building.delete(month);
+  }
+});
+
+async function generateMonth(req: AuthedRequest, res: Res, g: { me: string }, month: string) {
+  void req;
   const c = await monthCtx(month);
   if (!needMusic(c, res)) return;
   if (!editable(c.planRow)) return fail(res, 409, 'LOCKED', 'Return the month to draft first');
@@ -370,7 +384,7 @@ protocolRouter.post('/months/:month/generate', requireAuth, async (req: AuthedRe
   });
   await audit(g.me, 'PROTOCOL_TEAMS_BUILT', `Built the teams for ${month}`, { month, slots: slots.length });
   res.json({ ok: true, slots: slots.length });
-});
+}
 
 const slotBody = z.object({ serviceId: z.string().min(1), personId: z.string().min(1) });
 
@@ -420,7 +434,8 @@ protocolRouter.post('/months/:month/slots/:id/replace', requireAuth, async (req:
   if (!row || !svc) return fail(res, 404, 'NOT_FOUND', 'Not found');
   const why = whyNot(c, svc, parsed.data.personId, row.id);
   if (why) return fail(res, 409, why, 'This person cannot take that place');
-  await prisma.protocolSlot.update({ where: { id: row.id }, data: { personId: parsed.data.personId, source: 'MANUAL', role: 'MEMBER', recommendedRole: null, roleStatus: null } });
+  const kind = c.slots.filter((s) => s.id !== row.id && s.personId === parsed.data.personId && s.slotKind === 'REGULAR').length >= c.rules.softMax ? 'EXTRA' : 'REGULAR';
+  await prisma.protocolSlot.update({ where: { id: row.id }, data: { personId: parsed.data.personId, source: 'MANUAL', role: 'MEMBER', recommendedRole: null, roleStatus: null, slotKind: kind } });
   await audit(g.me, 'PROTOCOL_SLOT_REPLACE', `Replaced ${row.personId} with ${parsed.data.personId}`, { month, serviceId: row.serviceId });
   res.json({ ok: true });
 });
@@ -686,7 +701,8 @@ function whyCannotTake(c: Ctx, svc: ProtocolService, personId: string, leaving?:
   const clash = musicClash(c, svc, personId);
   if (clash) return clash;
   const load = c.slots.filter((s) => s.personId === personId && s.slotKind !== 'FILL_IN').length;
-  if (!leaving && load >= c.rules.hardMax) return 'OVER_MAX';
+  // Taking a place always adds one duty to the taker, whoever else is leaving it.
+  if (load >= c.rules.hardMax) return 'OVER_MAX';
   return null;
 }
 
@@ -760,7 +776,8 @@ protocolRouter.post('/swaps/:id/respond', requireAuth, async (req: AuthedRequest
     if (!slot) return fail(res, 409, 'NOT_ON_TEAM', 'You are no longer on this team');
     const why = whyCannotTake(x.c, x.svc, row.proposerId, me);
     if (why) return fail(res, 409, why, 'The other person can no longer take this place');
-    await prisma.protocolSlot.update({ where: { id: slot.id }, data: { personId: row.proposerId, source: 'SWAP', role: slot.role } });
+    const kind = x.c.slots.filter((s) => s.id !== slot.id && s.personId === row.proposerId && s.slotKind === 'REGULAR').length >= x.c.rules.softMax ? 'EXTRA' : 'REGULAR';
+    await prisma.protocolSlot.update({ where: { id: slot.id }, data: { personId: row.proposerId, source: 'SWAP', role: slot.role, slotKind: kind } });
   }
   await prisma.protocolSwapProposal.update({ where: { id: row.id }, data: { status: parsed.data.accept ? 'ACCEPTED' : 'DECLINED', respondedAt: new Date() } });
   await tell(row.proposerId, 'FOR_INFORMATION', parsed.data.accept ? 'Swap accepted' : 'Swap declined', x.svc.label, `protocol:swap-answer:${row.id}`);

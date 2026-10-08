@@ -304,7 +304,42 @@ export function buildProtocolTeams(input: {
     }
   }
 
-  return { slots, warnings };
+  const capped = enforceDutyCap(slots, serviceById, rules);
+  warnings.push(...capped.warnings);
+  return { slots: capped.slots, warnings };
+}
+
+/**
+ * The last word on the monthly maximum. Whatever the picking above did, nobody leaves the builder with
+ * the same service twice or with more than `hardMax` duties in a month: the latest extras are dropped
+ * and the short team is reported, so the Coordinator sees a gap rather than an overloaded member.
+ */
+export function enforceDutyCap(
+  slots: ProtocolTeamSlot[],
+  serviceById: Map<string, ProtocolService>,
+  rules: Pick<ProtocolSchedulingRules, 'hardMax'>,
+): { slots: ProtocolTeamSlot[]; warnings: string[] } {
+  const warnings: string[] = [];
+  const seen = new Set<string>();
+  const perMonth = new Map<string, number>();
+  const out: ProtocolTeamSlot[] = [];
+  const order = (s: ProtocolTeamSlot) => `${serviceById.get(s.serviceId)?.date ?? ''}|${serviceById.get(s.serviceId)?.kind ?? ''}`;
+  for (const s of [...slots].sort((a, b) => order(a).localeCompare(order(b)))) {
+    if (s.slotKind === 'FILL_IN') { out.push(s); continue; }
+    const svc = serviceById.get(s.serviceId);
+    const dup = `${s.serviceId}|${s.personId}`;
+    const month = `${svc?.monthKey ?? ''}|${s.personId}`;
+    if (seen.has(dup)) continue;
+    if ((perMonth.get(month) ?? 0) >= rules.hardMax) {
+      warnings.push(`${svc?.label ?? s.serviceId} (${svc?.date ?? ''}): ${s.personId} left out, already at ${rules.hardMax} duties this month`);
+      continue;
+    }
+    seen.add(dup);
+    perMonth.set(month, (perMonth.get(month) ?? 0) + 1);
+    out.push(s);
+  }
+  const keep = new Set(out.map((s) => s.id));
+  return { slots: slots.filter((s) => keep.has(s.id)), warnings };
 }
 
 function issue(

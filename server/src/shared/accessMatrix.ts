@@ -103,10 +103,9 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
     COMMUNICATION: ['R'],
     REPORTS: ['R', 'W'],
   },
+  /** Media publishes and nothing more: no People, Money or Reports of any system. */
   ADMINISTRATOR: {
-    PEOPLE: ['R', 'W'],
     COMMUNICATION: ['R', 'W'],
-    REPORTS: ['R'],
   },
   PRESIDENT: {
     PEOPLE: ['R', 'W'],

@@ -43,9 +43,10 @@ describe('who may post', () => {
     expect(canPostTo('vp', choir, data, NOW)).toBe(false);
     expect(canPostTo('treas', { kind: 'SYSTEM', systemId: 'sys-youth' }, data, NOW)).toBe(false);
   });
-  it('the Church Leader and Church Secretary post to any system', () => {
+  it('the Church Leader posts to any system; the Church Secretary only to Central', () => {
     expect(canPostTo('lead', { kind: 'SYSTEM', systemId: 'sys-youth' }, data, NOW)).toBe(true);
-    expect(canPostTo('sec', { kind: 'SYSTEM', systemId: 'sys-choir' }, data, NOW)).toBe(true);
+    expect(canPostTo('sec', { kind: 'SYSTEM', systemId: 'sys-choir' }, data, NOW)).toBe(false);
+    expect(canPostTo('sec', { kind: 'SYSTEM', systemId: 'sys-main' }, data, NOW)).toBe(true);
   });
   it('an office audience is decided in the main church', () => {
     expect(targetSystem({ kind: 'OFFICE' })).toBe('sys-main');

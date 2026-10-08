@@ -72,7 +72,8 @@ describe('Central Administration overview', () => {
     const kinds = r.body.urgent.map((u: any) => u.kind);
     expect(kinds).not.toContain('DECISION_TO_APPROVE');
     expect(kinds).not.toContain('LETTER_TO_PRINT');
-    expect(kinds).toContain('MEETING_OVERDUE');
+    // The Catechist works inside Central, so another system's overdue meeting is not theirs to see.
+    expect(kinds).not.toContain('MEETING_OVERDUE');
   });
   it('Oversight counts every system the reader may see, the main church first', async () => {
     const r = await get('p-pastor', '/api/central/overview');

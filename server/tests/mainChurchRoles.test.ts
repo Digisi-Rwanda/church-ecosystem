@@ -12,17 +12,17 @@ const enterable = (positions: any[]) => {
 };
 
 describe('server: governance reach by role', () => {
-  it('PASTOR → Main Church + Evangelism only', () => {
-    expect(enterable([pos('PASTOR')])).toEqual(['sys-evangelism', 'sys-main']);
+  it('PASTOR → Central only', () => {
+    expect(enterable([pos('PASTOR')])).toEqual(['sys-main']);
   });
   it('PASTOR stays scoped even if the legacy grantsAllSystems flag is on', () => {
-    expect(enterable([pos('PASTOR', { grantsAllSystems: true })])).toEqual(['sys-evangelism', 'sys-main']);
+    expect(enterable([pos('PASTOR', { grantsAllSystems: true })])).toEqual(['sys-main']);
   });
   it('CHURCH_LEADER → every system', () => {
     expect(enterable([pos('CHURCH_LEADER')]).length).toBe(SYSTEMS.length);
   });
-  it('CATECHIST → every system', () => {
-    expect(enterable([pos('CATECHIST')]).length).toBe(SYSTEMS.length);
+  it('CATECHIST → Central only (firm walls)', () => {
+    expect(enterable([pos('CATECHIST')])).toEqual(['sys-main']);
   });
   it('ASSISTANT_PASTOR is no longer a role → no governance at all', () => {
     expect(enterable([pos('ASSISTANT_PASTOR')])).toEqual(['sys-main']);

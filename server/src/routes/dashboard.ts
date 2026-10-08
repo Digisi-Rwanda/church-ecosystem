@@ -8,7 +8,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
-import { lettersInSystem, liveHoldings } from '../capabilities/engine.js';
+import { lettersInSystem, liveHoldings, reachesEverySystem } from '../capabilities/engine.js';
 import { canSee, type WorkRow } from '../work/rules.js';
 import { asWorkRow, type PlanRow } from '../work/plan.js';
 import { balances } from '../money/rules.js';
@@ -45,7 +45,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const now = new Date();
   const { data, units } = await loadAccessData(me);
   // Only a leader of this system (or of the whole church) gets a dashboard; others get a plain "not found".
-  const leader = liveHoldings(me, data, now).some((h) => h.scope === 'CHURCH' || h.systemId === systemId);
+  const leader = liveHoldings(me, data, now).some((h) => reachesEverySystem(h) || (h.scope === 'CHURCH' && systemId === 'sys-main') || h.systemId === systemId);
   if (!leader) return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
 
   const central = systemId === COLLECTIONS_SYSTEM;
@@ -196,7 +196,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   }
 
   // Reports: only where this person may read them. A ministry sees its own; Central sees what it receives.
-  const readsReports = central ? liveHoldings(me, data, now).some((h) => h.scope === 'CHURCH') || canReadReports(me, systemId, data, now) : canReadReports(me, systemId, data, now);
+  const readsReports = central ? liveHoldings(me, data, now).some((h) => reachesEverySystem(h)) || canReadReports(me, systemId, data, now) : canReadReports(me, systemId, data, now);
   if (readsReports) {
     const got = await reportsReceived(me, data, units as never, now);
     const mine = <T extends { systemId: string }>(rows: T[]) => (central ? rows : rows.filter((r) => r.systemId === systemId));

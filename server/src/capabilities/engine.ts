@@ -179,7 +179,27 @@ export function liveHoldings(personId: string, data: AccessData, now = new Date(
   return out;
 }
 
-const covers = (h: Holding, systemId: string): boolean => h.scope === 'CHURCH' || h.systemId === systemId;
+/** The Central system, where church-wide offices work. */
+export const CENTRAL = 'sys-main';
+
+/** Only the Church Leader reaches into every system; every other office stays inside its own walls. */
+export const reachesEverySystem = (h: Pick<Holding, 'office' | 'scope'>): boolean => h.scope === 'CHURCH' && h.office === 'CHURCH_LEADER';
+
+const covers = (h: Holding, systemId: string): boolean =>
+  reachesEverySystem(h) || h.systemId === systemId || (h.scope === 'CHURCH' && systemId === CENTRAL);
+
+/**
+ * The systems a person may see anything of: Central, the systems they belong to, and the systems
+ * where they hold an office. `null` means all of them, which only the Church Leader reaches.
+ */
+export function reachableSystems(personId: string, data: AccessData, now = new Date()): Set<string> | null {
+  const holdings = liveHoldings(personId, data, now);
+  if (holdings.some(reachesEverySystem)) return null;
+  const out = new Set<string>([CENTRAL]);
+  for (const h of holdings) if (h.systemId) out.add(h.systemId);
+  for (const m of data.memberships) if (m.personId === personId && m.systemId && isLive(m, now)) out.add(m.systemId);
+  return out;
+}
 
 export function isMemberOf(personId: string, systemId: string, data: AccessData, now = new Date()): boolean {
   return data.memberships.some(

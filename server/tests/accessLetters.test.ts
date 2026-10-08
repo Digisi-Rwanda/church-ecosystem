@@ -63,7 +63,7 @@ describe('a rule matrix per office', () => {
       for (const k of MODULE_KEYS) {
         expect(own[k]).toEqual(withRead(OFFICE_LETTERS[office][k] ?? []));
         if (OFFICE_SCOPE[office] === 'UNIT') expect(other[k]).toEqual([]);
-        else expect(other[k]).toEqual(own[k]);
+        else expect(other[k], 'only the Church Leader reaches other systems').toEqual(office === 'CHURCH_LEADER' ? own[k] : []);
       }
     });
   }

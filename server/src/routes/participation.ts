@@ -19,6 +19,8 @@ import { findClash } from '../lib/appointments.js';
 import { OFFICE_TITLE } from '../shared/accessMatrix.js';
 import { OFFICE_CODES, UNIT_KINDS } from '../shared/vocabulary.js';
 import { authorizePerson } from '../policy/index.js';
+import { liveHoldings, reachableSystems } from '../capabilities/engine.js';
+import { loadAccessData } from '../notifications/feed.js';
 import { hasPeopleModule } from '../policy/personAccess.js';
 import { requireAuth, pathParam, type AuthedRequest } from '../middleware/http.js';
 
@@ -59,11 +61,26 @@ async function can(
 
 participationRouter.get('/records', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const [orgUnits, memberships, positions] = await Promise.all([
+  const [allUnits, allMemberships, allPositions] = await Promise.all([
     prisma.orgUnit.findMany({ orderBy: { name: 'asc' } }),
     prisma.membership.findMany({ orderBy: { startDate: 'desc' } }),
     prisma.position.findMany({ orderBy: { startDate: 'desc' } }),
   ]);
+  // Firm walls: a system sees only itself (and Central). The Church Leader reaches every system;
+  // an Administrator also sees the structure of offices (not who belongs where) so they can appoint.
+  const { data: accessData } = await loadAccessData(me);
+  const now = new Date();
+  const reach = reachableSystems(me, accessData, now);
+  const isAdmin = liveHoldings(me, accessData, now).some((h) => h.via === 'OFFICE' && h.office === 'ADMINISTRATOR');
+  const unitSys = new Map(allUnits.map((u) => [u.id, u.systemId ?? null]));
+  const inReach = (sys: string | null | undefined, unitId?: string | null) => {
+    if (reach === null) return true;
+    const s = sys ?? (unitId ? unitSys.get(unitId) : null) ?? MAIN;
+    return reach.has(s);
+  };
+  const orgUnits = allUnits.filter((u) => isAdmin || inReach(u.systemId, u.id));
+  const memberships = allMemberships.filter((m) => m.personId === me || inReach(m.systemId, m.orgUnitId));
+  const positions = allPositions.filter((p) => p.personId === me || isAdmin || inReach(p.systemId, p.orgUnitId));
   // Church Leader and Catechist (PERSON VIEW) may see everyone's records.
   const broad = await hasPeopleModule(me);
   const memo = new Map<string, boolean>();

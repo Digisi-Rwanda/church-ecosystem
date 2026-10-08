@@ -132,12 +132,8 @@ describe('peer oversight entry', () => {
     expect(oversightMayAccessModule('sys-youth', 'tasks', 'ops')).toBe(true);
   });
 
-  it('ordained pastor gets light oversight on Evangelism only', () => {
-    const entry = resolvePeerEntry('p-pastor-2', 'sys-evangelism', POSITIONS);
-    expect(entry.kind).toBe('oversight');
-    expect(oversightMayAccessModule('sys-evangelism', 'tasks', 'light')).toBe(
-      false,
-    );
+  it('ordained pastor keeps light oversight rules, but no peer system is entered any more', () => {
+    expect(oversightMayAccessModule('sys-evangelism', 'tasks', 'light')).toBe(false);
   });
 
   it('ordained pastor is just a member in other ministries (no oversight)', () => {
@@ -348,18 +344,18 @@ describe('main church roles — system reach', () => {
         ).allowed,
     );
 
-  it('Pastor enters only Main Church and Evangelism', () => {
-    expect(enterable('p-pastor-2').sort()).toEqual(['sys-evangelism', 'sys-main']);
+  it('Pastor enters Central only (firm walls)', () => {
+    expect(enterable('p-pastor-2').sort()).toEqual(['sys-main']);
   });
 
-  it('Pastor keeps full governance inside Evangelism, none in Youth', () => {
+  it('Pastor has no governance inside Evangelism or Youth', () => {
     const grants = grantsFor('p-pastor-2');
     expect(
       authorize(
         { personId: 'p-pastor-2', systemId: 'sys-evangelism', resource: 'PROGRAM', action: 'VIEW' },
         grants,
       ).allowed,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       authorize(
         { personId: 'p-pastor-2', systemId: 'sys-youth', resource: 'PROGRAM', action: 'VIEW' },
@@ -372,8 +368,8 @@ describe('main church roles — system reach', () => {
     expect(enterable('p-pastor').length).toBe(SYSTEMS.length);
   });
 
-  it('Catechist enters every system', () => {
-    expect(enterable('p-catechist').length).toBe(SYSTEMS.length);
+  it('Catechist enters Central only (firm walls)', () => {
+    expect(enterable('p-catechist')).toEqual(['sys-main']);
   });
 
   it('no role called assistant pastor exists any more', () => {

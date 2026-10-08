@@ -143,3 +143,22 @@ describe('validation', () => {
     expect(new Set(issues.map((i) => i.key)).size).toBe(issues.length);
   });
 });
+
+describe('the monthly maximum has the last word', () => {
+  const mk = (id: string, date: string): ProtocolService => ({ id, musicServiceId: id, label: id, date, kind: 'TUESDAY', monthKey: '2026-10', targetTeamSize: 1 }) as ProtocolService;
+  const services = ['01', '02', '03', '04', '05', '06'].map((d) => mk(`s${d}`, `2026-10-${d}`));
+  const byId = new Map(services.map((s) => [s.id, s]));
+  it('drops anything beyond the maximum and any doubled place, and says so', async () => {
+    const { enforceDutyCap } = await import('../src/protocol/engine');
+    const slots = [...services.map((s, i) => ({ id: `a${i}`, serviceId: s.id, personId: 'p1', source: 'ENGINE', role: 'MEMBER', slotKind: i < 3 ? 'REGULAR' : 'EXTRA' })), { id: 'dup', serviceId: 's01', personId: 'p1', source: 'ENGINE', role: 'MEMBER', slotKind: 'EXTRA' }] as ProtocolTeamSlot[];
+    const r = enforceDutyCap(slots, byId, { hardMax: 4 });
+    expect(r.slots.filter((s) => s.personId === 'p1')).toHaveLength(4);
+    expect(new Set(r.slots.map((s) => s.serviceId)).size).toBe(4);
+    expect(r.warnings.length).toBeGreaterThan(0);
+  });
+  it('never counts a fill-in against the maximum', async () => {
+    const { enforceDutyCap } = await import('../src/protocol/engine');
+    const slots = services.map((s, i) => ({ id: `f${i}`, serviceId: s.id, personId: 'p2', source: 'FILL_IN', role: 'MEMBER', slotKind: 'FILL_IN' })) as ProtocolTeamSlot[];
+    expect(enforceDutyCap(slots, byId, { hardMax: 4 }).slots).toHaveLength(6);
+  });
+});

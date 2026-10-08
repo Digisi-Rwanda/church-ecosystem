@@ -5,10 +5,7 @@ import type { Position, SystemId } from './types';
  * Church Leader and Catechist keep every system. Widen this list later if the
  * church decides Pastors should oversee more ministries.
  */
-export const PASTOR_SYSTEM_IDS: readonly SystemId[] = [
-  'sys-main',
-  'sys-evangelism',
-];
+export const PASTOR_SYSTEM_IDS: readonly SystemId[] = ['sys-main'];
 
 /** True when this position's governance reach is limited to PASTOR_SYSTEM_IDS. */
 export function isPastorScoped(p: Pick<Position, 'systemRole'>): boolean {
@@ -20,8 +17,7 @@ export function governanceSystemsFor(
   p: Pick<Position, 'systemRole'>,
   allSystemIds: SystemId[],
 ): SystemId[] {
-  if (isPastorScoped(p)) {
-    return allSystemIds.filter((id) => PASTOR_SYSTEM_IDS.includes(id));
-  }
-  return allSystemIds;
+  // Firm walls: only the Church Leader (or the legacy all-systems flag with no named role) reaches every system.
+  if (p.systemRole === 'CHURCH_LEADER' || !p.systemRole) return allSystemIds;
+  return allSystemIds.filter((id) => id === 'sys-main');
 }

@@ -21,6 +21,7 @@ import {
   isLive,
   liveHoldings,
   lettersInSystem,
+  reachableSystems,
   type AccessData,
   type DelegationRec,
   type Holding,
@@ -110,7 +111,7 @@ function powers(hs: Holding[]) {
     // Administrators assign every office (the Church Leader's too) and reassign it when it changes hands.
     canAppoint: admin,
     canAppointLeader: admin,
-    canReadAppointments: hs.some((h) => (h.letters.PEOPLE?.length ?? 0) > 0),
+    canReadAppointments: admin || hs.some((h) => (h.letters.PEOPLE?.length ?? 0) > 0),
     // The Access page, the rule matrix and the audit trail are Administrator-only, here as on screen.
     canReadAudit: admin,
     canExplainOthers: admin,
@@ -266,8 +267,11 @@ accessRouter.get('/appointments', requireAuth, async (req: AuthedRequest, res) =
     const inSystem = units.filter((u) => u.systemId === p.systemId);
     return inSystem.find((u) => !u.parentId) ?? inSystem.find((u) => unitKindOf(u) !== 'TEAM') ?? inSystem[0];
   };
+  // Firm walls: an Administrator or the Church Leader see every appointment; anyone else only their own systems'.
+  const reach = pw.canAppoint ? null : reachableSystems(req.auth!.personId, data, now);
+  const sysOfPos = (p: PositionRec) => p.systemId ?? (p.orgUnitId ? byId.get(p.orgUnitId)?.systemId : null) ?? 'sys-main';
   const rows = data.positions.filter(
-    (p) => officeOf(p) && (includeEnded || isLive(p, now)) && (!unitId || unitFor(p)?.id === unitId),
+    (p) => officeOf(p) && (includeEnded || isLive(p, now)) && (!unitId || unitFor(p)?.id === unitId) && (reach === null || reach.has(sysOfPos(p))),
   );
   const who = await names(rows.map((r) => r.personId));
   res.json({
@@ -441,7 +445,11 @@ accessRouter.get('/vacancies', requireAuth, async (req: AuthedRequest, res) => {
   const { data, units } = await load();
   const pw = powers(liveHoldings(req.auth!.personId, data, now));
   if (!pw.canReadAppointments) return fail(res, 403, 'NOT_ALLOWED', 'You may not see vacancies');
-  const { vacancies, conflicts } = computeVacancies(units, data.positions, now, (await loadSettings())['access.termReminderDays']);
+  const all = computeVacancies(units, data.positions, now, (await loadSettings())['access.termReminderDays']);
+  const reach = pw.canAppoint ? null : reachableSystems(req.auth!.personId, data, now);
+  const unitSys = (id: string) => units.find((u) => u.id === id)?.systemId ?? 'sys-main';
+  const vacancies = all.vacancies.filter((v) => reach === null || reach.has(unitSys(v.unitId)));
+  const conflicts = all.conflicts.filter((c) => reach === null || reach.has(unitSys(c.unitId)));
   const who = await names(vacancies.map((v) => v.holderPersonId ?? ''));
   res.json({
     vacancies: vacancies.map((v) => ({ ...v, holderName: v.holderPersonId ? (who.get(v.holderPersonId)?.name ?? null) : null })),
