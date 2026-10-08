@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import {
   fetchChurchCalendar,
   fetchMonth,
@@ -15,7 +15,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
-import { lettersFor } from './menu';
+import { buildOwnMenu, lettersFor } from './menu';
 import { CHURCH_SYSTEM } from './portalHome';
 import { addMonths, dayHeading, dayOf, groupByDay, monthLabel, planActions, planStatusKey, scheduleErrorKey, thisMonth, timeRange } from './schedule';
 import { SlotCard, SlotForm } from './ScheduleParts';
@@ -30,6 +30,7 @@ export function SchedulePage() {
   const [month, setMonth] = useState(thisMonth());
   const allowed = lettersFor(capabilities, systemId, 'schedule').length > 0;
   const options = useLoad(fetchScheduleOptions, 'sched-options');
+  const planner = buildOwnMenu(capabilities, systemId).some((o) => o.block === 'monthplan' && o.letters.includes('W'));
   if (!allowed) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
   return (
     <section className="door-block" aria-labelledby="door-sched-title">
@@ -48,6 +49,17 @@ export function SchedulePage() {
           </button>
         )}
       </div>
+      {planner && (
+        <div className="panel door-row">
+          <span>
+            <strong>{t('door.sched.planner')}</strong>
+            <span className="muted"> {t('door.sched.plannerHint')}</span>
+          </span>
+          <Link className="btn" to={`/s/${systemId}/monthplan`}>
+            {t('door.sched.plannerOpen')}
+          </Link>
+        </div>
+      )}
       <MyDuties />
       {systemId === CHURCH_SYSTEM && <ChurchCalendar month={month} />}
       <Plans systemId={systemId} month={month} options={options.data} />

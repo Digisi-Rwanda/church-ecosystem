@@ -1933,6 +1933,10 @@ export const en = {
   'door.units.group.ORGANISATION': 'Organisations',
   'door.units.group.TEAM': 'Teams and offices',
 
+  'door.sched.planner': 'You plan this ministry\'s choir schedule.',
+  'door.sched.plannerHint': 'Build a draft, adjust it, confirm months and publish them.',
+  'door.sched.plannerOpen': 'Open Month plan',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;
