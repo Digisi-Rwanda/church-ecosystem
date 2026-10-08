@@ -46,6 +46,36 @@ export function MoneyReportsPage() {
                 </tbody>
               </table>
             </div>
+            <h3>{t('door.money.byPlan.title')}</h3>
+            <p className="muted">{t('door.money.byPlan.intro')}</p>
+            {data.byPlan.length === 0 ? (
+              <p className="muted">{t('door.money.byPlan.none')}</p>
+            ) : (
+              <div className="door-table-wrap">
+                <table className="door-table door-stack">
+                  <thead>
+                    <tr>
+                      <th>{t('door.money.byPlan.name')}</th>
+                      <th>{t('door.money.col.planned')}</th>
+                      <th>{t('door.money.kind.INCOME')}</th>
+                      <th>{t('door.money.kind.SPENDING')}</th>
+                      <th>{t('door.money.byPlan.waiting')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {data.byPlan.map((r) => (
+                      <tr key={r.planId}>
+                        <th scope="row">{r.title}</th>
+                        <td data-label={t('door.money.col.planned')}>{formatRwf(r.planned)}</td>
+                        <td data-label={t('door.money.kind.INCOME')}>{formatRwf(r.income)}</td>
+                        <td data-label={t('door.money.kind.SPENDING')}>{formatRwf(r.spending)}</td>
+                        <td data-label={t('door.money.byPlan.waiting')}>{formatRwf(r.pending)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
             <h3>{t('door.money.reports.contributions')}</h3>
             {data.contributions.length === 0 ? (
               <p className="muted">{t('door.money.reports.noContributions')}</p>

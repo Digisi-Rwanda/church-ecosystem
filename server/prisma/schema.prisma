@@ -832,9 +832,12 @@ model MoneyEntry {
   decidedById  String?
   decidedAt    DateTime?
   decisionNote String?
+  /// Optional link to the program, project or event (WorkPlan) this money is for
+  planId       String?
 
   @@index([accountId, status])
   @@index([systemId, occurredOn])
+  @@index([planId])
 }
 
 /// Offerings counted at a service. A count record only: it carries no link to any MoneyEntry,
@@ -1468,8 +1471,11 @@ model MoneyPlanItem {
   note        String?
   createdById String
   createdAt   DateTime @default(now())
+  /// Optional link to the program, project or event (WorkPlan) this activity belongs to
+  planId      String?
 
   @@index([systemId, year])
+  @@index([planId])
 }
 
 /// A contribution list: a team's list for a month, or the unit's (combined or recorded directly).

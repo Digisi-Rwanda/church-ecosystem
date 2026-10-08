@@ -1,8 +1,9 @@
 import { SelectField } from '../components/ui/Field';
-import type { AccountingSideView, AccountingView } from '../api/frontDoorApi';
+import { fetchPlanLinks, type AccountingSideView, type AccountingView } from '../api/frontDoorApi';
 import { useT } from '../i18n/I18nContext';
 import { categoryKey, formatRwf } from './money';
 import { progress, yearChoices } from './moneyBlock';
+import { useLoad } from './useLoad';
 
 export function YearSelect({ year, onChange }: { year: number; onChange: (y: number) => void }) {
   const t = useT();
@@ -70,5 +71,21 @@ export function PlanVsActual({ view }: { view: AccountingView }) {
         <strong>{t('door.money.net')}</strong> {t('door.money.col.planned')}: {formatRwf(view.net.planned)} · {t('door.money.col.actual')}: {formatRwf(view.net.actual)}
       </p>
     </div>
+  );
+}
+
+/** Choose the program, project or event a piece of money is for (optional). */
+export function PlanSelect({ systemId, value, onChange, name }: { systemId: string; value: string; onChange: (v: string) => void; name: string }) {
+  const t = useT();
+  const links = useLoad(() => fetchPlanLinks(systemId), `plan-links|${systemId}`);
+  return (
+    <SelectField label={t('door.money.plan.for')} name={name} value={value} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{t('door.money.plan.forNone')}</option>
+      {(links.data ?? []).map((p) => (
+        <option key={p.id} value={p.id}>
+          {p.title}
+        </option>
+      ))}
+    </SelectField>
   );
 }

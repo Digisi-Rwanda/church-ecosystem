@@ -7,6 +7,7 @@ import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { categoryKey, formatRwf, moneyErrorKey, moneyStatusKey, parseAmount } from './money';
+import { PlanSelect } from './MoneyBlockParts';
 
 /** Open a money account for a unit the treasurer serves. */
 export function AccountForm({ options, systemId, onDone, onCancel }: { options: MoneyOptions; systemId: string; onDone: () => void; onCancel: () => void }) {
@@ -61,7 +62,7 @@ export function AccountForm({ options, systemId, onDone, onCancel }: { options: 
 }
 
 /** Record income (kept at once) or spending (waits for the president's approval). */
-export function EntryForm({ options, accounts, onDone, onCancel }: { options: MoneyOptions; accounts: MoneyAccountItem[]; onDone: () => void; onCancel: () => void }) {
+export function EntryForm({ options, accounts, systemId, onDone, onCancel }: { options: MoneyOptions; accounts: MoneyAccountItem[]; systemId: string; onDone: () => void; onCancel: () => void }) {
   const t = useT();
   const open = accounts.filter((a) => a.status === 'ACTIVE');
   const [accountId, setAccountId] = useState(open.length === 1 ? open[0].id : '');
@@ -70,6 +71,7 @@ export function EntryForm({ options, accounts, onDone, onCancel }: { options: Mo
   const [day, setDay] = useState(new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState(options.categories[0] ?? 'OTHER');
   const [note, setNote] = useState('');
+  const [planId, setPlanId] = useState('');
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const submit = async (e: FormEvent) => {
@@ -80,7 +82,7 @@ export function EntryForm({ options, accounts, onDone, onCancel }: { options: Mo
     setBusy(true);
     setError('');
     try {
-      await recordMoneyEntry({ accountId, kind, amount: n, occurredOn: day, category, note: note.trim() || null });
+      await recordMoneyEntry({ accountId, kind, amount: n, occurredOn: day, category, note: note.trim() || null, planId: planId || null });
       onDone();
     } catch (err) {
       setError(t(moneyErrorKey(errorCode(err)) as 'door.people.actionFailed'));
@@ -111,6 +113,7 @@ export function EntryForm({ options, accounts, onDone, onCancel }: { options: Mo
           </option>
         ))}
       </SelectField>
+      <PlanSelect systemId={systemId} name="m-plan" value={planId} onChange={setPlanId} />
       <TextAreaField label={t('door.money.entry.note')} name="m-note" rows={2} value={note} maxLength={options.limits.noteMax} onChange={(e) => setNote(e.target.value)} />
       {error && (
         <p className="door-error" role="alert">
@@ -159,7 +162,7 @@ export function EntryRow({ entry, onChange }: { entry: MoneyEntryItem; onChange:
           <span className={`door-chip${entry.status === 'PENDING_APPROVAL' ? ' warn' : ''}`}>{t(moneyStatusKey(entry.status))}</span>
         </div>
         <p className="muted">
-          {day} · {entry.accountName} · {t(categoryKey(entry.category) as 'door.money.cat.OTHER')} · {t('door.money.entry.by', { name: entry.recordedByName })}
+          {day} · {entry.accountName} · {t(categoryKey(entry.category) as 'door.money.cat.OTHER')}{entry.planTitle ? ` · ${entry.planTitle}` : ''} · {t('door.money.entry.by', { name: entry.recordedByName })}
         </p>
         {entry.note && <p>{entry.note}</p>}
         {entry.decidedByName && (

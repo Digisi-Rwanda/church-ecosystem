@@ -7,7 +7,7 @@ import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { categoryKey, formatRwf, moneyErrorKey, parseAmount } from './money';
-import { YearSelect } from './MoneyBlockParts';
+import { PlanSelect, YearSelect } from './MoneyBlockParts';
 import { useLoad } from './useLoad';
 
 /** The money action plan: what the unit plans to do this year and what it should cost. */
@@ -21,6 +21,7 @@ export function MoneyPlanPage() {
   const [amount, setAmount] = useState('');
   const [month, setMonth] = useState('');
   const [category, setCategory] = useState('');
+  const [planId, setPlanId] = useState('');
   const run = async (job: () => Promise<void>) => {
     setError('');
     try {
@@ -36,11 +37,12 @@ export function MoneyPlanPage() {
     e.preventDefault();
     const n = amount.trim() === '' ? 0 : parseAmount(amount);
     if (!title.trim() || n === null) return setError(t('door.money.form.incomplete'));
-    if (await run(() => addMoneyPlanItem({ systemId, year, title: title.trim(), amount: n, dueMonth: month || null, category: category || null }))) {
+    if (await run(() => addMoneyPlanItem({ systemId, year, title: title.trim(), amount: n, dueMonth: month || null, category: category || null, planId: planId || null }))) {
       setTitle('');
       setAmount('');
       setMonth('');
       setCategory('');
+      setPlanId('');
     }
   };
   const row = (i: MoneyPlanItemView) => (
@@ -54,6 +56,7 @@ export function MoneyPlanPage() {
           {formatRwf(i.amount)}
           {i.dueMonth && ` · ${i.dueMonth}`}
           {i.category && ` · ${t(categoryKey(i.category) as 'door.money.cat.OTHER')}`}
+          {i.planTitle && ` · ${i.planTitle}`}
         </p>
         {data?.canWrite && i.status === 'PLANNED' && (
           <div className="door-row">
@@ -105,6 +108,7 @@ export function MoneyPlanPage() {
                     </option>
                   ))}
                 </SelectField>
+                <PlanSelect systemId={systemId} name="mp-plan" value={planId} onChange={setPlanId} />
                 <button type="submit" className="btn">
                   {t('door.money.plan.add')}
                 </button>

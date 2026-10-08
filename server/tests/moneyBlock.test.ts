@@ -2,7 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
-import { accounting, combine, counts, goalGroups, linesProblem, yearOf } from '../src/money/block';
+import { accounting, combine, counts, goalGroups, linesProblem, moneyByPlan, yearOf } from '../src/money/block';
 
 describe('money block rules', () => {
   it('planned and actual side by side; totals are computed', () => {
@@ -21,6 +21,21 @@ describe('money block rules', () => {
     expect(r.income.rows.map((x) => [x.category, x.planned, x.actual, x.difference])).toEqual([['TITHE', 5000, 3000, -2000], ['DONATION', 0, 700, 700]]);
     expect([r.income.planned, r.income.actual, r.spending.planned, r.spending.actual]).toEqual([5000, 3700, 2000, 2500]);
     expect(r.net).toEqual({ planned: 3000, actual: 1200 });
+  });
+  it('money by plan: planned from live activities, income recorded, spending approved or waiting', () => {
+    const r = moneyByPlan(
+      [{ planId: 'a', amount: 500, status: 'PLANNED' }, { planId: 'a', amount: 300, status: 'DROPPED' }, { planId: 'b', amount: 100, status: 'DONE' }, { amount: 999, status: 'PLANNED' }],
+      [
+        { planId: 'a', kind: 'INCOME', amount: 200, status: 'RECORDED' },
+        { planId: 'a', kind: 'SPENDING', amount: 400, status: 'APPROVED' },
+        { planId: 'a', kind: 'SPENDING', amount: 50, status: 'PENDING_APPROVAL' },
+        { planId: 'a', kind: 'SPENDING', amount: 70, status: 'REJECTED' },
+        { kind: 'SPENDING', amount: 9, status: 'APPROVED' },
+      ],
+    );
+    expect(r.find((x) => x.planId === 'a')).toEqual({ planId: 'a', planned: 500, income: 200, spending: 400, pending: 50 });
+    expect(r.find((x) => x.planId === 'b')).toEqual({ planId: 'b', planned: 100, income: 0, spending: 0, pending: 0 });
+    expect(r).toHaveLength(2);
   });
   it('a day belongs to the year it is in Kigali', () => {
     expect(yearOf('2026-12-31T23:30:00Z')).toBe(2027);
@@ -254,5 +269,51 @@ describe('report', () => {
     expect(r.months[9]).toEqual({ month: '2026-10', income: 7000, spending: 0 });
     expect(r.contributions).toEqual([{ code: 'TITHE', name: 'Tithe', approved: 3000, inProgress: 0 }]);
     expect((await get('p-choir-member', `/api/money/report?${S}&year=2026`)).status).toBe(404);
+  });
+});
+
+describe('money tied to a program, project or event', () => {
+  beforeEach(() => {
+    const db = fake.__db;
+    db.workPlan ??= [];
+    db.workPlan.push(
+      { id: 'wp1', systemId: 'sys-choir', title: 'Christmas concert', planType: 'EVENT', status: 'RUNNING' },
+      { id: 'wp-old', systemId: 'sys-choir', title: 'Cancelled trip', planType: 'PROJECT', status: 'CANCELLED' },
+      { id: 'wp-other', systemId: 'sys-youth', title: 'Youth camp', planType: 'PROGRAM', status: 'RUNNING' },
+    );
+    db.moneyAccount.push({ id: 'acc1', orgUnitId: 'ou-choir', systemId: 'sys-choir', name: 'Cash', status: 'ACTIVE' });
+  });
+  const entry = (planId: string | null, kind = 'INCOME', amount = 1000) =>
+    post('p-ctr', '/api/money/entries', { accountId: 'acc1', kind, amount, occurredOn: '2026-05-10', category: 'EVENT', planId });
+
+  it('lists the plans of this system (not cancelled) for the pickers', async () => {
+    const r = await get('p-ctr', `/api/money/plan-links?${S}`);
+    expect(r.body.plans.map((p: { id: string }) => p.id)).toEqual(['wp1']);
+    expect((await get('p-choir-member', `/api/money/plan-links?${S}`)).status).toBe(404);
+  });
+  it('an entry and an activity can be linked; a plan of another system is refused', async () => {
+    expect((await entry('wp1')).status).toBe(201);
+    expect((await entry('wp-other')).status).toBe(400);
+    expect((await entry('nope')).status).toBe(400);
+    expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Hire sound', amount: 300, planId: 'wp1' })).status).toBe(201);
+    expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Bad', amount: 1, planId: 'wp-other' })).status).toBe(400);
+    const list = await get('p-ctr', `/api/money/entries?${S}`);
+    expect(list.body.entries[0]).toMatchObject({ planId: 'wp1', planTitle: 'Christmas concert' });
+    const plan = await get('p-ctr', `/api/money/plan?${S}&year=2026`);
+    expect(plan.body.items[0]).toMatchObject({ planId: 'wp1', planTitle: 'Christmas concert' });
+  });
+  it('the plan shows what it costs and earns, and the report lists every plan', async () => {
+    await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Hire sound', amount: 300, planId: 'wp1' });
+    await entry('wp1', 'INCOME', 1000);
+    const sp = await entry('wp1', 'SPENDING', 400);
+    const m1 = await get('p-ctr', `/api/money/plan-money?${S}&planId=wp1`);
+    expect(m1.body).toMatchObject({ planned: 300, income: 1000, spending: 0, pending: 400 });
+    await post('p-choir-leader', `/api/money/entries/${sp.body.id}/approve`);
+    const m2 = await get('p-ctr', `/api/money/plan-money?${S}&planId=wp1`);
+    expect(m2.body).toMatchObject({ spending: 400, pending: 0 });
+    const rep = await get('p-ctr', `/api/money/report?${S}&year=2026`);
+    expect(rep.body.byPlan).toEqual([{ planId: 'wp1', title: 'Christmas concert', planned: 300, income: 1000, spending: 400, pending: 0 }]);
+    expect((await get('p-ctr', `/api/money/plan-money?${S}&planId=wp-other`)).status).toBe(404);
+    expect((await get('p-choir-member', `/api/money/plan-money?${S}&planId=wp1`)).status).toBe(404);
   });
 });

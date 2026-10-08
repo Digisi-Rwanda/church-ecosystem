@@ -1031,10 +1031,10 @@ export type MoneyAccountItem = {
 export type MoneyAccounts = { canRecord: boolean; canApprove: boolean; accounts: MoneyAccountItem[] };
 export type MoneyEntryItem = {
   id: string; accountId: string; accountName: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note: string;
-  status: MoneyStatus; recordedByName: string; recordedAt: string | null; decidedByName: string | null; decisionNote: string | null;
+  status: MoneyStatus; recordedByName: string; recordedAt: string | null; decidedByName: string | null; decisionNote: string | null; planId: string | null; planTitle: string | null;
   canDecide: boolean; canVoid: boolean;
 };
-export type MoneyEntryInput = { accountId: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note?: string | null };
+export type MoneyEntryInput = { accountId: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note?: string | null; planId?: string | null };
 const M = '/api/money';
 export const fetchMoneyOptions = (): Promise<MoneyOptions> => apiFetch(`${M}/options`);
 export const fetchMoneyAccounts = (systemId: string): Promise<MoneyAccounts> => apiFetch(`${M}/accounts?systemId=${encodeURIComponent(systemId)}`);
@@ -1077,15 +1077,20 @@ export async function setBudgetApproval(systemId: string, year: number, approve:
 }
 
 export type MoneyPlanStatus = 'PLANNED' | 'DONE' | 'DROPPED';
-export type MoneyPlanItemView = { id: string; title: string; amount: number; dueMonth: string; category: string; status: MoneyPlanStatus; note: string };
+export type MoneyPlanItemView = { id: string; title: string; amount: number; dueMonth: string; category: string; status: MoneyPlanStatus; note: string; planId: string | null; planTitle: string | null };
 export type MoneyPlanView = { year: number; canWrite: boolean; categories: string[]; items: MoneyPlanItemView[]; totals: { planned: number; done: number; budgetSpending: number } };
 export const fetchMoneyPlan = (systemId: string, year: number): Promise<MoneyPlanView> => apiFetch(`${M}/plan?${qs({ systemId, year })}`);
-export async function addMoneyPlanItem(b: { systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; note?: string | null }): Promise<void> {
+export async function addMoneyPlanItem(b: { systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; note?: string | null; planId?: string | null }): Promise<void> {
   await apiFetch(`${M}/plan`, { method: 'POST', body: b });
 }
-export async function changeMoneyPlanItem(id: string, b: Partial<{ title: string; amount: number; dueMonth: string | null; category: string | null; note: string | null; status: MoneyPlanStatus }>): Promise<void> {
+export async function changeMoneyPlanItem(id: string, b: Partial<{ title: string; amount: number; dueMonth: string | null; category: string | null; note: string | null; status: MoneyPlanStatus; planId: string | null }>): Promise<void> {
   await apiFetch(`${M}/plan/${encodeURIComponent(id)}`, { method: 'PATCH', body: b });
 }
+
+export type PlanLink = { id: string; title: string; planType: string; status: string };
+export const fetchPlanLinks = async (systemId: string): Promise<PlanLink[]> => (await apiFetch<{ plans: PlanLink[] }>(`${M}/plan-links?${qs({ systemId })}`)).plans;
+export type PlanMoney = { planned: number; income: number; spending: number; pending: number; activities: number; entries: number };
+export const fetchPlanMoney = (systemId: string, planId: string): Promise<PlanMoney> => apiFetch(`${M}/plan-money?${qs({ systemId, planId })}`);
 
 export type AccountingRowView = { kind: BudgetKind; category: string; planned: number; actual: number; difference: number };
 export type AccountingSideView = { rows: AccountingRowView[]; planned: number; actual: number };
@@ -1138,6 +1143,7 @@ export type MoneyReportView = AccountingView & {
   contributions: Array<{ code: string; name: string; approved: number; inProgress: number }>;
   donations: { approved: number; waiting: number };
   plan: { items: number; planned: number; done: number };
+  byPlan: Array<{ planId: string; title: string; planned: number; income: number; spending: number; pending: number }>;
 };
 export const fetchMoneyReport = (systemId: string, year: number): Promise<MoneyReportView> => apiFetch(`${M}/report?${qs({ systemId, year })}`);
 

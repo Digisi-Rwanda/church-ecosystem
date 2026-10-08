@@ -14,7 +14,7 @@ import { loadPolicyContext } from '../policy/loadContext.js';
 import { liveHoldings } from '../capabilities/engine.js';
 import { CATEGORIES, KINDS, NOTE_MAX, amountProblem, canApproveSpending, canReadMoney, canRecord, isDay } from '../money/rules.js';
 import {
-  PLAN_STATUS, accounting, combine, counts, editable, goalGroups, isMonth, isYear, linesProblem, monthOf, total, yearOf, type Goal, type LineLike,
+  PLAN_STATUS, accounting, combine, moneyByPlan, counts, editable, goalGroups, isMonth, isYear, linesProblem, monthOf, total, yearOf, type Goal, type LineLike,
 } from '../money/block.js';
 import { moneySchema, parseStored, EMPTY_MONEY } from '../systemSettings/rules.js';
 
@@ -28,14 +28,15 @@ const day = (v: Date | string) => new Date(v).toISOString().slice(0, 10);
 interface UnitRow { id: string; name: string; systemId?: string | null; kind?: string | null; type?: string | null; leaderPersonId?: string | null }
 interface Budget { id: string; systemId: string; year: number; status: string; approvedById?: string | null; approvedAt?: Date | string | null }
 interface BLine { id: string; systemId: string; year: number; kind: string; category: string; planned: number; note?: string | null }
-interface PlanItem { id: string; systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; status: string; note?: string | null; createdById: string }
+interface PlanItem { id: string; systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; status: string; note?: string | null; createdById: string; planId?: string | null }
 interface CList {
   id: string; systemId: string; level: string; typeCode: string; typeName: string; month: string; teamUnitId?: string | null; teamName?: string | null; status: string;
   sourceListIds: string; createdById: string; submittedAt?: Date | string | null; decidedById?: string | null; decisionNote?: string | null;
 }
 interface CLine { id: string; listId: string; name: string; personId?: string | null; team?: string | null; amount: number }
 interface Don { id: string; systemId: string; accountId: string; donorName: string; amount: number; receivedOn: Date | string; note?: string | null; status: string; recordedById: string; decidedById?: string | null; decisionNote?: string | null }
-interface Entry { kind: string; amount: number; status: string; category: string; occurredOn: Date | string }
+interface Entry { kind: string; amount: number; status: string; category: string; occurredOn: Date | string; planId?: string | null }
+interface PlanRow { id: string; title: string; systemId: string; planType?: string | null; status: string }
 
 async function ctx(me: string) {
   const { data, units } = await loadAccessData(me);
@@ -167,7 +168,27 @@ moneyBlockRouter.post('/budget/reopen', requireAuth, (req, res) => setBudgetStat
 
 /* ───────────── action plan ───────────── */
 
-const shapePlan = (i: PlanItem) => ({ id: i.id, title: i.title, amount: i.amount, dueMonth: i.dueMonth ?? '', category: i.category ?? '', status: i.status, note: i.note ?? '' });
+const shapePlan = (i: PlanItem, plans: Map<string, string>) => ({
+  id: i.id, title: i.title, amount: i.amount, dueMonth: i.dueMonth ?? '', category: i.category ?? '', status: i.status, note: i.note ?? '',
+  planId: i.planId ?? null, planTitle: i.planId ? plans.get(i.planId) ?? '' : null,
+});
+
+/** The programs, projects and events of a system, as names. */
+async function plansOf(systemId: string): Promise<PlanRow[]> {
+  return ((await prisma.workPlan.findMany({ where: { systemId } })) as PlanRow[]).filter((p) => p.status !== 'CANCELLED');
+}
+async function planTitleMap(ids: Array<string | null | undefined>) {
+  const uniq = [...new Set(ids.filter((x): x is string => !!x))];
+  const out = new Map<string, string>();
+  if (!uniq.length) return out;
+  for (const p of (await prisma.workPlan.findMany({ where: { id: { in: uniq } } })) as PlanRow[]) out.set(p.id, p.title);
+  return out;
+}
+/** A link must point at a plan of the same system. */
+async function planBelongs(planId: string, systemId: string) {
+  const p = (await prisma.workPlan.findUnique({ where: { id: planId } })) as PlanRow | null;
+  return !!p && p.systemId === systemId;
+}
 
 moneyBlockRouter.get('/plan', requireAuth, async (req: AuthedRequest, res) => {
   const g = await gate(req, res);
@@ -177,15 +198,16 @@ moneyBlockRouter.get('/plan', requireAuth, async (req: AuthedRequest, res) => {
   const items = ((await prisma.moneyPlanItem.findMany({ where: { systemId: g.systemId, year } })) as PlanItem[]).sort((a, b) => (a.dueMonth ?? '9').localeCompare(b.dueMonth ?? '9') || a.title.localeCompare(b.title));
   const budget = await budgetOf(g.systemId, year);
   const live = items.filter((i) => i.status !== 'DROPPED');
+  const titles = await planTitleMap(items.map((i) => i.planId));
   res.json({
-    year, canWrite: g.s.write, categories: CATEGORIES, items: items.map(shapePlan),
+    year, canWrite: g.s.write, categories: CATEGORIES, items: items.map((i) => shapePlan(i, titles)),
     totals: { planned: live.reduce((s, i) => s + i.amount, 0), done: items.filter((i) => i.status === 'DONE').reduce((s, i) => s + i.amount, 0), budgetSpending: budget.lines.filter((l) => l.kind === 'SPENDING').reduce((s, l) => s + l.planned, 0) },
   });
 });
 
 const planSchema = z.object({
   systemId: z.string().min(1), year: z.number(), title: z.string().trim().min(1).max(120), amount: z.number().int().min(0).max(2_000_000_000),
-  dueMonth: z.string().nullish(), category: z.enum(CATEGORIES).nullish(), note: z.string().trim().max(NOTE_MAX).nullish(),
+  dueMonth: z.string().nullish(), category: z.enum(CATEGORIES).nullish(), note: z.string().trim().max(NOTE_MAX).nullish(), planId: z.string().min(1).nullish(),
 });
 
 moneyBlockRouter.post('/plan', requireAuth, async (req: AuthedRequest, res) => {
@@ -193,8 +215,9 @@ moneyBlockRouter.post('/plan', requireAuth, async (req: AuthedRequest, res) => {
   if (!g) return;
   const p = planSchema.safeParse(req.body);
   if (!p.success || !isYear(p.data.year) || (p.data.dueMonth && !isMonth(p.data.dueMonth))) return fail(res, 400, 'BAD_INPUT', 'Check the activity');
+  if (p.data.planId && !(await planBelongs(p.data.planId, g.systemId))) return fail(res, 400, 'BAD_PLAN', 'Choose a program, project or event of this system');
   const row = (await prisma.moneyPlanItem.create({
-    data: { systemId: g.systemId, year: p.data.year, title: p.data.title, amount: p.data.amount, dueMonth: p.data.dueMonth || null, category: p.data.category || null, status: 'PLANNED', note: p.data.note || null, createdById: g.me, createdAt: new Date() },
+    data: { systemId: g.systemId, year: p.data.year, planId: p.data.planId || null, title: p.data.title, amount: p.data.amount, dueMonth: p.data.dueMonth || null, category: p.data.category || null, status: 'PLANNED', note: p.data.note || null, createdById: g.me, createdAt: new Date() },
   })) as PlanItem;
   await audit(g.me, g.systemId, 'MONEY_PLAN_ITEM', `Planned “${row.title}” ${row.amount} RWF`, { id: row.id });
   res.status(201).json({ id: row.id });
@@ -208,16 +231,39 @@ moneyBlockRouter.patch('/plan/:id', requireAuth, async (req: AuthedRequest, res)
   const p = planSchema.partial().omit({ systemId: true, year: true }).extend({ status: z.enum(PLAN_STATUS).optional() }).safeParse(req.body);
   if (!p.success || (p.data.dueMonth && !isMonth(p.data.dueMonth))) return fail(res, 400, 'BAD_INPUT', 'Check the activity');
   const d = p.data;
+  if (d.planId && !(await planBelongs(d.planId, item.systemId))) return fail(res, 400, 'BAD_PLAN', 'Choose a program, project or event of this system');
   await prisma.moneyPlanItem.update({
     where: { id: item.id },
     data: {
       ...(d.title !== undefined && { title: d.title }), ...(d.amount !== undefined && { amount: d.amount }),
       ...(d.dueMonth !== undefined && { dueMonth: d.dueMonth || null }), ...(d.category !== undefined && { category: d.category || null }),
-      ...(d.note !== undefined && { note: d.note || null }), ...(d.status !== undefined && { status: d.status }),
+      ...(d.note !== undefined && { note: d.note || null }), ...(d.status !== undefined && { status: d.status }), ...(d.planId !== undefined && { planId: d.planId || null }),
     },
   });
   await audit(g.me, g.systemId, 'MONEY_PLAN_ITEM', `Changed “${item.title}”`, { id: item.id, ...d });
   res.json({ ok: true });
+});
+
+/* ───────────── money of a program, project or event ───────────── */
+
+/** The plans a person can tie money to: every program, project and event of the system. */
+moneyBlockRouter.get('/plan-links', requireAuth, async (req: AuthedRequest, res) => {
+  const g = await gate(req, res);
+  if (!g) return;
+  const plans = (await plansOf(g.systemId)).sort((a, b) => a.title.localeCompare(b.title));
+  res.json({ plans: plans.map((p) => ({ id: p.id, title: p.title, planType: p.planType ?? 'PROJECT', status: p.status })) });
+});
+
+/** What one program, project or event costs and earns: planned, income, approved and waiting spending. */
+moneyBlockRouter.get('/plan-money', requireAuth, async (req: AuthedRequest, res) => {
+  const g = await gate(req, res);
+  const planId = String(req.query.planId ?? '');
+  if (!g) return;
+  if (!planId || !(await planBelongs(planId, g.systemId))) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  const items = ((await prisma.moneyPlanItem.findMany({ where: { systemId: g.systemId } })) as PlanItem[]).filter((i) => i.planId === planId);
+  const entries = ((await entriesOf(g.systemId)) as Entry[]).filter((e) => e.planId === planId);
+  const row = moneyByPlan(items, entries).find((r) => r.planId === planId) ?? { planId, planned: 0, income: 0, spending: 0, pending: 0 };
+  res.json({ planned: row.planned, income: row.income, spending: row.spending, pending: row.pending, activities: items.filter((i) => i.status !== 'DROPPED').length, entries: entries.length });
 });
 
 /* ───────────── accounting: planned against actual ───────────── */
@@ -549,8 +595,12 @@ moneyBlockRouter.get('/report', requireAuth, async (req: AuthedRequest, res) => 
   }
   const donations = ((await prisma.donation.findMany({ where: { systemId: g.systemId } })) as Don[]).filter((d) => yearOf(d.receivedOn) === year);
   const plan = ((await prisma.moneyPlanItem.findMany({ where: { systemId: g.systemId, year } })) as PlanItem[]).filter((i) => i.status !== 'DROPPED');
+  const planned = ((await prisma.moneyPlanItem.findMany({ where: { systemId: g.systemId, year } })) as PlanItem[]);
+  const perPlan = moneyByPlan(planned, entries);
+  const titles = await planTitleMap(perPlan.map((r) => r.planId));
+  const byPlan = perPlan.map((r) => ({ ...r, title: titles.get(r.planId) ?? '' })).sort((a, b) => a.title.localeCompare(b.title));
   res.json({
-    year, budgetStatus: b.status, ...accounting(b.lines, entries, year), months, contributions: [...byType.values()],
+    year, budgetStatus: b.status, ...accounting(b.lines, entries, year), months, contributions: [...byType.values()], byPlan,
     donations: { approved: donations.filter((d) => d.status === 'APPROVED').reduce((s, d) => s + d.amount, 0), waiting: donations.filter((d) => d.status === 'PENDING').reduce((s, d) => s + d.amount, 0) },
     plan: { items: plan.length, planned: plan.reduce((s, i) => s + i.amount, 0), done: plan.filter((i) => i.status === 'DONE').length },
   });

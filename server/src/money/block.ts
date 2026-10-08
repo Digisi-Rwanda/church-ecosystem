@@ -101,3 +101,28 @@ export function linesProblem(lines: unknown): string | null {
   }
   return null;
 }
+
+/* ───────────── money by program, project or event ───────────── */
+
+export interface PlanLinkedItem { planId?: string | null; amount: number; status: string }
+export interface PlanLinkedEntry { planId?: string | null; kind: string; amount: number; status: string }
+export interface PlanMoneyRow { planId: string; planned: number; income: number; spending: number; pending: number }
+
+/** Money per plan: planned from the action plan (dropped ones left out), income recorded, spending approved, spending still waiting. */
+export function moneyByPlan(items: PlanLinkedItem[], entries: PlanLinkedEntry[]): PlanMoneyRow[] {
+  const rows = new Map<string, PlanMoneyRow>();
+  const row = (id: string) => {
+    const r = rows.get(id) ?? { planId: id, planned: 0, income: 0, spending: 0, pending: 0 };
+    rows.set(id, r);
+    return r;
+  };
+  for (const i of items) if (i.planId && i.status !== 'DROPPED') row(i.planId).planned += i.amount;
+  for (const e of entries) {
+    if (!e.planId) continue;
+    const r = row(e.planId);
+    if (e.kind === 'INCOME' && e.status === 'RECORDED') r.income += e.amount;
+    else if (e.kind === 'SPENDING' && e.status === 'APPROVED') r.spending += e.amount;
+    else if (e.kind === 'SPENDING' && e.status === 'PENDING_APPROVAL') r.pending += e.amount;
+  }
+  return [...rows.values()];
+}

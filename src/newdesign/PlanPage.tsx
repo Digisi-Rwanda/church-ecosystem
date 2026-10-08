@@ -7,8 +7,12 @@ import {
 import { EmptyState } from '../components/ui/EmptyState';
 import { TextAreaField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
+import { fetchPlanMoney } from '../api/frontDoorApi';
+import { useFrontDoor } from './FrontDoorContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
+import { lettersFor } from './menu';
+import { formatRwf } from './money';
 import { PlanForm } from './PlanForm';
 import { PLAN_STEPS, phaseOf, planActions, planErrorKey, planStatusKey, stepIndex } from './plans';
 import { useLoad } from './useLoad';
@@ -169,6 +173,8 @@ export function PlanPage() {
             </div>
           )}
 
+          <PlanMoney systemId={systemId} planId={p.id} />
+
           {p.levels.length > 0 && (
             <div className="panel">
               <h3>{t('door.plan.approvals')}</h3>
@@ -280,5 +286,29 @@ export function PlanPage() {
         </section>
       )}
     </LoadState>
+  );
+}
+
+/** What this program, project or event costs and earns; shown only to people who may read the system's money. */
+function PlanMoney({ systemId, planId }: { systemId: string; planId: string }) {
+  const t = useT();
+  const { capabilities } = useFrontDoor();
+  const allowed = lettersFor(capabilities, systemId, 'money').length > 0;
+  const money = useLoad(() => (allowed ? fetchPlanMoney(systemId, planId) : Promise.reject(new Error('no'))), `plan-money|${systemId}|${planId}|${allowed}`);
+  if (!allowed || !money.data) return null;
+  const m = money.data;
+  const empty = m.activities === 0 && m.entries === 0;
+  return (
+    <div className="panel">
+      <h3>{t('door.plan.money.title')}</h3>
+      {empty ? (
+        <p className="muted">{t('door.plan.money.none')}</p>
+      ) : (
+        <p>{t('door.plan.money.line', { planned: formatRwf(m.planned), income: formatRwf(m.income), spending: formatRwf(m.spending), pending: formatRwf(m.pending) })}</p>
+      )}
+      <Link className="btn ghost sm" to={`/s/${systemId}/money/plan`}>
+        {t('door.plan.money.open')}
+      </Link>
+    </div>
   );
 }

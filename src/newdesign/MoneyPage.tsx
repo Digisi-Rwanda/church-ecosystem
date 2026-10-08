@@ -40,6 +40,7 @@ export function MoneyPage() {
         <h2 id="door-money-title">{t('door.money.accounting')}</h2>
         <p className="muted">{accounts.data?.canRecord ? t('door.money.intro.treasurer') : t('door.money.intro.view')}</p>
         <p className="muted">{t('door.money.apart')}</p>
+        {accounts.data && !accounts.data.canRecord && <p className="muted">{t('door.money.hint.notTreasurer')}</p>}
       </div>
       <YearSelect year={year} onChange={setYear} />
       <LoadState loading={plan.loading} failed={plan.failed} retry={plan.reload}>
@@ -59,7 +60,7 @@ export function MoneyPage() {
         <AccountForm options={options.data} systemId={systemId} onDone={() => { setForm(null); reload(); }} onCancel={() => setForm(null)} />
       )}
       {form === 'entry' && options.data && accounts.data && (
-        <EntryForm options={options.data} accounts={accounts.data.accounts} onDone={() => { setForm(null); reload(); }} onCancel={() => setForm(null)} />
+        <EntryForm options={options.data} accounts={accounts.data.accounts} systemId={systemId} onDone={() => { setForm(null); reload(); }} onCancel={() => setForm(null)} />
       )}
       <LoadState loading={accounts.loading} failed={accounts.failed} retry={accounts.reload}>
         {accounts.data && accounts.data.accounts.length === 0 ? (

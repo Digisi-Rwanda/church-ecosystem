@@ -1937,6 +1937,20 @@ export const en = {
   'door.sched.plannerHint': 'Build a draft, adjust it, confirm months and publish them.',
   'door.sched.plannerOpen': 'Open Month plan',
 
+  'door.money.plan.for': 'For a program, project or event (optional)',
+  'door.money.plan.forNone': 'Not tied to one',
+  'door.money.err.plan': 'Choose a program, project or event of this system.',
+  'door.money.byPlan.title': 'By program, project and event',
+  'door.money.byPlan.intro': 'What each one was planned to cost, what came in, what was spent, and what still waits for approval.',
+  'door.money.byPlan.none': 'No money is tied to a program, project or event yet. Choose one when you record money or plan an activity.',
+  'door.money.byPlan.name': 'Program, project or event',
+  'door.money.byPlan.waiting': 'Waiting',
+  'door.money.hint.notTreasurer': 'Only the treasurer opens accounts and records money. You can read everything here.',
+  'door.plan.money.title': 'Money',
+  'door.plan.money.none': 'No money is tied to this yet. The treasurer chooses it when planning an activity or recording money.',
+  'door.plan.money.line': 'Planned {planned} · In {income} · Spent {spending} · Waiting {pending}',
+  'door.plan.money.open': 'Open the money plan',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

@@ -2,6 +2,7 @@ import type { CountStatus, MoneyEntryItem, MoneyStatus } from '../api/frontDoorA
 
 const ERROR_KEYS: Record<string, string> = {
   AMOUNT: 'door.money.err.amount',
+  BAD_PLAN: 'door.money.err.plan',
   BAD_DATE: 'door.money.err.date',
   ACCOUNT_CLOSED: 'door.money.err.closed',
   PENDING_SPENDING: 'door.money.err.pending',

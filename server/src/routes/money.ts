@@ -21,7 +21,7 @@ const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v
 interface Account { id: string; orgUnitId: string; systemId: string; name: string; status: string }
 interface Entry {
   id: string; accountId: string; orgUnitId: string; systemId: string; kind: string; amount: number; occurredOn: Date | string; category: string;
-  note?: string | null; status: string; recordedById: string; recordedAt: Date | string; decidedById?: string | null; decidedAt?: Date | string | null; decisionNote?: string | null;
+  note?: string | null; status: string; recordedById: string; recordedAt: Date | string; decidedById?: string | null; decidedAt?: Date | string | null; decisionNote?: string | null; planId?: string | null;
 }
 interface UnitRow { id: string; name: string; systemId?: string | null }
 
@@ -31,6 +31,13 @@ async function names(ids: Array<string | null | undefined>): Promise<Map<string,
   if (!uniq.length) return out;
   const rows = (await prisma.person.findMany({ where: { id: { in: uniq } } })) as Array<{ id: string; fullName: string }>;
   for (const p of rows) out.set(p.id, p.fullName);
+  return out;
+}
+async function planTitles(ids: Array<string | null | undefined>): Promise<Map<string, string>> {
+  const uniq = [...new Set(ids.filter((x): x is string => !!x))];
+  const out = new Map<string, string>();
+  if (!uniq.length) return out;
+  for (const p of (await prisma.workPlan.findMany({ where: { id: { in: uniq } } })) as Array<{ id: string; title: string }>) out.set(p.id, p.title);
   return out;
 }
 async function audit(actorId: string, systemId: string, action: string, detail: string, meta: object) {
@@ -106,8 +113,9 @@ moneyRouter.post('/accounts/:id/close', requireAuth, async (req: AuthedRequest, 
   res.json({ ok: true });
 });
 
-function shapeEntry(e: Entry, who: Map<string, string>, me: string, c: Ctx, accName: string) {
+function shapeEntry(e: Entry, who: Map<string, string>, me: string, c: Ctx, accName: string, plans: Map<string, string>) {
   return {
+    planId: e.planId ?? null, planTitle: e.planId ? plans.get(e.planId) ?? '' : null,
     id: e.id, accountId: e.accountId, accountName: accName, kind: e.kind, amount: e.amount, occurredOn: iso(e.occurredOn)!.slice(0, 10),
     category: e.category, note: e.note ?? '', status: e.status, recordedByName: who.get(e.recordedById) ?? '', recordedAt: iso(e.recordedAt),
     decidedByName: e.decidedById ? who.get(e.decidedById) ?? '' : null, decisionNote: e.decisionNote ?? null,
@@ -131,7 +139,8 @@ moneyRouter.get('/entries', requireAuth, async (req: AuthedRequest, res) => {
     .sort((a, b) => new Date(b.occurredOn).getTime() - new Date(a.occurredOn).getTime() || new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())
     .slice(0, 300);
   const who = await names(rows.flatMap((e) => [e.recordedById, e.decidedById]));
-  res.json({ entries: rows.map((e) => shapeEntry(e, who, me, c, accounts.find((a) => a.id === e.accountId)?.name ?? '')) });
+  const plans = await planTitles(rows.map((e) => e.planId));
+  res.json({ entries: rows.map((e) => shapeEntry(e, who, me, c, accounts.find((a) => a.id === e.accountId)?.name ?? '', plans)) });
 });
 
 moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
@@ -139,7 +148,7 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
   const parsed = z
     .object({
       accountId: z.string().min(1), kind: z.enum(KINDS), amount: z.number(), occurredOn: z.string(),
-      category: z.enum(CATEGORIES), note: z.string().trim().max(NOTE_MAX).nullish(),
+      category: z.enum(CATEGORIES), note: z.string().trim().max(NOTE_MAX).nullish(), planId: z.string().min(1).nullish(),
     })
     .safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid entry');
@@ -151,11 +160,15 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
   if (!acc || !canReadMoney(me, acc.systemId, c.data)) return fail(res, 404, 'NOT_FOUND', 'Account not found');
   if (!canRecord(me, acc.systemId, c.data)) return fail(res, 403, 'FORBIDDEN', 'Only the treasurer records money');
   if (acc.status !== 'ACTIVE') return fail(res, 409, 'ACCOUNT_CLOSED', 'This account is closed');
+  if (b.planId) {
+    const plan = (await prisma.workPlan.findUnique({ where: { id: b.planId } })) as { systemId: string } | null;
+    if (!plan || plan.systemId !== acc.systemId) return fail(res, 400, 'BAD_PLAN', 'Choose a program, project or event of this system');
+  }
   const spending = b.kind === 'SPENDING';
   const row = (await prisma.moneyEntry.create({
     data: {
       accountId: acc.id, orgUnitId: acc.orgUnitId, systemId: acc.systemId, kind: b.kind, amount: b.amount, occurredOn: new Date(`${b.occurredOn}T00:00:00Z`),
-      category: b.category, note: b.note || null, status: spending ? 'PENDING_APPROVAL' : 'RECORDED', recordedById: me,
+      category: b.category, note: b.note || null, status: spending ? 'PENDING_APPROVAL' : 'RECORDED', recordedById: me, planId: b.planId || null,
     },
   })) as Entry;
   if (spending) {
