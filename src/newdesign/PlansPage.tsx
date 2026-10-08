@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { fetchPlanOptions, type PlanType } from '../api/frontDoorApi';
@@ -31,6 +32,7 @@ export function PlansPage({ planType }: { planType: PlanType }) {
             </button>
           ) : undefined
         }
+        actions={canCreate ? <ImportLink systemId={systemId} target="plans" /> : undefined}
       />
       <PlansList systemId={systemId} planType={planType} creating={creating} onCloseCreate={() => setCreating(false)} />
     </section>

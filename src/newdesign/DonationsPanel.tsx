@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState, type FormEvent } from 'react';
 import { decideDonation, fetchDonations, fetchMoneyAccounts, recordDonation } from '../api/frontDoorApi';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
@@ -46,9 +47,12 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
       <p className="muted">{t('door.money.donations.intro')}</p>
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data?.canRecord && !form && (
-          <button type="button" className="btn" onClick={() => setForm(true)}>
-            {t('door.money.donations.new')}
-          </button>
+          <div className="door-row">
+            <button type="button" className="btn" onClick={() => setForm(true)}>
+              {t('door.money.donations.new')}
+            </button>
+            <ImportLink systemId={systemId} target="donations" />
+          </div>
         )}
         {form && (
           <form className="panel door-form" onSubmit={submit} noValidate>

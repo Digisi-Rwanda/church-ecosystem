@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -43,6 +44,7 @@ export function SchedulePage() {
         purpose={t('door.purpose.schedule')}
         actions={
           <>
+            {view.data?.canWrite && <ImportLink systemId={systemId} target="scheduleSlots" />}
             <button type="button" className="btn ghost no-print" onClick={() => window.print()}>
               {t('door.sched.print')}
             </button>

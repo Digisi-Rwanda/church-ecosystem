@@ -50,6 +50,7 @@ import {
   ReportPage,
   ReportsPage,
   AdminPage,
+  ImportPage,
   PeopleImportPage,
   PeopleDuplicatesPage,
   MyAssignmentsPage,
@@ -119,6 +120,7 @@ export function newDesignRoutes() {
           <Route path="preferences" element={<SystemSettingsPage />} />
           <Route path="schedule" element={<SchedulePage />} />
           <Route path="schedule/mine" element={<MyAssignmentsPage />} />
+          <Route path="import/:target" element={<ImportPage />} />
           <Route path="work" element={<WorkPage />} />
           <Route path="programs" element={<PlansPage planType="PROGRAM" />} />
           <Route path="events" element={<PlansPage planType="EVENT" />} />

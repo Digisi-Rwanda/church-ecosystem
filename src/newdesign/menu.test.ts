@@ -103,6 +103,16 @@ describe('buildModules', () => {
     expect(resolveActive(mods, '/s/sys-a/collections')?.module.id).toBe('governance');
   });
 
+  it('puts the import page in the module of what it imports, and only for people who have that module', async () => {
+    const { buildModules, resolveActive } = await import('./menu');
+    const caps = mk(sys('sys-a', { home: ['R'], work: ['R', 'W'], schedule: ['R'] }));
+    const mods = buildModules(caps, 'sys-a');
+    expect(resolveActive(mods, '/s/sys-a/import/tasks')?.module.id).toBe('work');
+    expect(resolveActive(mods, '/s/sys-a/import/scheduleSlots')?.module.id).toBe('schedule');
+    expect(resolveActive(mods, '/s/sys-a/import/protocolRoster')).toBeNull();
+    expect(resolveActive(mods, '/s/sys-a/import/unknown')).toBeNull();
+  });
+
   it('the Portal (church-wide level) has Units on the sidebar, other systems do not', async () => {
     const { buildModules } = await import('./menu');
     const caps = mk(sys('sys-main', { home: ['R'], people: ['R'], work: ['R'] }, [{ key: 'settings', letters: ['R'] }]), sys('sys-a', { people: ['R'] }));

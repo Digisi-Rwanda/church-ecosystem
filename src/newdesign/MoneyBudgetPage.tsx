@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { fetchBudget, saveBudgetLine, setBudgetApproval, type BudgetKind, type BudgetView } from '../api/frontDoorApi';
@@ -33,6 +34,7 @@ export function MoneyBudgetPage() {
         <p className="muted">{t('door.money.budget.intro')}</p>
       </div>
       <YearSelect year={year} onChange={setYear} />
+      {data?.canWrite && <div className="door-row"><ImportLink systemId={systemId} target="budgetLines" /></div>}
       {error && (
         <p className="door-error" role="alert">
           {error}

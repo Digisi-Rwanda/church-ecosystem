@@ -1,3 +1,5 @@
+import { useParams } from 'react-router-dom';
+import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import {
   addProtocolMember, fetchProtocolRoster, fetchProtocolScores, patchProtocolMember, type DirectoryPerson, type ProtocolKind, type ProtocolMemberRow, type ProtocolOffice, type ProtocolRosterPatch,
@@ -66,6 +68,7 @@ function MemberEditor({ m, onSave }: { m: ProtocolMemberRow; onSave: (patch: Pro
 
 /** The Protocol team: who serves, on which days and under which limits, and how each has done. */
 export function ProtocolRosterPage() {
+  const { systemId = '' } = useParams();
   const t = useT();
   const { locale } = useI18n();
   const data = useLoad(fetchProtocolRoster, 'protocol-roster');
@@ -100,6 +103,7 @@ export function ProtocolRosterPage() {
             {data.data.canWrite && (
               <div className="panel door-form">
                 <PersonPicker label={t('door.protocol.roster.add')} name="r-add" onPick={(p: DirectoryPerson) => void run(() => addProtocolMember(p.id))} />
+                <ImportLink systemId={systemId} target="protocolRoster" />
               </div>
             )}
             <label className="door-check">

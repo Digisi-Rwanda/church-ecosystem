@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { fetchAccounting, fetchMoneyAccounts, fetchMoneyEntries, fetchMoneyOptions } from '../api/frontDoorApi';
@@ -60,6 +61,7 @@ export function MoneyPage() {
           primary={canRecord ? <button type="button" className="btn" onClick={() => setForm('entry')}>{t('door.money.entry.new')}</button> : undefined}
           actions={
             <>
+              {canRecord && <ImportLink systemId={systemId} target="moneyEntries" />}
               {canRecord && (
                 <button type="button" className="btn ghost" onClick={() => setForm('account')}>
                   {t('door.money.account.new')}

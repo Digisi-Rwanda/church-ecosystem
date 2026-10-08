@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { fetchWork, fetchWorkOptions } from '../api/frontDoorApi';
@@ -40,6 +41,7 @@ export function WorkPage() {
         title={t('door.work.tasks')}
         purpose={t('door.purpose.work')}
         primary={canCreate ? <button type="button" className="btn" onClick={() => setCreating(true)}>{t('door.work.new')}</button> : undefined}
+        actions={canCreate ? <ImportLink systemId={systemId} target="tasks" /> : undefined}
       />
       <>
       <div className="view-bar">

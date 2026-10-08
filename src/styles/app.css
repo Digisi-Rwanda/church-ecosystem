@@ -7497,3 +7497,18 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* Sub-menus scroll away with the page like any other part of it; they never float over the content. */
 .door-subbar, .door-frame-top { position: static !important; top: auto !important; z-index: auto; }
+
+/* Sidebar tree: a module with several places opens under itself, with a guide line, like a file tree. */
+.nav-item-row { display: flex; align-items: center; gap: 0.1rem; }
+.nav-item-row > a { flex: 1; min-width: 0; }
+.nav-caret { flex: none; display: inline-flex; align-items: center; justify-content: center; width: 2rem; height: 2rem; border: 0; border-radius: 10px; background: transparent; color: var(--sidebar-text); cursor: pointer; opacity: 0.75; }
+.nav-caret:hover { background: color-mix(in srgb, var(--accent-soft) 55%, transparent); opacity: 1; }
+.nav-caret svg { transition: transform var(--dur-fast, 0.15s) ease; transform: rotate(-90deg); }
+.nav-item.open .nav-caret svg { transform: none; }
+.nav .nav-item-row > a.parent-active { color: var(--sidebar-active); font-weight: 650; }
+.nav .nav-item-row > a.parent-active .nav-icon { opacity: 1; color: var(--accent); }
+.nav-tree { list-style: none; margin: 0.1rem 0 0.25rem 1.35rem; padding: 0 0 0 0; border-left: 1px solid color-mix(in srgb, var(--sidebar-text) 22%, transparent); display: grid; gap: 0.05rem; }
+.nav-tree li { position: relative; padding-left: 0.9rem; }
+.nav-tree li::before { content: ''; position: absolute; left: 0; top: 50%; width: 0.7rem; border-top: 1px solid color-mix(in srgb, var(--sidebar-text) 22%, transparent); }
+.nav .nav-tree a { font-size: 0.82rem; font-weight: 500; padding: 0.4rem 0.6rem; }
+.nav .nav-tree a.active { font-weight: 650; }

@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { createChoir, fetchChoirs, setChoirActive, type ChoirRole } from '../api/frontDoorApi';
@@ -42,7 +43,7 @@ export function ChoirsPage() {
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}
       {list.data?.canManage && !form && (
-        <div className="door-row"><button type="button" className="btn" onClick={() => setForm(true)}>{t('door.music.choirs.new')}</button></div>
+        <div className="door-row"><button type="button" className="btn" onClick={() => setForm(true)}>{t('door.music.choirs.new')}</button><ImportLink systemId={systemId} target="choirMembers" /></div>
       )}
       {form && (
         <form className="panel door-form" onSubmit={submit} noValidate>

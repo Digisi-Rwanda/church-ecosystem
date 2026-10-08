@@ -1,3 +1,5 @@
+import { useParams } from 'react-router-dom';
+import { ImportLink } from './imports/ImportLink';
 import { useState, type FormEvent } from 'react';
 import { addSong, fetchSongs, markSongSung, retireSong } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -13,6 +15,7 @@ import { PageHeader } from './kit';
 const today = () => new Date().toISOString().slice(0, 10);
 
 function Songs({ choirId }: { choirId: string }) {
+  const { systemId = '' } = useParams();
   const t = useT();
   const { locale } = useI18n();
   const data = useLoad(() => fetchSongs(choirId), `songs|${choirId}`);
@@ -39,7 +42,7 @@ function Songs({ choirId }: { choirId: string }) {
   return (
     <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>
       {error && <p className="door-error" role="alert">{error}</p>}
-      {canWrite && !form && <div className="door-row"><button type="button" className="btn" onClick={() => setForm(true)}>{t('door.choirwork.song.new')}</button></div>}
+      {canWrite && !form && <div className="door-row"><button type="button" className="btn" onClick={() => setForm(true)}>{t('door.choirwork.song.new')}</button><ImportLink systemId={systemId} target="songs" /></div>}
       {form && (
         <form className="panel door-form" onSubmit={submit} noValidate>
           <h3>{t('door.choirwork.song.new')}</h3>

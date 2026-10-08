@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState, type FormEvent } from 'react';
 import { useParams } from 'react-router-dom';
 import { addMoneyPlanItem, changeMoneyPlanItem, fetchMoneyPlan, type MoneyPlanItemView } from '../api/frontDoorApi';
@@ -84,6 +85,7 @@ export function MoneyPlanPage() {
         <p className="muted">{t('door.money.plan.intro')}</p>
       </div>
       <YearSelect year={year} onChange={setYear} />
+      {data?.canWrite && <div className="door-row"><ImportLink systemId={systemId} target="planItems" /></div>}
       {error && (
         <p className="door-error" role="alert">
           {error}

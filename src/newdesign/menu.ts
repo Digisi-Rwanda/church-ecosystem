@@ -186,6 +186,12 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
 /** Pages that belong to a module without being a menu entry of their own, by the first part of their address. */
 const EXTRA_PAGES: Record<string, ModuleId> = { 'deleted-work': 'work', collections: 'governance', 'money/contributions': 'money' };
 
+/** The spreadsheet import page (`/s/<system>/import/<what>`) sits in the module of what it imports. */
+const IMPORT_MODULE: Record<string, ModuleId> = {
+  tasks: 'work', plans: 'work', groupMembers: 'people', choirMembers: 'ministry', protocolRoster: 'ministry', songs: 'ministry',
+  moneyEntries: 'money', budgetLines: 'money', planItems: 'money', donations: 'money', scheduleSlots: 'schedule',
+};
+
 const pathOf = (to: string) => to.split('?')[0]!;
 const isUnder = (path: string, to: string, end: boolean) => path === to || (!end && path.startsWith(`${to}/`));
 
@@ -200,7 +206,7 @@ export function resolveActive(modules: NavModule[], pathname: string): { module:
   }
   if (best) return best;
   const parts = pathname.split('/');
-  const id = EXTRA_PAGES[`${parts[3] ?? ''}/${parts[4] ?? ''}`] ?? EXTRA_PAGES[parts[3] ?? ''];
+  const id = parts[3] === 'import' ? IMPORT_MODULE[parts[4] ?? ''] : (EXTRA_PAGES[`${parts[3] ?? ''}/${parts[4] ?? ''}`] ?? EXTRA_PAGES[parts[3] ?? '']);
   const m = id ? modules.find((x) => x.id === id) : undefined;
   return m ? { module: m, place: null } : null;
 }

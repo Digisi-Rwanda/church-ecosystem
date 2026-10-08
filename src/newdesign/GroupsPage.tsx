@@ -1,3 +1,4 @@
+import { ImportLink } from './imports/ImportLink';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { createGroup, fetchGroupOptions, fetchGroups, type DirectoryPerson, type GroupOptions } from '../api/frontDoorApi';
@@ -119,6 +120,7 @@ export function GroupsPage() {
           <button type="button" className="btn" onClick={() => setForm(true)}>
             {t(kindKey(kind, 'new'))}
           </button>
+          <ImportLink systemId={systemId} target="groupMembers" />
         </div>
       )}
       {form && options.data && (

@@ -8,7 +8,6 @@ import { useFrontDoor } from './FrontDoorContext';
 import { resolveActive, type NavModule } from './menu';
 import { badge } from './notices';
 import { useAnnouncementSummary } from './useAnnouncementSummary';
-import { DoorMenu } from './DoorMenu';
 import { LanguageSwitch } from './LanguageSwitch';
 import { OfflineBanner } from './OfflineBanner';
 import { warm } from './warm';
@@ -71,10 +70,17 @@ export function Shell({
   const open = openAt === location.pathname;
   const setOpen = (v: boolean | ((x: boolean) => boolean)) => setOpenAt((cur) => ((typeof v === 'function' ? v(cur === location.pathname) : v) ? location.pathname : null));
   const toggleRef = useRef<HTMLButtonElement>(null);
+  // A module with several places opens like a tree in the sidebar. The one you are in is open by itself; a click on its arrow overrides that.
+  const [override, setOverride] = useState<Record<string, boolean>>({});
 
   const active = resolveActive(modules, location.pathname);
   const current = active?.module;
   const allowed = capabilities === null || active !== null;
+
+  useEffect(() => {
+    if (!current) return;
+    setOverride((o) => (current.id in o ? Object.fromEntries(Object.entries(o).filter(([k]) => k !== current.id)) : o));
+  }, [current?.id]); // oxlint-disable-line react-hooks/exhaustive-deps
 
   const placeName = active?.place ?? current?.places[0];
   const pageTitle = placeName ? `${t(placeName.labelKey as 'door.block.home')} · ${where}` : where;
@@ -132,17 +138,19 @@ export function Shell({
               <div className="nav-group-label">{t(g.labelKey as 'nav.group.home')}</div>
               {g.items.map((m) => {
                 const count = m.id === 'notifications' ? notificationCount : m.id === 'announcements' ? announcements.unread : 0;
-                return (
+                const tree = m.places.length > 1;
+                const isOpen = tree && (override[m.id] ?? current?.id === m.id);
+                const link = (
                   <NavLink
                     key={m.id}
                     to={m.to}
                     end={m.places.length === 1 && m.places[0]!.end}
-                    onClick={close}
+                    onClick={tree ? () => setOverride((o) => ({ ...o, [m.id]: true })) : close}
                     onMouseEnter={() => warm(m.to)}
                     onFocus={() => warm(m.to)}
                     onTouchStart={() => warm(m.to)}
-                    className={() => (current?.id === m.id ? 'active' : undefined)}
-                    aria-current={current?.id === m.id ? 'page' : undefined}
+                    className={() => (current?.id === m.id ? (tree ? 'parent-active' : 'active') : undefined)}
+                    aria-current={current?.id === m.id && !tree ? 'page' : undefined}
                   >
                     <span className="nav-link-main">
                       <Icon name={MODULE_ICON[m.id]} size={15} className="nav-icon" />
@@ -150,6 +158,42 @@ export function Shell({
                     </span>
                     {count > 0 && <span className="nav-badge">{badge(count)}</span>}
                   </NavLink>
+                );
+                if (!tree) return link;
+                return (
+                  <div key={m.id} className={`nav-item${isOpen ? ' open' : ''}`}>
+                    <div className="nav-item-row">
+                      {link}
+                      <button
+                        type="button"
+                        className="nav-caret"
+                        aria-expanded={isOpen}
+                        aria-controls={`nav-tree-${m.id}`}
+                        aria-label={t('door.frame.submenu', { module: t(m.labelKey as 'door.block.home') })}
+                        onClick={() => setOverride((o) => ({ ...o, [m.id]: !isOpen }))}
+                      >
+                        <Icon name="chevron-down" size={14} />
+                      </button>
+                    </div>
+                    {isOpen && (
+                      <ul id={`nav-tree-${m.id}`} className="nav-tree">
+                        {m.places.map((p) => (
+                          <li key={p.key}>
+                            <NavLink
+                              to={p.to}
+                              onClick={close}
+                              onMouseEnter={() => warm(p.to)}
+                              onTouchStart={() => warm(p.to)}
+                              className={() => (current?.id === m.id && active?.place?.key === p.key ? 'active' : undefined)}
+                              aria-current={current?.id === m.id && active?.place?.key === p.key ? 'page' : undefined}
+                            >
+                              <span className="nav-label">{t(p.labelKey as 'door.block.home')}</span>
+                            </NavLink>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  </div>
                 );
               })}
             </div>
@@ -193,20 +237,6 @@ export function Shell({
             </Link>
           </div>
         </header>
-        {current && current.places.length > 1 && (
-          <DoorMenu label={t('door.frame.submenu', { module: t(current.labelKey as 'door.block.home') })} className="door-subbar">
-            {current.places.map((p) => (
-              <NavLink
-                key={p.key}
-                to={p.to}
-                className={() => `door-menu-link${active?.place?.key === p.key ? ' active' : ''}`}
-                aria-current={active?.place?.key === p.key ? 'page' : undefined}
-              >
-                {t(p.labelKey as 'door.block.home')}
-              </NavLink>
-            ))}
-          </DoorMenu>
-        )}
         <OfflineBanner />
         <div className="print-head" aria-hidden>ADEPR Kacyiru · {where} · {fmt.date(new Date())}</div>
         <main id="door-main" className="content door-content" tabIndex={-1}>

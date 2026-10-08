@@ -104,6 +104,8 @@ const loadReportsPage = () => import('./ReportsPage').then((m) => ({ default: m.
 export const ReportsPage = lazy(loadReportsPage);
 const loadAdminPage = () => import('./AdminPage').then((m) => ({ default: m.AdminPage }));
 export const AdminPage = lazy(loadAdminPage);
+const loadImportPage = () => import('./imports/ImportPage').then((m) => ({ default: m.ImportPage }));
+export const ImportPage = lazy(loadImportPage);
 const loadPeopleImportPage = () => import('./PeopleImportPage').then((m) => ({ default: m.PeopleImportPage }));
 export const PeopleImportPage = lazy(loadPeopleImportPage);
 const loadPeopleDuplicatesPage = () => import('./PeopleDuplicatesPage').then((m) => ({ default: m.PeopleDuplicatesPage }));
@@ -181,6 +183,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   ReportPage: loadReportPage,
   ReportsPage: loadReportsPage,
   AdminPage: loadAdminPage,
+  ImportPage: loadImportPage,
   PeopleImportPage: loadPeopleImportPage,
   PeopleDuplicatesPage: loadPeopleDuplicatesPage,
   MyAssignmentsPage: loadMyAssignmentsPage,
