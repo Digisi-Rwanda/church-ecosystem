@@ -6,9 +6,10 @@ import { chartBars, compactNumber, roundedTopBar, shortDay, shortMonth } from '.
 import { useFrontDoor } from './FrontDoorContext';
 import { GlanceDashboard } from './GlanceDashboard';
 import { formatRwf } from './money';
+import { SystemLink } from './SystemLink';
 import { useLoad } from './useLoad';
 
-const KPI_ICON: Record<DashKpi['key'], IconName> = { members: 'users', attendance: 'pulse', giving: 'wallet', money: 'wallet', units: 'layers' };
+const KPI_ICON: Record<DashKpi['key'], IconName> = { members: 'users', attendance: 'pulse', giving: 'wallet', money: 'wallet', units: 'layers', reports: 'folder' };
 
 /** "Up 12%" / "Down 3%" / "Same": the words travel with the arrow, so colour is never the only signal. */
 function Trend({ value }: { value: number | null }) {
@@ -38,6 +39,7 @@ function KpiCard({ kpi }: { kpi: DashKpi }) {
         <span className="dash-kpi-label">{label}</span>
       </span>
       <Trend value={kpi.trend} />
+      {kpi.tone === 'late' && <span className="dash-flag">{t('door.dash.reports.late')}</span>}
     </>
   );
   return kpi.href ? (
@@ -154,18 +156,19 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
           <ul className="dash-list">
             {data.events.map((e) => (
               <li key={e.id}>
-                <Link to={e.href} className="dash-row">
+                <SystemLink from={systemId} to={e.href} className="dash-row">
                   <span className="dash-date">{day(e.startsOn)}</span>
                   <span className="dash-row-main">
                     <strong>{e.title}</strong>
                     <span className="dash-chip">{t(`door.plans.${e.planType}` as 'door.plans.EVENT')}</span>
                   </span>
-                </Link>
+                </SystemLink>
               </li>
             ))}
           </ul>
         )}
       </Panel>
+      {data.members && (
       <Panel title={t('door.dash.members.title')} to={`/s/${systemId}/people`}>
         {data.members.length === 0 ? (
           <p className="muted">{t('door.dash.members.none')}</p>
@@ -173,7 +176,7 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
           <ul className="dash-list">
             {data.members.map((m) => (
               <li key={m.personId}>
-                <Link to={m.href} className="dash-row">
+                <SystemLink from={systemId} to={m.href} className="dash-row">
                   <span className="dash-avatar" aria-hidden="true">
                     {initials(m.name)}
                   </span>
@@ -181,12 +184,39 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
                     <strong>{m.name}</strong>
                     <span className="muted">{t('door.dash.members.joined', { date: day(m.joinedOn) })}</span>
                   </span>
-                </Link>
+                </SystemLink>
               </li>
             ))}
           </ul>
         )}
       </Panel>
+      )}
+      {data.reports && (
+        <Panel title={t('door.dash.reports.title')} to={`/s/${systemId}/reports`}>
+          {data.reports.length === 0 ? (
+            <p className="muted">{t('door.dash.reports.none')}</p>
+          ) : (
+            <ul className="dash-list">
+              {data.reports.map((r) => (
+                <li key={r.id}>
+                  <SystemLink from={systemId} to={r.href} className="dash-row">
+                    <span className="dash-icon" aria-hidden="true">
+                      <Icon name="folder" size={18} />
+                    </span>
+                    <span className="dash-row-main">
+                      <strong>{r.title}</strong>
+                      <span className="muted">
+                        {t(`door.reports.kind.${r.kind}` as 'door.dash.reports.none')} · {r.periodKey}
+                      </span>
+                    </span>
+                    {r.late && <span className="dash-flag">{t('door.dash.reports.late')}</span>}
+                  </SystemLink>
+                </li>
+              ))}
+            </ul>
+          )}
+        </Panel>
+      )}
       <Panel title={t('door.dash.work.title')} to={`/s/${systemId}/work`}>
         {data.work.length === 0 ? (
           <p className="muted">{t('door.dash.work.none')}</p>
@@ -194,7 +224,7 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
           <ul className="dash-list">
             {data.work.map((w) => (
               <li key={w.id}>
-                <Link to={w.href} className="dash-row">
+                <SystemLink from={systemId} to={w.href} className="dash-row">
                   <span className="dash-icon" aria-hidden="true">
                     <Icon name="task" size={18} />
                   </span>
@@ -202,7 +232,7 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
                     <strong>{w.title}</strong>
                     <span className="muted">{t(`door.work.status.${w.status}` as 'door.work.status.TODO')}</span>
                   </span>
-                </Link>
+                </SystemLink>
               </li>
             ))}
           </ul>

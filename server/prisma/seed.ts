@@ -4,6 +4,7 @@ import bcrypt from 'bcryptjs';
 import { PrismaClient } from '@prisma/client';
 import { backfillCodes } from '../src/lib/codes.js';
 import { backfillStructure } from '../src/lib/offices.js';
+import { seedDemoFlows } from './seedDemoFlows.js';
 import { MINISTRY_KIT_ORGS, SPECIAL_MINISTRY_ORGS, CHOIR_ORGS, CHOIR_PARENT_ORG } from '../src/lib/ministryOrgs.js';
 
 const prisma = new PrismaClient();
@@ -549,6 +550,14 @@ async function main() {
       posAdded++;
     }
     console.log(`  demo church: ${ouAdded} org units, ${peopleAdded} people, ${memAdded} memberships, ${posAdded} positions added`);
+    if (process.env.SEED_DEMO_FLOWS !== 'false') {
+      try {
+        const f = await seedDemoFlows(prisma);
+        console.log(`  demo flows: ${f.scheduling.choirs} choirs, ${f.scheduling.members} choir members, ${f.scheduling.roster} protocol people, ${f.money.ministries} ministries with ${f.money.plans} plans and ${f.money.entries} money entries added`);
+      } catch (err) {
+        console.warn('  demo flows skipped:', err instanceof Error ? err.message : err);
+      }
+    }
     } catch (err) {
       // Never stop the server from starting over demo data.
       console.warn('  demo church roster skipped:', err instanceof Error ? err.message : err);

@@ -22,7 +22,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'workTask', 'workPlan', 'unitGroup', 'groupSession', 'moneyEntry', 'offeringCount']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'workTask', 'workPlan', 'unitGroup', 'groupSession', 'moneyEntry', 'offeringCount', 'report', 'reportSchedule']) db[k] ??= [];
   db.orgUnit.push(
     { id: 'ou-church', name: 'ADEPR Kacyiru', code: 'KAC', kind: 'CENTRAL', type: 'ORGANISATION', parentId: null, systemId: 'sys-main' },
     { id: 'ou-youth', name: 'Youth', code: 'KAC-YOU', kind: 'MINISTRY', type: 'MINISTRY', parentId: 'ou-church', systemId: 'sys-youth' },
@@ -84,5 +84,20 @@ describe('leader dashboard', () => {
     const r = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
     expect(r.body.events.map((e: { title: string }) => e.title)).toEqual(['Youth camp']);
     expect(r.body.work.map((w: { title: string }) => w.title)).toEqual(['Book the hall']);
+  });
+  it('reports appear only where the REPORTS letter opens them, and only for the system in view', async () => {
+    const db = fake.__db;
+    const now = new Date();
+    const period = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`;
+    db.report.push(
+      { id: 'r1', systemId: 'sys-youth', orgUnitId: 'ou-youth', kind: 'MEETINGS', periodKey: period, title: 'x', status: 'PUBLISHED', snapshotJson: '{}', composedById: 'a', composedAt: now, publishedAt: now },
+      { id: 'r2', systemId: 'sys-music', orgUnitId: 'ou-youth', kind: 'MEETINGS', periodKey: period, title: 'y', status: 'PUBLISHED', snapshotJson: '{}', composedById: 'a', composedAt: now, publishedAt: now },
+    );
+    const r = await get('p-pastor', '/api/dashboard?systemId=sys-youth');
+    expect(keys(r)).toContain('reports');
+    expect(r.body.reports.map((x: { id: string }) => x.id)).toEqual(['r1']);
+    // A leader whose letters do not include People gets no members list and no members figure.
+    const y = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
+    expect(y.body.members === null).toBe(!keys(y).includes('members'));
   });
 });

@@ -6,6 +6,7 @@ import { needsAttention, orderOversight, urgentHref, urgentKey } from './central
 import { useFrontDoor } from './FrontDoorContext';
 import { MonthChart } from './GlanceDashboard';
 import { LeaderDashboard } from './Dashboard';
+import { SystemLink } from './SystemLink';
 import { formatRwf } from './money';
 import { buildOwnMenu } from './menu';
 import { LoadState } from './LoadState';
@@ -17,6 +18,7 @@ import { kindKey } from './reports';
 
 /** Offerings counted at services across the church, read only. These are counts, never added to Money's figures. */
 function ChurchCollections() {
+  const { systemId = '' } = useParams();
   const t = useT();
   const { locale } = useI18n();
   const { data, loading, failed, reload } = useLoad(fetchChurchCollections, 'central-collections');
@@ -38,7 +40,7 @@ function ChurchCollections() {
                 <tbody>
                   {data.ministries.map((m) => (
                     <tr key={m.systemId}>
-                      <th scope="row"><Link to={`/s/${m.systemId}/collections`}>{m.name}</Link></th>
+                      <th scope="row"><SystemLink from={systemId} to={`/s/${m.systemId}/collections`}>{m.name}</SystemLink></th>
                       <td>{formatRwf(m.total)}</td>
                       <td className="muted">{t('door.central.coll.counts', { count: String(m.count) })}</td>
                       <td className={m.toConfirm + m.toHandOver > 0 ? 'door-error' : 'muted'}>{m.toConfirm + m.toHandOver > 0 ? t('door.central.coll.open', { confirm: String(m.toConfirm), hand: String(m.toHandOver) }) : ''}</td>
@@ -112,7 +114,7 @@ export function CentralHomePage() {
                 {orderOversight(data.oversight).map((r) => (
                   <div key={r.systemId} className={`door-oversight-card${needsAttention(r) ? ' attention' : ''}`}>
                     <strong>
-                      <Link to={`/s/${r.systemId}/governance`}>{r.name}</Link>
+                      <SystemLink from={systemId} to={`/s/${r.systemId}/governance`}>{r.name}</SystemLink>
                     </strong>
                     <dl>
                       <dt>{t('door.central.col.units')}</dt>
@@ -141,9 +143,9 @@ export function CentralHomePage() {
                   <ul className="door-notices">
                     {(data.reportsLate ?? []).map((l) => (
                       <li key={l.scheduleId}>
-                        <Link to={`/s/${l.systemId}/reports`}>
+                        <SystemLink from={systemId} to={`/s/${l.systemId}/reports`}>
                           {t('door.central.reports.lateLine', { unit: l.unitName, kind: t(kindKey(l.kind)), period: l.periodKey, due: l.dueOn })}
-                        </Link>
+                        </SystemLink>
                       </li>
                     ))}
                   </ul>
@@ -155,9 +157,9 @@ export function CentralHomePage() {
                 <ul className="door-notices">
                   {data.reports.map((r) => (
                     <li key={r.id}>
-                      <Link to={`/s/${r.systemId}/reports/${r.id}`}>
+                      <SystemLink from={systemId} to={`/s/${r.systemId}/reports/${r.id}`}>
                         {t(kindKey(r.kind))} · {r.periodKey} · {r.unitName}
-                      </Link>
+                      </SystemLink>
                     </li>
                   ))}
                 </ul>

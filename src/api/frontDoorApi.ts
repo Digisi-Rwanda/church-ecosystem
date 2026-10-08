@@ -1471,7 +1471,7 @@ export const fetchGlance = (systemId: string): Promise<{ systemId: string; tiles
 
 /* ─── Leader dashboard ─── */
 export type DashPoint = { label: string; value: number };
-export type DashKpi = { key: 'members' | 'attendance' | 'giving' | 'money' | 'units'; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string };
+export type DashKpi = { key: 'members' | 'attendance' | 'giving' | 'money' | 'units' | 'reports'; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok' };
 export type Dashboard = {
   systemId: string;
   central: boolean;
@@ -1479,7 +1479,9 @@ export type Dashboard = {
   attendance: DashPoint[] | null;
   second: { kind: 'giving' | 'money'; series: Array<{ key: 'giving' | 'income' | 'spent'; points: DashPoint[] }> } | null;
   events: Array<{ id: string; title: string; startsOn: string | null; planType: string; href: string }>;
-  members: Array<{ personId: string; name: string; joinedOn: string; href: string }>;
+  /** null = this person's access does not open that part, so the page leaves it out. */
+  members: Array<{ personId: string; name: string; joinedOn: string; href: string }> | null;
+  reports: Array<{ id: string; title: string; kind: string; periodKey: string; late: boolean; href: string }> | null;
   work: Array<{ id: string; title: string; status: string; at: string | null; href: string }>;
 };
 export const fetchDashboard = (systemId: string): Promise<Dashboard> => apiFetch(`/api/dashboard?systemId=${encodeURIComponent(systemId)}`);

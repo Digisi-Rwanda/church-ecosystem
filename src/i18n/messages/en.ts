@@ -1980,6 +1980,11 @@ export const en = {
   'door.dash.viewAll': 'View all',
   'door.dash.goTo': 'Go to',
 
+  'door.dash.reports.title': 'Reports',
+  'door.dash.reports.none': 'No reports yet.',
+  'door.dash.reports.late': 'Late',
+  'door.dash.kpi.reports': 'Reports',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

@@ -7317,3 +7317,4 @@ a.dash-kpi:hover { border-color: var(--accent); }
 .dash-date { flex: none; min-width: 52px; text-align: center; padding: 6px 4px; border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--accent-on-soft); font-size: 0.78rem; font-weight: 700; }
 .dash-chip { justify-self: start; font-size: 0.72rem; padding: 1px 8px; border-radius: var(--radius-pill); background: var(--accent-soft); color: var(--accent-on-soft); }
 .dash-avatar { display: grid; place-items: center; flex: none; width: 36px; height: 36px; border-radius: 50%; background: var(--accent); color: var(--accent-ink); font-size: 0.8rem; font-weight: 700; }
+.dash-flag { flex: none; font-size: 0.72rem; font-weight: 600; padding: 1px 8px; border-radius: var(--radius-pill); background: var(--warn-soft); color: var(--warn); }

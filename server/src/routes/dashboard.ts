@@ -13,6 +13,8 @@ import { canSee, type WorkRow } from '../work/rules.js';
 import { asWorkRow, type PlanRow } from '../work/plan.js';
 import { balances } from '../money/rules.js';
 import { COLLECTIONS_SYSTEM } from './collections.js';
+import { reportsReceived } from './reports.js';
+import { canReadReports } from '../reports/access.js';
 import { lastMonths, monthOf, percentChange, sumByMonth } from '../glance/rules.js';
 
 export const dashboardRouter = Router();
@@ -52,13 +54,15 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const months = lastMonths(now);
   const thisMonth = months[months.length - 1]!;
   const lastMonth = months[months.length - 2]!;
-  const kpis: Array<{ key: string; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string }> = [];
-  const lists: { events: unknown[]; members: unknown[]; work: unknown[] } = { events: [], members: [], work: [] };
+  const kpis: Array<{ key: string; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok' }> = [];
+  // null = this person's letters do not open that part, so the page leaves it out; [] = allowed, nothing yet.
+  const lists: { events: unknown[]; members: unknown[] | null; work: unknown[]; reports: unknown[] | null } = { events: [], members: null, work: [], reports: null };
   let attendance: Array<{ label: string; value: number }> | null = null;
   let second: { kind: 'giving' | 'money'; series: Array<{ key: string; points: Array<{ label: string; value: number }> }> } | null = null;
 
   // People: members, recent joiners, attendance at groups.
   if (has('PEOPLE')) {
+    lists.members = [];
     const all = (await prisma.membership.findMany(central ? undefined : { where: { systemId } })) as MemberRow[];
     const scoped = all.filter((m) => (central ? m.type === 'CHURCH_MEMBER' : m.systemId === systemId));
     const countAt = (at: Date) => new Set(scoped.filter((m) => new Date(m.startDate) <= at && (!m.endDate || new Date(m.endDate) > at) && (m.status === 'ACTIVE' || !!m.endDate)).map((m) => m.personId)).size;
@@ -107,7 +111,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
 
   // Units inside this scope.
   const inScope = (units as UnitRow[]).filter((u) => (central ? u.kind === 'MINISTRY' || u.kind === 'ORGANISATION' : u.systemId === systemId) && (u.status ?? 'ACTIVE') === 'ACTIVE');
-  if (inScope.length > 0) kpis.push({ key: 'units', value: inScope.length, format: 'count', trend: null, href: `/s/${systemId}/people/units` });
+  if (has('PEOPLE') && inScope.length > 0) kpis.push({ key: 'units', value: inScope.length, format: 'count', trend: null, href: `/s/${systemId}/people/units` });
 
   // Upcoming events and programs this person may see.
   const today = new Date(now);
@@ -126,6 +130,21 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     .sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime())
     .slice(0, 4);
   lists.work = tasks.map((w) => ({ id: w.id, title: w.title, status: w.status, at: iso(w.updatedAt ?? w.createdAt), href: `/s/${w.systemId}/work` }));
+
+  // Reports: only where this person may read them. A ministry sees its own; Central sees what it receives.
+  const readsReports = central ? liveHoldings(me, data, now).some((h) => h.scope === 'CHURCH') || canReadReports(me, systemId, data, now) : canReadReports(me, systemId, data, now);
+  if (readsReports) {
+    const got = await reportsReceived(me, data, units as never, now);
+    const mine = <T extends { systemId: string }>(rows: T[]) => (central ? rows : rows.filter((r) => r.systemId === systemId));
+    const late = mine(got.late);
+    const published = mine(got.reports);
+    const thisPeriod = published.filter((r) => r.periodKey === thisMonth || r.periodKey === lastMonth).length;
+    kpis.push({ key: 'reports', value: late.length > 0 ? late.length : thisPeriod, format: 'count', trend: null, href: `/s/${systemId}/reports`, tone: late.length > 0 ? 'late' : 'ok' });
+    lists.reports = [
+      ...late.map((r) => ({ id: `late-${r.scheduleId}`, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: true, href: `/s/${r.systemId}/reports` })),
+      ...published.map((r) => ({ id: r.id, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: false, href: `/s/${r.systemId}/reports/${r.id}` })),
+    ].slice(0, 4);
+  }
 
   res.json({ systemId, central, kpis, attendance, second, ...lists });
 });
