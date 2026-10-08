@@ -61,6 +61,10 @@ beforeEach(async () => {
     { id: 'pos-ctr', personId: 'p-ctr', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Treasurer', office: 'TREASURER', status: 'ACTIVE', startDate: at },
     { id: 'pos-vp', personId: 'p-vp', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Vice President', office: 'VICE_PRESIDENT', status: 'ACTIVE', startDate: at },
   );
+  db.position.push(
+    { id: 'pos-vp-main', personId: 'p-vp', systemId: 'sys-main', orgUnitId: 'ou-church', title: 'Vice President', office: 'VICE_PRESIDENT', status: 'ACTIVE', startDate: at },
+    { id: 'pos-pres-main', personId: 'p-choir-leader', systemId: 'sys-main', orgUnitId: 'ou-church', title: 'President', office: 'PRESIDENT', status: 'ACTIVE', startDate: at },
+  );
   const { createApp } = await import('../src/app.js');
   app = createApp();
 });
@@ -135,7 +139,13 @@ describe('money', () => {
 });
 
 describe('collections', () => {
-  const count = (o: object = {}) => ({ unitId: 'ou-choir', serviceOn: '2026-10-04', label: 'Sunday service', amount: 85000, counterIds: ['p-vp', 'p-choir-member'], ...o });
+  it('belong to Central Administration only: no other system records or reads them', async () => {
+    expect((await post('p-vp', '/api/collections', { unitId: 'ou-choir', serviceOn: '2026-10-04', label: 'Sunday service', amount: 85000, counterIds: ['p-vp', 'p-choir-member'] })).status).toBe(403);
+    expect((await get('p-vp', '/api/collections?systemId=sys-choir')).status).toBe(404);
+    const opts = await get('p-vp', '/api/collections/options');
+    expect(opts.body.units.map((u: { systemId: string }) => u.systemId)).toEqual(['sys-main']);
+  });
+  const count = (o: object = {}) => ({ unitId: 'ou-church', serviceOn: '2026-10-04', label: 'Sunday service', amount: 85000, counterIds: ['p-vp', 'p-choir-member'], ...o });
   it('needs two different counters', async () => {
     expect((await post('p-vp', '/api/collections', count({ counterIds: ['p-vp'] }))).status).toBe(400);
     expect((await post('p-vp', '/api/collections', count({ counterIds: ['p-vp', 'p-vp'] }))).body.code).toBe('NEEDS_TWO_COUNTERS');
@@ -159,7 +169,7 @@ describe('collections', () => {
     const c = (await post('p-vp', '/api/collections', count())).body.id;
     expect((await post('p-vp', `/api/collections/${c}/void`)).body.code).toBe('REASON_REQUIRED');
     expect((await post('p-vp', `/api/collections/${c}/void`, { reason: 'Wrong day' })).status).toBe(200);
-    expect((await get('p-choir-member', '/api/collections?systemId=sys-choir')).status).toBe(404);
-    expect((await get('p-vp', '/api/collections?systemId=sys-choir')).body.counts[0].status).toBe('VOIDED');
+    expect((await get('p-choir-member', '/api/collections?systemId=sys-main')).status).toBe(404);
+    expect((await get('p-vp', '/api/collections?systemId=sys-main')).body.counts[0].status).toBe('VOIDED');
   });
 });

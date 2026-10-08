@@ -26,7 +26,9 @@ interface Count {
 }
 interface UnitRow { id: string; name: string; systemId?: string | null }
 
-const g = (me: string, s: string, d: AccessData) => lettersInSystem(me, s, d, new Date()).GOVERNANCE as string[];
+/** Tithes, offerings and other givings belong to Central Administration only: no other system holds them. */
+export const COLLECTIONS_SYSTEM = 'sys-main';
+const g = (me: string, s: string, d: AccessData) => (s === COLLECTIONS_SYSTEM ? (lettersInSystem(me, s, d, new Date()).GOVERNANCE as string[]) : []);
 const canRead = (me: string, s: string, d: AccessData) => g(me, s, d).includes('R');
 const canWrite = (me: string, s: string, d: AccessData) => g(me, s, d).includes('W');
 const canConfirm = (me: string, s: string, d: AccessData) => g(me, s, d).includes('A');

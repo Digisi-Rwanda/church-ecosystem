@@ -3,7 +3,7 @@ import { Icon, type IconName } from '../components/ui/Icon';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { buildMenu, buildOwnMenu } from './menu';
-import { GlanceDashboard } from './GlanceDashboard';
+import { LeaderDashboard } from './Dashboard';
 import { UrgentTile } from './UrgentTile';
 
 const SHARED_ICON: Record<string, IconName> = { people: 'users', work: 'task', schedule: 'calendar', money: 'wallet', reports: 'chart' };
@@ -38,7 +38,7 @@ export function SystemHome({ systemId, systemName }: { systemId: string; systemN
         <p className="muted">{t('door.tile.intro')}</p>
       </div>
       <UrgentTile systemId={systemId} />
-      <GlanceDashboard systemId={systemId} />
+      <LeaderDashboard systemId={systemId} systemName={systemName} />
       <ul className="door-tiles">
         {tiles.map((x) => (
           <li key={x.key}>

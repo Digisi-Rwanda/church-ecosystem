@@ -10,6 +10,7 @@
  * Read state is stored per person, so it shows on a second device.
  */
 import { prisma } from '../lib/prisma.js';
+import { remember } from '../lib/shortCache.js';
 import { buildAttentionFeed } from '../attention/buildFeed.js';
 import { liveHoldings, type AccessData, type DelegationRec, type MembershipRec, type PositionRec } from '../capabilities/engine.js';
 import type { UnitRec } from '../lib/appointments.js';
@@ -19,10 +20,10 @@ export { MAIN, countNotices, addressedTo, waitingFromAppointments, type Counts, 
 
 export async function loadAccessData(personId?: string): Promise<{ data: AccessData; units: UnitRec[] }> {
   const [positions, memberships, delegations, units] = await Promise.all([
-    prisma.position.findMany(),
-    prisma.membership.findMany(),
-    prisma.delegation.findMany(personId ? { where: { toPersonId: personId } } : undefined),
-    prisma.orgUnit.findMany(),
+    remember('access|positions', () => prisma.position.findMany()),
+    remember('access|memberships', () => prisma.membership.findMany()),
+    remember(`access|delegations|${personId ?? '*'}`, () => prisma.delegation.findMany(personId ? { where: { toPersonId: personId } } : undefined)),
+    remember('access|units', () => prisma.orgUnit.findMany()),
   ]);
   const unitSystem: Record<string, string | null> = {};
   for (const u of units as UnitRec[]) unitSystem[u.id] = u.systemId ?? null;

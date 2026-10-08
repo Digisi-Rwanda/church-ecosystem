@@ -1,3 +1,4 @@
+import { forgetAll } from './lib/shortCache.js';
 import cors from 'cors';
 import express from 'express';
 import { config } from './config.js';
@@ -27,6 +28,7 @@ import { groupsRouter } from './routes/groups.js';
 import { movesRouter } from './routes/moves.js';
 import { caringRouter } from './routes/caring.js';
 import { glanceRouter } from './routes/glance.js';
+import { dashboardRouter } from './routes/dashboard.js';
 import { protocolRouter } from './routes/protocol.js';
 import { musicScheduleRouter } from './routes/musicSchedule.js';
 import { evangelismRouter } from './routes/evangelism.js';
@@ -49,6 +51,11 @@ export function createApp() {
   app.disable('x-powered-by');
   app.use(securityHeaders);
   app.use(requestLog);
+  // Any change empties the short lookup memory, so the next read is always fresh.
+  app.use((req, res, next) => {
+    if (req.method !== 'GET' && req.method !== 'HEAD' && req.method !== 'OPTIONS') res.on('finish', forgetAll);
+    next();
+  });
   app.use(
     cors({
       origin: config.corsOrigin,
@@ -113,6 +120,7 @@ export function createApp() {
   app.use('/api/moves', movesRouter);
   app.use('/api/caring', caringRouter);
   app.use('/api/glance', glanceRouter);
+  app.use('/api/dashboard', dashboardRouter);
   app.use('/api/protocol', protocolRouter);
   app.use('/api/music/schedule', musicScheduleRouter);
   app.use('/api/evangelism', evangelismRouter);

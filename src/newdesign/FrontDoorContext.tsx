@@ -16,6 +16,7 @@ import {
   type PortalSystem,
 } from '../api/frontDoorApi';
 import { authService } from '../services';
+import { clearLoadCache } from './useLoad';
 
 type Status = 'checking' | 'out' | 'loading' | 'in' | 'error';
 
@@ -45,7 +46,8 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
 
   const load = useCallback(async () => {
-    setStatus('loading');
+    // Already signed in: refresh quietly, without blanking the screen.
+    setStatus((s) => (s === 'in' ? s : 'loading'));
     try {
       const [me, systems, caps] = await Promise.all([apiMe(), fetchPortal(), fetchCapabilities()]);
       setPersonName(me.person.preferredName || me.person.fullName);
@@ -77,6 +79,7 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
         if (e instanceof ApiError && e.status === 0) return 'unreachable';
         return 'failed';
       }
+      clearLoadCache();
       await load();
       return 'ok';
     },
@@ -84,6 +87,7 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
   );
 
   const signOut = useCallback(() => {
+    clearLoadCache();
     authService.logout(); // also clears the token and anything the old app kept
     setApiToken(null);
     setPortal([]);

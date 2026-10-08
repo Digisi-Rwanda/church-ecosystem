@@ -104,14 +104,26 @@ beforeEach(async () => {
     { id: 'mem-tl2', personId: 'p-tl2', systemId: 'sys-choir', type: 'MINISTRY_MEMBER', label: 'Choir member', status: 'ACTIVE', startDate: at },
   );
   db.position.push({ id: 'pos-ctr', personId: 'p-ctr', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Treasurer', office: 'TREASURER', status: 'ACTIVE', startDate: at });
-  db.systemSetting.push({ id: 'ss1', systemId: 'sys-choir', detailsJson: '{}', moneyJson: JSON.stringify({ types: [{ code: 'TITHE', name: 'Tithe', goalAmount: 1000, goalPer: 'MEMBER' }], methods: ['CASH'] }) });
+  db.systemSetting.push({ id: 'ss1', systemId: 'sys-choir', detailsJson: '{}', moneyJson: JSON.stringify({ types: [{ code: 'BUILDING', name: 'Building fund', goalAmount: 1000, goalPer: 'MEMBER' }], methods: ['CASH'] }) });
   const { createApp } = await import('../src/app.js');
   app = createApp();
 });
 
+describe("tithes and offerings stay out of a unit's money", () => {
+  it('they are not offered and are refused as a kind of money', async () => {
+    const opts = await get('p-ctr', '/api/money/options');
+    expect(opts.body.categories).not.toContain('TITHE');
+    expect(opts.body.categories).not.toContain('OFFERING');
+    for (const category of ['TITHE', 'OFFERING']) {
+      expect((await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category, planned: 100 })).status).toBe(400);
+      expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'x', amount: 1, category })).status).toBe(400);
+    }
+  });
+});
+
 describe('budget', () => {
   it('the treasurer plans, totals are computed, and non-readers see nothing', async () => {
-    expect((await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'TITHE', planned: 5000 })).status).toBe(200);
+    expect((await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'DONATION', planned: 5000 })).status).toBe(200);
     expect((await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'SPENDING', category: 'SUPPLIES', planned: 1500 })).status).toBe(200);
     const r = await get('p-ctr', `/api/money/budget?${S}&year=2026`);
     expect(r.body.totals).toEqual({ income: 5000, spending: 1500, net: 3500 });
@@ -120,7 +132,7 @@ describe('budget', () => {
     expect((await get('p-ctr', `/api/money/budget?systemId=sys-youth&year=2026`)).status).toBe(404);
   });
   it('zero removes a line; the president approves; an approved budget is locked until reopened', async () => {
-    const line = (planned: number) => put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'TITHE', planned });
+    const line = (planned: number) => put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'DONATION', planned });
     await line(5000);
     await line(0);
     expect((await get('p-ctr', `/api/money/budget?${S}&year=2026`)).body.lines).toHaveLength(0);
@@ -161,7 +173,7 @@ describe('action plan and accounting', () => {
 });
 
 describe('contribution lists', () => {
-  const team = (as: string, unit: string, month = '2026-10') => post(as, '/api/money/lists', { systemId: 'sys-choir', level: 'TEAM', typeCode: 'TITHE', month, teamUnitId: unit });
+  const team = (as: string, unit: string, month = '2026-10') => post(as, '/api/money/lists', { systemId: 'sys-choir', level: 'TEAM', typeCode: 'BUILDING', month, teamUnitId: unit });
   it('a team leader writes only their own team’s list', async () => {
     expect((await team('p-tl1', 'ou-sop')).status).toBe(201);
     expect((await team('p-tl1', 'ou-alto')).status).toBe(403);
@@ -177,11 +189,11 @@ describe('contribution lists', () => {
     expect((await post('p-tl1', `/api/money/lists/${a}/submit`)).status).toBe(200);
     expect((await put('p-tl1', `/api/money/lists/${a}`, { lines: [{ name: 'Late', amount: 1 }] })).status).toBe(403);
     // the other team has not submitted yet, so only the first combines
-    expect((await post('p-tl1', '/api/money/lists/combine', { systemId: 'sys-choir', typeCode: 'TITHE', month: '2026-10' })).status).toBe(404);
-    const first = await post('p-ctr', '/api/money/lists/combine', { systemId: 'sys-choir', typeCode: 'TITHE', month: '2026-10' });
+    expect((await post('p-tl1', '/api/money/lists/combine', { systemId: 'sys-choir', typeCode: 'BUILDING', month: '2026-10' })).status).toBe(404);
+    const first = await post('p-ctr', '/api/money/lists/combine', { systemId: 'sys-choir', typeCode: 'BUILDING', month: '2026-10' });
     expect(first.body.combined).toBe(1);
     await post('p-tl2', `/api/money/lists/${b}/submit`);
-    const second = await post('p-ctr', '/api/money/lists/combine', { systemId: 'sys-choir', typeCode: 'TITHE', month: '2026-10' });
+    const second = await post('p-ctr', '/api/money/lists/combine', { systemId: 'sys-choir', typeCode: 'BUILDING', month: '2026-10' });
     expect(second.body.id).toBe(first.body.id);
     const all = (await get('p-ctr', `/api/money/lists?${S}&month=2026-10`)).body;
     const unit = all.lists.find((l: any) => l.level === 'UNIT');
@@ -200,12 +212,12 @@ describe('contribution lists', () => {
     expect((await get('p-ctr', `/api/money/lists?${S}`)).body.lists.find((l: any) => l.id === unit.id).status).toBe('APPROVED');
   });
   it('a unit with no teams: the treasurer records the list and submits it', async () => {
-    const id = (await post('p-ctr', '/api/money/lists', { systemId: 'sys-choir', level: 'UNIT', typeCode: 'TITHE', month: '2026-09' })).body.id;
+    const id = (await post('p-ctr', '/api/money/lists', { systemId: 'sys-choir', level: 'UNIT', typeCode: 'BUILDING', month: '2026-09' })).body.id;
     await put('p-ctr', `/api/money/lists/${id}`, { lines: [{ name: 'Ann', amount: 1500 }] });
     const l = (await get('p-ctr', `/api/money/lists?${S}&month=2026-09`)).body.lists[0];
     expect(l.goals).toEqual([{ label: 'Ann', total: 1500, goal: 1000, met: true }]);
     expect((await post('p-ctr', `/api/money/lists/${id}/submit`)).status).toBe(200);
-    expect((await post('p-tl1', '/api/money/lists', { systemId: 'sys-choir', level: 'UNIT', typeCode: 'TITHE', month: '2026-08' })).status).toBe(403);
+    expect((await post('p-tl1', '/api/money/lists', { systemId: 'sys-choir', level: 'UNIT', typeCode: 'BUILDING', month: '2026-08' })).status).toBe(403);
   });
   it('a team draft is private to its leader and the treasurer', async () => {
     const a = (await team('p-tl1', 'ou-sop')).body.id;
@@ -221,16 +233,16 @@ describe('contribution lists', () => {
 
 describe('my contribution', () => {
   it('a member sees only their own lines, counted once, against their goal; others see nothing of them', async () => {
-    const a = (await post('p-tl1', '/api/money/lists', { systemId: 'sys-choir', level: 'TEAM', typeCode: 'TITHE', month: '2026-10', teamUnitId: 'ou-sop' })).body.id;
+    const a = (await post('p-tl1', '/api/money/lists', { systemId: 'sys-choir', level: 'TEAM', typeCode: 'BUILDING', month: '2026-10', teamUnitId: 'ou-sop' })).body.id;
     await put('p-tl1', `/api/money/lists/${a}`, { lines: [{ name: 'Choir member', personId: 'p-choir-member', amount: 800 }, { name: 'Other', personId: 'p-pastor', amount: 9999 }] });
     let r = (await get('p-choir-member', `/api/money/mine?${S}&year=2026`)).body;
     expect(r.grandTotal).toBe(0); // still a draft with the team leader
     await post('p-tl1', `/api/money/lists/${a}/submit`);
     r = (await get('p-choir-member', `/api/money/mine?${S}&year=2026`)).body;
     expect(r.grandTotal).toBe(800);
-    expect(r.types[0]).toMatchObject({ code: 'TITHE', total: 800, goal: 1000, reached: false });
+    expect(r.types[0]).toMatchObject({ code: 'BUILDING', total: 800, goal: 1000, reached: false });
     // combined into the unit list: still counted once
-    await post('p-ctr', '/api/money/lists/combine', { systemId: 'sys-choir', typeCode: 'TITHE', month: '2026-10' });
+    await post('p-ctr', '/api/money/lists/combine', { systemId: 'sys-choir', typeCode: 'BUILDING', month: '2026-10' });
     r = (await get('p-choir-member', `/api/money/mine?${S}&year=2026`)).body;
     expect(r.grandTotal).toBe(1600 / 2);
     expect(r.history.map((h: any) => h.amount)).toEqual([800, 800]);
@@ -257,17 +269,17 @@ describe('donations', () => {
 
 describe('report', () => {
   it('brings plan, actual, months, contributions and donations together', async () => {
-    await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'TITHE', planned: 9000 });
+    await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'DONATION', planned: 9000 });
     const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Fund' })).body.id;
-    await post('p-ctr', '/api/money/entries', { accountId: acc, kind: 'INCOME', amount: 7000, occurredOn: '2026-10-04', category: 'TITHE' });
-    const l = (await post('p-ctr', '/api/money/lists', { systemId: 'sys-choir', level: 'UNIT', typeCode: 'TITHE', month: '2026-10' })).body.id;
+    await post('p-ctr', '/api/money/entries', { accountId: acc, kind: 'INCOME', amount: 7000, occurredOn: '2026-10-04', category: 'DONATION' });
+    const l = (await post('p-ctr', '/api/money/lists', { systemId: 'sys-choir', level: 'UNIT', typeCode: 'BUILDING', month: '2026-10' })).body.id;
     await put('p-ctr', `/api/money/lists/${l}`, { lines: [{ name: 'Ann', amount: 3000 }] });
     await post('p-ctr', `/api/money/lists/${l}/submit`);
     await post('p-choir-leader', `/api/money/lists/${l}/approve`);
     const r = (await get('p-ctr', `/api/money/report?${S}&year=2026`)).body;
-    expect(r.income.rows[0]).toMatchObject({ category: 'TITHE', planned: 9000, actual: 7000 });
+    expect(r.income.rows[0]).toMatchObject({ category: 'DONATION', planned: 9000, actual: 7000 });
     expect(r.months[9]).toEqual({ month: '2026-10', income: 7000, spending: 0 });
-    expect(r.contributions).toEqual([{ code: 'TITHE', name: 'Tithe', approved: 3000, inProgress: 0 }]);
+    expect(r.contributions).toEqual([{ code: 'BUILDING', name: 'Building fund', approved: 3000, inProgress: 0 }]);
     expect((await get('p-choir-member', `/api/money/report?${S}&year=2026`)).status).toBe(404);
   });
 });

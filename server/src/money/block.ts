@@ -2,7 +2,7 @@
  * The Money block's rules (Module 5), kept pure so they can be tested without a database.
  * Totals are always computed from lines, never typed. Planned and actual sit side by side.
  */
-import { CATEGORIES } from './rules.js';
+import { CATEGORIES, RETIRED_CATEGORIES } from './rules.js';
 
 export const BUDGET_STATUS = ['DRAFT', 'APPROVED'] as const;
 export const PLAN_STATUS = ['PLANNED', 'DONE', 'DROPPED'] as const;
@@ -23,8 +23,9 @@ export interface AccountingRow { kind: 'INCOME' | 'SPENDING'; category: string; 
 export interface AccountingSide { rows: AccountingRow[]; planned: number; actual: number }
 
 const order = (c: string) => {
-  const i = (CATEGORIES as readonly string[]).indexOf(c);
-  return i < 0 ? CATEGORIES.length : i;
+  const known = [...RETIRED_CATEGORIES, ...CATEGORIES] as readonly string[];
+  const i = known.indexOf(c);
+  return i < 0 ? known.length : i;
 };
 
 /** Planned against actual for one year: income recorded and spending approved count as actual. */

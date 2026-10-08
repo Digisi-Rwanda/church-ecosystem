@@ -6,7 +6,13 @@
  */
 import { lettersInSystem, type AccessData } from '../capabilities/engine.js';
 
-export const CATEGORIES = ['TITHE', 'OFFERING', 'DONATION', 'EVENT', 'SUPPLIES', 'SERVICES', 'TRANSPORT', 'AID', 'OTHER'] as const;
+/**
+ * What a unit's money can be recorded as. Tithes and offerings are collections: they are counted and
+ * kept by Central Administration only and never mix with a unit's money, so they are not offered here.
+ */
+export const CATEGORIES = ['DONATION', 'EVENT', 'SUPPLIES', 'SERVICES', 'TRANSPORT', 'AID', 'OTHER'] as const;
+/** Kinds of money that older entries may still carry; they are shown, never offered again. */
+export const RETIRED_CATEGORIES = ['TITHE', 'OFFERING'] as const;
 export const KINDS = ['INCOME', 'SPENDING'] as const;
 export type EntryKind = (typeof KINDS)[number];
 export const NAME_MAX = 80;

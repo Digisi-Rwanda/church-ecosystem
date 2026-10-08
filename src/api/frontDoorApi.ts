@@ -1469,6 +1469,21 @@ export interface GlanceSeries { key: string; format: 'count' | 'rwf'; points: Ar
 export const fetchGlance = (systemId: string): Promise<{ systemId: string; tiles: GlanceTile[]; series: GlanceSeries[] }> =>
   apiFetch(`/api/glance?systemId=${encodeURIComponent(systemId)}`);
 
+/* ─── Leader dashboard ─── */
+export type DashPoint = { label: string; value: number };
+export type DashKpi = { key: 'members' | 'attendance' | 'giving' | 'money' | 'units'; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string };
+export type Dashboard = {
+  systemId: string;
+  central: boolean;
+  kpis: DashKpi[];
+  attendance: DashPoint[] | null;
+  second: { kind: 'giving' | 'money'; series: Array<{ key: 'giving' | 'income' | 'spent'; points: DashPoint[] }> } | null;
+  events: Array<{ id: string; title: string; startsOn: string | null; planType: string; href: string }>;
+  members: Array<{ personId: string; name: string; joinedOn: string; href: string }>;
+  work: Array<{ id: string; title: string; status: string; at: string | null; href: string }>;
+};
+export const fetchDashboard = (systemId: string): Promise<Dashboard> => apiFetch(`/api/dashboard?systemId=${encodeURIComponent(systemId)}`);
+
 // ── Protocol (slice 3.16): the old team engine ─────────────────────────────────
 export type ProtocolOffice = 'PRESIDENT' | 'VP' | 'SECRETARY' | 'TREASURER' | 'COORDINATOR' | 'MEMBER';
 export type ProtocolServeDays = 'SUNDAY' | 'TUESDAY' | 'BOTH';

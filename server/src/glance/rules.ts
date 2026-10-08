@@ -29,3 +29,6 @@ export function sumByMonth<T>(rows: T[], months: string[], when: (r: T) => Date 
 
 export interface Tile { key: string; value: number; format: 'count' | 'rwf'; tone?: 'warn'; href?: string }
 export interface Series { key: string; format: 'count' | 'rwf'; points: Array<{ label: string; value: number }> }
+
+/** Percent change from the earlier to the later figure; null when there is nothing to compare with. */
+export const percentChange = (now: number, before: number): number | null => (before > 0 ? Math.round(((now - before) / before) * 100) : null);
