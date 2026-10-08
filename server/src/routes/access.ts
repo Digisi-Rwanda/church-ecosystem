@@ -104,18 +104,18 @@ const own = (hs: Holding[], office: OfficeCode) => hs.some((h) => h.via === 'OFF
 
 /** What the signed-in person may do on this page, from their own live offices. */
 function powers(hs: Holding[]) {
-  const leader = own(hs, 'CHURCH_LEADER');
   const admin = own(hs, 'ADMINISTRATOR');
-  const secretary = own(hs, 'CHURCH_SECRETARY');
   return {
     // Offices are voted in real life; the system only records who holds them.
     // Administrators assign every office (the Church Leader's too) and reassign it when it changes hands.
     canAppoint: admin,
     canAppointLeader: admin,
     canReadAppointments: hs.some((h) => (h.letters.PEOPLE?.length ?? 0) > 0),
-    canReadAudit: leader || admin || secretary,
-    canExplainOthers: leader || admin,
-    canSeeAllDelegations: leader || admin,
+    // The Access page, the rule matrix and the audit trail are Administrator-only, here as on screen.
+    canReadAudit: admin,
+    canExplainOthers: admin,
+    canSeeAllDelegations: admin,
+    canReadMatrix: admin,
   };
 }
 
@@ -143,7 +143,11 @@ const titleOf = (o: OfficeCode) => OFFICE_TITLE[o];
 
 /* ───────────── the rule matrix ───────────── */
 
-accessRouter.get('/matrix', requireAuth, async (_req, res) => {
+accessRouter.get('/matrix', requireAuth, async (req: AuthedRequest, res) => {
+  const { data } = await load();
+  if (!powers(liveHoldings(req.auth!.personId, data, new Date())).canReadMatrix) {
+    return fail(res, 403, 'NOT_ALLOWED', 'Only Administrators read the rule matrix');
+  }
   res.json({
     letters: ACCESS_LETTERS.map((l) => ({ letter: l, ...ACCESS_LETTER_MEANING[l] })),
     modules: MODULE_KEYS.map((k) => ({ key: k, letters: MODULE_LETTERS[k] })),
@@ -212,7 +216,7 @@ accessRouter.get('/explain/:personId', requireAuth, async (req: AuthedRequest, r
   if (target !== me) {
     const { data } = await load();
     if (!powers(liveHoldings(me, data)).canExplainOthers) {
-      return fail(res, 403, 'NOT_ALLOWED', 'Only the Church Leader and Administrators can see another person’s access');
+      return fail(res, 403, 'NOT_ALLOWED', 'Only Administrators can see another person’s access');
     }
   }
   if (!(await prisma.person.findUnique({ where: { id: target } }))) return fail(res, 404, 'NOT_FOUND', 'Person not found');
@@ -609,7 +613,7 @@ accessRouter.get('/audit', requireAuth, async (req: AuthedRequest, res) => {
   const now = new Date();
   const { data } = await load();
   if (!powers(liveHoldings(req.auth!.personId, data, now)).canReadAudit) {
-    return fail(res, 403, 'NOT_ALLOWED', 'Only the Church Leader, Administrators and the Church Secretary read the audit trail');
+    return fail(res, 403, 'NOT_ALLOWED', 'Only Administrators read the audit trail');
   }
   const limit = Math.min(Math.max(Number(req.query.limit) || 50, 1), 200);
   const rows = (await prisma.auditEvent.findMany({ where: { action: { in: AUDITED } }, orderBy: { at: 'desc' }, take: 500 })) as Array<{

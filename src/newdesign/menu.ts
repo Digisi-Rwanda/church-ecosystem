@@ -137,7 +137,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
           place('directory', 'people', 'door.people.tab.directory'),
           ...(central ? [] : [place('organisation', 'people/units', 'door.people.tab.units')]),
           place('appointments', 'people/appointments', 'door.people.tab.appointments'),
-          ...(admin ? [place('access', 'people/access', 'door.people.tab.access')] : []),
+          ...(admin ? [place('access', 'people/access', 'door.people.tab.access'), place('admin', 'people/admin', 'door.people.tab.admin')] : []),
           ...some(['groups', 'couples', 'contacts', 'visits', 'moves'].map(ownPlace)),
         ]
       : some(['groups', 'couples', 'contacts', 'visits', 'moves'].map(ownPlace)),

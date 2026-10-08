@@ -49,6 +49,9 @@ import {
   RepertoirePage,
   ReportPage,
   ReportsPage,
+  AdminPage,
+  PeopleImportPage,
+  PeopleDuplicatesPage,
   MyAssignmentsPage,
   SchedulePage,
   SettingsPage,
@@ -96,6 +99,9 @@ export function newDesignRoutes() {
             <Route path="units/:unitId" element={<UnitPage />} />
             <Route path="appointments" element={<AppointmentsPage />} />
             <Route path="access" element={<AccessPage />} />
+            <Route path="admin" element={<AdminPage />} />
+            <Route path="import" element={<PeopleImportPage />} />
+            <Route path="duplicates" element={<PeopleDuplicatesPage />} />
             <Route path="baptism" element={<BaptismCohortPage />} />
             <Route path=":personId/360" element={<Person360Page />} />
             <Route path=":personId" element={<PersonCardPage />} />

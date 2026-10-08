@@ -60,6 +60,8 @@ export function legacyColumnsFor(code: OfficeCode): Partial<OfficeColumns> {
     case 'VICE_PRESIDENT':
       return { ministryOffice: 'VP' };
     case 'ADMINISTRATOR':
+    case 'PASTOR':
+    case 'CHURCH_TREASURER':
       return {};
   }
 }

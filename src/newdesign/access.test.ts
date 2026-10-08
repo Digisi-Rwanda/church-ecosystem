@@ -10,7 +10,7 @@ const row = (id: string, office: AppointmentRow['office'], unit: string): Appoin
 describe('officesFor', () => {
   it('lets the Church Leader fill unit offices but not their own seat', () => {
     expect(officesFor('MINISTRY', 'sys-choir', true, false)).toEqual(['PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY', 'TREASURER', 'COORDINATOR']);
-    expect(officesFor('CENTRAL', 'sys-main', true, false)).toEqual(['CATECHIST', 'CHURCH_SECRETARY']);
+    expect(officesFor('CENTRAL', 'sys-main', true, false)).toEqual(['CATECHIST', 'CHURCH_SECRETARY', 'PASTOR', 'CHURCH_TREASURER']);
   });
   it('lets an Administrator fill only the Church Leader seat', () => {
     expect(officesFor('CENTRAL', 'sys-main', false, true)).toEqual(['CHURCH_LEADER']);

@@ -25,6 +25,15 @@ function noteFail(key: string) {
   else f.n += 1;
 }
 
+/** Usernames that are locked out right now (for the Administrator console). */
+export function lockedUsers(): string[] {
+  return [...fails.keys()].filter((k) => throttled(k));
+}
+/** Let a username try again at once. */
+export function clearFails(username: string) {
+  fails.delete(username.toLowerCase());
+}
+
 const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),

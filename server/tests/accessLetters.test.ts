@@ -378,7 +378,9 @@ describe('delegation', () => {
     const all = await request(app).get('/api/access/delegations?all=true').set(bearer('p-youth-leader'));
     expect(all.body.all).toBeUndefined();
     const lead = await request(app).get('/api/access/delegations?all=true').set(bearer('p-pastor'));
-    expect(lead.body.all).toHaveLength(1);
+    expect(lead.body.all).toBeUndefined();
+    const adm = await request(app).get('/api/access/delegations?all=true').set(bearer('p-admin1'));
+    expect(adm.body.all).toHaveLength(1);
   });
 });
 
@@ -417,9 +419,11 @@ describe('vacancies and appointments list', () => {
 });
 
 describe('the explainer and the audit trail', () => {
-  it('serves the matrix to anyone signed in', async () => {
+  it('serves the matrix to Administrators only', async () => {
     expect((await request(app).get('/api/access/matrix')).status).toBe(401);
-    const r = await request(app).get('/api/access/matrix').set(bearer('p-member'));
+    expect((await request(app).get('/api/access/matrix').set(bearer('p-member'))).status).toBe(403);
+    expect((await request(app).get('/api/access/matrix').set(bearer('p-pastor'))).status).toBe(403);
+    const r = await request(app).get('/api/access/matrix').set(bearer('p-admin1'));
     expect(r.body.offices.map((o: any) => o.code)).toEqual([...OFFICE_CODES]);
     expect(r.body.letters).toHaveLength(7);
     expect(r.body.limits).toEqual({ minAdministrators: 2, delegationMaxDays: 90 });
@@ -432,9 +436,9 @@ describe('the explainer and the audit trail', () => {
     expect(r.body.systems.find((s: any) => s.id === 'sys-youth')).toBeUndefined();
     expect(r.body.powers).toMatchObject({ canAppoint: false, canReadAudit: false, canExplainOthers: false });
     const lead = await request(app).get('/api/access/me').set(bearer('p-pastor'));
-    expect(lead.body.powers).toMatchObject({ canAppoint: false, canAppointLeader: false, canReadAudit: true, canExplainOthers: true });
+    expect(lead.body.powers).toMatchObject({ canAppoint: false, canAppointLeader: false, canReadAudit: false, canExplainOthers: false });
     const adm = await request(app).get('/api/access/me').set(bearer('p-admin1'));
-    expect(adm.body.powers).toMatchObject({ canAppoint: true, canAppointLeader: true, canExplainOthers: true });
+    expect(adm.body.powers).toMatchObject({ canAppoint: true, canAppointLeader: true, canExplainOthers: true, canReadAudit: true, canReadMatrix: true });
   });
   it('shows a delegate which letters are borrowed', async () => {
     await request(app).post('/api/access/delegations').set(bearer('p-choir-leader')).send({ positionId: 'pos-choir', toPersonId: 'p-vp', letters: { MONEY: ['A'] }, endDate: new Date(Date.now() + 86400000 * 10).toISOString().slice(0, 10) });
@@ -443,11 +447,11 @@ describe('the explainer and the audit trail', () => {
     expect(choir.why.MONEY.find((x: any) => x.letter === 'A')).toMatchObject({ from: 'President (delegated)', via: 'DELEGATION' });
     expect(r.body.delegated).toHaveLength(1);
   });
-  it('only the Leader and Administrators explain other people', async () => {
+  it('only Administrators explain other people', async () => {
     expect((await request(app).get('/api/access/explain/p-choir-leader').set(bearer('p-youth-leader'))).status).toBe(403);
-    expect((await request(app).get('/api/access/explain/p-choir-leader').set(bearer('p-pastor'))).status).toBe(200);
+    expect((await request(app).get('/api/access/explain/p-choir-leader').set(bearer('p-pastor'))).status).toBe(403);
     expect((await request(app).get('/api/access/explain/p-choir-leader').set(bearer('p-admin1'))).status).toBe(200);
-    expect((await request(app).get('/api/access/explain/p-zzz').set(bearer('p-pastor'))).status).toBe(404);
+    expect((await request(app).get('/api/access/explain/p-zzz').set(bearer('p-admin1'))).status).toBe(404);
     expect((await request(app).get('/api/access/explain/p-member').set(bearer('p-member'))).status).toBe(200);
   });
   it('shows the audit trail, newest first, to the Leader and Administrators only', async () => {

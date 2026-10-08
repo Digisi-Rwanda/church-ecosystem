@@ -9,17 +9,17 @@ import { z } from 'zod';
 
 export const SECTIONS = ['CONTACT', 'EMPLOYMENT', 'EDUCATION', 'GIFT', 'SKILL', 'CALLING', 'FAMILY', 'BAPTISM', 'MARRIAGE'] as const;
 export type Section = (typeof SECTIONS)[number];
-type Office = 'CHURCH_LEADER' | 'CATECHIST' | 'CHURCH_SECRETARY';
+type Office = 'CHURCH_LEADER' | 'PASTOR' | 'CATECHIST' | 'CHURCH_SECRETARY';
 
 const EVERYDAY: Section[] = ['CONTACT', 'EMPLOYMENT', 'EDUCATION', 'GIFT', 'SKILL', 'CALLING', 'FAMILY'];
 const READERS: Record<Section, Office[]> = {
-  ...(Object.fromEntries(SECTIONS.map((s) => [s, ['CHURCH_LEADER', 'CATECHIST', 'CHURCH_SECRETARY']])) as Record<Section, Office[]>),
-  MARRIAGE: ['CHURCH_LEADER'],
+  ...(Object.fromEntries(SECTIONS.map((s) => [s, ['CHURCH_LEADER', 'PASTOR', 'CATECHIST', 'CHURCH_SECRETARY']])) as Record<Section, Office[]>),
+  MARRIAGE: ['CHURCH_LEADER', 'PASTOR'],
 };
 const WRITERS: Record<Section, Office[]> = {
-  ...(Object.fromEntries(EVERYDAY.map((s) => [s, ['CHURCH_LEADER', 'CHURCH_SECRETARY']])) as Record<Section, Office[]>),
-  BAPTISM: ['CHURCH_LEADER', 'CATECHIST'],
-  MARRIAGE: ['CHURCH_LEADER'],
+  ...(Object.fromEntries(EVERYDAY.map((s) => [s, ['CHURCH_LEADER', 'PASTOR', 'CHURCH_SECRETARY']])) as Record<Section, Office[]>),
+  BAPTISM: ['CHURCH_LEADER', 'PASTOR', 'CATECHIST'],
+  MARRIAGE: ['CHURCH_LEADER', 'PASTOR'],
 };
 /** Sections of which a person has one current record at a time. */
 export const SINGLE: Section[] = ['BAPTISM', 'MARRIAGE'];
@@ -34,7 +34,7 @@ export function accessFor(me: string, data: AccessData, now = new Date()): Acces
   return {
     read: SECTIONS.filter((s) => READERS[s].some((o) => r.has(o))),
     write: SECTIONS.filter((s) => WRITERS[s].some((o) => w.has(o))),
-    leader: r.has('CHURCH_LEADER'),
+    leader: r.has('CHURCH_LEADER') || r.has('PASTOR'),
   };
 }
 

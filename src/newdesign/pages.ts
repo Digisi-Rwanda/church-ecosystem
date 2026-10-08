@@ -102,6 +102,12 @@ const loadReportPage = () => import('./ReportPage').then((m) => ({ default: m.Re
 export const ReportPage = lazy(loadReportPage);
 const loadReportsPage = () => import('./ReportsPage').then((m) => ({ default: m.ReportsPage }));
 export const ReportsPage = lazy(loadReportsPage);
+const loadAdminPage = () => import('./AdminPage').then((m) => ({ default: m.AdminPage }));
+export const AdminPage = lazy(loadAdminPage);
+const loadPeopleImportPage = () => import('./PeopleImportPage').then((m) => ({ default: m.PeopleImportPage }));
+export const PeopleImportPage = lazy(loadPeopleImportPage);
+const loadPeopleDuplicatesPage = () => import('./PeopleDuplicatesPage').then((m) => ({ default: m.PeopleDuplicatesPage }));
+export const PeopleDuplicatesPage = lazy(loadPeopleDuplicatesPage);
 const loadMyAssignmentsPage = () => import('./MyAssignmentsPage').then((m) => ({ default: m.MyAssignmentsPage }));
 export const MyAssignmentsPage = lazy(loadMyAssignmentsPage);
 const loadSchedulePage = () => import('./SchedulePage').then((m) => ({ default: m.SchedulePage }));
@@ -174,6 +180,9 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   RepertoirePage: loadRepertoirePage,
   ReportPage: loadReportPage,
   ReportsPage: loadReportsPage,
+  AdminPage: loadAdminPage,
+  PeopleImportPage: loadPeopleImportPage,
+  PeopleDuplicatesPage: loadPeopleDuplicatesPage,
   MyAssignmentsPage: loadMyAssignmentsPage,
   SchedulePage: loadSchedulePage,
   SettingsPage: loadSettingsPage,

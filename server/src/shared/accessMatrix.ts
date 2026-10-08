@@ -29,6 +29,8 @@ export const OFFICE_SCOPE: Record<OfficeCode, 'CHURCH' | 'UNIT'> = {
   CHURCH_LEADER: 'CHURCH',
   CATECHIST: 'CHURCH',
   CHURCH_SECRETARY: 'CHURCH',
+  PASTOR: 'CHURCH',
+  CHURCH_TREASURER: 'CHURCH',
   ADMINISTRATOR: 'CHURCH',
   PRESIDENT: 'UNIT',
   VICE_PRESIDENT: 'UNIT',
@@ -41,6 +43,8 @@ export const OFFICE_TITLE: Record<OfficeCode, string> = {
   CHURCH_LEADER: 'Church Leader',
   CATECHIST: 'Catechist',
   CHURCH_SECRETARY: 'Church Secretary',
+  PASTOR: 'Pastor',
+  CHURCH_TREASURER: 'Church Treasurer',
   ADMINISTRATOR: 'Administrator',
   PRESIDENT: 'President',
   VICE_PRESIDENT: 'Vice President',
@@ -77,6 +81,26 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
     SCHEDULING: ['R'],
     GOVERNANCE: ['R', 'W', 'S'],
     COMMUNICATION: ['R', 'W'],
+    REPORTS: ['R', 'W'],
+  },
+  /** Pastoral work without money: people, care, mission and governance, but no Money letters. */
+  PASTOR: {
+    PEOPLE: ['R', 'W'],
+    PERSON_360: ['R', 'W'],
+    MISSION: ['R', 'W', 'A'],
+    SCHEDULING: ['R'],
+    GOVERNANCE: ['R', 'W', 'A'],
+    COMMUNICATION: ['R', 'W'],
+    REPORTS: ['R', 'W', 'P'],
+  },
+  /** The church's money without pastoral records: no Person 360. */
+  CHURCH_TREASURER: {
+    PEOPLE: ['R'],
+    MISSION: ['R'],
+    SCHEDULING: ['R'],
+    MONEY: ['R', 'W'],
+    GOVERNANCE: ['R'],
+    COMMUNICATION: ['R'],
     REPORTS: ['R', 'W'],
   },
   ADMINISTRATOR: {
@@ -145,6 +169,8 @@ export const SOLE_OFFICES: readonly OfficeCode[] = [
   'CHURCH_LEADER',
   'CATECHIST',
   'CHURCH_SECRETARY',
+  'PASTOR',
+  'CHURCH_TREASURER',
   'PRESIDENT',
   'VICE_PRESIDENT',
   'SECRETARY',
@@ -161,7 +187,7 @@ export const REQUIRED_OFFICES: Record<UnitKind, readonly OfficeCode[]> = {
 
 /** Where each office may be held. */
 export const OFFICES_BY_KIND: Record<UnitKind, readonly OfficeCode[]> = {
-  CENTRAL: ['CHURCH_LEADER', 'CATECHIST', 'CHURCH_SECRETARY'],
+  CENTRAL: ['CHURCH_LEADER', 'CATECHIST', 'CHURCH_SECRETARY', 'PASTOR', 'CHURCH_TREASURER'],
   MINISTRY: ['PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY', 'TREASURER', 'COORDINATOR'],
   ORGANISATION: ['PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY', 'TREASURER', 'COORDINATOR'],
   TEAM: ['COORDINATOR', 'SECRETARY'],

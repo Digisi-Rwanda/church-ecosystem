@@ -173,6 +173,6 @@ describe('settings reach the rules they name', () => {
     const r = await lend(40);
     expect(r.status).toBe(400);
     expect(r.body.code).toBe('DELEGATION_TOO_LONG');
-    expect((await get('p-pastor', '/api/access/matrix')).body.limits.delegationMaxDays).toBe(30);
+    expect((await get('p-pastor', '/api/access/delegations')).body.limits.maxDays).toBe(30);
   });
 });

@@ -13,6 +13,8 @@ import { healthRouter } from './routes/health.js';
 import { missionRouter } from './routes/mission.js';
 import { participationRouter } from './routes/participation.js';
 import { accessRouter } from './routes/access.js';
+import { adminRouter } from './routes/admin.js';
+import { peopleToolsRouter } from './routes/peopleTools.js';
 import { announcementsRouter } from './routes/announcements.js';
 import { governanceRouter } from './routes/governance.js';
 import { lettersRouter } from './routes/letters.js';
@@ -102,6 +104,8 @@ export function createApp() {
   app.use('/api/people', peopleRouter);
   app.use('/api/participation', participationRouter);
   app.use('/api/access', accessRouter);
+  app.use('/api/admin', adminRouter);
+  app.use('/api/people-tools', peopleToolsRouter);
   app.use('/api/notifications', notificationsRouter);
   app.use('/api/announcements', announcementsRouter);
   app.use('/api/settings', settingsRouter);

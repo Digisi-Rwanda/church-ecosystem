@@ -1603,3 +1603,39 @@ export async function saveProtocolServiceReport(serviceId: string, parts: Protoc
   await apiFetch(`${PR}/services/${serviceId}/report`, { method: 'PUT', body: parts });
 }
 export const fetchProtocolReports = (month: string): Promise<{ month: string; reports: ProtocolReportItem[] }> => apiFetch(`${PR}/reports?month=${month}`);
+
+// ── Administrator console and people tools (phase 3) ───────────────────────────
+export type AdminOverview = {
+  administrators: { count: number; minimum: number };
+  accounts: number; people: number; withoutAccount: number; locked: number;
+  health: { db: 'ok' | 'error'; env: string; time: string };
+  backup: null | { lastAt: string };
+};
+export type AdminAccount = {
+  personId: string; name: string; memberCode: string | null; username: string; status: string; locked: boolean;
+  createdAt: string | null; passwordChangedAt: string | null; offices: string[];
+};
+export type AdminEvent = { id: string; at: string | null; action: string; detail: string; actorName: string | null };
+export const fetchAdminOverview = (): Promise<AdminOverview> => apiFetch('/api/admin/overview');
+export const fetchAdminAccounts = (q: string): Promise<{ accounts: AdminAccount[]; total: number }> => apiFetch(`/api/admin/accounts?q=${encodeURIComponent(q)}`);
+export const createAdminAccount = (input: { personId: string; username: string }): Promise<{ username: string; temporaryPassword: string }> =>
+  apiFetch('/api/admin/accounts', { method: 'POST', body: input });
+export const resetAdminPassword = (personId: string): Promise<{ username: string; temporaryPassword: string }> =>
+  apiFetch(`/api/admin/accounts/${encodeURIComponent(personId)}/reset-password`, { method: 'POST', body: {} });
+export async function unlockAdminAccount(personId: string): Promise<void> {
+  await apiFetch(`/api/admin/accounts/${encodeURIComponent(personId)}/unlock`, { method: 'POST', body: {} });
+}
+export async function fetchAdminAudit(limit = 50): Promise<AdminEvent[]> {
+  return (await apiFetch<{ events: AdminEvent[] }>(`/api/admin/audit?limit=${limit}`)).events;
+}
+
+export type ImportRow = { line: number; fullName: string; state: 'OK' | 'DUPLICATE' | 'ERROR'; message?: string; matches?: string[] };
+export type ImportResult = { committed: boolean; created?: number; summary: { ok: number; duplicates: number; errors: number }; rows: ImportRow[] };
+export const importPeople = (rows: Array<Record<string, string>>, commit: boolean): Promise<ImportResult> =>
+  apiFetch('/api/people-tools/import', { method: 'POST', body: { rows, commit } });
+export type DuplicateGroup = { key: string; people: Array<{ id: string; fullName: string; memberCode: string | null }> };
+export const fetchDuplicates = (): Promise<{ groups: DuplicateGroup[]; total: number }> => apiFetch('/api/people-tools/duplicates');
+export type UpcomingDay = { personId: string; name: string; memberCode: string | null; kind: 'BIRTHDAY' | 'ANNIVERSARY'; day: string; years: number };
+export async function fetchUpcoming(days = 30): Promise<UpcomingDay[]> {
+  return (await apiFetch<{ events: UpcomingDay[] }>(`/api/people-tools/upcoming?days=${days}`)).events;
+}

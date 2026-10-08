@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   archivePerson,
+  fetchP360,
   fetchP360Access,
   fetchPerson,
   fetchStructure,
@@ -10,12 +11,13 @@ import {
 } from '../api/frontDoorApi';
 import { ApiError } from '../api/client';
 import { StatusPill } from '../components/ui/StatusPill';
-import { useT } from '../i18n/I18nContext';
+import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { useCanWritePeople } from './usePeopleAccess';
 import { belongingOf } from './structure';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
+import { shortDay, timelineOf } from './peopleTools';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -27,7 +29,9 @@ export function PersonCardPage() {
   const p360 = useLoad(fetchP360Access, 'p360-access');
   const { loading, failed, data, reload } = useLoad(async () => {
     const [person, structure] = await Promise.all([fetchPerson(personId), fetchStructure()]);
-    return { person, belonging: belongingOf(personId, structure, today()) };
+    // Person 360 answers 403 to those who may not read it; the timeline then simply has fewer lines.
+    const p360 = await fetchP360(personId).catch(() => null);
+    return { person, belonging: belongingOf(personId, structure, today()), p360 };
   }, `person|${personId}`);
 
   return (
@@ -77,10 +81,36 @@ export function PersonCardPage() {
                 </ul>
               )}
             </div>
+            <Timeline
+              events={timelineOf({
+                joinedChurchOn: data.person.joinedChurchOn,
+                memberships: data.belonging.memberships,
+                offices: data.belonging.offices.map((o) => ({ ...o, officeName: o.office ? t(`door.office.${o.office}` as const) : o.title })),
+                records: (data.p360?.records ?? []).filter((r) => r.status === 'CURRENT').map((r) => ({ section: r.section, day: typeof r.data.date === 'string' ? r.data.date : null })),
+              })}
+            />
             {canWrite && <ArchivePanel person={data.person} onChanged={reload} />}
           </>
         )}
       </LoadState>
+    </div>
+  );
+}
+
+function Timeline({ events }: { events: ReturnType<typeof timelineOf> }) {
+  const t = useT();
+  const { locale } = useI18n();
+  if (events.length === 0) return null;
+  return (
+    <div className="panel">
+      <h3>{t('door.people.timeline')}</h3>
+      <ol className="door-list">
+        {events.map((e, i) => (
+          <li key={`${e.kind}-${e.day}-${i}`}>
+            <span className="muted">{shortDay(e.day, locale)} {e.day.slice(0, 4)}</span> — {t(`door.people.timeline.${e.kind}` as 'door.people.timeline.JOINED', { name: e.name })}
+          </li>
+        ))}
+      </ol>
     </div>
   );
 }

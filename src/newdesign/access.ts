@@ -40,7 +40,7 @@ export function accessErrorKey(code: string | undefined): string {
 /** Live appointments grouped by unit, units in name order, offices in the order the matrix lists them. */
 export function groupByUnit(rows: AppointmentRow[], unitOrder: UnitRecord[]): Array<{ key: string; unitName: string; unitCode: string | null; rows: AppointmentRow[] }> {
   const rank = new Map<OfficeCode, number>(
-    (['CHURCH_LEADER', 'CATECHIST', 'CHURCH_SECRETARY', 'ADMINISTRATOR', 'PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY', 'TREASURER', 'COORDINATOR'] as OfficeCode[]).map((o, i) => [o, i]),
+    (['CHURCH_LEADER', 'CATECHIST', 'CHURCH_SECRETARY', 'PASTOR', 'CHURCH_TREASURER', 'ADMINISTRATOR', 'PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY', 'TREASURER', 'COORDINATOR'] as OfficeCode[]).map((o, i) => [o, i]),
   );
   const groups = new Map<string, { key: string; unitName: string; unitCode: string | null; rows: AppointmentRow[] }>();
   for (const r of rows) {
