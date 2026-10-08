@@ -113,7 +113,9 @@ describe('buildModules', () => {
     expect(buildModules(admin, 'sys-main').find((m) => m.id === 'people')!.places.map((p) => p.key)).toEqual(['directory', 'appointments', 'access', 'admin']);
     const other = buildModules(caps, 'sys-a');
     expect(other.some((m) => m.id === 'units')).toBe(false);
-    expect(other.find((m) => m.id === 'people')!.places.map((p) => p.key)).toContain('organisation');
+    expect(other.find((m) => m.id === 'people')!.places.map((p) => p.key)).not.toContain('organisation');
+    const music = mk(sys('sys-music', { people: ['R'] }, [{ key: 'organisation', letters: ['R'] }]));
+    expect(buildModules(music, 'sys-music').find((m) => m.id === 'people')!.places.map((p) => p.key)).toContain('organisation');
   });
 
   it('keeps notifications and announcements even with no letters at all', async () => {

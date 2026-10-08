@@ -21,6 +21,7 @@ import { OFFICE_CODES, UNIT_KINDS } from '../shared/vocabulary.js';
 import { authorizePerson } from '../policy/index.js';
 import { liveHoldings, reachableSystems } from '../capabilities/engine.js';
 import { loadAccessData } from '../notifications/feed.js';
+import { mayReadPeople, subtreeUnitIds } from '../lib/peopleScope.js';
 import { hasPeopleModule } from '../policy/personAccess.js';
 import { requireAuth, pathParam, type AuthedRequest } from '../middleware/http.js';
 
@@ -78,9 +79,18 @@ participationRouter.get('/records', requireAuth, async (req: AuthedRequest, res)
     const s = sys ?? (unitId ? unitSys.get(unitId) : null) ?? MAIN;
     return reach.has(s);
   };
-  const orgUnits = allUnits.filter((u) => isAdmin || inReach(u.systemId, u.id));
-  const memberships = allMemberships.filter((m) => m.personId === me || inReach(m.systemId, m.orgUnitId));
-  const positions = allPositions.filter((p) => p.personId === me || isAdmin || inReach(p.systemId, p.orgUnitId));
+  // One system named: only that system's own part of the organisation, its members and its leaders.
+  // Central names the whole church; a system with units under it (Music, Deacon) also sees that structure.
+  const named = typeof req.query.systemId === 'string' ? req.query.systemId : '';
+  if (named && !isAdmin && !mayReadPeople(me, named, accessData, now)) {
+    return res.status(403).json({ error: 'You may not open the people of this system', code: 'NOT_ALLOWED' });
+  }
+  const inside = named && named !== MAIN ? subtreeUnitIds(allUnits, named) : null;
+  const scoped = (sys: string | null | undefined, unitId?: string | null) =>
+    !inside || sys === named || (!!unitId && inside.has(unitId));
+  const orgUnits = allUnits.filter((u) => (inside ? inside.has(u.id) : isAdmin || inReach(u.systemId, u.id)));
+  const memberships = allMemberships.filter((m) => (inside ? scoped(m.systemId, m.orgUnitId) : m.personId === me || inReach(m.systemId, m.orgUnitId)));
+  const positions = allPositions.filter((p) => (inside ? scoped(p.systemId, p.orgUnitId) : p.personId === me || isAdmin || inReach(p.systemId, p.orgUnitId)));
   // Church Leader and Catechist (PERSON VIEW) may see everyone's records.
   const broad = await hasPeopleModule(me);
   const memo = new Map<string, boolean>();
@@ -91,7 +101,8 @@ participationRouter.get('/records', requireAuth, async (req: AuthedRequest, res)
   };
   const seeMembership = [];
   for (const m of memberships) {
-    if (broad || m.personId === me || (await manages(m.systemId, 'MEMBERSHIP'))) seeMembership.push(m);
+    // Someone who may read the People block of the system they named sees that system's own members.
+    if (broad || m.personId === me || named || (await manages(m.systemId, 'MEMBERSHIP'))) seeMembership.push(m);
   }
   // Who holds which office is public church life; the authority flags are not.
   const seePosition = [];

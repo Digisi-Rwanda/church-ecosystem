@@ -31,9 +31,9 @@ export function AppointmentsPage() {
   const base = `/s/${systemId}/people`;
   const [showEnded, setShowEnded] = useState(false);
   const { loading, failed, data, reload } = useLoad(async () => {
-    const [list, structure, vac] = await Promise.all([fetchAppointments({ ended: showEnded }), fetchStructure(), fetchVacancies()]);
+    const [list, structure, vac] = await Promise.all([fetchAppointments({ ended: showEnded, systemId }), fetchStructure(systemId), fetchVacancies(systemId)]);
     return { list, structure, vac };
-  }, `appointments|${showEnded}`);
+  }, `appointments|${systemId}|${showEnded}`);
 
   const [prefill, setPrefill] = useState<{ unitId: string; office: OfficeCode } | null>(null);
   const [ending, setEnding] = useState<string | null>(null);

@@ -14,7 +14,7 @@ export type PortalSystem = {
 };
 
 /** A system's own blocks after the six shared ones. */
-export type OwnBlock = 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves';
+export type OwnBlock = 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves';
 
 export type Capabilities = {
   personId: string;
@@ -118,12 +118,13 @@ export type Structure = {
   offices: OfficeRecord[];
 };
 
-export async function fetchPeople(opts: { q?: string; status?: string; archived?: boolean; ids?: string[] } = {}): Promise<DirectoryPerson[]> {
+export async function fetchPeople(opts: { q?: string; status?: string; archived?: boolean; ids?: string[]; systemId?: string } = {}): Promise<DirectoryPerson[]> {
   const qs = new URLSearchParams();
   if (opts.q) qs.set('q', opts.q);
   if (opts.status) qs.set('status', opts.status);
   if (opts.archived) qs.set('archived', 'true');
   if (opts.ids?.length) qs.set('ids', opts.ids.join(','));
+  if (opts.systemId) qs.set('systemId', opts.systemId);
   const res = await apiFetch<{ people: DirectoryPerson[] }>(`/api/people${qs.size ? `?${qs}` : ''}`);
   return res.people;
 }
@@ -133,12 +134,13 @@ export async function fetchPerson(id: string): Promise<DirectoryPerson> {
   return res.person;
 }
 
-export async function fetchStructure(): Promise<Structure> {
+/** The organisation as one system sees it: pass the system so only its own part comes back. */
+export async function fetchStructure(systemId?: string): Promise<Structure> {
   const res = await apiFetch<{
     orgUnits: UnitRecord[];
     memberships: MembershipRecord[];
     positions: OfficeRecord[];
-  }>('/api/participation/records');
+  }>(`/api/participation/records${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
   return { units: res.orgUnits, memberships: res.memberships, offices: res.positions };
 }
 
@@ -202,11 +204,12 @@ export type AppointmentRow = {
 };
 
 export async function fetchAppointments(
-  opts: { unitId?: string; ended?: boolean } = {},
+  opts: { unitId?: string; ended?: boolean; systemId?: string } = {},
 ): Promise<AccessPowers & { appointments: AppointmentRow[] }> {
   const qs = new URLSearchParams();
   if (opts.unitId) qs.set('unitId', opts.unitId);
   if (opts.ended) qs.set('ended', 'true');
+  if (opts.systemId) qs.set('systemId', opts.systemId);
   return apiFetch(`/api/access/appointments${qs.size ? `?${qs}` : ''}`);
 }
 
@@ -246,8 +249,8 @@ export type VacancyReport = {
   administrators: { count: number; minimum: number };
 };
 
-export async function fetchVacancies(): Promise<VacancyReport> {
-  return apiFetch('/api/access/vacancies');
+export async function fetchVacancies(systemId?: string): Promise<VacancyReport> {
+  return apiFetch(`/api/access/vacancies${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
 }
 
 export type LetterSource = {
@@ -394,7 +397,8 @@ export async function markNoticesUnread(keys: string[]): Promise<void> {
   await apiFetch('/api/notifications/unread', { method: 'POST', body: { keys } });
 }
 
-export type Preferences = { language: string | null; theme: 'light' | 'dark' | null; mutedSystems: string[] };
+export type DigestChannel = 'OFF' | 'EMAIL' | 'SMS' | 'WHATSAPP';
+export type Preferences = { language: string | null; theme: 'light' | 'dark' | null; mutedSystems: string[]; digestChannel?: DigestChannel };
 
 export async function fetchPreferences(): Promise<Preferences> {
   return apiFetch('/api/me/preferences');

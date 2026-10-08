@@ -40,6 +40,7 @@ import { centralRouter } from './routes/central.js';
 import { settingsRouter } from './routes/settings.js';
 import { systemSettingsRouter } from './routes/systemSettings.js';
 import { notificationsRouter } from './routes/notifications.js';
+import { digestRouter } from './routes/digest.js';
 import { peopleRouter } from './routes/people.js';
 import { protocolOfficesRouter } from './routes/protocolOffices.js';
 import { scheduleStateRouter } from './routes/scheduleState.js';
@@ -107,6 +108,7 @@ export function createApp() {
   app.use('/api/admin', adminRouter);
   app.use('/api/people-tools', peopleToolsRouter);
   app.use('/api/notifications', notificationsRouter);
+  app.use('/api/digest', digestRouter);
   app.use('/api/announcements', announcementsRouter);
   app.use('/api/settings', settingsRouter);
   app.use('/api/system-settings', systemSettingsRouter);

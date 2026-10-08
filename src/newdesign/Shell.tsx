@@ -9,6 +9,8 @@ import { resolveActive, type NavModule } from './menu';
 import { badge } from './notices';
 import { useAnnouncementSummary } from './useAnnouncementSummary';
 import { DoorMenu } from './DoorMenu';
+import { LanguageSwitch } from './LanguageSwitch';
+import { OfflineBanner } from './OfflineBanner';
 import { warm } from './warm';
 import { MODULE_ICON } from './moduleIcons';
 
@@ -17,6 +19,9 @@ function weekOfLabel(locale: string, d = new Date()) {
   start.setDate(d.getDate() - d.getDay());
   return start.toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' });
 }
+
+/** The four places a phone shows in the bottom bar, in order; a person without one of them simply sees fewer. */
+const BOTTOM_PREFERRED = ['home', 'schedule', 'people', 'notifications', 'work'];
 
 /** Sidebar sections, in order; a module outside every section is not drawn. */
 const GROUPS: Array<{ key: string; labelKey: string; ids: string[] }> = [
@@ -57,7 +62,7 @@ export function Shell({
   children: ReactNode;
 }) {
   const t = useT();
-  const { locale } = useI18n();
+  const { locale, fmt } = useI18n();
   const weekLabel = useMemo(() => weekOfLabel(locale), [locale]);
   const location = useLocation();
   const { capabilities, signOut, personName } = useFrontDoor();
@@ -91,6 +96,7 @@ export function Shell({
 
   const placeTitle = placeName ? t(placeName.labelKey as 'door.block.home') : where;
   const close = () => setOpen(false);
+  const bottom = BOTTOM_PREFERRED.map((id) => modules.find((m) => m.id === id)).filter((m): m is NavModule => !!m).slice(0, 4);
   const groups = GROUPS.map((g) => ({ ...g, items: modules.filter((m) => g.ids.includes(m.id)) })).filter((g) => g.items.length > 0);
 
   return (
@@ -178,6 +184,7 @@ export function Shell({
             </div>
           </div>
           <div className="topbar-actions">
+            <LanguageSwitch />
             <ThemeToggle />
             <Link to={notificationsTo} className="topbar-inbox" aria-label={t('door.portal.nav.notifications')}>
               <Icon name="inbox" size={15} />
@@ -200,9 +207,36 @@ export function Shell({
             ))}
           </DoorMenu>
         )}
+        <OfflineBanner />
+        <div className="print-head" aria-hidden>ADEPR Kacyiru · {where} · {fmt.date(new Date())}</div>
         <main id="door-main" className="content door-content" tabIndex={-1}>
           {allowed ? children : <EmptyState variant="no-results" title={t('door.frame.notFound')} />}
         </main>
+        <nav className="bottom-nav no-print" aria-label={t('door.frame.bottomNav')}>
+          {bottom.map((m) => {
+            const count = m.id === 'notifications' ? notificationCount : 0;
+            return (
+              <NavLink
+                key={m.id}
+                to={m.to}
+                end={m.places.length === 1 && m.places[0]!.end}
+                className={() => (current?.id === m.id ? 'active' : undefined)}
+                aria-current={current?.id === m.id ? 'page' : undefined}
+                onTouchStart={() => warm(m.to)}
+              >
+                <span className="bottom-nav-icon">
+                  <Icon name={MODULE_ICON[m.id]} size={20} />
+                  {count > 0 && <span className="nav-badge">{badge(count)}</span>}
+                </span>
+                <span className="bottom-nav-label">{t(m.labelKey as 'door.block.home')}</span>
+              </NavLink>
+            );
+          })}
+          <button type="button" onClick={() => setOpen(true)} aria-expanded={open} aria-controls="door-side">
+            <span className="bottom-nav-icon"><Icon name="menu" size={20} /></span>
+            <span className="bottom-nav-label">{t('door.frame.more')}</span>
+          </button>
+        </nav>
       </div>
     </div>
   );

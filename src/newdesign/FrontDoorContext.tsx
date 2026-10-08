@@ -10,6 +10,7 @@ import {
 import { apiLogin } from '../api/authApi';
 import { ApiError, getApiToken, setApiToken } from '../api/client';
 import { fetchBootstrap, type Capabilities, type PortalSystem } from '../api/frontDoorApi';
+import { clearOffline } from '../api/offlineStore';
 import { clearLoadCache } from './useLoad';
 
 type Status = 'checking' | 'out' | 'loading' | 'in' | 'error';
@@ -82,6 +83,7 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
 
   const signOut = useCallback(() => {
     clearLoadCache();
+    clearOffline();
     setApiToken(null);
     // Clear whatever the old app kept for this browser. It is loaded only now, so the new app never carries it.
     void import('../services').then((m) => m.authService.logout());

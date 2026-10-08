@@ -75,6 +75,8 @@ beforeEach(async () => {
     { id: 'pos-vp', personId: 'p-vp', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Vice President', office: 'VICE_PRESIDENT', status: 'ACTIVE', startDate: new Date('2022-01-01') },
     { id: 'pos-admin', personId: 'p-admin', systemId: 'sys-media', title: 'Administrator', office: 'ADMINISTRATOR', status: 'ACTIVE', startDate: new Date('2022-01-01') },
   );
+  // The Vice President may create work only while the President lends the Write letter.
+  db.delegation.push({ id: 'del-vp', positionId: 'pos-choir', fromPersonId: 'p-choir-leader', toPersonId: 'p-vp', lettersJson: JSON.stringify({ MISSION: ['W'] }), status: 'ACTIVE', startDate: new Date('2022-01-01'), endDate: new Date('2099-01-01') });
   const { createApp } = await import('../src/app.js');
   app = createApp();
 });
@@ -91,6 +93,12 @@ describe('creating and assigning', () => {
     expect((await post('p-choir-member', '/api/work', body())).status).toBe(403);
     expect((await post('p-youth-leader', '/api/work', body())).status).toBe(403);
     expect((await post('p-choir-leader', '/api/work', body({ ownerId: 'p-gone' }))).body.code).toBe('PERSON_NOT_ACTIVE');
+  });
+  it('only a President creates work; a Vice President only while the Write letter is lent', async () => {
+    expect((await post('p-vp', '/api/work', body())).status).toBe(201);
+    fake.__db.delegation.length = 0;
+    expect((await post('p-vp', '/api/work', body())).status).toBe(403);
+    expect((await post('p-choir-leader', '/api/work', body())).status).toBe(201);
   });
   it('creates work, tells the owner and the helpers, audits it', async () => {
     const r = await post('p-vp', '/api/work', body({ helperIds: ['p-youth-member', 'p-choir-member'] }));

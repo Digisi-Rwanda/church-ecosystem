@@ -6,7 +6,7 @@ import { LoadState } from './LoadState';
 import { formatRwf } from './money';
 import { PlanVsActual, YearSelect } from './MoneyBlockParts';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { PageHeader, PrintButton } from './kit';
 
 /** The year in one place: plan against actual, month by month, contributions, donations and the action plan. */
 export function MoneyReportsPage() {
@@ -17,7 +17,7 @@ export function MoneyReportsPage() {
   return (
     <section className="door-block" aria-labelledby="door-mrep-title">
       <div>
-        <PageHeader id="door-mrep-title" title={t('door.money.reports')} purpose={t('door.purpose.moneyReports')} />
+        <PageHeader id="door-mrep-title" title={t('door.money.reports')} purpose={t('door.purpose.moneyReports')} actions={<PrintButton />} />
         <p className="muted">{t('door.money.reports.intro')}</p>
       </div>
       <YearSelect year={year} onChange={setYear} />

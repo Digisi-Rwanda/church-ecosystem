@@ -3,6 +3,7 @@
  * ones they sit beside; it does not invent its own headers, rows, chips or loading states.
  */
 export { PageHeader } from './PageHeader';
+export { PrintButton } from './PrintButton';
 export { ListRow, RowList } from './ListRow';
 export { initialsOf } from './initials';
 export { StatusChip, type ChipTone } from './StatusChip';

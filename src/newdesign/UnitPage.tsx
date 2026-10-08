@@ -15,14 +15,14 @@ export function UnitPage() {
   const { systemId = '', unitId = '' } = useParams();
   const base = `/s/${systemId}/people`;
   const { loading, failed, data, reload } = useLoad(async () => {
-    const structure = await fetchStructure();
+    const structure = await fetchStructure(systemId);
     const day = today();
     const memberIds = membersOf(unitId, structure.memberships, day);
     const holders = officeHoldersOf(unitId, structure.offices, day);
     const ids = [...new Set([...memberIds, ...holders.map((h) => h.personId)])];
-    const people = ids.length ? await fetchPeople({ ids }) : [];
+    const people = ids.length ? await fetchPeople({ ids, systemId }) : [];
     return { structure, memberIds, holders, names: new Map(people.map((p) => [p.id, p.fullName])) };
-  }, `unit|${unitId}`);
+  }, `unit|${systemId}|${unitId}`);
 
   const unit = data?.structure.units.find((u) => u.id === unitId);
   const nameOf = (id: string) => data?.names.get(id) ?? id;

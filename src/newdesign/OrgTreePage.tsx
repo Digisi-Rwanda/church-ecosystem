@@ -14,7 +14,7 @@ export function OrgTreePage() {
   const t = useT();
   const { systemId = '' } = useParams();
   const { portal } = useFrontDoor();
-  const { loading, failed, data, reload } = useLoad(fetchStructure, 'units');
+  const { loading, failed, data, reload } = useLoad(() => fetchStructure(systemId), `units|${systemId}`);
   const units = data?.units ?? [];
   const inside = new Map<string, number>();
   for (const u of units) if (u.parentId) inside.set(u.parentId, (inside.get(u.parentId) ?? 0) + 1);

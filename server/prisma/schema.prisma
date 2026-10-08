@@ -570,7 +570,24 @@ model Preference {
   theme             String?
   /// Systems whose "For information" notices the person has muted: ["sys-youth"].
   mutedSystemsJson  String   @default("[]")
+  /// How the daily digest of unread notices reaches the person: OFF | EMAIL | SMS | WHATSAPP.
+  digestChannel     String   @default("OFF")
   updatedAt         DateTime @updatedAt
+}
+
+/// One digest per person per day (slice 4.4): the unique day stops a second send, whatever calls the job.
+model DigestLog {
+  id        String   @id @default(cuid())
+  personId  String
+  /// YYYY-MM-DD in Kigali time.
+  day       String
+  channel   String
+  /// SENT | NO_CONTACT | FAILED | EMPTY
+  status    String
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([personId, day])
 }
 
 /// An announcement (slice 1.5). Who sees it is worked out on read from its audience and the

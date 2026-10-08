@@ -14,6 +14,7 @@
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
+import { mayReadPeople } from '../lib/peopleScope.js';
 import { loadSettings } from '../settings/store.js';
 import { requireAuth, pathParam, type AuthedRequest } from '../middleware/http.js';
 import {
@@ -270,8 +271,13 @@ accessRouter.get('/appointments', requireAuth, async (req: AuthedRequest, res) =
   // Firm walls: an Administrator or the Church Leader see every appointment; anyone else only their own systems'.
   const reach = pw.canAppoint ? null : reachableSystems(req.auth!.personId, data, now);
   const sysOfPos = (p: PositionRec) => p.systemId ?? (p.orgUnitId ? byId.get(p.orgUnitId)?.systemId : null) ?? 'sys-main';
+  // Leaders of one system: its own offices only. Central names every leader of the church.
+  const named = typeof req.query.systemId === 'string' ? req.query.systemId : '';
+  if (named && !pw.canAppoint && !mayReadPeople(req.auth!.personId, named, data, now)) return fail(res, 403, 'NOT_ALLOWED', 'You may not see the leaders of this system');
   const rows = data.positions.filter(
-    (p) => officeOf(p) && (includeEnded || isLive(p, now)) && (!unitId || unitFor(p)?.id === unitId) && (reach === null || reach.has(sysOfPos(p))),
+    (p) =>
+      officeOf(p) && (includeEnded || isLive(p, now)) && (!unitId || unitFor(p)?.id === unitId) && (reach === null || reach.has(sysOfPos(p))) &&
+      (!named || named === 'sys-main' || sysOfPos(p) === named),
   );
   const who = await names(rows.map((r) => r.personId));
   res.json({
@@ -448,8 +454,10 @@ accessRouter.get('/vacancies', requireAuth, async (req: AuthedRequest, res) => {
   const all = computeVacancies(units, data.positions, now, (await loadSettings())['access.termReminderDays']);
   const reach = pw.canAppoint ? null : reachableSystems(req.auth!.personId, data, now);
   const unitSys = (id: string) => units.find((u) => u.id === id)?.systemId ?? 'sys-main';
-  const vacancies = all.vacancies.filter((v) => reach === null || reach.has(unitSys(v.unitId)));
-  const conflicts = all.conflicts.filter((c) => reach === null || reach.has(unitSys(c.unitId)));
+  const named = typeof req.query.systemId === 'string' ? req.query.systemId : '';
+  const mine = (s: string) => (reach === null || reach.has(s)) && (!named || named === 'sys-main' || s === named);
+  const vacancies = all.vacancies.filter((v) => mine(unitSys(v.unitId)));
+  const conflicts = all.conflicts.filter((c) => mine(unitSys(c.unitId)));
   const who = await names(vacancies.map((v) => v.holderPersonId ?? ''));
   res.json({
     vacancies: vacancies.map((v) => ({ ...v, holderName: v.holderPersonId ? (who.get(v.holderPersonId)?.name ?? null) : null })),

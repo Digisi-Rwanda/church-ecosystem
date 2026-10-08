@@ -8,7 +8,8 @@ import {
   type ReactNode,
 } from 'react';
 import { DEFAULT_LOCALE, ENABLED_LOCALES, isEnabledLocale, type Locale } from './locales';
-import { translate, type MessageKey, type MessageParams } from './translate';
+import { makeFormat, type Format } from './format';
+import { translate, translatePlural, type MessageKey, type MessageParams } from './translate';
 
 const STORAGE_KEY = 'adepr-locale';
 
@@ -16,6 +17,9 @@ type I18nValue = {
   locale: Locale;
   setLocale: (locale: Locale) => void;
   t: (key: MessageKey, params?: MessageParams) => string;
+  /** A text that changes with a count: pass the base key (`x` for `x.one` / `x.other`). */
+  tn: (key: string, count: number, params?: MessageParams) => string;
+  fmt: Format;
 };
 
 const I18nContext = createContext<I18nValue | null>(null);
@@ -52,6 +56,8 @@ export function I18nProvider({ children }: { children: ReactNode }) {
       locale,
       setLocale,
       t: (key, params) => translate(locale, key, params),
+      fmt: makeFormat(locale),
+      tn: (key, count, params) => translatePlural(locale, key, count, makeFormat(locale).plural(count), params),
     }),
     [locale, setLocale],
   );
@@ -73,4 +79,9 @@ export function useT() {
 /** Languages the person may choose (more than one means the picker is shown). */
 export function useEnabledLocales(): readonly Locale[] {
   return ENABLED_LOCALES;
+}
+
+/** Dates, numbers and francs in the person's language. */
+export function useFormat(): Format {
+  return useI18n().fmt;
 }

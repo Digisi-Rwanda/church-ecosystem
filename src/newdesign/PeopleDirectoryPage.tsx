@@ -6,7 +6,7 @@ import { LoadState } from './LoadState';
 import { loadViews, peopleToCsv, shortDay, storeViews, type SavedView } from './peopleTools';
 import { useCanWritePeople } from './usePeopleAccess';
 import { useLoad } from './useLoad';
-import { EmptyState, ListRow, PageHeader, RowList, StatusChip } from './kit';
+import { EmptyState, ListRow, PageHeader, PrintButton, RowList, StatusChip } from './kit';
 
 const STATUSES = ['ACTIVE', 'INACTIVE', 'VISITOR'] as const;
 const tone = (s: string) => (s === 'ACTIVE' ? 'success' : s === 'VISITOR' ? 'info' : 'neutral');
@@ -21,7 +21,7 @@ export function PeopleDirectoryPage() {
   const [status, setStatus] = useState('');
   const [archived, setArchived] = useState(false);
   const [views, setViews] = useState<SavedView[]>(loadViews);
-  const { loading, failed, data, reload } = useLoad(() => fetchPeople({ q: q.trim(), status, archived }), `dir|${q.trim()}|${status}|${archived}`);
+  const { loading, failed, data, reload } = useLoad(() => fetchPeople({ q: q.trim(), status, archived, systemId }), `dir|${systemId}|${q.trim()}|${status}|${archived}`);
   const upcoming = useLoad(() => fetchUpcoming(30), 'people-upcoming');
   const base = `/s/${systemId}/people`;
   const list = data ?? [];
@@ -56,6 +56,7 @@ export function PeopleDirectoryPage() {
         primary={canWrite ? <Link className="btn" to={`${base}/new`}>{t('door.people.add')}</Link> : undefined}
         actions={
           <>
+            <PrintButton />
             <button type="button" className="btn ghost no-print" onClick={exportCsv} disabled={list.length === 0}>
               {t('door.people.export')}
             </button>

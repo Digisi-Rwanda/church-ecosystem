@@ -4,7 +4,10 @@ import { filterPerson, SELF_EDITABLE } from '../policy/personFields.js';
 import { personTier } from '../policy/personAccess.js';
 import { prisma } from '../lib/prisma.js';
 import { nextMemberCode, personWithNationalId, possibleDuplicates } from '../lib/codes.js';
-import { authorizePerson, grantsForPerson } from '../policy/index.js';
+import { authorizePerson } from '../policy/index.js';
+import { loadAccessData } from '../notifications/feed.js';
+import { reachableSystems } from '../capabilities/engine.js';
+import { CENTRAL, isAdministrator, mayReadPeople, peopleOfSystem, subtreeUnitIds } from '../lib/peopleScope.js';
 import {
   pathParam,
   requireAuth,
@@ -13,17 +16,45 @@ import {
 
 export const peopleRouter = Router();
 
-/** Directory access needs at least one real role — not just a bare account. */
-async function isInvolved(personId: string): Promise<boolean> {
-  const grants = await grantsForPerson(personId);
-  return grants.some((g) => g.source !== 'ACCOUNT');
+/**
+ * Whose people this caller may list. `null` means everyone (Central Administration, or an Administrator
+ * searching names to appoint or give a sign-in); otherwise the exact set of people of the named system.
+ * A system that is not named means every system the caller may read, never more.
+ */
+async function peopleScopeFor(me: string, requested: string, withUnits: boolean): Promise<{ ids: Set<string> | null } | 'FORBIDDEN'> {
+  const { data, units } = await loadAccessData(me);
+  const now = new Date();
+  const unitRows = units as Array<{ id: string; parentId?: string | null; systemId?: string | null }>;
+  const of = (systemId: string) => {
+    const set = peopleOfSystem(systemId, data.memberships, data.positions, unitRows, now);
+    if (withUnits) {
+      const inside = subtreeUnitIds(unitRows, systemId);
+      for (const r of [...data.memberships, ...data.positions] as Array<{ personId: string; orgUnitId?: string | null }>) if (r.orgUnitId && inside.has(r.orgUnitId)) set.add(r.personId);
+    }
+    return set;
+  };
+  if (requested) {
+    if (!mayReadPeople(me, requested, data, now)) return 'FORBIDDEN';
+    return { ids: requested === CENTRAL ? null : of(requested) };
+  }
+  if (isAdministrator(me, data, now)) return { ids: null };
+  const reach = reachableSystems(me, data, now);
+  const readable = (reach === null ? unitRows.map((u) => u.systemId ?? '').concat(CENTRAL) : [...reach]).filter((s, i, a) => s && a.indexOf(s) === i && mayReadPeople(me, s, data, now));
+  if (readable.length === 0) return 'FORBIDDEN';
+  if (readable.includes(CENTRAL)) return { ids: null };
+  const out = new Set<string>();
+  for (const s of readable) for (const id of of(s)) out.add(id);
+  return { ids: out };
 }
 
 const tierOf = personTier;
 
 peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
-  if (!(await isInvolved(req.auth!.personId))) {
-    res.status(403).json({ error: 'Directory is limited to church members with a role' });
+  const requestedSystem = typeof req.query.systemId === 'string' ? req.query.systemId : '';
+  const wantsIds = typeof req.query.ids === 'string' && req.query.ids.length > 0;
+  const scope = await peopleScopeFor(req.auth!.personId, requestedSystem, wantsIds);
+  if (scope === 'FORBIDDEN') {
+    res.status(403).json({ error: 'You may not open the people of this system', code: 'NOT_ALLOWED' });
     return;
   }
   const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
@@ -43,10 +74,16 @@ peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
         ],
       }
     : {};
+  const mine = req.auth!.personId;
+  const wanted = scope.ids === null ? ids : (ids.length ? ids : [...scope.ids, mine]).filter((id) => id === mine || scope.ids!.has(id));
+  if (scope.ids !== null && wanted.length === 0) {
+    res.json({ people: [] });
+    return;
+  }
   const people = await prisma.person.findMany({
     where: {
       ...text,
-      ...(ids.length ? { id: { in: ids } } : {}),
+      ...(wanted.length ? { id: { in: wanted } } : {}),
       ...(status && ['ACTIVE', 'INACTIVE', 'VISITOR'].includes(status) ? { status } : {}),
       ...(wantArchived ? { archivedAt: { not: null } } : { archivedAt: null }),
     },

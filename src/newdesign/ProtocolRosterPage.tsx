@@ -11,7 +11,7 @@ import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { KINDS, OFFICES, ROSTER_STATUS, SERVE_DAYS, protocolErrorKey, toggleKind, withDay, withoutDay } from './protocol';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { PageHeader, PrintButton } from './kit';
 
 /** One person's limits: office, serve days, the services their leader allows, dates they cannot come. */
 function MemberEditor({ m, onSave }: { m: ProtocolMemberRow; onSave: (patch: ProtocolRosterPatch) => void }) {
@@ -90,7 +90,7 @@ export function ProtocolRosterPage() {
   return (
     <section className="door-block" aria-labelledby="door-roster-title">
       <div>
-        <PageHeader id="door-roster-title" title={t('door.own.roster')} purpose={t('door.purpose.roster')} />
+        <PageHeader id="door-roster-title" title={t('door.own.roster')} purpose={t('door.purpose.roster')} actions={<PrintButton />} />
         <p className="muted">{t('door.protocol.roster.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}

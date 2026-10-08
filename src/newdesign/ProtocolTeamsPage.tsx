@@ -11,7 +11,7 @@ import { LoadState } from './LoadState';
 import { shiftMonth, thisMonth } from './music';
 import { ROLES, STEPS, candidatesFor, issuesOfService, openBlocking, protocolErrorKey, sortIssues, stepIndex } from './protocol';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { PageHeader, PrintButton } from './kit';
 
 type Act = (job: () => Promise<unknown>) => void;
 
@@ -97,7 +97,7 @@ export function ProtocolTeamsPage() {
   return (
     <section className="door-block" aria-labelledby="door-teams-title">
       <div>
-        <PageHeader id="door-teams-title" title={t('door.own.teams')} purpose={t('door.purpose.teams')} />
+        <PageHeader id="door-teams-title" title={t('door.own.teams')} purpose={t('door.purpose.teams')} actions={<PrintButton />} />
         <p className="muted">{t('door.protocol.teams.intro')}</p>
       </div>
       <div className="door-row">

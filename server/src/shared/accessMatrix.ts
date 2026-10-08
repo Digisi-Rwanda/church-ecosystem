@@ -120,7 +120,7 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
   VICE_PRESIDENT: {
     PEOPLE: ['R', 'W'],
     PERSON_360: ['R'],
-    MISSION: ['R', 'W'],
+    MISSION: ['R'],
     SCHEDULING: ['R', 'W', 'C'],
     MONEY: ['R', 'V'],
     GOVERNANCE: ['R', 'W'],
@@ -130,7 +130,7 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
   SECRETARY: {
     PEOPLE: ['R', 'W'],
     PERSON_360: ['R', 'W'],
-    MISSION: ['R', 'W'],
+    MISSION: ['R'],
     SCHEDULING: ['R', 'W'],
     GOVERNANCE: ['R', 'W', 'S'],
     COMMUNICATION: ['R', 'W'],
@@ -148,13 +148,19 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
   COORDINATOR: {
     PEOPLE: ['R'],
     PERSON_360: ['R'],
-    MISSION: ['R', 'W'],
+    MISSION: ['R'],
     SCHEDULING: ['R', 'W', 'P'],
     GOVERNANCE: ['R'],
     COMMUNICATION: ['R'],
     REPORTS: ['R', 'W'],
   },
 };
+
+/*
+ * Work (the Mission module): only a President creates and changes work (tasks, events, programs, projects),
+ * and approves it. A Vice President gets W only when the President lends it for a few days. Everyone else
+ * reads, and the person a piece of work is given to moves their own work along.
+ */
 
 /** What a plain member of a system can do there, with no office. */
 export const MEMBER_LETTERS: ModuleLetters = {

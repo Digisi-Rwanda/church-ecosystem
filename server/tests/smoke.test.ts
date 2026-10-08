@@ -15,8 +15,10 @@ describe('harness sanity', () => {
   });
   it('accepts a valid token', async () => {
     const { createApp } = await import('../src/app.js');
-    const r = await request(createApp()).get('/api/people').set(bearer('p-member'));
-    expect(r.status).toBe(200);
+    const app = createApp();
+    expect((await request(app).get('/api/people').set(bearer('p-pastor'))).status).toBe(200);
+    // A church member with no office has no People block, so no directory either.
+    expect((await request(app).get('/api/people').set(bearer('p-member'))).status).toBe(403);
   });
   it('pastor can ENTER any system, member cannot ENTER sys-deacon', async () => {
     const { createApp } = await import('../src/app.js');

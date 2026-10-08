@@ -1,4 +1,5 @@
 import { apiBaseUrl } from './config';
+import { isKeptPath, readOffline, saveOffline, setStaleSince } from './offlineStore';
 
 const TOKEN_KEY = 'adepr.apiToken';
 
@@ -77,6 +78,14 @@ export async function apiFetch<T>(
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     });
   } catch (e) {
+    // No signal: a screen that may be read offline shows the last saved copy, labelled with its time.
+    if ((opts.method ?? 'GET') === 'GET' && opts.body === undefined) {
+      const kept = readOffline<T>(path, token);
+      if (kept) {
+        setStaleSince(kept.at);
+        return kept.data;
+      }
+    }
     throw new ApiError(
       e instanceof Error ? e.message : 'Network error',
       0,
@@ -104,6 +113,10 @@ export async function apiFetch<T>(
     throw new ApiError(msg, res.status, data);
   }
 
+  if ((opts.method ?? 'GET') === 'GET' && opts.body === undefined && isKeptPath(path)) {
+    saveOffline(path, token, data);
+    setStaleSince(null);
+  }
   return data as T;
 }
 

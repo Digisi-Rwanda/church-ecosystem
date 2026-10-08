@@ -28,3 +28,14 @@ export function missingKeys(locale: Locale): MessageKey[] {
   const catalog = CATALOGS[locale];
   return (Object.keys(en) as MessageKey[]).filter((k) => !catalog[k]);
 }
+
+/**
+ * Texts that change with a count. A key `x` is written as `x.one` and `x.other` (and `x.few` / `x.many`
+ * where a language needs them), so a sentence is never built by joining pieces. `{count}` is filled in.
+ */
+export function translatePlural(locale: Locale, key: string, count: number, category: string, params?: MessageParams): string {
+  const cat = CATALOGS[locale] as Record<string, string | undefined>;
+  const base = CATALOGS[DEFAULT_LOCALE] as Record<string, string | undefined>;
+  const text = cat[`${key}.${category}`] ?? cat[`${key}.other`] ?? base[`${key}.${category}`] ?? base[`${key}.other`] ?? key;
+  return fill(text, { count, ...params });
+}

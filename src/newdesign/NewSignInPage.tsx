@@ -5,6 +5,7 @@ import { Spinner } from '../components/ui/Spinner';
 import { pickScripture } from '../lib/scriptures';
 import { useT } from '../i18n/I18nContext';
 import type { MessageKey } from '../i18n/translate';
+import { LanguageSwitch } from './LanguageSwitch';
 import { useFrontDoor, type SignInResult } from './FrontDoorContext';
 
 const ERROR_KEY: Record<Exclude<SignInResult, 'ok'>, MessageKey> = {
@@ -57,6 +58,7 @@ export function NewSignInPage() {
 
       <div className="login-form-pane">
         <div className="login-card stack">
+          <LanguageSwitch className="lang-switch-login" />
           <div className="login-brand">
             <img src="/brand/adepr-logo.png" alt="ADEPR" width={76} height={76} />
             <div>

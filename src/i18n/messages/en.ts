@@ -214,7 +214,7 @@ export const en = {
   'door.letter.C.name': 'Confirm',
   'door.letter.C.meaning': 'Lock a draft as agreed before it is published',
 
-  'door.people.tab.appointments': 'Appointments',
+  'door.people.tab.appointments': 'Leaders',
   'door.people.tab.access': 'Access',
   'door.module.PEOPLE': 'People and organisation',
   'door.module.PERSON_360': 'Person 360',
@@ -224,7 +224,7 @@ export const en = {
   'door.module.GOVERNANCE': 'Governance',
   'door.module.COMMUNICATION': 'Home and communication',
   'door.module.REPORTS': 'Reports',
-  'door.access.appointments.title': 'Appointments',
+  'door.access.appointments.title': 'Leaders',
   'door.access.appointments.intro': 'Who holds each office, and which seats are empty. An office carries its letters only while it is held.',
   'door.access.vacancies.title': 'Needs attention',
   'door.access.vacancies.none': 'Every required seat is filled.',
@@ -2032,7 +2032,7 @@ export const en = {
   'door.purpose.announce': 'Messages for the church, with who they are for and until when.',
   'door.purpose.settings': 'The rules the church works by. Changes are recorded.',
   'door.purpose.access': 'Who can open what. Visible to Administrators only.',
-  'door.purpose.appointments': 'Who holds each office, and the offices that are vacant.',
+  'door.purpose.appointments': 'Who leads this system, and the offices that are vacant.',
   'door.purpose.units': 'How the church is organised, from the church down to each group.',
   'door.purpose.gov': 'Meetings, decisions and letters.',
   'door.purpose.choirs': 'The choirs, their members and how they serve.',
@@ -2184,6 +2184,22 @@ export const en = {
   'door.people.timeline.OFFICE': 'Took office: {name}',
   'door.people.timeline.BAPTISM': 'Baptised',
   'door.people.timeline.MARRIAGE': 'Married',
+
+  'door.lang.label': 'Language',
+
+  'door.frame.bottomNav': 'Main places',
+  'door.frame.more': 'More',
+
+  'door.offline.banner': 'No connection. You are reading what was saved on {date} at {time}. It may be out of date.',
+
+  'door.prefs.digest': 'Daily summary',
+  'door.prefs.digestHint': 'One short message a day with what is waiting for you. It is sent to the email address or phone number in your person card.',
+  'door.prefs.digest.OFF': 'No daily summary',
+  'door.prefs.digest.EMAIL': 'By email',
+  'door.prefs.digest.SMS': 'By SMS',
+  'door.prefs.digest.WHATSAPP': 'By WhatsApp',
+
+  'door.print.pdf': 'Save as PDF',
 
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',

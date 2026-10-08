@@ -93,10 +93,14 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
  * system where the person holds a Governance letter, and Settings in Central Administration
  * for the offices that run it (they change settings; Administrators only read them).
  */
+const SYSTEMS_WITH_ORGANISATION = ['sys-music', 'sys-deacon'];
+
 function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, holdings: ReturnType<typeof liveHoldings>) {
-  const own: Array<{ key: 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves'; letters: AccessLetter[]; variant?: string }> = [];
+  const own: Array<{ key: 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves'; letters: AccessLetter[]; variant?: string }> = [];
   // Central Administration home (slice 2.4): the main church's leaders see the whole church at a glance.
   if (systemId === 'sys-main' && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'central', letters: modules.GOVERNANCE });
+  // Only a system that has units beneath it shows an Organisation: Music (its choirs) and Deacon (Protocol).
+  if (SYSTEMS_WITH_ORGANISATION.includes(systemId) && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'organisation', letters: modules.PEOPLE });
   if ((modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'governance', letters: modules.GOVERNANCE });
   if (systemId in KIND_BY_SYSTEM && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'groups', letters: modules.PEOPLE, variant: KIND_BY_SYSTEM[systemId] });
   if (isMoveSystem(systemId) && (modules.PEOPLE ?? []).includes('W') && canConfirmMove(holdings, systemId)) own.push({ key: 'moves', letters: modules.PEOPLE });
@@ -178,10 +182,11 @@ const THEMES = ['light', 'dark'] as const;
 
 /** Kept on the server so a person's choices follow them to every device. */
 meRouter.get('/preferences', requireAuth, async (req: AuthedRequest, res) => {
-  const pref = (await prisma.preference.findFirst({ where: { personId: req.auth!.personId } })) as { language?: string | null; theme?: string | null } | null;
+  const pref = (await prisma.preference.findFirst({ where: { personId: req.auth!.personId } })) as { language?: string | null; theme?: string | null; digestChannel?: string | null } | null;
   res.json({
     language: pref?.language ?? null,
     theme: pref?.theme ?? null,
+    digestChannel: pref?.digestChannel ?? 'OFF',
     mutedSystems: await mutedSystemsOf(req.auth!.personId),
     languages: LANGUAGES,
   });
@@ -192,6 +197,8 @@ const prefSchema = z.object({
   theme: z.enum(THEMES).nullable().optional(),
   /** Systems whose "For information" notices are muted. Things waiting for you can never be muted. */
   mutedSystems: z.array(z.string().min(1).max(60)).max(40).optional(),
+  /** The daily digest of unread notices: off, or by email, SMS or WhatsApp. */
+  digestChannel: z.enum(['OFF', 'EMAIL', 'SMS', 'WHATSAPP']).optional(),
 });
 
 meRouter.put('/preferences', requireAuth, async (req: AuthedRequest, res) => {
@@ -201,6 +208,7 @@ meRouter.put('/preferences', requireAuth, async (req: AuthedRequest, res) => {
   const data: Record<string, unknown> = {};
   if (parsed.data.language !== undefined) data.language = parsed.data.language;
   if (parsed.data.theme !== undefined) data.theme = parsed.data.theme;
+  if (parsed.data.digestChannel !== undefined) data.digestChannel = parsed.data.digestChannel;
   if (parsed.data.mutedSystems !== undefined) {
     const known = new Set((await prisma.churchSystem.findMany({ select: { id: true } })).map((x: { id: string }) => x.id));
     const unknown = parsed.data.mutedSystems.filter((id) => !known.has(id));
@@ -208,6 +216,6 @@ meRouter.put('/preferences', requireAuth, async (req: AuthedRequest, res) => {
     data.mutedSystemsJson = JSON.stringify([...new Set(parsed.data.mutedSystems)].sort());
   }
   await prisma.preference.upsert({ where: { personId: me }, create: { personId: me, ...data }, update: data });
-  const after = (await prisma.preference.findFirst({ where: { personId: me } })) as { language?: string | null; theme?: string | null } | null;
-  res.json({ language: after?.language ?? null, theme: after?.theme ?? null, mutedSystems: await mutedSystemsOf(me) });
+  const after = (await prisma.preference.findFirst({ where: { personId: me } })) as { language?: string | null; theme?: string | null; digestChannel?: string | null } | null;
+  res.json({ language: after?.language ?? null, theme: after?.theme ?? null, digestChannel: after?.digestChannel ?? 'OFF', mutedSystems: await mutedSystemsOf(me) });
 });

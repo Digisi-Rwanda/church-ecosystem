@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { fetchPreferences, savePreferences } from '../api/frontDoorApi';
+import { fetchPreferences, savePreferences, type DigestChannel } from '../api/frontDoorApi';
 import { SelectField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { ENABLED_LOCALES, LOCALE_NAMES, isEnabledLocale } from '../i18n/locales';
@@ -17,6 +17,7 @@ export function PreferencesPage() {
   const { loading, failed, data, reload } = useLoad(fetchPreferences, 'preferences');
   const [language, setLanguage] = useState('');
   const [muted, setMuted] = useState<string[]>([]);
+  const [digest, setDigest] = useState<DigestChannel>('OFF');
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState('');
 
@@ -24,6 +25,7 @@ export function PreferencesPage() {
     if (data) {
       setLanguage(data.language ?? '');
       setMuted(data.mutedSystems);
+      setDigest(data.digestChannel ?? 'OFF');
       // A language chosen on another device applies here too.
       if (isEnabledLocale(data.language)) setLocale(data.language);
     }
@@ -34,7 +36,7 @@ export function PreferencesPage() {
     setError('');
     setSaved(false);
     try {
-      await savePreferences({ language: language || null, mutedSystems: muted });
+      await savePreferences({ language: language || null, mutedSystems: muted, digestChannel: digest });
       if (isEnabledLocale(language)) setLocale(language);
       setSaved(true);
     } catch {
@@ -56,6 +58,11 @@ export function PreferencesPage() {
               <option key={l} value={l}>
                 {LOCALE_NAMES[l]}
               </option>
+            ))}
+          </SelectField>
+          <SelectField label={t('door.prefs.digest')} name="digest" value={digest} onChange={(e) => setDigest(e.target.value as DigestChannel)} hint={t('door.prefs.digestHint')}>
+            {(['OFF', 'EMAIL', 'SMS', 'WHATSAPP'] as const).map((c) => (
+              <option key={c} value={c}>{t(`door.prefs.digest.${c}` as 'door.prefs.digest.OFF')}</option>
             ))}
           </SelectField>
           <fieldset className="door-fieldset">
