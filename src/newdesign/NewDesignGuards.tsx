@@ -17,7 +17,7 @@ export function NewDesignLayout() {
 export function RequireSignedIn() {
   const { status } = useFrontDoor();
   const location = useLocation();
-  if (status === 'checking') {
+  if (status === 'checking' || status === 'loading') {
     return (
       <div className="door-center">
         <Spinner size="lg" />

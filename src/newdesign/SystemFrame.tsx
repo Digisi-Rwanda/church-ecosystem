@@ -14,10 +14,26 @@ import { Shell } from './Shell';
 export function SystemFrame() {
   const t = useT();
   const { systemId = '' } = useParams();
-  const { portal, capabilities } = useFrontDoor();
+  const { portal, capabilities, status, reload } = useFrontDoor();
   const system = portal.find((s) => s.id === systemId);
   const { counts } = useNoticeSummary();
 
+  if (!system && status === 'error') {
+    return (
+      <main className="door-page">
+        <EmptyState
+          variant="error"
+          title={t('door.portal.errorTitle')}
+          detail={t('door.portal.errorDetail')}
+          action={
+            <button type="button" className="btn" onClick={() => void reload()}>
+              {t('door.portal.retry')}
+            </button>
+          }
+        />
+      </main>
+    );
+  }
   if (!system) {
     return (
       <main className="door-page">
