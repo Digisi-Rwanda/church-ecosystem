@@ -41,3 +41,25 @@ export function lastMonth(now = new Date()): string {
   const d = new Date(Date.UTC(k.getUTCFullYear(), k.getUTCMonth() - 1, 1));
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
+
+/** How many monthly reports are received, due and late. */
+export function boardCounts(list: ReportScheduleItem[]): Record<ReportScheduleItem['state'], number> {
+  const out = { RECEIVED: 0, DUE: 0, LATE: 0 };
+  for (const s of list) out[s.state]++;
+  return out;
+}
+
+/** The period before a report's period: last month for "2026-10", last year for "2026". */
+export function previousPeriod(key: string): string {
+  if (/^\d{4}$/.test(key)) return String(Number(key) - 1);
+  const [y, m] = key.split('-').map(Number);
+  const d = new Date(Date.UTC(y, m - 2, 1));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}
+
+/** Change from the last period as text: "+12", "−3" or "=" (numbers only). */
+export function deltaText(now: ReportCell, before: ReportCell): string {
+  if (typeof now !== 'number' || typeof before !== 'number') return '';
+  const d = now - before;
+  return d === 0 ? '=' : `${d > 0 ? '+' : '−'}${Math.abs(d)}`;
+}

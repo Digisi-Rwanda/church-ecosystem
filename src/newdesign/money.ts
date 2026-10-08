@@ -48,3 +48,14 @@ export function queueFirst(list: MoneyEntryItem[]): MoneyEntryItem[] {
 }
 
 export const currentMonth = (now = new Date()): string => new Date(now.getTime() + 2 * 3600 * 1000).toISOString().slice(0, 7);
+
+const csvCell = (v: string | number | null): string => {
+  const s = v === null ? '' : String(v);
+  return /[",\n\r]/.test(s) || /^[=+\-@]/.test(s) ? `"${(/^[=+\-@]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"` : s;
+};
+
+/** The entries as a spreadsheet file (CSV). Amounts are whole francs; a cancelled entry keeps its reason. */
+export function entriesToCsv(list: MoneyEntryItem[], head: string[]): string {
+  const rows = list.map((e) => [e.occurredOn, e.accountName, e.kind, e.category, e.amount, e.status, e.note, e.planTitle, e.recordedByName, e.decidedByName, e.decisionNote]);
+  return [head, ...rows].map((r) => r.map((c) => csvCell(c as string | number | null)).join(',')).join('\r\n');
+}

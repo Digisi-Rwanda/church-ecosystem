@@ -40,6 +40,9 @@ export function PlanForm({
   const [visibility, setVisibility] = useState<WorkVisibility>(existing?.visibility ?? 'SYSTEM');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [step, setStep] = useState(0);
+  const wizard = !existing;
+  const show = (n: number) => !wizard || step === n;
 
   const addMember = (p: DirectoryPerson) => {
     if (!role.trim()) return setError(t('door.plan.form.roleFirst'));
@@ -48,8 +51,15 @@ export function PlanForm({
     setRole('');
   };
 
+  const next = () => {
+    if (step === 0 && (!title.trim() || !unitId)) return setError(t('door.plan.form.incomplete'));
+    setError('');
+    setStep(step + 1);
+  };
+
   const submit = async (e: FormEvent) => {
     e.preventDefault();
+    if (wizard && step < 2) return next();
     if (!title.trim() || !leader || (!existing && !unitId)) return setError(t('door.plan.form.incomplete'));
     const input = {
       title: title.trim(), aim: aim.trim(), needs: needs.trim() || null, location: location.trim() || null,
@@ -69,7 +79,12 @@ export function PlanForm({
   return (
     <form className="panel door-form" onSubmit={submit} noValidate>
       <h3>{existing ? t('door.plan.form.edit') : t('door.plan.form.new')}</h3>
-      {!existing && units.length > 1 && (
+      {wizard && (
+        <p className="muted" aria-live="polite">
+          {t('door.plan.wizard.step', { n: step + 1, total: 3 })} · {t(`door.plan.wizard.${step}` as 'door.plan.wizard.0')}
+        </p>
+      )}
+      {show(0) && !existing && units.length > 1 && (
         <SelectField label={t('door.work.form.unit')} name="p-unit" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
           <option value="">{t('door.gov.meeting.choose')}</option>
           {units.map((u) => (
@@ -79,10 +94,15 @@ export function PlanForm({
           ))}
         </SelectField>
       )}
+      {show(0) && (
+        <>
       <TextField label={t('door.plan.form.title')} name="p-title" value={title} maxLength={options.limits.titleMax} onChange={(e) => setTitle(e.target.value)} />
       <TextAreaField label={t('door.plan.form.aim')} name="p-aim" rows={3} value={aim} maxLength={options.limits.textMax} onChange={(e) => setAim(e.target.value)} />
-      <TextAreaField label={t('door.plan.form.needs')} name="p-needs" rows={2} value={needs} maxLength={options.limits.textMax} onChange={(e) => setNeeds(e.target.value)} />
-      <TextField label={t('door.plan.form.location')} name="p-loc" value={location} maxLength={options.limits.titleMax} onChange={(e) => setLocation(e.target.value)} />
+        </>
+      )}
+      {show(2) && <TextAreaField label={t('door.plan.form.needs')} name="p-needs" rows={2} value={needs} maxLength={options.limits.textMax} onChange={(e) => setNeeds(e.target.value)} />}
+      {show(1) && <TextField label={t('door.plan.form.location')} name="p-loc" value={location} maxLength={options.limits.titleMax} onChange={(e) => setLocation(e.target.value)} />}
+      {show(0) && (
       <SelectField label={t('door.plan.type')} name="p-type" value={planType} onChange={(e) => setPlanType(e.target.value as PlanType)}>
         {PLAN_TYPES.map((k) => (
           <option key={k} value={k}>
@@ -90,8 +110,15 @@ export function PlanForm({
           </option>
         ))}
       </SelectField>
+      )}
+      {show(1) && (
+        <>
       <TextField label={t('door.plan.form.starts')} name="p-starts" type="date" value={starts} onChange={(e) => setStarts(e.target.value)} />
       <TextField label={t('door.plan.form.ends')} name="p-ends" type="date" value={ends} onChange={(e) => setEnds(e.target.value)} />
+        </>
+      )}
+      {show(2) && (
+        <>
       <p>
         <strong>{t('door.plan.leader')}:</strong> {leader ? leader.name : <span className="muted">{t('door.work.form.nobody')}</span>}
       </p>
@@ -119,15 +146,28 @@ export function PlanForm({
           </option>
         ))}
       </SelectField>
+        </>
+      )}
       {error && (
         <p className="door-error" role="alert">
           {error}
         </p>
       )}
       <div className="door-row">
-        <button type="submit" className="btn" disabled={busy}>
-          {existing ? t('door.work.form.save') : t('door.plan.form.create')}
-        </button>
+        {wizard && step < 2 ? (
+          <button type="button" className="btn" onClick={next}>
+            {t('door.plan.wizard.next')}
+          </button>
+        ) : (
+          <button type="submit" className="btn" disabled={busy}>
+            {existing ? t('door.work.form.save') : t('door.plan.form.create')}
+          </button>
+        )}
+        {wizard && step > 0 && (
+          <button type="button" className="btn secondary" onClick={() => { setError(''); setStep(step - 1); }}>
+            {t('door.plan.wizard.back')}
+          </button>
+        )}
         <button type="button" className="btn ghost" onClick={onCancel}>
           {t('door.settings.cancel')}
         </button>

@@ -40,3 +40,10 @@ const ERROR_KEYS: Record<string, string> = {
   NOT_FOUND: 'door.work.err.gone',
 };
 export const planErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
+
+/** "2026-10" from a plan's start, or "none" when it has no date. Church time is UTC+2. */
+export function monthKeyOf(iso: string | null): string {
+  if (!iso) return 'none';
+  const d = new Date(new Date(iso).getTime() + 2 * 3600 * 1000);
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
+}

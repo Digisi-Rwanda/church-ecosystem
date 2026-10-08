@@ -78,3 +78,65 @@ const ERROR_KEYS: Record<string, string> = {
 export const scheduleErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
 
 export const liveAssignments = (s: ScheduleSlot) => s.assignments.filter((a) => a.status !== 'REPLACED');
+
+/** The weeks of a YYYY-MM month as a grid, Monday first. Days outside the month are marked `off`. */
+export function monthGrid(month: string): Array<{ day: string; off: boolean }> {
+  const [y, m] = month.split('-').map(Number);
+  const first = new Date(Date.UTC(y, m - 1, 1));
+  const lead = (first.getUTCDay() + 6) % 7;
+  const days = new Date(Date.UTC(y, m, 0)).getUTCDate();
+  const cells = Math.ceil((lead + days) / 7) * 7;
+  return Array.from({ length: cells }, (_, i) => {
+    const d = new Date(Date.UTC(y, m - 1, 1 - lead + i));
+    return { day: d.toISOString().slice(0, 10), off: d.getUTCMonth() !== m - 1 };
+  });
+}
+
+type Timed = { startsAt: string; endsAt: string | null };
+const endOf = (s: Timed) => (s.endsAt ? new Date(s.endsAt).getTime() : new Date(s.startsAt).getTime() + 3600 * 1000);
+
+/** Ids of items that overlap another item in the list in time. */
+export function overlapping<T extends Timed & { id: string }>(items: T[]): Set<string> {
+  const out = new Set<string>();
+  for (let i = 0; i < items.length; i++)
+    for (let j = i + 1; j < items.length; j++) {
+      const a = items[i];
+      const b = items[j];
+      if (new Date(a.startsAt).getTime() < endOf(b) && new Date(b.startsAt).getTime() < endOf(a)) {
+        out.add(a.id);
+        out.add(b.id);
+      }
+    }
+  return out;
+}
+
+/** People who are assigned to two slots that overlap: [name, slot titles]. */
+export function personClashes(slots: ScheduleSlot[]): Array<{ name: string; titles: string[] }> {
+  const byPerson = new Map<string, { name: string; slots: ScheduleSlot[] }>();
+  for (const s of slots)
+    for (const a of s.assignments)
+      if (a.status === 'ASSIGNED') {
+        const e = byPerson.get(a.personId) ?? { name: a.personName, slots: [] };
+        e.slots.push(s);
+        byPerson.set(a.personId, e);
+      }
+  const out: Array<{ name: string; titles: string[] }> = [];
+  for (const e of byPerson.values()) {
+    const ids = overlapping(e.slots);
+    if (ids.size > 0) out.push({ name: e.name, titles: e.slots.filter((s) => ids.has(s.id)).map((s) => s.title) });
+  }
+  return out;
+}
+
+/** How many times each person serves this month, most first: the fairness figures. */
+export function servingCounts(slots: ScheduleSlot[]): Array<{ personId: string; name: string; count: number }> {
+  const m = new Map<string, { personId: string; name: string; count: number }>();
+  for (const s of slots)
+    for (const a of s.assignments)
+      if (a.status === 'ASSIGNED') {
+        const e = m.get(a.personId) ?? { personId: a.personId, name: a.personName, count: 0 };
+        e.count++;
+        m.set(a.personId, e);
+      }
+  return [...m.values()].sort((a, b) => b.count - a.count || a.name.localeCompare(b.name));
+}

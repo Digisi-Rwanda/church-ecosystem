@@ -1,12 +1,12 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
-import { discardReport, fetchReport, reportStep, type ReportDetail } from '../api/frontDoorApi';
+import { discardReport, fetchReport, fetchReports, reportStep, type ReportDetail } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { PageHeader } from './kit';
 import { LoadState } from './LoadState';
-import { cellText, kindKey, periodLabel, reportErrorKey } from './reports';
+import { cellText, deltaText, kindKey, periodLabel, previousPeriod, reportErrorKey } from './reports';
 import { useLoad } from './useLoad';
 
 /** One report: figures as they stood when composed. A published report is frozen. */
@@ -18,6 +18,13 @@ export function ReportPage() {
   const load = useLoad(() => fetchReport(reportId), `report|${reportId}`);
   const [error, setError] = useState('');
   const r: ReportDetail | null = load.data ?? null;
+  const prevKey = r ? previousPeriod(r.periodKey) : '';
+  const before = useLoad(async () => {
+    if (!r) return null;
+    const found = (await fetchReports({ systemId: r.systemId, kind: r.kind, period: prevKey, status: 'PUBLISHED' })).reports.find((x) => x.unitName === r.unitName);
+    return found ? fetchReport(found.id) : null;
+  }, `report-before|${reportId}|${r?.id ?? ''}`);
+  const prev = before.data?.snapshot ?? null;
   const run = async (job: () => Promise<void>, after?: () => void) => {
     setError('');
     try {
@@ -31,7 +38,7 @@ export function ReportPage() {
   const when = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
   return (
     <section className="door-block" aria-labelledby="door-report-title">
-      <p>
+      <p className="no-print">
         <Link to={`/s/${systemId}/reports`}>{t('door.reports.back')}</Link>
       </p>
       <LoadState loading={load.loading} failed={load.failed} retry={load.reload}>
@@ -52,7 +59,7 @@ export function ReportPage() {
               {r.status === 'DRAFT' && <p className="muted">{t('door.reports.draftHint')}</p>}
               {r.status === 'PUBLISHED' && <p className="muted">{t('door.reports.frozen')}</p>}
             </div>
-            <div className="door-row">
+            <div className="door-row no-print">
               {r.canEdit && (
                 <button type="button" className="btn ghost" onClick={() => void run(() => reportStep(r.id, 'refresh'))}>
                   {t('door.reports.refresh')}
@@ -81,12 +88,17 @@ export function ReportPage() {
               <EmptyState variant="error" title={t('door.reports.unreadable')} />
             ) : (
               <>
-                <div className="panel">
+                <div className="panel print-sheet">
                   <dl className="door-facts">
                     {r.snapshot.summary.map((s) => (
                       <div key={s.key}>
                         <dt>{t(`door.reports.sum.${r.kind}.${s.key}` as 'door.reports.sum.MONEY.income')}</dt>
-                        <dd>{cellText(s.value, s.type)}</dd>
+                        <dd>
+                          {cellText(s.value, s.type)}
+                          {prev && deltaText(s.value, prev.summary.find((x) => x.key === s.key)?.value ?? null) && (
+                            <span className="muted"> ({deltaText(s.value, prev.summary.find((x) => x.key === s.key)?.value ?? null)} {t('door.reports.vsLast', { period: periodLabel(prevKey, locale) })})</span>
+                          )}
+                        </dd>
                       </div>
                     ))}
                   </dl>

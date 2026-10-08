@@ -16,9 +16,10 @@ import { formatRwf } from './money';
 import { PlanForm } from './PlanForm';
 import { PLAN_STEPS, phaseOf, planActions, planErrorKey, planStatusKey, stepIndex } from './plans';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { ListRow, PageHeader, RowList, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | null;
+type Tab = 'overview' | 'team' | 'checklist' | 'money' | 'report' | 'history';
 
 /** One plan: where it stands in the six steps, its planning record, the execution record and the report. */
 export function PlanPage() {
@@ -35,6 +36,7 @@ export function PlanPage() {
   const [note, setNote] = useState('');
   const [item, setItem] = useState('');
   const [error, setError] = useState('');
+  const [tab, setTab] = useState<Tab>('overview');
   const [report, setReport] = useState<{ planningSummary: string; executionSummary: string; outcome: string } | null>(null);
 
   const p = plan && plan.id === planId ? plan : load.data;
@@ -58,18 +60,33 @@ export function PlanPage() {
     <LoadState loading={load.loading || !p} failed={false} retry={load.reload}>
       {p && (
         <section className="door-block" aria-labelledby="door-plan-title">
-          <p>
-            <Link to={`/s/${systemId}/work`}>← {t('door.block.work')}</Link>
-          </p>
-          <div className="door-row">
-            <PageHeader id="door-plan-title" title={p.title} />
-            <span className="door-chip">{t(planStatusKey(p.status))}</span>
-            <span className="door-chip">{t(`door.work.visibility.${p.visibility}` as const)}</span>
-          </div>
-          <p className="muted">
-            {p.unitName} · {t('door.plan.leader')}: {p.leaderName}
-            {p.startsOn ? ` · ${day(p.startsOn)}${p.endsOn ? ` – ${day(p.endsOn)}` : ''}` : ''}
-          </p>
+          <PageHeader
+            id="door-plan-title"
+            title={p.title}
+            back={<Link to={`/s/${systemId}/work`}>← {t('door.block.work')}</Link>}
+            purpose={`${p.unitName} · ${t('door.plan.leader')}: ${p.leaderName}${p.startsOn ? ` · ${day(p.startsOn)}${p.endsOn ? ` – ${day(p.endsOn)}` : ''}` : ''}`}
+            meta={
+              <>
+                <StatusChip tone={p.status === 'PENDING_APPROVAL' || p.status === 'CLOSING' ? 'warn' : p.status === 'RUNNING' ? 'info' : p.status === 'ENDED' ? 'success' : p.status === 'CANCELLED' ? 'danger' : 'neutral'}>{t(planStatusKey(p.status))}</StatusChip>
+                <StatusChip>{t(`door.work.visibility.${p.visibility}` as const)}</StatusChip>
+              </>
+            }
+          />
+          <Tabs
+            label={t('door.plan.tabs')}
+            value={tab}
+            onChange={setTab}
+            items={[
+              { key: 'overview', label: t('door.plan.tab.overview') },
+              { key: 'team', label: t('door.plan.tab.team'), count: p.team.length },
+              { key: 'checklist', label: t('door.plan.tab.checklist'), count: p.checks.filter((k) => !k.done).length },
+              { key: 'money', label: t('door.plan.tab.money') },
+              { key: 'report', label: t('door.plan.tab.report') },
+              { key: 'history', label: t('door.plan.tab.history') },
+            ]}
+          />
+          {tab === 'overview' && (
+            <>
 
           <ol className="door-steps" aria-label={t('door.plan.steps')}>
             {PLAN_STEPS.map((s) => (
@@ -162,38 +179,28 @@ export function PlanPage() {
                   <strong>{t('door.plan.form.location')}:</strong> {p.location}
                 </p>
               )}
-              {p.team.length > 0 && (
-                <ul className="door-list">
-                  {p.team.map((m) => (
-                    <li key={m.personId}>
-                      <strong>{m.name}</strong> · {m.role}
-                    </li>
-                  ))}
-                </ul>
-              )}
             </div>
           )}
+            </>
+          )}
 
-          <PlanMoney systemId={systemId} planId={p.id} />
-
-          {p.levels.length > 0 && (
-            <div className="panel">
-              <h3>{t('door.plan.approvals')}</h3>
-              <ul className="door-list">
-                {p.levels.map((l) => (
-                  <li key={l.levelKey}>
-                    <strong>{l.label}</strong> ·{' '}
-                    {l.status === 'APPROVED' ? t('door.plan.approvedBy', { who: l.byName ?? '', when: day(l.at) }) : t('door.plan.levelWaiting')}
-                    {l.note ? ` — ${l.note}` : ''}
-                  </li>
+          {tab === 'team' &&
+            (p.team.length === 0 ? (
+              <p className="muted">{t('door.plan.team.none')}</p>
+            ) : (
+              <RowList label={t('door.plan.tab.team')}>
+                {p.team.map((m) => (
+                  <ListRow key={m.personId} avatarName={m.name} title={m.name} detail={m.role} />
                 ))}
-              </ul>
-            </div>
-          )}
+              </RowList>
+            ))}
 
-          {(['RUNNING', 'CLOSING', 'ENDED'].includes(p.status) || p.notes.length > 0 || p.checks.length > 0) && (
+          {tab === 'money' && <PlanMoney systemId={systemId} planId={p.id} />}
+
+          {tab === 'checklist' && (
             <div className="panel">
-              <h3>{t('door.plan.record.execution')}</h3>
+              <h3>{t('door.plan.tab.checklist')}</h3>
+              {p.checks.length === 0 && <p className="muted">{t('door.plan.checklist.none')}</p>}
               {p.checks.length > 0 && (
                 <ul className="door-list">
                   {p.checks.map((k) => (
@@ -218,6 +225,29 @@ export function PlanPage() {
                   </button>
                 </div>
               )}
+            </div>
+          )}
+          {tab === 'history' && (
+            <>
+          {p.levels.length > 0 && (
+            <div className="panel">
+              <h3>{t('door.plan.approvals')}</h3>
+              <ul className="door-list">
+                {p.levels.map((l) => (
+                  <li key={l.levelKey}>
+                    <strong>{l.label}</strong> ·{' '}
+                    {l.status === 'APPROVED' ? t('door.plan.approvedBy', { who: l.byName ?? '', when: day(l.at) }) : t('door.plan.levelWaiting')}
+                    {l.note ? ` — ${l.note}` : ''}
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+
+              <div className="panel">
+                <h3>{t('door.plan.record.execution')}</h3>
+                {p.notes.length === 0 && <p className="muted">{t('door.plan.history.none')}</p>}
               {p.notes.length > 0 && (
                 <ul className="door-list">
                   {p.notes.map((n) => (
@@ -235,10 +265,11 @@ export function PlanPage() {
                   </button>
                 </div>
               )}
-            </div>
+              </div>
+            </>
           )}
-
-          {(p.status === 'CLOSING' || p.status === 'ENDED') && (
+          {tab === 'report' && !(p.status === 'CLOSING' || p.status === 'ENDED') && <p className="muted">{t('door.plan.report.notYet')}</p>}
+          {tab === 'report' && (p.status === 'CLOSING' || p.status === 'ENDED') && (
             <div className="panel">
               <h3>{t('door.plan.report')}</h3>
               {p.canCompose ? (

@@ -49,6 +49,7 @@ import {
   RepertoirePage,
   ReportPage,
   ReportsPage,
+  MyAssignmentsPage,
   SchedulePage,
   SettingsPage,
   SponsorshipPage,
@@ -111,6 +112,7 @@ export function newDesignRoutes() {
           <Route path="settings" element={<SettingsPage />} />
           <Route path="preferences" element={<SystemSettingsPage />} />
           <Route path="schedule" element={<SchedulePage />} />
+          <Route path="schedule/mine" element={<MyAssignmentsPage />} />
           <Route path="work" element={<WorkPage />} />
           <Route path="programs" element={<PlansPage planType="PROGRAM" />} />
           <Route path="events" element={<PlansPage planType="EVENT" />} />

@@ -102,6 +102,8 @@ const loadReportPage = () => import('./ReportPage').then((m) => ({ default: m.Re
 export const ReportPage = lazy(loadReportPage);
 const loadReportsPage = () => import('./ReportsPage').then((m) => ({ default: m.ReportsPage }));
 export const ReportsPage = lazy(loadReportsPage);
+const loadMyAssignmentsPage = () => import('./MyAssignmentsPage').then((m) => ({ default: m.MyAssignmentsPage }));
+export const MyAssignmentsPage = lazy(loadMyAssignmentsPage);
 const loadSchedulePage = () => import('./SchedulePage').then((m) => ({ default: m.SchedulePage }));
 export const SchedulePage = lazy(loadSchedulePage);
 const loadSettingsPage = () => import('./SettingsPage').then((m) => ({ default: m.SettingsPage }));
@@ -172,6 +174,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   RepertoirePage: loadRepertoirePage,
   ReportPage: loadReportPage,
   ReportsPage: loadReportsPage,
+  MyAssignmentsPage: loadMyAssignmentsPage,
   SchedulePage: loadSchedulePage,
   SettingsPage: loadSettingsPage,
   SponsorshipPage: loadSponsorshipPage,

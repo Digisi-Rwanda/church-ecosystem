@@ -1,8 +1,8 @@
 import { useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   addReportSchedule, composeReport, fetchReportOptions, fetchReportSchedules, fetchReports, stopReportSchedule,
-  type ReportKind, type ReportOptions,
+  type ReportKind, type ReportOptions, type ReportScheduleItem,
 } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
@@ -11,9 +11,9 @@ import { useFrontDoor } from './FrontDoorContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
-import { kindKey, lastMonth, periodLabel, reportErrorKey, sortReports, stateKey } from './reports';
+import { boardCounts, kindKey, lastMonth, periodLabel, reportErrorKey, sortReports, stateKey } from './reports';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { ListRow, PageHeader, RowList, SidePanel, StatusChip, Tabs } from './kit';
 
 function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportOptions; systemId: string; onDone: (id: string) => void; onCancel: () => void }) {
   const t = useT();
@@ -132,6 +132,24 @@ function ScheduleForm({ options, systemId, onDone, onCancel }: { options: Report
   );
 }
 
+/** What is received, due and late, at a glance. Late ones come first so nobody has to hunt for them. */
+function ReportBoard({ items }: { items: ReportScheduleItem[] }) {
+  const t = useT();
+  const c = boardCounts(items);
+  if (items.length === 0) return null;
+  return (
+    <div className="queue-grid">
+      {(['LATE', 'DUE', 'RECEIVED'] as const).map((st) => (
+        <div key={st} className="panel queue-card">
+          <h3>
+            {t(stateKey(st))} <span className="muted">{c[st]}</span>
+          </h3>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** The Reports block: the library of reports, and the monthly schedules of what each unit owes. */
 export function ReportsPage() {
   const t = useT();
@@ -152,18 +170,45 @@ export function ReportsPage() {
   const items = sortReports(list.data?.reports ?? []);
   return (
     <section className="door-block" aria-labelledby="door-reports-title">
-      <div>
-        <PageHeader id="door-reports-title" title={t('door.block.reports')} purpose={t('door.purpose.reports')} />
-        <p className="muted">{t('door.reports.intro')}</p>
-      </div>
-      <div className="door-row" role="group" aria-label={t('door.reports.tabs')}>
-        <button type="button" className={tab === 'library' ? 'btn sm' : 'btn ghost sm'} aria-pressed={tab === 'library'} onClick={() => setTab('library')}>
-          {t('door.reports.tab.library')}
-        </button>
-        <button type="button" className={tab === 'schedules' ? 'btn sm' : 'btn ghost sm'} aria-pressed={tab === 'schedules'} onClick={() => setTab('schedules')}>
-          {t('door.reports.tab.schedules')}
-        </button>
-      </div>
+      <PageHeader
+        id="door-reports-title"
+        title={t('door.block.reports')}
+        purpose={t('door.purpose.reports')}
+        primary={
+          tab === 'library' && canCompose ? (
+            <button type="button" className="btn" onClick={() => setForm('compose')}>
+              {t('door.reports.new')}
+            </button>
+          ) : tab === 'schedules' && canSchedule ? (
+            <button type="button" className="btn" onClick={() => setForm('schedule')}>
+              {t('door.reports.schedule.new')}
+            </button>
+          ) : undefined
+        }
+      />
+      <Tabs
+        label={t('door.reports.tabs')}
+        value={tab}
+        onChange={setTab}
+        items={[
+          { key: 'library', label: t('door.reports.tab.library') },
+          { key: 'schedules', label: t('door.reports.tab.schedules'), count: (schedules.data?.schedules ?? []).filter((x) => x.state === 'LATE').length },
+        ]}
+      />
+      <SidePanel open={form === 'compose' && !!options.data} title={t('door.reports.new')} purpose={t('door.reports.intro')} onClose={() => setForm(null)}>
+        {options.data && (
+          <div className="side-form">
+            <ComposeForm options={options.data} systemId={systemId} onDone={(id) => navigate(`/s/${systemId}/reports/${id}`)} onCancel={() => setForm(null)} />
+          </div>
+        )}
+      </SidePanel>
+      <SidePanel open={form === 'schedule' && !!options.data} title={t('door.reports.schedule.new')} purpose={t('door.reports.schedule.intro')} onClose={() => setForm(null)}>
+        {options.data && (
+          <div className="side-form">
+            <ScheduleForm options={options.data} systemId={systemId} onDone={() => { setForm(null); schedules.reload(); }} onCancel={() => setForm(null)} />
+          </div>
+        )}
+      </SidePanel>
       {tab === 'library' && (
         <>
           <div className="door-filters">
@@ -175,34 +220,22 @@ export function ReportsPage() {
                 </option>
               ))}
             </SelectField>
-            {canCompose && !form && (
-              <button type="button" className="btn" onClick={() => setForm('compose')}>
-                {t('door.reports.new')}
-              </button>
-            )}
           </div>
-          {form === 'compose' && options.data && <ComposeForm options={options.data} systemId={systemId} onDone={(id) => navigate(`/s/${systemId}/reports/${id}`)} onCancel={() => setForm(null)} />}
           <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
             {items.length === 0 ? (
               <EmptyState title={t('door.reports.none')} detail={t('door.reports.noneDetail')} />
             ) : (
-              <ul className="door-notices">
+              <RowList label={t('door.reports.tab.library')}>
                 {items.map((r) => (
-                  <li key={r.id} className="panel door-notice">
-                    <div className="door-notice-main">
-                      <div className="door-row">
-                        <strong>
-                          <Link to={`/s/${systemId}/reports/${r.id}`}>
-                            {t(kindKey(r.kind))} · {periodLabel(r.periodKey, locale)}
-                          </Link>
-                        </strong>
-                        <span className={`door-chip${r.status === 'DRAFT' ? ' warn' : ''}`}>{t(`door.reports.status.${r.status}` as const)}</span>
-                      </div>
-                      <p className="muted">{r.unitName}</p>
-                    </div>
-                  </li>
+                  <ListRow
+                    key={r.id}
+                    title={`${t(kindKey(r.kind))} · ${periodLabel(r.periodKey, locale)}`}
+                    detail={r.unitName}
+                    status={<StatusChip tone={r.status === 'DRAFT' ? 'warn' : 'success'}>{t(`door.reports.status.${r.status}` as const)}</StatusChip>}
+                    to={`/s/${systemId}/reports/${r.id}`}
+                  />
                 ))}
-              </ul>
+              </RowList>
             )}
           </LoadState>
         </>
@@ -210,20 +243,13 @@ export function ReportsPage() {
       {tab === 'schedules' && (
         <>
           <p className="muted">{t('door.reports.schedule.intro')}</p>
-          {canSchedule && !form && (
-            <button type="button" className="btn" onClick={() => setForm('schedule')}>
-              {t('door.reports.schedule.new')}
-            </button>
-          )}
-          {form === 'schedule' && options.data && (
-            <ScheduleForm options={options.data} systemId={systemId} onDone={() => { setForm(null); schedules.reload(); }} onCancel={() => setForm(null)} />
-          )}
+          <ReportBoard items={schedules.data?.schedules ?? []} />
           <LoadState loading={schedules.loading} failed={schedules.failed} retry={schedules.reload}>
             {(schedules.data?.schedules ?? []).length === 0 ? (
               <EmptyState title={t('door.reports.schedule.none')} detail={t('door.reports.schedule.noneDetail')} />
             ) : (
               <ul className="door-notices">
-                {(schedules.data?.schedules ?? []).map((s) => (
+                {[...(schedules.data?.schedules ?? [])].sort((a, b) => ['LATE', 'DUE', 'RECEIVED'].indexOf(a.state) - ['LATE', 'DUE', 'RECEIVED'].indexOf(b.state)).map((s) => (
                   <li key={s.id} className="panel door-notice">
                     <div className="door-notice-main">
                       <div className="door-row">

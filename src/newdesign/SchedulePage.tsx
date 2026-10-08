@@ -17,10 +17,10 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { buildOwnMenu, lettersFor } from './menu';
 import { CHURCH_SYSTEM } from './portalHome';
-import { addMonths, dayHeading, dayOf, groupByDay, monthLabel, planActions, planStatusKey, scheduleErrorKey, thisMonth, timeRange } from './schedule';
+import { addMonths, dayHeading, dayOf, groupByDay, monthGrid, monthLabel, overlapping, personClashes, planActions, planStatusKey, scheduleErrorKey, servingCounts, thisMonth, timeRange } from './schedule';
 import { SlotCard, SlotForm } from './ScheduleParts';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { PageHeader, Segmented, StatusChip } from './kit';
 
 /** The Schedule block: my duties, the church calendar (on the church-wide home), and this system's month plans. */
 export function SchedulePage() {
@@ -31,11 +31,28 @@ export function SchedulePage() {
   const [month, setMonth] = useState(thisMonth());
   const allowed = lettersFor(capabilities, systemId, 'schedule').length > 0;
   const options = useLoad(fetchScheduleOptions, 'sched-options');
+  const [layout, setLayout] = useState<'list' | 'calendar'>('list');
+  const view = useLoad(() => fetchMonth(systemId, month), `sched-month|${systemId}|${month}`);
   const planner = buildOwnMenu(capabilities, systemId).some((o) => o.block === 'monthplan' && o.letters.includes('W'));
   if (!allowed) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
   return (
     <section className="door-block" aria-labelledby="door-sched-title">
-      <PageHeader id="door-sched-title" title={t('door.block.schedule')} purpose={t('door.purpose.schedule')} />
+      <PageHeader
+        id="door-sched-title"
+        title={t('door.block.schedule')}
+        purpose={t('door.purpose.schedule')}
+        actions={
+          <>
+            <button type="button" className="btn ghost no-print" onClick={() => window.print()}>
+              {t('door.sched.print')}
+            </button>
+            <Link className="btn secondary no-print" to={`/s/${systemId}/schedule/mine`}>
+              {t('door.sched.mine')}
+            </Link>
+          </>
+        }
+      />
+      <div className="view-bar">
       <div className="door-row">
         <button type="button" className="btn secondary sm" onClick={() => setMonth(addMonths(month, -1))} aria-label={t('door.sched.prev')}>
           ‹
@@ -50,6 +67,13 @@ export function SchedulePage() {
           </button>
         )}
       </div>
+      <Segmented
+        label={t('door.work.layout')}
+        value={layout}
+        onChange={setLayout}
+        items={[{ key: 'list', label: t('door.work.layout.list') }, { key: 'calendar', label: t('door.sched.layout.calendar') }]}
+      />
+      </div>
       {planner && (
         <div className="panel door-row">
           <span>
@@ -63,7 +87,7 @@ export function SchedulePage() {
       )}
       <MyDuties />
       {systemId === CHURCH_SYSTEM && <ChurchCalendar month={month} />}
-      <Plans systemId={systemId} month={month} options={options.data} />
+      <Plans view={view} layout={layout} month={month} options={options.data} />
     </section>
   );
 }
@@ -77,7 +101,7 @@ function MyDuties() {
     <div className="panel">
       <h3>{t('door.sched.mine')}</h3>
       <ul className="door-list">
-        {duties.data.map((d) => (
+        {duties.data.slice(0, 3).map((d) => (
           <li key={d.assignmentId}>
             <strong>{d.title}</strong> · {d.role}
             <span className="muted">
@@ -125,11 +149,45 @@ function ChurchCalendar({ month }: { month: string }) {
   );
 }
 
-function Plans({ systemId, month, options }: { systemId: string; month: string; options: ScheduleOptions | undefined }) {
+function MonthCalendar({ view, month }: { view: MonthView; month: string }) {
   const t = useT();
-  const view = useLoad(() => fetchMonth(systemId, month), `sched-month|${systemId}|${month}`);
+  const { locale } = useI18n();
+  const all = view.units.flatMap((u) => u.slots);
+  const clash = overlapping(all);
+  const today = dayOf(new Date().toISOString());
+  const dow = Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 0, 1 + i))));
+  const byDay = new Map<string, typeof all>();
+  for (const s of all) byDay.set(dayOf(s.startsAt), [...(byDay.get(dayOf(s.startsAt)) ?? []), s]);
+  return (
+    <div className="month-grid print-sheet" role="grid" aria-label={monthLabel(month, locale)}>
+      {dow.map((d) => (
+        <div key={d} className="dow" role="columnheader">
+          {d}
+        </div>
+      ))}
+      {monthGrid(month).map((c) => {
+        const slots = (byDay.get(c.day) ?? []).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+        return (
+          <div key={c.day} className={`month-cell${c.off ? ' off' : ''}${c.day === today ? ' today' : ''}`} role="gridcell" data-n={slots.length}>
+            <span className="day-num">{Number(c.day.slice(8))}</span>
+            {slots.slice(0, 3).map((s) => (
+              <span key={s.id} className={`month-chip${clash.has(s.id) ? ' clash' : ''}`} title={`${s.title} · ${timeRange(s.startsAt, s.endsAt, locale)}${clash.has(s.id) ? ` · ${t('door.sched.clash')}` : ''}`}>
+                {timeRange(s.startsAt, null, locale)} {s.title}
+              </span>
+            ))}
+            {slots.length > 3 && <span className="month-more">{t('door.sched.more', { count: slots.length - 3 })}</span>}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function Plans({ view, layout, month, options }: { view: ReturnType<typeof useLoad<MonthView>>; layout: 'list' | 'calendar'; month: string; options: ScheduleOptions | undefined }) {
+  const t = useT();
   return (
     <LoadState loading={view.loading} failed={view.failed} retry={view.reload}>
+      {view.data && layout === 'calendar' && <MonthCalendar view={view.data} month={month} />}
       {view.data && view.data.units.length === 0 ? (
         <EmptyState title={t('door.sched.none')} detail={t('door.sched.noneDetail')} />
       ) : (
@@ -145,6 +203,8 @@ function UnitMonth({ unit, view, month, options, reload }: { unit: UnitPlan; vie
   const [adding, setAdding] = useState(false);
   const [error, setError] = useState('');
   const status = unit.plan?.status ?? null;
+  const clashes = personClashes(unit.slots);
+  const counts = servingCounts(unit.slots);
   const actions = planActions(status, { confirm: view.canConfirm, publish: view.canPublish }, unit.slots.length);
   const canBuild = view.canWrite && (status === null || status === 'DRAFT');
 
@@ -165,6 +225,16 @@ function UnitMonth({ unit, view, month, options, reload }: { unit: UnitPlan; vie
         <span className={`door-chip${status === 'PUBLISHED' ? '' : ' warn'}`}>{t(planStatusKey(status))}</span>
       </div>
       {status === 'DRAFT' && <p className="muted">{t('door.sched.draftNote')}</p>}
+      {clashes.length > 0 && (
+        <div className="panel" role="status">
+          <StatusChip tone="warn">{t('door.sched.clash')}</StatusChip>
+          <ul className="door-list">
+            {clashes.map((c) => (
+              <li key={c.name}>{t('door.sched.clashLine', { name: c.name, titles: c.titles.join(', ') })}</li>
+            ))}
+          </ul>
+        </div>
+      )}
       {unit.slots.length === 0 && <p className="muted">{t('door.sched.noSlots')}</p>}
       {groupByDay(unit.slots).map((g) => (
         <div key={g.day}>
@@ -194,7 +264,19 @@ function UnitMonth({ unit, view, month, options, reload }: { unit: UnitPlan; vie
           {error}
         </p>
       )}
-      <div className="door-row">
+      {counts.length > 1 && (
+        <details className="no-print">
+          <summary>{t('door.sched.fairness')}</summary>
+          <ul className="door-list">
+            {counts.map((c) => (
+              <li key={c.personId}>
+                <strong>{c.name}</strong> · {t('door.sched.times', { count: c.count })}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
+      <div className="door-row no-print">
         {canBuild && !adding && options && (
           <button type="button" className="btn" onClick={() => setAdding(true)}>
             {t('door.sched.addSlot')}
