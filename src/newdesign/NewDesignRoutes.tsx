@@ -85,7 +85,8 @@ export function newDesignRoutes() {
           <Route index element={<PortalPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="work" element={<PortalWorkPage />} />
+          <Route path="work" element={<PortalWorkPage part="tasks" />} />
+          <Route path="work/plans" element={<PortalWorkPage part="plans" />} />
           <Route path="notifications/preferences" element={<PreferencesPage />} />
           <Route path=":block" element={<PortalBlockPage />} />
         </Route>

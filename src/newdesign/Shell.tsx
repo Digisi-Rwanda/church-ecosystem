@@ -125,12 +125,12 @@ export function Shell({
         <nav className="nav" aria-label={t('door.frame.modules')}>
           {backTo && (
             <div className="nav-group">
-              <NavLink to={backTo} onClick={close} className="door-back-link">
+              <a href={backTo} target="_blank" rel="noopener noreferrer" onClick={close} className="door-back-link">
                 <span className="nav-link-main">
                   <Icon name="home" size={15} className="nav-icon" />
                   <span className="nav-label">{t('door.frame.allSystems')}</span>
                 </span>
-              </NavLink>
+              </a>
             </div>
           )}
           {groups.map((g) => (
@@ -179,16 +179,22 @@ export function Shell({
                       <ul id={`nav-tree-${m.id}`} className="nav-tree">
                         {m.places.map((p) => (
                           <li key={p.key}>
-                            <NavLink
-                              to={p.to}
-                              onClick={close}
-                              onMouseEnter={() => warm(p.to)}
-                              onTouchStart={() => warm(p.to)}
-                              className={() => (current?.id === m.id && active?.place?.key === p.key ? 'active' : undefined)}
-                              aria-current={current?.id === m.id && active?.place?.key === p.key ? 'page' : undefined}
-                            >
-                              <span className="nav-label">{t(p.labelKey as 'door.block.home')}</span>
-                            </NavLink>
+                            {p.external ? (
+                              <a href={p.to} target="_blank" rel="noopener noreferrer" onClick={close}>
+                                <span className="nav-label">{p.label ?? t(p.labelKey as 'door.block.home')}</span>
+                              </a>
+                            ) : (
+                              <NavLink
+                                to={p.to}
+                                onClick={close}
+                                onMouseEnter={() => warm(p.to)}
+                                onTouchStart={() => warm(p.to)}
+                                className={() => (current?.id === m.id && active?.place?.key === p.key ? 'active' : undefined)}
+                                aria-current={current?.id === m.id && active?.place?.key === p.key ? 'page' : undefined}
+                              >
+                                <span className="nav-label">{p.label ?? t(p.labelKey as 'door.block.home')}</span>
+                              </NavLink>
+                            )}
                           </li>
                         ))}
                       </ul>

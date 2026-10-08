@@ -146,6 +146,11 @@ describe('buildPortalModules', () => {
     } as unknown as Capabilities;
     expect(buildPortalModules(caps).map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'work', 'reports']);
     expect(buildPortalModules(null).map((m) => m.id)).toEqual(['home', 'notifications', 'announcements']);
+    const work = buildPortalModules(caps).find((m) => m.id === 'work')!;
+    expect(work.places.map((p) => p.to)).toEqual(['/portal/work', '/portal/work/plans']);
+    const reports = buildPortalModules(caps, [{ id: 'sys-b', shortName: 'Beta' }]).find((m) => m.id === 'reports')!;
+    expect(reports.places.map((p) => p.to)).toEqual(['/portal/reports', '/s/sys-b/reports']);
+    expect(reports.places[1]).toMatchObject({ label: 'Beta', external: true });
   });
   it('every system has its own Settings, and Central Administration keeps the church-wide ones beside it', async () => {
     const { buildModules } = await import('./menu');

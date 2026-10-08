@@ -2251,6 +2251,30 @@ export const en = {
   'door.import.target.songs': 'Import songs',
   'door.import.target.scheduleSlots': 'Import services and meetings',
 
+  'door.portal.nav.overview': 'Overview',
+  'door.portal.search': 'Search your systems',
+  'door.portal.search.none': 'No system matches what you typed.',
+  'door.portal.pinned': 'Pinned',
+  'door.portal.pin': 'Pin {system} to the top',
+  'door.portal.unpin': 'Unpin {system}',
+  'door.portal.waiting.tasks': '{count} open to do',
+  'door.portal.waiting.overdue': '{count} overdue',
+
+  'door.portal.block.subtitle.reports': 'The latest published reports from every system you can read.',
+  'door.portal.block.subtitle.people': 'Active members in each system you can see.',
+  'door.portal.block.subtitle.schedule': 'Your upcoming duties and what is planned for the whole church.',
+  'door.portal.block.subtitle.work': 'Your tasks and plans from every system.',
+  'door.portal.block.work': 'Open Tasks or Plans in the menu.',
+  'door.portal.reports.none': 'No published reports yet.',
+  'door.portal.reports.noneDetail': 'Reports for {period} appear here once a unit publishes them.',
+  'door.portal.reports.published': 'Published {date}',
+  'door.portal.openIn': 'Open the Reports page of:',
+  'door.portal.people.members': 'active members',
+  'door.portal.schedule.mine': 'My duties',
+  'door.portal.schedule.noneMine': 'Nothing is assigned to you.',
+  'door.portal.schedule.church': 'Coming up in the church',
+  'door.portal.schedule.noneChurch': 'Nothing is planned for the whole church yet.',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

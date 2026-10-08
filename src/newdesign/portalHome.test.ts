@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PortalSystem } from '../api/frontDoorApi';
-import { groupByKind, kindOfSystem, landingPath } from './portalHome';
+import { filterSystems, groupByKind, kindOfSystem, landingPath, pinnedFirst, waitingBySystem } from './portalHome';
 
 const sys = (id: string): PortalSystem => ({ id, code: id, name: id, shortName: id, basePath: `/${id}`, role: 'Member', unreadCount: 0 });
 
@@ -22,5 +22,25 @@ describe('the Portal', () => {
   it('knows each kind', () => {
     expect(kindOfSystem('sys-protocol')).toBe('organisation');
     expect(kindOfSystem('sys-music')).toBe('ministry');
+  });
+});
+
+describe('the Portal home helpers', () => {
+  const all = [sys('sys-main'), sys('sys-choir'), sys('sys-youth')];
+  it('searches by name or role, every word must match', () => {
+    expect(filterSystems(all, 'choir').map((s) => s.id)).toEqual(['sys-choir']);
+    expect(filterSystems(all, 'member sys-y').map((s) => s.id)).toEqual(['sys-youth']);
+    expect(filterSystems(all, '  ')).toHaveLength(3);
+    expect(filterSystems(all, 'zzz')).toHaveLength(0);
+  });
+  it('puts pinned systems first and ignores pins of systems the person no longer has', () => {
+    const r = pinnedFirst(all, ['sys-youth', 'sys-gone', 'sys-main']);
+    expect(r.pinned.map((s) => s.id)).toEqual(['sys-youth', 'sys-main']);
+    expect(r.rest.map((s) => s.id)).toEqual(['sys-choir']);
+  });
+  it('counts what waits per system', () => {
+    const m = waitingBySystem([{ systemId: 'a', overdue: true }, { systemId: 'a' }, { systemId: 'b' }]);
+    expect(m.get('a')).toEqual({ open: 2, overdue: 1 });
+    expect(m.get('b')).toEqual({ open: 1, overdue: 0 });
   });
 });

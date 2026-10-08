@@ -1643,3 +1643,10 @@ export type UpcomingDay = { personId: string; name: string; memberCode: string |
 export async function fetchUpcoming(days = 30): Promise<UpcomingDay[]> {
   return (await apiFetch<{ events: UpcomingDay[] }>(`/api/people-tools/upcoming?days=${days}`)).events;
 }
+
+export type PortalSummary = {
+  reports: Array<{ id: string; systemId: string; unitName: string; kind: ReportKind; periodKey: string; publishedAt: string | null }>;
+  people: Array<{ systemId: string; members: number }>;
+};
+/** What the Portal's People and Reports pages show, across the systems the person may read. */
+export const fetchPortalSummary = (): Promise<PortalSummary> => apiFetch('/api/portal/summary');

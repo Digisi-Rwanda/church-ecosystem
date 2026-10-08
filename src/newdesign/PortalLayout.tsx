@@ -17,7 +17,7 @@ export function PortalLayout() {
   const { counts } = useNoticeSummary();
   return (
     <Shell
-      modules={buildPortalModules(capabilities)}
+      modules={buildPortalModules(capabilities, portal)}
       where={t('door.frame.portal')}
       subtitle={t('door.frame.portal')}
       brandSub={t('door.frame.portal')}

@@ -8,6 +8,7 @@ import { attentionRouter } from './routes/attention.js';
 import { authRouter } from './routes/auth.js';
 import { authorizeRouter } from './routes/authorize.js';
 import { meRouter, portalRouter } from './routes/me.js';
+import { portalSummaryRouter } from './routes/portalSummary.js';
 import { assignmentsRouter } from './routes/assignments.js';
 import { healthRouter } from './routes/health.js';
 import { missionRouter } from './routes/mission.js';
@@ -135,6 +136,7 @@ export function createApp() {
   app.use('/api/central', centralRouter);
   app.use('/api/authorize', authorizeRouter);
   app.use('/api/me', meRouter);
+  app.use('/api/portal/summary', portalSummaryRouter);
   app.use('/api/portal', portalRouter);
   app.use('/api/mission', missionRouter);
   app.use('/api/attention', attentionRouter);

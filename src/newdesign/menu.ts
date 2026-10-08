@@ -98,7 +98,8 @@ export const MODULE_IDS = [
 ] as const;
 export type ModuleId = (typeof MODULE_IDS)[number];
 
-export type NavPlace = { key: string; to: string; labelKey: string; end: boolean };
+/** A place in a module. `label` (a system's name) replaces the translated `labelKey`; `external` opens in a new tab. */
+export type NavPlace = { key: string; to: string; labelKey: string; end: boolean; label?: string; external?: boolean };
 export type NavModule = { id: ModuleId; labelKey: string; to: string; places: NavPlace[] };
 
 const MODULE_LABEL: Record<ModuleId, string> = {
@@ -221,7 +222,7 @@ export function canSeePath(modules: NavModule[], pathname: string): boolean {
  * from every system, then Work, People, Schedule and Reports for each block the person holds in at
  * least one system. Built only from the server's capabilities.
  */
-export function buildPortalModules(caps: Capabilities | null): NavModule[] {
+export function buildPortalModules(caps: Capabilities | null, portal: Array<{ id: string; shortName: string }> = []): NavModule[] {
   const one = (id: ModuleId, path: string, labelKey: string, end: boolean): NavModule => ({
     id, labelKey, to: path, places: [{ key: id, to: path, labelKey, end }],
   });
@@ -231,8 +232,24 @@ export function buildPortalModules(caps: Capabilities | null): NavModule[] {
     one('announcements', '/portal/announcements', MODULE_LABEL.announcements, false),
   ];
   for (const nav of buildPortalNav(caps)) {
-    if (nav.key === 'work' || nav.key === 'people' || nav.key === 'schedule' || nav.key === 'reports') {
-      mods.push(one(nav.key, `/portal/${nav.key}`, MODULE_LABEL[nav.key], false));
+    if (nav.key === 'work') {
+      mods.push({
+        id: 'work', labelKey: MODULE_LABEL.work, to: '/portal/work',
+        places: [
+          { key: 'tasks', to: '/portal/work', labelKey: 'door.work.tasks', end: true },
+          { key: 'plans', to: '/portal/work/plans', labelKey: 'door.portal.work.plans', end: false },
+        ],
+      });
+    } else if (nav.key === 'people' || nav.key === 'schedule' || nav.key === 'reports') {
+      // Overview first, then each system where the person holds the block (opens in its own tab).
+      const where = systemsWithBlock(caps, portal, nav.key).map(({ systemId }): NavPlace => ({
+        key: `sys-${systemId}`, to: `/s/${systemId}/${nav.key}`, labelKey: MODULE_LABEL[nav.key],
+        label: portal.find((s) => s.id === systemId)?.shortName ?? systemId, end: false, external: true,
+      }));
+      mods.push({
+        id: nav.key, labelKey: MODULE_LABEL[nav.key], to: `/portal/${nav.key}`,
+        places: [{ key: nav.key, to: `/portal/${nav.key}`, labelKey: 'door.portal.nav.overview', end: true }, ...where],
+      });
     }
   }
   return mods;
