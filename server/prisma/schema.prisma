@@ -789,6 +789,10 @@ model WorkPlan {
   capacity             Int?
   /// Events: a secret link anyone can use to register, only when the team turns it on
   publicToken          String?
+  /// Optional: the program (or project) this belongs to. Items may stand alone.
+  parentId             String?
+  /// Programs: JSON array of { personId, role } on the steering committee
+  steeringJson         String    @default("[]")
   createdById          String
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
@@ -850,6 +854,45 @@ model WorkPlanRegistration {
   createdAt    DateTime  @default(now())
 
   @@index([planId])
+}
+
+/// A program's review: when it met, what it found, what it decided.
+model WorkPlanReview {
+  id          String   @id @default(cuid())
+  planId      String
+  heldOn      DateTime
+  summary     String
+  /// CONTINUE | ADJUST | CONCLUDE
+  decision    String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([planId])
+}
+
+/// A program indicator: what is measured, its target and unit. Readings are kept, the latest is current.
+model WorkPlanIndicator {
+  id          String   @id @default(cuid())
+  planId      String
+  name        String
+  unit        String   @default("")
+  target      Float
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([planId])
+}
+
+model WorkPlanMeasure {
+  id          String   @id @default(cuid())
+  indicatorId String
+  planId      String
+  value       Float
+  note        String?
+  byId        String
+  at          DateTime @default(now())
+
+  @@index([indicatorId])
 }
 
 model MoneyAccount {
@@ -1485,7 +1528,7 @@ model MoneyBudget {
   id           String    @id @default(cuid())
   systemId     String
   year         Int
-  /// DRAFT | APPROVED
+  /// DRAFT | SUBMITTED | APPROVED
   status       String    @default("DRAFT")
   approvedById String?
   approvedAt   DateTime?
@@ -1517,6 +1560,11 @@ model MoneyBudgetSubmission {
   snapshotJson  String
   submittedById String
   submittedAt   DateTime @default(now())
+  /// SUBMITTED | APPROVED | RETURNED | WITHDRAWN
+  status        String   @default("SUBMITTED")
+  decidedById   String?
+  decidedAt     DateTime?
+  decisionNote  String?
 
   @@index([systemId, year])
 }
@@ -1538,6 +1586,11 @@ model MoneyPlanItem {
   createdAt   DateTime @default(now())
   /// Optional link to the program, project or event (WorkPlan) this activity belongs to
   planId      String?
+  /// Where the money for this activity comes from: CONTRIBUTION (a contribution type of the unit) | DONATION | OTHER
+  fundingKind String?
+  /// The contribution type code, when the funding is a contribution
+  fundingCode String?
+  fundingNote String?
 
   @@index([systemId, year])
   @@index([planId])

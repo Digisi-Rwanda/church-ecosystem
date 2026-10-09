@@ -980,6 +980,7 @@ export type PlanFlags = {
   canPause: boolean; canResume: boolean; canRenew: boolean;
   canCancel: boolean; canDelete: boolean; canNote: boolean; canCheck: boolean; canAddCheck: boolean; canCompose: boolean; canPublish: boolean;
   canManageRegistration: boolean; canMarkAttendance: boolean; canMilestone: boolean; canTickMilestone: boolean;
+  canLink: boolean; canGovern: boolean; canReview: boolean; canMeasure: boolean;
 };
 
 export type PlanType = 'PROGRAM' | 'EVENT' | 'PROJECT';
@@ -1001,6 +1002,19 @@ export type PlanDetail = PlanItem & {
   report: { planningSummary: string; executionSummary: string; outcome: string; composedAt: string | null; publishedAt: string | null; frozen: boolean };
   milestones: Array<{ id: string; title: string; dueOn: string | null; done: boolean; doneAt: string | null }>;
   registration: PlanRegistration | null;
+  parent: PlanBrief | null;
+  children: PlanBrief[];
+  program: ProgramView | null;
+};
+export type PlanBrief = { id: string; title: string; planType: PlanType; status: WorkPlanStatus };
+export type ReviewDecision = 'CONTINUE' | 'ADJUST' | 'CONCLUDE';
+export type ProgramView = {
+  steering: Array<{ personId: string; name: string; role: string }>;
+  reviews: Array<{ id: string; heldOn: string | null; summary: string; decision: ReviewDecision; byName: string }>;
+  indicators: Array<{
+    id: string; name: string; unit: string; target: number; current: number | null; percent: number | null;
+    readings: Array<{ value: number; at: string | null; note: string; byName: string }>;
+  }>;
 };
 export type PlanRegistration = {
   open: boolean; capacity: number | null; count: number; attended: number; spotsLeft: number | null; canRegister: boolean;
@@ -1055,6 +1069,14 @@ export const cancelMyRegistration = (id: string) => planBody(apiFetch(`${P}/${pi
 export const addGuest = (id: string, name: string, phone: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations`, { method: 'POST', body: { name, phone: phone || null } }));
 export const markAttended = (id: string, rid: string, attended: boolean) => planBody(apiFetch(`${P}/${pid(id)}/registrations/${pid(rid)}`, { method: 'PATCH', body: { attended } }));
 export const removeGuest = (id: string, rid: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations/${pid(rid)}`, { method: 'DELETE' }));
+
+export const fetchParentOptions = async (id: string): Promise<PlanBrief[]> => (await apiFetch<{ items: PlanBrief[] }>(`${P}/${pid(id)}/parent-options`)).items;
+export const setParent = (id: string, parentId: string | null) => planBody(apiFetch(`${P}/${pid(id)}/parent`, { method: 'PATCH', body: { parentId } }));
+export const setSteering = (id: string, members: Array<{ personId: string; role: string }>) => planBody(apiFetch(`${P}/${pid(id)}/steering`, { method: 'PUT', body: { members } }));
+export const addReview = (id: string, body: { heldOn: string; summary: string; decision: ReviewDecision }) => planBody(apiFetch(`${P}/${pid(id)}/reviews`, { method: 'POST', body }));
+export const addIndicator = (id: string, body: { name: string; unit: string; target: number }) => planBody(apiFetch(`${P}/${pid(id)}/indicators`, { method: 'POST', body }));
+export const removeIndicator = (id: string, iid: string) => planBody(apiFetch(`${P}/${pid(id)}/indicators/${pid(iid)}`, { method: 'DELETE' }));
+export const addReading = (id: string, iid: string, value: number, note: string) => planBody(apiFetch(`${P}/${pid(id)}/indicators/${pid(iid)}/readings`, { method: 'POST', body: { value, note: note || null } }));
 
 export type PublicEvent = { title: string; aim: string; location: string; startsOn: string | null; endsOn: string | null; open: boolean; full: boolean };
 export const fetchPublicEvent = async (token: string): Promise<PublicEvent> =>
@@ -1117,14 +1139,18 @@ export async function voidMoneyEntry(id: string, reason: string): Promise<void> 
 export type BudgetKind = 'INCOME' | 'SPENDING';
 const qs = (o: Record<string, string | number>) => new URLSearchParams(Object.entries(o).map(([k, v]) => [k, String(v)])).toString();
 
-export type BudgetActivity = { id: string; title: string; amount: number; status: string; dueMonth: string | null; planId: string | null };
-export type BudgetLineItem = { id: string; kind: BudgetKind; category: string; planned: number; note: string; committed: number; actual: number; activities: BudgetActivity[] };
+export type FundingKind = 'CONTRIBUTION' | 'DONATION' | 'OTHER';
+export type BudgetActivity = { id: string; title: string; amount: number; status: string; dueMonth: string | null; planId: string | null; fundingKind: FundingKind | null; fundingCode: string | null; fundingNote: string | null };
+export type BudgetLineItem = { id: string; kind: BudgetKind; category: string; planned: number; setAside: number; derived: boolean; note: string; committed: number; actual: number; activities: BudgetActivity[] };
+export type FundingRowView = { kind: FundingKind | 'NONE'; code: string | null; name?: string | null; planned: number; count: number };
+export type BudgetDecisionStatus = 'SUBMITTED' | 'APPROVED' | 'RETURNED' | 'WITHDRAWN';
 export type BudgetView = {
-  year: number; status: 'DRAFT' | 'APPROVED'; approvedAt: string | null; canWrite: boolean; canApprove: boolean; categories: string[];
+  year: number; status: 'DRAFT' | 'SUBMITTED' | 'APPROVED'; approvedAt: string | null; canWrite: boolean; canApprove: boolean; categories: string[];
   lines: BudgetLineItem[]; totals: { income: number; spending: number; net: number };
   unlinked: { count: number; amount: number };
-  submission: { submittedAt: string | null; submittedByName: string } | null;
-  canSubmit: boolean; isCentral: boolean;
+  funding: FundingRowView[]; activitiesCount: number;
+  submission: { status: BudgetDecisionStatus; submittedAt: string | null; submittedByName: string; decidedAt: string | null; decidedByName: string | null; decisionNote: string | null } | null;
+  canSubmit: boolean; canWithdraw: boolean; isCentral: boolean;
 };
 export const fetchBudget = (systemId: string, year: number): Promise<BudgetView> => apiFetch(`${M}/budget?${qs({ systemId, year })}`);
 export async function saveBudgetLine(b: { systemId: string; year: number; kind: BudgetKind; category: string; planned: number; note?: string | null }): Promise<void> {
@@ -1138,38 +1164,50 @@ export type ChurchBudget = {
   year: number;
   systems: Array<{
     systemId: string; name: string; own: boolean; submittedAt: string | null; submittedByName: string; totals: BudgetTotals;
+    status: string; decisionNote: string | null; decidedByName: string | null; canDecide: boolean; funding: FundingRowView[];
     lines: Array<{ kind: BudgetKind; category: string; planned: number; committed: number; actual: number }>;
-    activities: Array<{ title: string; category: string; dueMonth: string | null; amount: number; status: string; planTitle: string | null }>;
+    activities: Array<{ title: string; category: string; dueMonth: string | null; amount: number; status: string; planTitle: string | null; fundingKind?: string | null; fundingCode?: string | null }>;
   }>;
   missing: Array<{ systemId: string; name: string }>;
   totals: BudgetTotals;
   byCategory: Array<{ kind: BudgetKind; category: string; planned: number; committed: number; actual: number }>;
+  funding: FundingRowView[];
 };
 /** Central's view of the budgets the systems sent, with the church-wide totals. */
 export const fetchChurchBudget = (year: number): Promise<ChurchBudget> => apiFetch(`${M}/budget/church?${qs({ systemId: 'sys-main', year })}`);
+export async function decideBudget(systemId: string, year: number, approve: boolean, reason?: string): Promise<void> {
+  await apiFetch(`${M}/budget/decide`, { method: 'POST', body: { systemId, year, approve, reason: reason || null } });
+}
 export async function setBudgetApproval(systemId: string, year: number, approve: boolean): Promise<void> {
   await apiFetch(`${M}/budget/${approve ? 'approve' : 'reopen'}`, { method: 'POST', body: { systemId, year } });
 }
 
 export type MoneyPlanStatus = 'PLANNED' | 'DONE' | 'DROPPED';
-export type MoneyPlanItemView = { id: string; title: string; amount: number; dueMonth: string; category: string; status: MoneyPlanStatus; note: string; planId: string | null; planTitle: string | null };
-export type MoneyPlanView = { year: number; canWrite: boolean; categories: string[]; budgetCategories: string[]; items: MoneyPlanItemView[]; totals: { planned: number; done: number; budgetSpending: number } };
+export type MoneyPlanItemView = { id: string; title: string; amount: number; dueMonth: string; category: string; status: MoneyPlanStatus; note: string; planId: string | null; planTitle: string | null; fundingKind: FundingKind | ''; fundingCode: string; fundingNote: string };
+export type MoneyPlanView = {
+  year: number; canWrite: boolean; locked: boolean; budgetStatus: 'DRAFT' | 'SUBMITTED' | 'APPROVED'; categories: string[]; budgetCategories: string[];
+  fundingTypes: Array<{ code: string; name: string }>; items: MoneyPlanItemView[]; totals: { planned: number; done: number; budgetSpending: number };
+};
 export const fetchMoneyPlan = (systemId: string, year: number): Promise<MoneyPlanView> => apiFetch(`${M}/plan?${qs({ systemId, year })}`);
-export async function addMoneyPlanItem(b: { systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; note?: string | null; planId?: string | null }): Promise<void> {
+export type FundingInput = { fundingKind?: FundingKind | null; fundingCode?: string | null; fundingNote?: string | null };
+export async function addMoneyPlanItem(b: { systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; note?: string | null; planId?: string | null } & FundingInput): Promise<void> {
   await apiFetch(`${M}/plan`, { method: 'POST', body: b });
 }
-export async function changeMoneyPlanItem(id: string, b: Partial<{ title: string; amount: number; dueMonth: string | null; category: string | null; note: string | null; status: MoneyPlanStatus; planId: string | null }>): Promise<void> {
+export async function changeMoneyPlanItem(id: string, b: Partial<{ title: string; amount: number; dueMonth: string | null; category: string | null; note: string | null; status: MoneyPlanStatus; planId: string | null }> & FundingInput): Promise<void> {
   await apiFetch(`${M}/plan/${encodeURIComponent(id)}`, { method: 'PATCH', body: b });
 }
 
 export type PlanLink = { id: string; title: string; planType: string; status: string };
 export const fetchPlanLinks = async (systemId: string): Promise<PlanLink[]> => (await apiFetch<{ plans: PlanLink[] }>(`${M}/plan-links?${qs({ systemId })}`)).plans;
-export type PlanMoney = { planned: number; income: number; spending: number; pending: number; activities: number; entries: number };
+export type PlanMoney = {
+  planned: number; income: number; spending: number; pending: number; activities: number; entries: number;
+  linked: { plans: number; planned: number; income: number; spending: number; pending: number } | null;
+};
 export const fetchPlanMoney = (systemId: string, planId: string): Promise<PlanMoney> => apiFetch(`${M}/plan-money?${qs({ systemId, planId })}`);
 
 export type AccountingRowView = { kind: BudgetKind; category: string; planned: number; actual: number; difference: number };
 export type AccountingSideView = { rows: AccountingRowView[]; planned: number; actual: number };
-export type AccountingView = { year: number; budgetStatus: 'DRAFT' | 'APPROVED'; income: AccountingSideView; spending: AccountingSideView; net: { planned: number; actual: number } };
+export type AccountingView = { year: number; budgetStatus: 'DRAFT' | 'SUBMITTED' | 'APPROVED'; income: AccountingSideView; spending: AccountingSideView; net: { planned: number; actual: number } };
 export const fetchAccounting = (systemId: string, year: number): Promise<AccountingView> => apiFetch(`${M}/accounting?${qs({ systemId, year })}`);
 
 export type ListLevel = 'TEAM' | 'UNIT';

@@ -27,6 +27,10 @@ const ERROR_KEYS: Record<string, string> = {
   LINE_IN_USE: 'door.money.err.lineInUse',
   BUDGET_NOT_APPROVED: 'door.money.err.budgetNotApproved',
   CATEGORY_REQUIRED: 'door.money.err.categoryRequired',
+  BUDGET_LOCKED: 'door.money.err.budgetLocked',
+  FUNDING_TYPE: 'door.money.err.fundingType',
+  SEND_TO_CHURCH_LEADER: 'door.money.err.sendToLeader',
+  NOT_FOR_CENTRAL: 'door.money.err.notForCentral',
 };
 export const moneyErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
 

@@ -2,7 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
-import { buildLevels, publishProblem, stateProblem, typeProblem } from '../src/work/plan';
+import { descendantsOf, indicatorPercent, parentProblem, buildLevels, publishProblem, stateProblem, typeProblem } from '../src/work/plan';
 
 describe('plan rules', () => {
   it('levels: the unit, plus the church when the work reaches beyond the unit; central work needs only the church', () => {
@@ -22,6 +22,16 @@ describe('plan rules', () => {
     expect(stateProblem('resume', 'PAUSED')).toBeNull();
     expect(stateProblem('cancel', 'PAUSED')).toBeNull();
     expect(stateProblem('renew', 'CLOSING')).toBeNull();
+  });
+  it('parents: a project under a program, an event under either, never the other way', () => {
+    expect(parentProblem('PROJECT', 'PROGRAM')).toBeNull();
+    expect(parentProblem('PROJECT', 'EVENT')).toBe('BAD_PARENT');
+    expect(parentProblem('EVENT', 'PROJECT')).toBeNull();
+    expect(parentProblem('EVENT', 'PROGRAM')).toBeNull();
+    expect(parentProblem('PROGRAM', 'PROGRAM')).toBe('BAD_PARENT');
+    expect(descendantsOf('a', [{ id: 'b', parentId: 'a' }, { id: 'c', parentId: 'b' }, { id: 'x' }]).sort()).toEqual(['b', 'c']);
+    expect(indicatorPercent(50, 200)).toBe(25);
+    expect(indicatorPercent(null, 200)).toBeNull();
   });
   it('moves are allowed only from the right state', () => {
     expect(stateProblem('submit', 'DRAFT')).toBeNull();
@@ -53,7 +63,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'workPlan', 'workPlanNote', 'workPlanCheck', 'workPlanMilestone', 'workPlanRegistration']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'workPlan', 'workPlanNote', 'workPlanCheck', 'workPlanMilestone', 'workPlanRegistration', 'workPlanReview', 'workPlanIndicator', 'workPlanMeasure']) db[k] ??= [];
   for (const s of db.churchSystem) {
     s.code = s.id.replace('sys-', '').toUpperCase();
     s.name = s.id;
@@ -326,6 +336,43 @@ describe('project milestones', () => {
     expect((await del('p-vp', `${B}/${id}/milestones/${m[0].id}`)).body.plan.milestones).toHaveLength(0);
     const e = await running({ planType: 'EVENT' });
     expect((await post('p-vp', `${B}/${e}/milestones`, { title: 'x' })).status).toBe(403);
+  });
+});
+
+describe('optional links and program governance', () => {
+  const link = (id: string, parentId: string | null, as = 'p-vp') => patch(as, `${B}/${id}/parent`, { parentId });
+  it('plans stand alone; links are optional, typed, same-system and never loop', async () => {
+    const g = await draft({ planType: 'PROGRAM' });
+    const pj = await draft({ planType: 'PROJECT', parentId: g });
+    const e = await draft({ planType: 'EVENT' });
+    expect((await get('p-vp', `${B}/${e}`)).body.plan.parent).toBeNull();
+    expect((await link(e, pj)).body.plan.parent).toMatchObject({ id: pj, planType: 'PROJECT' });
+    const prog = (await get('p-vp', `${B}/${g}`)).body.plan;
+    expect(prog.children.map((x: any) => x.id)).toEqual([pj]);
+    expect((await link(g, pj)).status).toBe(403); // a program has no parent
+    expect((await link(pj, e)).body.code).toBe('BAD_PARENT'); // a project cannot sit under an event
+    expect((await link(pj, pj)).body.code).toBe('BAD_PARENT');
+    expect((await link(e, null)).body.plan.parent).toBeNull();
+    expect((await post('p-vp', B, body({ planType: 'PROJECT', parentId: e }))).body.code).toBe('BAD_PARENT');
+    expect((await get('p-vp', `${B}/${pj}/parent-options`)).body.items.map((x: any) => x.id)).toEqual([g]);
+  });
+  it('a program keeps a steering committee, reviews and indicators with readings', async () => {
+    const g = await running({ planType: 'PROGRAM' });
+    expect((await put('p-vp', `${B}/${g}/steering`, { members: [{ personId: 'p-choir-member', role: 'Chair' }] })).body.plan.program.steering).toHaveLength(1);
+    expect((await post('p-vp', `${B}/${g}/reviews`, { heldOn: '2026-12-01T10:00:00Z', summary: 'On track', decision: 'CONTINUE' })).status).toBe(201);
+    expect((await post('p-vp', `${B}/${g}/reviews`, { heldOn: '2026-12-01T10:00:00Z', summary: 'x', decision: 'MAYBE' })).status).toBe(400);
+    await post('p-vp', `${B}/${g}/indicators`, { name: 'Families visited', unit: 'families', target: 200 });
+    const ind = (await get('p-vp', `${B}/${g}`)).body.plan.program.indicators[0];
+    expect((await post('p-choir-member', `${B}/${g}/indicators/${ind.id}/readings`, { value: 50 })).body.plan.program.indicators[0]).toMatchObject({ current: 50, percent: 25 });
+    expect((await post('p-choir-member', `${B}/${g}/indicators`, { name: 'x', target: 1 })).status).toBe(403);
+    const full = (await get('p-vp', `${B}/${g}`)).body.plan.program;
+    expect(full.reviews).toHaveLength(1);
+    const pj = await running({ planType: 'PROJECT' });
+    expect((await put('p-vp', `${B}/${pj}/steering`, { members: [] })).status).toBe(403);
+  });
+  it('a review needs the program to be running', async () => {
+    const g = await draft({ planType: 'PROGRAM' });
+    expect((await post('p-vp', `${B}/${g}/reviews`, { heldOn: '2026-12-01T10:00:00Z', summary: 'x', decision: 'CONTINUE' })).status).toBe(403);
   });
 });
 

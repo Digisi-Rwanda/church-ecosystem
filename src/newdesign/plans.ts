@@ -72,6 +72,7 @@ const ERROR_KEYS: Record<string, string> = {
   CHECKLIST_OPEN: 'door.plan.err.checklistOpen',
   TOO_MANY: 'door.plan.err.tooMany',
   EVENT_FULL: 'door.plan.err.full',
+  BAD_PARENT: 'door.plan.err.parent',
   ALREADY_REGISTERED: 'door.plan.err.already',
   REGISTRATION_CLOSED: 'door.plan.err.regClosed',
   ALREADY_ATTENDED: 'door.plan.err.attended',

@@ -12,9 +12,10 @@ import { notifySafely } from '../lib/notify.js';
 import { buildEffectiveAccess } from '../policy/evaluate.js';
 import { loadPolicyContext } from '../policy/loadContext.js';
 import { liveHoldings } from '../capabilities/engine.js';
+import { descendantsOf } from '../work/plan.js';
 import { CATEGORIES, KINDS, NOTE_MAX, amountProblem, canApproveSpending, canReadMoney, canRecord, isDay } from '../money/rules.js';
 import {
-  PLAN_STATUS, accounting, budgetSnapshot, budgetUsage, combine, combineBudgets, moneyByPlan, counts, editable, goalGroups, isMonth, isYear, linesProblem, monthOf, total, yearOf, type Goal, type LineLike,
+  FUNDING_KINDS, PLAN_STATUS, accounting, budgetSnapshot, budgetUsage, combine, combineBudgets, moneyByPlan, counts, editable, goalGroups, isMonth, isYear, linesProblem, monthOf, total, yearOf, type Goal, type LineLike,
 } from '../money/block.js';
 import { moneySchema, parseStored, EMPTY_MONEY } from '../systemSettings/rules.js';
 
@@ -28,14 +29,14 @@ const day = (v: Date | string) => new Date(v).toISOString().slice(0, 10);
 interface UnitRow { id: string; name: string; systemId?: string | null; kind?: string | null; type?: string | null; leaderPersonId?: string | null }
 interface Budget { id: string; systemId: string; year: number; status: string; approvedById?: string | null; approvedAt?: Date | string | null }
 interface BLine { id: string; systemId: string; year: number; kind: string; category: string; planned: number; note?: string | null }
-interface PlanItem { id: string; systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; status: string; note?: string | null; createdById: string; planId?: string | null }
+interface PlanItem { id: string; systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; status: string; note?: string | null; createdById: string; fundingKind?: string | null; fundingCode?: string | null; fundingNote?: string | null; planId?: string | null }
 interface CList {
   id: string; systemId: string; level: string; typeCode: string; typeName: string; month: string; teamUnitId?: string | null; teamName?: string | null; status: string;
   sourceListIds: string; createdById: string; submittedAt?: Date | string | null; decidedById?: string | null; decisionNote?: string | null;
 }
 interface CLine { id: string; listId: string; name: string; personId?: string | null; team?: string | null; amount: number }
 interface Don { id: string; systemId: string; accountId: string; donorName: string; amount: number; receivedOn: Date | string; note?: string | null; status: string; recordedById: string; decidedById?: string | null; decisionNote?: string | null }
-interface Submission { id: string; systemId: string; year: number; snapshotJson: string; submittedById: string; submittedAt: Date | string }
+interface Submission { id: string; systemId: string; year: number; snapshotJson: string; submittedById: string; submittedAt: Date | string; status?: string | null; decidedById?: string | null; decidedAt?: Date | string | null; decisionNote?: string | null }
 interface Entry { kind: string; amount: number; status: string; category: string; occurredOn: Date | string; planId?: string | null }
 interface PlanRow { id: string; title: string; systemId: string; planType?: string | null; status: string }
 
@@ -89,12 +90,12 @@ const yearOfReq = (req: AuthedRequest) => {
   return isYear(y) ? y : null;
 };
 /** Read access to a system's money, or a 404 that does not say the system exists. */
-async function gate(req: AuthedRequest, res: Res, need: 'read' | 'write' | 'approve' | 'enter' = 'read', forSystem?: string) {
+async function gate(req: AuthedRequest, res: Res, need: 'read' | 'write' | 'approve' | 'enter' | 'plan' = 'read', forSystem?: string) {
   const me = req.auth!.personId;
   const systemId = forSystem ?? sys(req);
   const c = await ctx(me);
   const s = systemId ? await standingIn(me, systemId, c) : null;
-  const ok = !!s && (need === 'enter' ? s.canEnter : need === 'read' ? s.read : need === 'write' ? s.read && s.write : s.read && s.approve);
+  const ok = !!s && (need === 'enter' ? s.canEnter : need === 'read' ? s.read : need === 'write' ? s.read && s.write : need === 'plan' ? s.read && (s.write || s.approve) : s.read && s.approve);
   if (!ok || !s) {
     fail(res, s && s.read ? 403 : 404, s && s.read ? 'FORBIDDEN' : 'NOT_FOUND', s && s.read ? 'You may not do this here' : 'Not found');
     return null;
@@ -136,17 +137,23 @@ moneyBlockRouter.get('/budget', requireAuth, async (req: AuthedRequest, res) => 
   if (!g) return;
   if (!year) return fail(res, 400, 'BAD_YEAR', 'Pick a year');
   const b = await budgetOf(g.systemId, year);
-  const { usage } = await usageOf(g.systemId, year, b.lines);
-  const sum = (kind: string) => b.lines.filter((l) => l.kind === kind).reduce((s, l) => s + l.planned, 0);
+  const { items, usage } = await usageOf(g.systemId, year, b.lines);
+  const sum = (kind: string) => usage.lines.filter((l) => l.kind === kind).reduce((s, l) => s + l.planned, 0);
   const sub = await latestSubmission(g.systemId, year);
+  const isCentral = g.systemId === 'sys-main';
+  const hasContent = usage.lines.length > 0;
+  const types = await moneyTypes(g.systemId);
   res.json({
-    year, status: b.status, approvedAt: b.approvedAt, canWrite: g.s.write && b.status === 'DRAFT', canApprove: g.s.approve, categories: CATEGORIES,
+    year, status: b.status, approvedAt: b.approvedAt, canWrite: g.s.write && b.status === 'DRAFT', canApprove: isCentral && g.s.approve && b.status === 'DRAFT', categories: CATEGORIES,
     lines: usage.lines.map((u) => ({ ...u, note: b.lines.find((l) => l.id === u.id)?.note ?? '' })),
     unlinked: usage.unlinked,
+    funding: usage.funding.map((f) => ({ ...f, name: f.code ? types.find((t) => t.code === f.code)?.name ?? f.code : null })),
     totals: { income: sum('INCOME'), spending: sum('SPENDING'), net: sum('INCOME') - sum('SPENDING') },
-    submission: sub ? { submittedAt: iso(sub.submittedAt), submittedByName: await nameOf(sub.submittedById) } : null,
-    canSubmit: g.s.approve && b.status === 'APPROVED',
-    isCentral: g.systemId === 'sys-main',
+    activitiesCount: items.filter((i) => i.status !== 'DROPPED').length,
+    submission: sub ? { status: sub.status ?? 'SUBMITTED', submittedAt: iso(sub.submittedAt), submittedByName: await nameOf(sub.submittedById), decidedAt: iso(sub.decidedAt), decidedByName: sub.decidedById ? await nameOf(sub.decidedById) : null, decisionNote: sub.decisionNote ?? null } : null,
+    canSubmit: !isCentral && g.s.approve && b.status === 'DRAFT' && hasContent,
+    canWithdraw: !isCentral && g.s.approve && (b.status === 'SUBMITTED' || b.status === 'APPROVED'),
+    isCentral,
   });
 });
 
@@ -186,34 +193,78 @@ async function setBudgetStatus(req: AuthedRequest, res: Res, status: 'APPROVED' 
   if (!g) return;
   if (!year) return fail(res, 400, 'BAD_YEAR', 'Pick a year');
   const b = (await prisma.moneyBudget.findFirst({ where: { systemId: g.systemId, year } })) as Budget | null;
+  const isCentral = g.systemId === 'sys-main';
+  // A unit's budget is approved by the Church Leader after the President sends it; only Central approves its own here.
+  if (status === 'APPROVED' && !isCentral) return fail(res, 409, 'SEND_TO_CHURCH_LEADER', 'Send the budget to the Church Leader; the Church Leader approves it');
   if (status === 'APPROVED' && (await budgetOf(g.systemId, year)).lines.length === 0) return fail(res, 409, 'EMPTY_BUDGET', 'Add budget lines first');
   const data = { status, approvedById: status === 'APPROVED' ? g.me : null, approvedAt: status === 'APPROVED' ? new Date() : null };
   if (b) await prisma.moneyBudget.update({ where: { id: b.id }, data });
   else await prisma.moneyBudget.create({ data: { systemId: g.systemId, year, createdAt: new Date(), ...data } });
+  if (status === 'DRAFT') await markLatest(g.systemId, year, ['SUBMITTED', 'APPROVED'], { status: 'WITHDRAWN' });
   await audit(g.me, g.systemId, status === 'APPROVED' ? 'MONEY_BUDGET_APPROVED' : 'MONEY_BUDGET_REOPENED', `${year} budget`, { year });
   if (status === 'APPROVED') await tell(await holdersOf(g.systemId, g.c, 'write', g.me), g.systemId, `Budget ${year} approved`, null, `money-budget:${g.systemId}:${year}`, false);
   res.json({ ok: true });
+}
+async function markLatest(systemId: string, year: number, from: string[], data: Record<string, unknown>) {
+  const sub = await latestSubmission(systemId, year);
+  if (sub && from.includes(sub.status ?? 'SUBMITTED')) await prisma.moneyBudgetSubmission.update({ where: { id: sub.id }, data });
 }
 moneyBlockRouter.post('/budget/approve', requireAuth, (req, res) => setBudgetStatus(req as AuthedRequest, res, 'APPROVED'));
 moneyBlockRouter.post('/budget/reopen', requireAuth, (req, res) => setBudgetStatus(req as AuthedRequest, res, 'DRAFT'));
 
 /**
- * Send the approved budget to Central as a frozen report: lines, what is committed to each by activities,
- * what was really recorded, and the activities. Nothing to approve; Central reads it. Sending again adds a newer copy.
+ * The President sends the planned budget (every line item with its activity and funding source, and the total) to
+ * the Church Leader as a frozen copy. The budget is then locked until the Church Leader approves or returns it.
  */
 moneyBlockRouter.post('/budget/submit', requireAuth, async (req: AuthedRequest, res) => {
   const g = await gate(req, res, 'approve');
   const year = yearOfReq(req);
   if (!g) return;
   if (!year) return fail(res, 400, 'BAD_YEAR', 'Pick a year');
+  if (g.systemId === 'sys-main') return fail(res, 409, 'NOT_FOR_CENTRAL', 'Central Administration approves its own budget');
   const b = await budgetOf(g.systemId, year);
-  if (b.status !== 'APPROVED') return fail(res, 409, 'BUDGET_NOT_APPROVED', 'Approve the budget before sending it to Central');
+  if (b.status !== 'DRAFT') return fail(res, 409, 'BUDGET_LOCKED', b.status === 'SUBMITTED' ? 'This budget is already with the Church Leader' : 'This budget is already approved; reopen it to change it');
   const { usage } = await usageOf(g.systemId, year, b.lines);
+  if (usage.lines.length === 0) return fail(res, 409, 'EMPTY_BUDGET', 'Add activities with their amounts first');
   const titles = await planTitleMap((await prisma.moneyPlanItem.findMany({ where: { systemId: g.systemId, year } }) as PlanItem[]).map((i) => i.planId));
   const snapshot = budgetSnapshot(usage, year, titles);
-  const row = (await prisma.moneyBudgetSubmission.create({ data: { systemId: g.systemId, year, snapshotJson: JSON.stringify(snapshot), submittedById: g.me, submittedAt: new Date() } })) as Submission;
-  await audit(g.me, g.systemId, 'MONEY_BUDGET_SUBMITTED', `${year} budget sent to Central`, { year, id: row.id });
+  const row = (await prisma.moneyBudgetSubmission.create({ data: { systemId: g.systemId, year, snapshotJson: JSON.stringify(snapshot), submittedById: g.me, submittedAt: new Date(), status: 'SUBMITTED' } })) as Submission;
+  const cur = (await prisma.moneyBudget.findFirst({ where: { systemId: g.systemId, year } })) as Budget | null;
+  if (cur) await prisma.moneyBudget.update({ where: { id: cur.id }, data: { status: 'SUBMITTED' } });
+  else await prisma.moneyBudget.create({ data: { systemId: g.systemId, year, status: 'SUBMITTED', createdAt: new Date() } });
+  await audit(g.me, g.systemId, 'MONEY_BUDGET_SUBMITTED', `${year} budget sent to the Church Leader`, { year, id: row.id });
+  const cc = await ctx(g.me);
+  await tell(await holdersOf('sys-main', cc, 'approve', g.me), 'sys-main', `Budget ${year} to decide: ${await systemLabel(g.systemId)}`, null, `money-budget-submitted:${row.id}`, true);
   res.status(201).json({ id: row.id });
+});
+
+async function systemLabel(systemId: string) {
+  const s = (await prisma.churchSystem.findUnique({ where: { id: systemId } })) as { shortName?: string | null; name?: string | null } | null;
+  return s?.shortName || s?.name || systemId;
+}
+
+/** The Church Leader decides a unit's submitted budget: approve it, or return it with a reason. */
+moneyBlockRouter.post('/budget/decide', requireAuth, async (req: AuthedRequest, res) => {
+  const g = await gate(req, res, 'approve', 'sys-main');
+  if (!g) return;
+  const p = z.object({ systemId: z.string().min(1), year: z.number(), approve: z.boolean(), reason: z.string().trim().max(NOTE_MAX).nullish() }).safeParse(req.body);
+  if (!p.success || !isYear(p.data.year)) return fail(res, 400, 'BAD_INPUT', 'Check the decision');
+  const { systemId, year, approve } = p.data;
+  if (systemId === 'sys-main' || !canReadMoney(g.me, systemId, g.c.data, g.c.now)) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (!approve && !p.data.reason) return fail(res, 400, 'REASON_REQUIRED', 'Please give a reason');
+  const sub = await latestSubmission(systemId, year);
+  const cur = (await prisma.moneyBudget.findFirst({ where: { systemId, year } })) as Budget | null;
+  if (!sub || (sub.status ?? 'SUBMITTED') !== 'SUBMITTED' || !cur || cur.status !== 'SUBMITTED') return fail(res, 409, 'WRONG_STATE', 'There is no submitted budget waiting for a decision');
+  const now = new Date();
+  await prisma.moneyBudgetSubmission.update({ where: { id: sub.id }, data: { status: approve ? 'APPROVED' : 'RETURNED', decidedById: g.me, decidedAt: now, decisionNote: p.data.reason || null } });
+  await prisma.moneyBudget.update({ where: { id: cur.id }, data: approve ? { status: 'APPROVED', approvedById: g.me, approvedAt: now } : { status: 'DRAFT', approvedById: null, approvedAt: null } });
+  await audit(g.me, systemId, approve ? 'MONEY_BUDGET_APPROVED' : 'MONEY_BUDGET_RETURNED', `${year} budget ${approve ? 'approved' : 'returned'} by the Church Leader`, { year, reason: p.data.reason ?? null });
+  const unit = await ctx(g.me);
+  const who = [...new Set([...(await holdersOf(systemId, unit, 'approve', g.me)), ...(await holdersOf(systemId, unit, 'write', g.me))])];
+  for (const id of who) {
+    await notifySafely(prisma as never, { kind: 'FOR_INFORMATION', toPersonId: id, systemId, title: `Budget ${year} ${approve ? 'approved' : 'returned'}`, body: p.data.reason ?? null, href: `/s/${systemId}/money/budget`, important: !approve, sourceKey: `money-budget-decided:${sub.id}:${id}` });
+  }
+  res.json({ ok: true });
 });
 
 /**
@@ -228,7 +279,7 @@ moneyBlockRouter.get('/budget/church', requireAuth, async (req: AuthedRequest, r
   const systems = ((await prisma.churchSystem.findMany()) as Array<{ id: string; name?: string | null; shortName?: string | null; kind?: string | null }>)
     .filter((x) => (x.kind ?? 'MINISTRY') !== 'SHARED' && canReadMoney(g.me, x.id, g.c.data, g.c.now));
   type Snap = import('../money/block.js').BudgetSnapshot;
-  const got: Array<{ systemId: string; name: string; own: boolean; submittedAt: string | null; submittedByName: string; snapshot: Snap }> = [];
+  const got: Array<{ systemId: string; name: string; own: boolean; submittedAt: string | null; submittedByName: string; snapshot: Snap; status: string; decisionNote: string | null; decidedByName: string | null }> = [];
   const missing: Array<{ systemId: string; name: string }> = [];
   for (const x of systems) {
     const name = x.shortName || x.name || x.id;
@@ -237,22 +288,22 @@ moneyBlockRouter.get('/budget/church', requireAuth, async (req: AuthedRequest, r
       const live = await budgetOf(x.id, year);
       const { usage } = await usageOf(x.id, year, live.lines);
       const titles = await planTitleMap((await prisma.moneyPlanItem.findMany({ where: { systemId: x.id, year } }) as PlanItem[]).map((i) => i.planId));
-      if (live.lines.length > 0) got.push({ systemId: x.id, name, own: true, submittedAt: null, submittedByName: '', snapshot: budgetSnapshot(usage, year, titles) });
+      if (usage.lines.length > 0) got.push({ systemId: x.id, name, own: true, submittedAt: null, submittedByName: '', snapshot: budgetSnapshot(usage, year, titles), status: live.status, decisionNote: null, decidedByName: null });
       else missing.push({ systemId: x.id, name });
       continue;
     }
     const sub = await latestSubmission(x.id, year);
     const snap = sub ? parseSnap(sub.snapshotJson) : null;
-    if (sub && snap) got.push({ systemId: x.id, name, own: false, submittedAt: iso(sub.submittedAt), submittedByName: await nameOf(sub.submittedById), snapshot: snap });
+    if (sub && snap) got.push({ systemId: x.id, name, own: false, submittedAt: iso(sub.submittedAt), submittedByName: await nameOf(sub.submittedById), snapshot: snap, status: sub.status ?? 'SUBMITTED', decisionNote: sub.decisionNote ?? null, decidedByName: sub.decidedById ? await nameOf(sub.decidedById) : null });
     else missing.push({ systemId: x.id, name });
   }
   const all = combineBudgets(got);
   res.json({
     year,
     // Central Administration first, then the units by name; each with its lines and the activities tied to them.
-    systems: got.map((x) => ({ systemId: x.systemId, name: x.name, own: x.own, submittedAt: x.submittedAt, submittedByName: x.submittedByName, totals: x.snapshot.totals, lines: x.snapshot.lines, activities: x.snapshot.activities })).sort((a, b) => Number(b.own) - Number(a.own) || a.name.localeCompare(b.name)),
+    systems: got.map((x) => ({ systemId: x.systemId, name: x.name, own: x.own, submittedAt: x.submittedAt, submittedByName: x.submittedByName, status: x.status, decisionNote: x.decisionNote, decidedByName: x.decidedByName, canDecide: g.s.approve && !x.own && x.status === 'SUBMITTED', funding: x.snapshot.funding ?? [], totals: x.snapshot.totals, lines: x.snapshot.lines, activities: x.snapshot.activities })).sort((a, b) => Number(b.own) - Number(a.own) || a.name.localeCompare(b.name)),
     missing: missing.sort((a, b) => a.name.localeCompare(b.name)),
-    totals: all.totals, byCategory: all.byCategory,
+    totals: all.totals, byCategory: all.byCategory, funding: all.funding,
   });
 });
 
@@ -261,6 +312,7 @@ moneyBlockRouter.get('/budget/church', requireAuth, async (req: AuthedRequest, r
 const shapePlan = (i: PlanItem, plans: Map<string, string>) => ({
   id: i.id, title: i.title, amount: i.amount, dueMonth: i.dueMonth ?? '', category: i.category ?? '', status: i.status, note: i.note ?? '',
   planId: i.planId ?? null, planTitle: i.planId ? plans.get(i.planId) ?? '' : null,
+  fundingKind: i.fundingKind ?? '', fundingCode: i.fundingCode ?? '', fundingNote: i.fundingNote ?? '',
 });
 
 /** The programs, projects and events of a system, as names. */
@@ -280,11 +332,6 @@ async function planBelongs(planId: string, systemId: string) {
   return !!p && p.systemId === systemId;
 }
 
-/** An activity may only be tied to a category that has a spending line in that year's budget. */
-async function hasSpendingLine(systemId: string, year: number, category: string) {
-  return ((await prisma.moneyBudgetLine.findMany({ where: { systemId, year } })) as BLine[]).some((l) => l.systemId === systemId && l.year === year && l.kind === 'SPENDING' && l.category === category);
-}
-
 moneyBlockRouter.get('/plan', requireAuth, async (req: AuthedRequest, res) => {
   const g = await gate(req, res);
   const year = yearOfReq(req);
@@ -295,25 +342,38 @@ moneyBlockRouter.get('/plan', requireAuth, async (req: AuthedRequest, res) => {
   const live = items.filter((i) => i.status !== 'DROPPED');
   const titles = await planTitleMap(items.map((i) => i.planId));
   res.json({
-    year, canWrite: g.s.write, categories: CATEGORIES, budgetCategories: budget.lines.filter((l) => l.kind === 'SPENDING').map((l) => l.category), items: items.map((i) => shapePlan(i, titles)),
-    totals: { planned: live.reduce((s, i) => s + i.amount, 0), done: items.filter((i) => i.status === 'DONE').reduce((s, i) => s + i.amount, 0), budgetSpending: budget.lines.filter((l) => l.kind === 'SPENDING').reduce((s, l) => s + l.planned, 0) },
+    year, canWrite: g.s.write || g.s.approve, locked: budget.status !== 'DRAFT', budgetStatus: budget.status, categories: CATEGORIES, budgetCategories: budget.lines.filter((l) => l.kind === 'SPENDING').map((l) => l.category),
+    fundingTypes: (await moneyTypes(g.systemId)).map((t) => ({ code: t.code, name: t.name })), items: items.map((i) => shapePlan(i, titles)),
+    totals: { planned: live.reduce((s, i) => s + i.amount, 0), done: items.filter((i) => i.status === 'DONE').reduce((s, i) => s + i.amount, 0), budgetSpending: (await usageOf(g.systemId, year, budget.lines)).usage.lines.filter((l) => l.kind === 'SPENDING').reduce((s, l) => s + l.planned, 0) },
   });
 });
 
 const planSchema = z.object({
   systemId: z.string().min(1), year: z.number(), title: z.string().trim().min(1).max(120), amount: z.number().int().min(0).max(2_000_000_000),
   dueMonth: z.string().nullish(), category: z.enum(CATEGORIES).nullish(), note: z.string().trim().max(NOTE_MAX).nullish(), planId: z.string().min(1).nullish(),
+  fundingKind: z.enum(FUNDING_KINDS).nullish(), fundingCode: z.string().trim().max(40).nullish(), fundingNote: z.string().trim().max(NOTE_MAX).nullish(),
+});
+
+/** A contribution source must be one of the unit's own contribution types; the other sources carry only a note. */
+async function fundingProblem(systemId: string, kind: string | null | undefined, code: string | null | undefined): Promise<'FUNDING_TYPE' | null> {
+  if (kind !== 'CONTRIBUTION') return null;
+  return code && (await moneyTypes(systemId)).some((t) => t.code === code) ? null : 'FUNDING_TYPE';
+}
+const fundingData = (d: { fundingKind?: string | null; fundingCode?: string | null; fundingNote?: string | null }) => ({
+  ...(d.fundingKind !== undefined && { fundingKind: d.fundingKind || null, fundingCode: d.fundingKind === 'CONTRIBUTION' ? d.fundingCode || null : null }),
+  ...(d.fundingNote !== undefined && { fundingNote: d.fundingNote || null }),
 });
 
 moneyBlockRouter.post('/plan', requireAuth, async (req: AuthedRequest, res) => {
-  const g = await gate(req, res, 'write');
+  const g = await gate(req, res, 'plan');
   if (!g) return;
   const p = planSchema.extend({ category: z.enum(CATEGORIES) }).safeParse(req.body);
   if (!p.success || !isYear(p.data.year) || (p.data.dueMonth && !isMonth(p.data.dueMonth))) return fail(res, 400, 'BAD_INPUT', 'Check the activity');
-  if (!(await hasSpendingLine(g.systemId, p.data.year, p.data.category))) return fail(res, 409, 'NO_BUDGET_LINE', 'Add a spending line for this category to the budget first');
+  if ((await budgetOf(g.systemId, p.data.year)).status !== 'DRAFT') return fail(res, 409, 'BUDGET_LOCKED', 'The budget is with the Church Leader or approved; reopen it to add activities');
+  if (await fundingProblem(g.systemId, p.data.fundingKind, p.data.fundingCode)) return fail(res, 400, 'FUNDING_TYPE', 'Choose one of this unit’s contribution types');
   if (p.data.planId && !(await planBelongs(p.data.planId, g.systemId))) return fail(res, 400, 'BAD_PLAN', 'Choose a program, project or event of this system');
   const row = (await prisma.moneyPlanItem.create({
-    data: { systemId: g.systemId, year: p.data.year, planId: p.data.planId || null, title: p.data.title, amount: p.data.amount, dueMonth: p.data.dueMonth || null, category: p.data.category || null, status: 'PLANNED', note: p.data.note || null, createdById: g.me, createdAt: new Date() },
+    data: { systemId: g.systemId, year: p.data.year, planId: p.data.planId || null, title: p.data.title, amount: p.data.amount, dueMonth: p.data.dueMonth || null, category: p.data.category || null, status: 'PLANNED', note: p.data.note || null, createdById: g.me, createdAt: new Date(), ...fundingData(p.data) },
   })) as PlanItem;
   await audit(g.me, g.systemId, 'MONEY_PLAN_ITEM', `Planned “${row.title}” ${row.amount} RWF`, { id: row.id });
   res.status(201).json({ id: row.id });
@@ -322,15 +382,16 @@ moneyBlockRouter.post('/plan', requireAuth, async (req: AuthedRequest, res) => {
 moneyBlockRouter.patch('/plan/:id', requireAuth, async (req: AuthedRequest, res) => {
   const item = (await prisma.moneyPlanItem.findUnique({ where: { id: String(req.params.id) } })) as PlanItem | null;
   if (!item) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const g = await gate(req, res, 'write', item.systemId);
+  const g = await gate(req, res, 'plan', item.systemId);
   if (!g) return;
   const p = planSchema.partial().omit({ systemId: true, year: true }).extend({ status: z.enum(PLAN_STATUS).optional() }).safeParse(req.body);
   if (!p.success || (p.data.dueMonth && !isMonth(p.data.dueMonth))) return fail(res, 400, 'BAD_INPUT', 'Check the activity');
   const d = p.data;
-  if (d.category !== undefined) {
-    if (!d.category) return fail(res, 400, 'CATEGORY_REQUIRED', 'Every activity is tied to a budget line');
-    if (!(await hasSpendingLine(item.systemId, (item as PlanItem & { year: number }).year, d.category))) return fail(res, 409, 'NO_BUDGET_LINE', 'Add a spending line for this category to the budget first');
-  }
+  // Once the budget is with the Church Leader or approved, the figures are fixed; finishing, dropping and linking stay open.
+  const changesFigures = d.title !== undefined || d.amount !== undefined || d.category !== undefined || d.fundingKind !== undefined || d.fundingCode !== undefined || d.dueMonth !== undefined;
+  if (changesFigures && (await budgetOf(item.systemId, (item as PlanItem & { year: number }).year)).status !== 'DRAFT') return fail(res, 409, 'BUDGET_LOCKED', 'The budget is with the Church Leader or approved; reopen it to change the figures');
+  if (d.category !== undefined && !d.category) return fail(res, 400, 'CATEGORY_REQUIRED', 'Every activity is tied to a budget line');
+  if (d.fundingKind !== undefined && (await fundingProblem(item.systemId, d.fundingKind, d.fundingCode))) return fail(res, 400, 'FUNDING_TYPE', 'Choose one of this unit’s contribution types');
   if (d.planId && !(await planBelongs(d.planId, item.systemId))) return fail(res, 400, 'BAD_PLAN', 'Choose a program, project or event of this system');
   await prisma.moneyPlanItem.update({
     where: { id: item.id },
@@ -338,6 +399,7 @@ moneyBlockRouter.patch('/plan/:id', requireAuth, async (req: AuthedRequest, res)
       ...(d.title !== undefined && { title: d.title }), ...(d.amount !== undefined && { amount: d.amount }),
       ...(d.dueMonth !== undefined && { dueMonth: d.dueMonth || null }), ...(d.category !== undefined && { category: d.category || null }),
       ...(d.note !== undefined && { note: d.note || null }), ...(d.status !== undefined && { status: d.status }), ...(d.planId !== undefined && { planId: d.planId || null }),
+      ...fundingData(d),
     },
   });
   await audit(g.me, g.systemId, 'MONEY_PLAN_ITEM', `Changed “${item.title}”`, { id: item.id, ...d });
@@ -360,10 +422,18 @@ moneyBlockRouter.get('/plan-money', requireAuth, async (req: AuthedRequest, res)
   const planId = String(req.query.planId ?? '');
   if (!g) return;
   if (!planId || !(await planBelongs(planId, g.systemId))) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const items = ((await prisma.moneyPlanItem.findMany({ where: { systemId: g.systemId } })) as PlanItem[]).filter((i) => i.planId === planId);
-  const entries = ((await entriesOf(g.systemId)) as Entry[]).filter((e) => e.planId === planId);
+  const allItems = (await prisma.moneyPlanItem.findMany({ where: { systemId: g.systemId } })) as PlanItem[];
+  const allEntries = (await entriesOf(g.systemId)) as Entry[];
+  const items = allItems.filter((i) => i.planId === planId);
+  const entries = allEntries.filter((e) => e.planId === planId);
   const row = moneyByPlan(items, entries).find((r) => r.planId === planId) ?? { planId, planned: 0, income: 0, spending: 0, pending: 0 };
-  res.json({ planned: row.planned, income: row.income, spending: row.spending, pending: row.pending, activities: items.filter((i) => i.status !== 'DROPPED').length, entries: entries.length });
+  const plans = (await prisma.workPlan.findMany()) as Array<{ id: string; parentId?: string | null; deletedAt?: Date | null; systemId: string }>;
+  const below = descendantsOf(planId, plans);
+  const kids = plans.filter((r) => below.includes(r.id) && r.systemId === g.systemId && !r.deletedAt).map((r) => r.id);
+  const rolled = kids.length
+    ? moneyByPlan(allItems, allEntries).filter((r) => r.planId && kids.includes(r.planId)).reduce((a, r) => ({ planned: a.planned + r.planned, income: a.income + r.income, spending: a.spending + r.spending, pending: a.pending + r.pending }), { planned: row.planned, income: row.income, spending: row.spending, pending: row.pending })
+    : null;
+  res.json({ planned: row.planned, income: row.income, spending: row.spending, pending: row.pending, activities: items.filter((i) => i.status !== 'DROPPED').length, entries: entries.length, linked: rolled ? { plans: kids.length, ...rolled } : null });
 });
 
 /* ───────────── accounting: planned against actual ───────────── */
@@ -378,7 +448,8 @@ moneyBlockRouter.get('/accounting', requireAuth, async (req: AuthedRequest, res)
   if (!g) return;
   if (!year) return fail(res, 400, 'BAD_YEAR', 'Pick a year');
   const b = await budgetOf(g.systemId, year);
-  res.json({ year, budgetStatus: b.status, ...accounting(b.lines, await entriesOf(g.systemId), year) });
+  const { usage } = await usageOf(g.systemId, year, b.lines);
+  res.json({ year, budgetStatus: b.status, ...accounting(usage.lines.map((l) => ({ kind: l.kind, category: l.category, planned: l.planned })), await entriesOf(g.systemId), year) });
 });
 
 /* ───────────── contribution lists ───────────── */

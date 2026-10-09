@@ -7,21 +7,24 @@ import {
 import { EmptyState } from '../components/ui/EmptyState';
 import { TextAreaField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
-import { fetchPlanMoney } from '../api/frontDoorApi';
+import { fetchMoneyPlan, fetchPlanMoney } from '../api/frontDoorApi';
+import { ActivityForm, fundingLabel } from './ActivityForm';
 import { useFrontDoor } from './FrontDoorContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
-import { formatRwf } from './money';
+import { categoryKey, formatRwf } from './money';
 import { PlanForm } from './PlanForm';
 import { PlanGuests } from './PlanGuests';
+import { PlanLinks } from './PlanLinks';
 import { PlanMilestones } from './PlanMilestones';
+import { PlanGovernance, PlanIndicators } from './PlanProgram';
 import { PLAN_STEPS, actionKey, needsApproval, phaseOf, planActions, planErrorKey, planStatusKey, stagesOf, stepIndex } from './plans';
 import { useLoad } from './useLoad';
 import { ListRow, PageHeader, RowList, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | null;
-type Tab = 'overview' | 'team' | 'guests' | 'milestones' | 'checklist' | 'money' | 'report' | 'history';
+type Tab = 'overview' | 'team' | 'guests' | 'milestones' | 'governance' | 'indicators' | 'checklist' | 'money' | 'report' | 'history';
 
 /** One plan: where it stands in the six steps, its planning record, the execution record and the report. */
 export function PlanPage() {
@@ -83,6 +86,7 @@ export function PlanPage() {
               { key: 'team', label: t('door.plan.tab.team'), count: p.team.length },
               ...(p.planType === 'EVENT' && p.registration ? [{ key: 'guests' as const, label: t('door.plan.tab.guests'), count: p.registration.count }] : []),
               ...(p.planType === 'PROJECT' ? [{ key: 'milestones' as const, label: t('door.plan.tab.milestones'), count: p.milestones.filter((m) => !m.done).length }] : []),
+              ...(p.planType === 'PROGRAM' ? [{ key: 'governance' as const, label: t('door.plan.tab.governance'), count: p.program?.reviews.length }, { key: 'indicators' as const, label: t('door.plan.tab.indicators'), count: p.program?.indicators.length }] : []),
               { key: 'checklist', label: t('door.plan.tab.checklist'), count: p.checks.filter((k) => !k.done).length },
               { key: 'money', label: t('door.plan.tab.money') },
               { key: 'report', label: t('door.plan.tab.report') },
@@ -91,6 +95,7 @@ export function PlanPage() {
           />
           {tab === 'overview' && (
             <>
+          <PlanLinks p={p} systemId={systemId} run={run} />
 
           <ol className="door-steps" aria-label={t(`door.plan.steps.${p.planType}` as const)}>
             {PLAN_STEPS.filter((s) => !(s === 'PENDING_APPROVAL' && !needsApproval(p.planType, p.beyondUnit) && p.status !== 'PENDING_APPROVAL')).map((s) => (
@@ -212,10 +217,12 @@ export function PlanPage() {
               </RowList>
             ))}
 
+          {tab === 'governance' && <PlanGovernance p={p} run={run} />}
+          {tab === 'indicators' && <PlanIndicators p={p} run={run} />}
           {tab === 'guests' && <PlanGuests p={p} run={run} />}
           {tab === 'milestones' && <PlanMilestones p={p} run={run} />}
 
-          {tab === 'money' && <PlanMoney systemId={systemId} planId={p.id} />}
+          {tab === 'money' && <PlanMoney systemId={systemId} planId={p.id} startsOn={p.startsOn} />}
 
           {tab === 'checklist' && (
             <div className="panel">
@@ -342,15 +349,21 @@ export function PlanPage() {
 }
 
 /** What this program, project or event costs and earns; shown only to people who may read the system's money. */
-function PlanMoney({ systemId, planId }: { systemId: string; planId: string }) {
+function PlanMoney({ systemId, planId, startsOn }: { systemId: string; planId: string; startsOn: string | null }) {
   const t = useT();
+  const year = startsOn ? new Date(new Date(startsOn).getTime() + 2 * 3600 * 1000).getUTCFullYear() : new Date().getUTCFullYear();
   const { capabilities } = useFrontDoor();
   const allowed = lettersFor(capabilities, systemId, 'money').length > 0;
   const money = useLoad(() => (allowed ? fetchPlanMoney(systemId, planId) : Promise.reject(new Error('no'))), `plan-money|${systemId}|${planId}|${allowed}`);
+  const budget = useLoad(() => (allowed ? fetchMoneyPlan(systemId, year) : Promise.reject(new Error('no'))), `plan-budget|${systemId}|${year}|${allowed}`);
   if (!allowed || !money.data) return null;
+  const mine = (budget.data?.items ?? []).filter((i) => i.planId === planId);
+  const live = mine.filter((i) => i.status !== 'DROPPED');
+  const budgetTotal = live.reduce((n, i) => n + i.amount, 0);
   const m = money.data;
   const empty = m.activities === 0 && m.entries === 0;
   return (
+    <>
     <div className="panel">
       <h3>{t('door.plan.money.title')}</h3>
       {empty ? (
@@ -358,9 +371,36 @@ function PlanMoney({ systemId, planId }: { systemId: string; planId: string }) {
       ) : (
         <p>{t('door.plan.money.line', { planned: formatRwf(m.planned), income: formatRwf(m.income), spending: formatRwf(m.spending), pending: formatRwf(m.pending) })}</p>
       )}
+      {m.linked && <p>{t('door.plan.money.linked', { plans: m.linked.plans, planned: formatRwf(m.linked.planned), income: formatRwf(m.linked.income), spending: formatRwf(m.linked.spending), pending: formatRwf(m.linked.pending) })}</p>}
       <Link className="btn ghost sm" to={`/s/${systemId}/money/plan`}>
         {t('door.plan.money.open')}
       </Link>
     </div>
+    <div className="panel">
+      <h3>{t('door.plan.budget.title')}</h3>
+      <p className="muted">{t('door.plan.budget.hint', { year })}</p>
+      {mine.length === 0 ? (
+        <p className="muted">{t('door.plan.budget.none')}</p>
+      ) : (
+        <>
+          <ul className="door-list">
+            {mine.map((i) => (
+              <li key={i.id}>
+                <strong>{i.title}</strong> · {formatRwf(i.amount)} · {t(categoryKey(i.category) as 'door.money.cat.OTHER')} · {t('door.money.activity.paidFrom')}:{' '}
+                {fundingLabel(t, i.fundingKind || null, i.fundingCode ? budget.data?.fundingTypes.find((x) => x.code === i.fundingCode)?.name ?? i.fundingCode : null, i.fundingNote)}
+                {i.status === 'DROPPED' ? ` · ${t('door.money.plan.status.DROPPED')}` : ''}
+              </li>
+            ))}
+          </ul>
+          <p><strong>{t('door.plan.budget.total')}</strong> {formatRwf(budgetTotal)}</p>
+        </>
+      )}
+      {budget.data?.canWrite && <ActivityForm systemId={systemId} year={year} view={budget.data} fixedPlanId={planId} onSaved={() => { budget.reload(); money.reload(); }} />}
+      {budget.data && !budget.data.canWrite && <p className="muted">{t('door.plan.budget.readOnly')}</p>}
+      <Link className="btn ghost sm" to={`/s/${systemId}/money/budget`}>
+        {t('door.plan.budget.open')}
+      </Link>
+    </div>
+    </>
   );
 }

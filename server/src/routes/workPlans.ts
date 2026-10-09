@@ -14,7 +14,7 @@ import { notifySafely } from '../lib/notify.js';
 import { NOTE_MAX, TEXT_MAX, TITLE_MAX, VISIBILITIES, canSee } from '../work/rules.js';
 import {
   CHECKS_MAX, ROLE_MAX, TEAM_MAX, approversOf, asWorkRow, buildLevels, canApprove, canComposeReport, canManagePlan, canPublishReport,
-  canWritePlan, currentLevel, isOnTeam, levelsOf, publishProblem, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
+  canWritePlan, currentLevel, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, publishProblem, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
 } from '../work/plan.js';
 
 export const workPlansRouter = Router();
@@ -29,7 +29,7 @@ interface Plan extends PlanRow {
   planType?: string | null;
   aim?: string | null; needs?: string | null; location?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null;
   rejectedReason?: string | null; cancelReason?: string | null; planningSummary?: string | null; executionSummary?: string | null;
-  registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null;
+  parentId?: string | null; steeringJson?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null;
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
 }
 interface NoteRow { id: string; planId: string; authorId: string; text: string; createdAt: Date | string }
@@ -39,6 +39,9 @@ interface RegRow {
   id: string; planId: string; personId?: string | null; name: string; phone?: string | null; source: string;
   attended: boolean; attendedAt?: Date | string | null; cancelledAt?: Date | string | null; createdAt: Date | string;
 }
+interface ReviewRow { id: string; planId: string; heldOn: Date | string; summary: string; decision: string; createdById: string }
+interface IndicatorRow { id: string; planId: string; name: string; unit: string; target: number }
+interface MeasureRow { id: string; indicatorId: string; planId: string; value: number; note?: string | null; byId: string; at: Date | string }
 interface UnitRow { id: string; name: string; systemId?: string | null }
 
 async function names(ids: Array<string | null | undefined>): Promise<Map<string, string>> {
@@ -73,6 +76,13 @@ const checksOf = async (planId: string) => ((await prisma.workPlanCheck.findMany
 const notesOf = async (planId: string) =>
   ((await prisma.workPlanNote.findMany()) as NoteRow[]).filter((n) => n.planId === planId).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+const DECISIONS = ['CONTINUE', 'ADJUST', 'CONCLUDE'] as const;
+const INDICATORS_MAX = 20;
+const reviewsOf = async (planId: string) =>
+  ((await prisma.workPlanReview.findMany()) as ReviewRow[]).filter((r) => r.planId === planId).sort((a, b) => new Date(b.heldOn).getTime() - new Date(a.heldOn).getTime());
+const indicatorsOf = async (planId: string) => ((await prisma.workPlanIndicator.findMany()) as IndicatorRow[]).filter((i) => i.planId === planId);
+const measuresOf = async (planId: string) =>
+  ((await prisma.workPlanMeasure.findMany()) as MeasureRow[]).filter((m) => m.planId === planId).sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
 const MILESTONES_MAX = 30;
 const REGISTRATIONS_MAX = 2000;
 const milestonesOf = async (planId: string) =>
@@ -113,6 +123,10 @@ function flags(p: Plan, c: Ctx, me: string) {
     canMarkAttendance: (manage || team) && type === 'EVENT' && ['RUNNING', 'CLOSING'].includes(p.status),
     canMilestone: manage && type === 'PROJECT' && ['DRAFT', 'SETUP', 'RUNNING', 'PAUSED'].includes(p.status),
     canTickMilestone: (manage || team) && type === 'PROJECT' && live,
+    canLink: manage && type !== 'PROGRAM' && !['ENDED', 'CANCELLED'].includes(p.status),
+    canGovern: manage && type === 'PROGRAM' && !['ENDED', 'CANCELLED'].includes(p.status),
+    canReview: manage && type === 'PROGRAM' && ['RUNNING', 'PAUSED', 'CLOSING'].includes(p.status),
+    canMeasure: (manage || team) && type === 'PROGRAM' && live,
     canCompose: p.status === 'CLOSING' && canComposeReport(me, p.systemId, c.data),
     canPublish: p.status === 'CLOSING' && canPublishReport(me, p.systemId, c.data),
   };
@@ -135,6 +149,36 @@ function registrationView(p: Plan, regs: RegRow[], who: Map<string, string>, me:
 }
 const canSeeList = (p: Plan, me: string) => isOnTeam(p, me) || p.leaderPersonId === me;
 
+type Brief = { id: string; title: string; planType: string; status: string };
+const brief = (r: Plan): Brief => ({ id: r.id, title: r.title, planType: r.planType ?? 'PROJECT', status: r.status });
+
+/** The plan above and the plans below, only those this person may see. */
+async function familyOf(p: Plan, c: Ctx, me: string): Promise<{ parent: Brief | null; children: Brief[] }> {
+  const all = (await prisma.workPlan.findMany()) as Plan[];
+  const seeable = (r: Plan) => !r.deletedAt && canSee(asWorkRow(r), me, c.data);
+  const parent = p.parentId ? all.find((r) => r.id === p.parentId && seeable(r)) : undefined;
+  return { parent: parent ? brief(parent) : null, children: all.filter((r) => r.parentId === p.id && seeable(r)).map(brief) };
+}
+
+async function programView(p: Plan, c: Ctx, me: string) {
+  const [reviews, inds, meas] = [await reviewsOf(p.id), await indicatorsOf(p.id), await measuresOf(p.id)];
+  const steering = (() => { try { return JSON.parse(p.steeringJson || '[]') as Array<{ personId: string; role: string }>; } catch { return []; } })();
+  const who = await names([...steering.map((x) => x.personId), ...reviews.map((r) => r.createdById), ...meas.map((m) => m.byId)]);
+  void c; void me;
+  return {
+    steering: steering.map((x) => ({ personId: x.personId, name: who.get(x.personId) ?? '', role: x.role })),
+    reviews: reviews.map((r) => ({ id: r.id, heldOn: iso(r.heldOn), summary: r.summary, decision: r.decision, byName: who.get(r.createdById) ?? '' })),
+    indicators: inds.map((i) => {
+      const mine = meas.filter((m) => m.indicatorId === i.id);
+      const current = mine.length ? mine[mine.length - 1]!.value : null;
+      return {
+        id: i.id, name: i.name, unit: i.unit, target: i.target, current, percent: indicatorPercent(current, i.target),
+        readings: mine.slice(-6).map((m) => ({ value: m.value, at: iso(m.at), note: m.note ?? '', byName: who.get(m.byId) ?? '' })),
+      };
+    }),
+  };
+}
+
 async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
   const team = teamOf(p);
   const levels = levelsOf(p);
@@ -143,6 +187,8 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
   const type = p.planType ?? 'PROJECT';
   const milestones = detail && type === 'PROJECT' ? await milestonesOf(p.id) : [];
   const regs = detail && type === 'EVENT' ? await registrationsOf(p.id) : [];
+  const family = detail ? await familyOf(p, c, me) : { parent: null, children: [] };
+  const program = detail && type === 'PROGRAM' ? await programView(p, c, me) : null;
   const who = await names([...regs.map((r) => r.personId), p.leaderPersonId, p.createdById, ...team.map((t) => t.personId), ...levels.map((l) => l.byId), ...notes.map((n) => n.authorId)]);
   const base = {
     id: p.id, title: p.title, status: p.status, systemId: p.systemId, orgUnitId: p.orgUnitId,
@@ -166,6 +212,7 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
       composedAt: iso(p.reportComposedAt), publishedAt: iso(p.reportPublishedAt), frozen: !!p.reportJson,
     },
     milestones: milestones.map((m) => ({ id: m.id, title: m.title, dueOn: iso(m.dueOn), done: m.done, doneAt: iso(m.doneAt) })),
+    parent: family.parent, children: family.children, program,
     registration: type === 'EVENT' ? registrationView(p, regs, who, me, fl) : null,
   };
 }
@@ -182,6 +229,7 @@ const fields = {
   beyondUnit: z.boolean().default(false),
   visibility: z.enum(VISIBILITIES).default('SYSTEM'),
   planType: z.enum(PLAN_TYPES).default('PROJECT'),
+  parentId: z.string().min(1).nullish(),
 };
 
 async function peopleProblem(ids: string[]): Promise<boolean> {
@@ -192,6 +240,16 @@ async function peopleProblem(ids: string[]): Promise<boolean> {
   return false;
 }
 const datesProblem = (a?: string | null, b?: string | null) => !!a && !!b && new Date(b).getTime() < new Date(a).getTime();
+
+/** A parent must be of the right kind, in the same system, visible to the person, still alive, and never the plan itself or one of its own descendants. */
+async function parentCheck(childType: string, parentId: string, systemId: string, me: string, c: Ctx, selfId: string | null): Promise<'BAD_PARENT' | null> {
+  const all = (await prisma.workPlan.findMany()) as Plan[];
+  const par = all.find((r) => r.id === parentId && !r.deletedAt);
+  if (!par || par.systemId !== systemId || !canSee(asWorkRow(par), me, c.data)) return 'BAD_PARENT';
+  if (['CANCELLED', 'ENDED'].includes(par.status)) return 'BAD_PARENT';
+  if (selfId && (par.id === selfId || descendantsOf(selfId, all).includes(par.id))) return 'BAD_PARENT';
+  return parentProblem(childType, par.planType);
+}
 
 workPlansRouter.get('/options', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
@@ -275,9 +333,13 @@ workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   if (!canWritePlan(me, unit.systemId, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not plan work here');
   if (datesProblem(b.startsOn, b.endsOn)) return fail(res, 400, 'BAD_DATES', 'The end must not be before the start');
   if (await peopleProblem([b.leaderId, ...b.team.map((t) => t.personId)])) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose people who are active members');
+  if (b.parentId) {
+    const bad = await parentCheck(b.planType, b.parentId, unit.systemId, me, c, null);
+    if (bad) return fail(res, 400, bad, 'That plan cannot be the parent');
+  }
   const row = (await prisma.workPlan.create({
     data: {
-      orgUnitId: unit.id, systemId: unit.systemId, title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null,
+      parentId: b.parentId || null, orgUnitId: unit.id, systemId: unit.systemId, title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null,
       startsOn: b.startsOn ? new Date(b.startsOn) : null, endsOn: b.endsOn ? new Date(b.endsOn) : null, leaderPersonId: b.leaderId,
       teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility, planType: b.planType, status: 'DRAFT', approvalsJson: '[]', createdById: me,
     },
@@ -534,7 +596,7 @@ workPlansRouter.post('/:id/publish', requireAuth, async (req: AuthedRequest, res
     title: p.title, unitName: detail.unitName, aim: detail.aim, needs: detail.needs, location: detail.location, startsOn: detail.startsOn, endsOn: detail.endsOn,
     leaderName: detail.leaderName, team: detail.team, levels: detail.levels, notes: detail.notes, checks: detail.checks,
     planningSummary: p.planningSummary, executionSummary: p.executionSummary, outcome: p.outcome, publishedAt: at.toISOString(),
-    milestones: detail.milestones, attendance: p.planType === 'EVENT' ? { registered: (detail.registration as { count: number }).count, attended: (detail.registration as { attended: number }).attended } : null,
+    milestones: detail.milestones, program: detail.program, children: detail.children, attendance: p.planType === 'EVENT' ? { registered: (detail.registration as { count: number }).count, attended: (detail.registration as { attended: number }).attended } : null,
   };
   const row = (await prisma.workPlan.update({
     where: { id: p.id },
@@ -680,4 +742,99 @@ workPlansRouter.delete('/:id/registrations/:rid', requireAuth, async (req: Authe
   if (!r) return fail(res, 404, 'NOT_FOUND', 'Registration not found');
   await prisma.workPlanRegistration.update({ where: { id: r.id }, data: { cancelledAt: new Date() } });
   res.json({ plan: await shape(p, c, me, true) });
+});
+
+/* ── Optional links between programs, projects and events ── */
+
+workPlansRouter.get('/:id/parent-options', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canLink) return res.json({ items: [] });
+  const all = (await prisma.workPlan.findMany()) as Plan[];
+  const below = descendantsOf(p.id, all);
+  const items = all
+    .filter((r) => !r.deletedAt && r.systemId === p.systemId && r.id !== p.id && !below.includes(r.id) && !['CANCELLED', 'ENDED'].includes(r.status))
+    .filter((r) => canSee(asWorkRow(r), me, c.data) && !parentProblem(p.planType, r.planType))
+    .map(brief);
+  res.json({ items });
+});
+
+workPlansRouter.patch('/:id/parent', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canLink) return fail(res, 403, 'FORBIDDEN', 'You may not link this plan now');
+  const parsed = z.object({ parentId: z.string().min(1).nullable() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid link');
+  if (parsed.data.parentId) {
+    const bad = await parentCheck(p.planType ?? 'PROJECT', parsed.data.parentId, p.systemId, me, c, p.id);
+    if (bad) return fail(res, 400, bad, 'That plan cannot be the parent');
+  }
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { parentId: parsed.data.parentId } })) as Plan;
+  await audit(me, p.systemId, 'WORKPLAN_LINKED', `${parsed.data.parentId ? 'Linked' : 'Unlinked'} “${p.title}”`, { planId: p.id, parentId: parsed.data.parentId });
+  res.json({ plan: await shape(row, c, me, true) });
+});
+
+/* ── Programs: steering committee, reviews and indicators ── */
+
+workPlansRouter.put('/:id/steering', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canGovern) return fail(res, 403, 'FORBIDDEN', 'You may not change the steering committee');
+  const parsed = z.object({ members: z.array(z.object({ personId: z.string().min(1), role: z.string().trim().min(1).max(ROLE_MAX) })).max(TEAM_MAX) }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid committee');
+  if (await peopleProblem(parsed.data.members.map((m) => m.personId))) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose people who are active members');
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { steeringJson: JSON.stringify(parsed.data.members) } })) as Plan;
+  await audit(me, p.systemId, 'WORKPLAN_STEERING_SET', `Set the steering committee of “${p.title}”`, { planId: p.id });
+  res.json({ plan: await shape(row, c, me, true) });
+});
+
+workPlansRouter.post('/:id/reviews', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canReview) return fail(res, 403, 'FORBIDDEN', 'A review is recorded while the program runs');
+  const parsed = z.object({ heldOn: z.string().datetime(), summary: z.string().trim().min(1).max(TEXT_MAX), decision: z.enum(DECISIONS) }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Write what the review found and decided');
+  await prisma.workPlanReview.create({ data: { planId: p.id, heldOn: new Date(parsed.data.heldOn), summary: parsed.data.summary, decision: parsed.data.decision, createdById: me } });
+  await audit(me, p.systemId, 'WORKPLAN_REVIEWED', `Recorded a review of “${p.title}”`, { planId: p.id, decision: parsed.data.decision });
+  res.status(201).json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.post('/:id/indicators', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canGovern) return fail(res, 403, 'FORBIDDEN', 'You may not add indicators');
+  const parsed = z.object({ name: z.string().trim().min(1).max(TITLE_MAX), unit: z.string().trim().max(30).default(''), target: z.number().positive().max(1e12) }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Give a name and a target above zero');
+  if ((await indicatorsOf(p.id)).length >= INDICATORS_MAX) return fail(res, 409, 'TOO_MANY', 'The indicator list is full');
+  await prisma.workPlanIndicator.create({ data: { planId: p.id, name: parsed.data.name, unit: parsed.data.unit, target: parsed.data.target, createdById: me } });
+  res.status(201).json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.delete('/:id/indicators/:iid', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canGovern) return fail(res, 403, 'FORBIDDEN', 'You may not remove indicators');
+  const i = (await indicatorsOf(p.id)).find((x) => x.id === String(req.params.iid));
+  if (!i) return fail(res, 404, 'NOT_FOUND', 'Indicator not found');
+  await prisma.workPlanIndicator.delete({ where: { id: i.id } });
+  res.json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.post('/:id/indicators/:iid/readings', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canMeasure) return fail(res, 403, 'FORBIDDEN', 'Readings are added by the team, while the program runs');
+  const i = (await indicatorsOf(p.id)).find((x) => x.id === String(req.params.iid));
+  if (!i) return fail(res, 404, 'NOT_FOUND', 'Indicator not found');
+  const parsed = z.object({ value: z.number().min(0).max(1e12), note: z.string().trim().max(NOTE_MAX).nullish() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Give a number');
+  await prisma.workPlanMeasure.create({ data: { indicatorId: i.id, planId: p.id, value: parsed.data.value, note: parsed.data.note || null, byId: me } });
+  res.status(201).json({ plan: await shape(p, c, me, true) });
 });

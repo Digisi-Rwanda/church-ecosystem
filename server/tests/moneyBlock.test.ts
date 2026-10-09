@@ -52,13 +52,26 @@ describe('money block rules', () => {
       { kind: 'INCOME', amount: 900, status: 'RECORDED', category: 'DONATION', occurredOn: '2025-03-01' },
     ];
     const u = budgetUsage(lines, items, entries, 2026);
-    expect(u.lines.map((l) => [l.category, l.planned, l.committed, l.actual, l.activities.length])).toEqual([['SUPPLIES', 1000, 400, 250, 1], ['DONATION', 500, 0, 200, 0]]);
-    expect(u.unlinked).toEqual({ count: 2, amount: 100 });
+    // an activity in a category with no line gives that category a line of its own (derived), so nothing is hidden
+    expect(u.lines.map((l) => [l.category, l.planned, l.committed, l.actual, l.activities.length])).toEqual([['SUPPLIES', 1000, 400, 250, 1], ['DONATION', 500, 0, 200, 0], ['TRANSPORT', 70, 70, 0, 1]]);
+    expect(u.lines[2]).toMatchObject({ derived: true, setAside: 0 });
+    expect(u.unlinked).toEqual({ count: 1, amount: 30 });
     const snap = budgetSnapshot(u, 2026, new Map());
-    expect(snap.totals).toEqual({ incomePlanned: 500, incomeActual: 200, spendingPlanned: 1000, spendingCommitted: 400, spendingActual: 250 });
+    expect(snap.totals).toEqual({ incomePlanned: 500, incomeActual: 200, spendingPlanned: 1070, spendingCommitted: 470, spendingActual: 250 });
     const all = combineBudgets([{ systemId: 'a', snapshot: snap }, { systemId: 'b', snapshot: snap }]);
-    expect(all.totals.spendingPlanned).toBe(2000);
+    expect(all.totals.spendingPlanned).toBe(2140);
     expect(all.byCategory.find((r) => r.category === 'SUPPLIES')).toMatchObject({ planned: 2000, committed: 800, actual: 500 });
+  });
+  it('the budget grows with its activities: a line is never smaller than what is committed to it, and funding is totalled by source', () => {
+    const lines = [{ id: 'l1', kind: 'SPENDING', category: 'SUPPLIES', planned: 300 }];
+    const items = [
+      { id: 'a', title: 'Chairs', amount: 400, status: 'PLANNED', category: 'SUPPLIES', fundingKind: 'CONTRIBUTION', fundingCode: 'BUILDING' },
+      { id: 'b', title: 'Banner', amount: 100, status: 'PLANNED', category: 'SUPPLIES', fundingKind: 'DONATION' },
+      { id: 'c', title: 'Fuel', amount: 50, status: 'PLANNED', category: 'TRANSPORT' },
+    ];
+    const u = budgetUsage(lines, items, [], 2026);
+    expect(u.lines[0]).toMatchObject({ planned: 500, setAside: 300, committed: 500 });
+    expect(u.funding).toEqual([{ kind: 'CONTRIBUTION', code: 'BUILDING', planned: 400, count: 1 }, { kind: 'DONATION', code: null, planned: 100, count: 1 }, { kind: 'NONE', code: null, planned: 50, count: 1 }]);
   });
   it('a day belongs to the year it is in Kigali', () => {
     expect(yearOf('2026-12-31T23:30:00Z')).toBe(2027);
@@ -154,18 +167,33 @@ describe('budget', () => {
     expect((await get('p-choir-member', `/api/money/budget?${S}&year=2026`)).status).toBe(404);
     expect((await get('p-ctr', `/api/money/budget?systemId=sys-youth&year=2026`)).status).toBe(404);
   });
-  it('zero removes a line; the president approves; an approved budget is locked until reopened', async () => {
+  it('zero removes a line; the president sends the budget and the Church Leader approves it; an approved budget is locked until reopened', async () => {
     const line = (planned: number) => put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'DONATION', planned });
+    const send = (as = 'p-choir-leader') => post(as, '/api/money/budget/submit', { systemId: 'sys-choir', year: 2026 });
+    const decide = (body: object, as = 'p-pastor') => post(as, '/api/money/budget/decide', { systemId: 'sys-choir', year: 2026, ...body });
     await line(5000);
     await line(0);
     expect((await get('p-ctr', `/api/money/budget?${S}&year=2026`)).body.lines).toHaveLength(0);
-    expect((await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 })).status).toBe(409);
+    expect((await send()).status).toBe(409); // nothing to send
     await line(4000);
-    expect((await post('p-ctr', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 })).status).toBe(403);
-    expect((await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 })).status).toBe(200);
-    expect((await line(4500)).status).toBe(409);
-    expect((await post('p-choir-leader', '/api/money/budget/reopen', { systemId: 'sys-choir', year: 2026 })).status).toBe(200);
+    expect((await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 })).status).toBe(409); // a unit's budget is approved by the Church Leader
+    expect((await send('p-ctr')).status).toBe(403);
+    expect((await send()).status).toBe(201);
+    expect((await line(4500)).status).toBe(409); // locked while with the Church Leader
+    expect((await decide({ approve: false }, 'p-choir-leader')).status).toBe(404); // the president cannot decide
+    expect((await decide({ approve: false })).body.code).toBe('REASON_REQUIRED');
+    expect((await decide({ approve: false, reason: 'Cut transport' })).status).toBe(200);
+    const back = (await get('p-choir-leader', `/api/money/budget?${S}&year=2026`)).body;
+    expect(back.status).toBe('DRAFT');
+    expect(back.submission).toMatchObject({ status: 'RETURNED', decisionNote: 'Cut transport' });
     expect((await line(4500)).status).toBe(200);
+    expect((await send()).status).toBe(201);
+    expect((await decide({ approve: true })).status).toBe(200);
+    expect((await decide({ approve: true })).status).toBe(409);
+    expect((await get('p-choir-leader', `/api/money/budget?${S}&year=2026`)).body).toMatchObject({ status: 'APPROVED', canWithdraw: true, canSubmit: false });
+    expect((await line(4600)).status).toBe(409);
+    expect((await post('p-choir-leader', '/api/money/budget/reopen', { systemId: 'sys-choir', year: 2026 })).status).toBe(200);
+    expect((await line(4600)).status).toBe(200);
   });
 });
 
@@ -182,22 +210,36 @@ describe('action plan and accounting', () => {
     expect(r.body.totals.planned).toBe(50000);
     expect(r.body.items).toHaveLength(2);
     expect((await post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'x', amount: 1, dueMonth: '2026-13', category: 'SUPPLIES' })).status).toBe(400);
-    expect((await patch('p-choir-leader', `/api/money/plan/${a}`, { title: 'Nope' })).status).toBe(403);
+    expect((await patch('p-choir-member', `/api/money/plan/${a}`, { title: 'Nope' })).status).toBe(404);
+    expect((await patch('p-choir-leader', `/api/money/plan/${a}`, { title: 'President may edit' })).status).toBe(200);
   });
-  it('every activity must be tied to a spending line of the budget', async () => {
-    const plan = (body: object) => post('p-ctr', '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Chairs', amount: 1000, ...body });
+  it('every activity has a category; a category without a line gets one from its activities, and the President may plan', async () => {
+    const plan = (body: object, as = 'p-ctr') => post(as, '/api/money/plan', { systemId: 'sys-choir', year: 2026, title: 'Chairs', amount: 1000, ...body });
     expect((await plan({})).status).toBe(400);
-    expect((await plan({ category: 'SUPPLIES' })).status).toBe(409);
-    expect((await get('p-ctr', `/api/money/plan?${S}&year=2026`)).body.budgetCategories).toEqual([]);
-    await line('SUPPLIES');
     const id = (await plan({ category: 'SUPPLIES' })).body.id;
-    expect((await get('p-ctr', `/api/money/plan?${S}&year=2026`)).body.budgetCategories).toEqual(['SUPPLIES']);
+    const bud = (await get('p-ctr', `/api/money/budget?${S}&year=2026`)).body;
+    expect(bud.lines).toHaveLength(1);
+    expect(bud.lines[0]).toMatchObject({ category: 'SUPPLIES', derived: true, planned: 1000 });
+    expect(bud.totals.spending).toBe(1000);
+    // the President writes an activity with its funding; it counts at once
+    expect((await plan({ category: 'EVENT', amount: 500, fundingKind: 'CONTRIBUTION', fundingCode: 'NOPE' }, 'p-choir-leader')).body.code).toBe('FUNDING_TYPE');
+    expect((await plan({ category: 'EVENT', amount: 500, fundingKind: 'CONTRIBUTION', fundingCode: 'BUILDING' }, 'p-choir-leader')).status).toBe(201);
+    expect((await plan({ category: 'EVENT', amount: 200, fundingKind: 'DONATION', fundingNote: 'Appeal' }, 'p-choir-leader')).status).toBe(201);
+    const after = (await get('p-choir-leader', `/api/money/budget?${S}&year=2026`)).body;
+    expect(after.totals.spending).toBe(1700);
+    expect(after.funding.map((f: any) => [f.kind, f.code, f.planned])).toEqual([['CONTRIBUTION', 'BUILDING', 500], ['DONATION', null, 200], ['NONE', null, 1000]]);
     expect((await patch('p-ctr', `/api/money/plan/${id}`, { category: null })).status).toBe(400);
-    expect((await patch('p-ctr', `/api/money/plan/${id}`, { category: 'TRANSPORT' })).status).toBe(409);
     // a line with live activities cannot be removed
+    await line('SUPPLIES');
     expect((await line('SUPPLIES', 0)).status).toBe(409);
     await patch('p-ctr', `/api/money/plan/${id}`, { status: 'DROPPED' });
     expect((await line('SUPPLIES', 0)).status).toBe(200);
+    // once the budget is with the Church Leader the figures are fixed, but finishing and dropping stay open
+    const keep = (await plan({ category: 'TRANSPORT', amount: 300 })).body.id;
+    expect((await post('p-choir-leader', '/api/money/budget/submit', { systemId: 'sys-choir', year: 2026 })).status).toBe(201);
+    expect((await plan({ category: 'AID' })).body.code).toBe('BUDGET_LOCKED');
+    expect((await patch('p-ctr', `/api/money/plan/${keep}`, { amount: 999 })).body.code).toBe('BUDGET_LOCKED');
+    expect((await patch('p-ctr', `/api/money/plan/${keep}`, { status: 'DONE' })).status).toBe(200);
   });
   it('the budget shows committed and recorded per line, and what is not tied to any line', async () => {
     await line('SUPPLIES', 10000);
@@ -226,43 +268,47 @@ describe('action plan and accounting', () => {
   });
 });
 
-describe('sending the budget to Central', () => {
+describe('sending the budget to the Church Leader', () => {
   const sendable = async () => {
     await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'INCOME', category: 'DONATION', planned: 5000 });
     await put('p-ctr', '/api/money/budget/lines', { systemId: 'sys-choir', year: 2026, kind: 'SPENDING', category: 'SUPPLIES', planned: 3000 });
   };
   const submit = (as: string) => post(as, '/api/money/budget/submit', { systemId: 'sys-choir', year: 2026 });
-  it('only an approved budget goes, and only by the president', async () => {
+  it('only the president sends it, once, and then it waits for a decision', async () => {
+    expect((await submit('p-choir-leader')).status).toBe(409); // empty
     await sendable();
-    expect((await submit('p-choir-leader')).status).toBe(409);
-    await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 });
     expect((await submit('p-ctr')).status).toBe(403);
     expect((await submit('p-choir-member')).status).toBe(404);
     expect((await submit('p-choir-leader')).status).toBe(201);
+    expect((await submit('p-choir-leader')).body.code).toBe('BUDGET_LOCKED');
     const view = (await get('p-choir-leader', `/api/money/budget?${S}&year=2026`)).body;
-    expect(view.submission.submittedAt).toBeTruthy();
-    expect(view.canSubmit).toBe(true);
+    expect(view.submission).toMatchObject({ status: 'SUBMITTED' });
+    expect(view.status).toBe('SUBMITTED');
+    expect(view.canSubmit).toBe(false);
+    expect(view.canWithdraw).toBe(true);
+    expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-pastor' && /to decide/.test(n.title))).toBe(true);
   });
-  it('Central sees the newest copy of each system and the church-wide totals, and others see nothing', async () => {
+  it('Central sees the newest copy of each system with its decision state and the church-wide totals, and others see nothing', async () => {
     await sendable();
-    await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 });
     await submit('p-choir-leader');
     expect((await get('p-choir-leader', '/api/money/budget/church?systemId=sys-main&year=2026')).status).toBe(404);
     expect((await get('p-choir-member', '/api/money/budget/church?systemId=sys-main&year=2026')).status).toBe(404);
     const central = await get('p-pastor', '/api/money/budget/church?systemId=sys-main&year=2026');
     expect(central.status).toBe(200);
     expect(central.body.systems.map((x: any) => x.systemId)).toEqual(['sys-choir']);
+    expect(central.body.systems[0]).toMatchObject({ status: 'SUBMITTED', canDecide: true });
     expect(central.body.totals).toMatchObject({ incomePlanned: 5000, spendingPlanned: 3000 });
     expect(central.body.missing.map((x: any) => x.systemId)).toContain('sys-youth');
-    // each unit opens up to its lines and the activities tied to them
     expect(central.body.systems[0].lines.map((l: any) => l.category)).toEqual(['DONATION', 'SUPPLIES']);
-    expect(central.body.systems[0].activities).toEqual([]);
+    await post('p-pastor', '/api/money/budget/decide', { systemId: 'sys-choir', year: 2026, approve: true });
+    const after = (await get('p-pastor', '/api/money/budget/church?systemId=sys-main&year=2026')).body;
+    expect(after.systems[0]).toMatchObject({ status: 'APPROVED', canDecide: false, decidedByName: expect.any(String) });
+    expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-choir-leader' && /approved/.test(n.title))).toBe(true);
   });
   it('Central Administration’s own budget is read live and counts in the overall total, with its activities', async () => {
     fake.__db.moneyBudgetLine.push({ id: 'bl-main', systemId: 'sys-main', year: 2026, kind: 'SPENDING', category: 'SUPPLIES', planned: 7000, updatedById: 'p-pastor' });
     fake.__db.moneyPlanItem.push({ id: 'pi-main', systemId: 'sys-main', year: 2026, title: 'Sound system', amount: 2000, status: 'PLANNED', category: 'SUPPLIES', createdById: 'p-pastor' });
     await sendable();
-    await post('p-choir-leader', '/api/money/budget/approve', { systemId: 'sys-choir', year: 2026 });
     await submit('p-choir-leader');
     const r = (await get('p-pastor', '/api/money/budget/church?systemId=sys-main&year=2026')).body;
     expect(r.systems.map((x: any) => [x.systemId, x.own])).toEqual([['sys-main', true], ['sys-choir', false]]);
@@ -428,6 +474,12 @@ describe('money tied to a program, project or event', () => {
     const rep = await get('p-ctr', `/api/money/report?${S}&year=2026`);
     expect(rep.body.byPlan).toEqual([{ planId: 'wp1', title: 'Christmas concert', planned: 300, income: 1000, spending: 400, pending: 0 }]);
     expect((await get('p-ctr', `/api/money/plan-money?${S}&planId=wp-other`)).status).toBe(404);
+    // a program adds up what is linked beneath it
+    fake.__db.workPlan.push({ id: 'wp-prog', systemId: 'sys-choir', title: 'Outreach', planType: 'PROGRAM', status: 'RUNNING' });
+    fake.__db.workPlan.find((x: any) => x.id === 'wp1').parentId = 'wp-prog';
+    const up = await get('p-ctr', `/api/money/plan-money?${S}&planId=wp-prog`);
+    expect(up.body.linked).toMatchObject({ plans: 1, planned: 300, income: 1000, spending: 400 });
+    expect(m2.body.linked).toBeNull();
     expect((await get('p-choir-member', `/api/money/plan-money?${S}&planId=wp1`)).status).toBe(404);
   });
 });

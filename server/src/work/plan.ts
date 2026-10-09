@@ -145,3 +145,25 @@ export const typeProblem = (action: Action, planType: string | null | undefined)
   const only = ONLY[action];
   return only && !only.includes(planType ?? 'PROJECT') ? 'WRONG_STATE' : null;
 };
+
+/** Which kind of work may sit under which: a project under a program, an event under a program or a project. Links are always optional. */
+const PARENTS: Record<string, string[]> = { PROJECT: ['PROGRAM'], EVENT: ['PROGRAM', 'PROJECT'] };
+export const parentProblem = (childType: string | null | undefined, parentType: string | null | undefined): 'BAD_PARENT' | null =>
+  (PARENTS[childType ?? 'PROJECT'] ?? []).includes(parentType ?? 'PROJECT') ? null : 'BAD_PARENT';
+
+/** Every plan below this one, however deep, never looping. */
+export function descendantsOf(id: string, rows: Array<{ id: string; parentId?: string | null }>): string[] {
+  const out: string[] = [];
+  const seen = new Set([id]);
+  let front = [id];
+  while (front.length) {
+    const next = rows.filter((r) => r.parentId && front.includes(r.parentId) && !seen.has(r.id));
+    next.forEach((r) => seen.add(r.id));
+    out.push(...next.map((r) => r.id));
+    front = next.map((r) => r.id);
+  }
+  return out;
+}
+
+/** An indicator's progress against its target, as a whole percentage (not capped, so exceeding shows). */
+export const indicatorPercent = (current: number | null, target: number): number | null => (current === null || !target ? null : Math.round((current / target) * 100));

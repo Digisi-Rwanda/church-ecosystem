@@ -1,14 +1,14 @@
 import { ImportLink } from './imports/ImportLink';
-import { useState, type FormEvent } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
-import { addMoneyPlanItem, changeMoneyPlanItem, fetchMoneyPlan, type MoneyPlanItemView } from '../api/frontDoorApi';
+import { changeMoneyPlanItem, fetchMoneyPlan, type MoneyPlanItemView } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
-import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
-import { categoryKey, formatRwf, moneyErrorKey, parseAmount } from './money';
-import { PlanSelect, YearSelect } from './MoneyBlockParts';
+import { ActivityForm, fundingLabel } from './ActivityForm';
+import { categoryKey, formatRwf, moneyErrorKey } from './money';
+import { YearSelect } from './MoneyBlockParts';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
 
@@ -19,11 +19,6 @@ export function MoneyPlanPage() {
   const [year, setYear] = useState(new Date().getUTCFullYear());
   const { loading, failed, data, reload } = useLoad(() => fetchMoneyPlan(systemId, year), `mplan|${systemId}|${year}`);
   const [error, setError] = useState('');
-  const [title, setTitle] = useState('');
-  const [amount, setAmount] = useState('');
-  const [month, setMonth] = useState('');
-  const [category, setCategory] = useState('');
-  const [planId, setPlanId] = useState('');
   const run = async (job: () => Promise<void>) => {
     setError('');
     try {
@@ -33,18 +28,6 @@ export function MoneyPlanPage() {
     } catch (e) {
       setError(t(moneyErrorKey(errorCode(e)) as 'door.people.actionFailed'));
       return false;
-    }
-  };
-  const add = async (e: FormEvent) => {
-    e.preventDefault();
-    const n = amount.trim() === '' ? 0 : parseAmount(amount);
-    if (!title.trim() || n === null || !category) return setError(t(!category ? 'door.money.err.categoryRequired' : 'door.money.form.incomplete'));
-    if (await run(() => addMoneyPlanItem({ systemId, year, title: title.trim(), amount: n, dueMonth: month || null, category, planId: planId || null }))) {
-      setTitle('');
-      setAmount('');
-      setMonth('');
-      setCategory('');
-      setPlanId('');
     }
   };
   const row = (i: MoneyPlanItemView) => (
@@ -60,6 +43,7 @@ export function MoneyPlanPage() {
           {i.category ? ` · ${t(categoryKey(i.category) as 'door.money.cat.OTHER')}` : ` · ${t('door.money.plan.notTied')}`}
           {i.planTitle && ` · ${i.planTitle}`}
         </p>
+        <p className="muted">{t('door.money.activity.paidFrom')}: {fundingLabel(t, i.fundingKind || null, i.fundingCode ? data?.fundingTypes.find((x) => x.code === i.fundingCode)?.name ?? i.fundingCode : null, i.fundingNote)}</p>
         {data?.canWrite && i.status === 'PLANNED' && (
           <div className="door-row">
             <button type="button" className="btn sm" onClick={() => void run(() => changeMoneyPlanItem(i.id, { status: 'DONE' }))}>
@@ -97,27 +81,7 @@ export function MoneyPlanPage() {
             <p>
               <strong>{t('door.money.plan.total')}</strong> {formatRwf(data.totals.planned)} · {t('door.money.plan.budgetSpending')} {formatRwf(data.totals.budgetSpending)}
             </p>
-            {data.canWrite && (
-              <form className="panel door-form" onSubmit={add} noValidate>
-                <h3>{t('door.money.plan.new')}</h3>
-                <TextField label={t('door.money.plan.title')} name="mp-title" maxLength={120} value={title} onChange={(e) => setTitle(e.target.value)} />
-                <TextField label={t('door.money.plan.cost')} name="mp-cost" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
-                <TextField label={t('door.money.plan.month')} name="mp-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
-                {data.budgetCategories.length === 0 && <p className="door-error" role="status">{t('door.money.plan.needLine')}</p>}
-                <SelectField label={t('door.money.plan.chooseLine')} name="mp-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
-                  <option value="">{t('door.gov.meeting.choose')}</option>
-                  {data.budgetCategories.map((c) => (
-                    <option key={c} value={c}>
-                      {t(categoryKey(c) as 'door.money.cat.OTHER')}
-                    </option>
-                  ))}
-                </SelectField>
-                <PlanSelect systemId={systemId} name="mp-plan" value={planId} onChange={setPlanId} />
-                <button type="submit" className="btn">
-                  {t('door.money.plan.add')}
-                </button>
-              </form>
-            )}
+            {data.canWrite && <ActivityForm systemId={systemId} year={year} view={data} onSaved={reload} />}
             {data.items.length === 0 ? <EmptyState title={t('door.money.plan.none')} /> : <ul className="door-notices">{data.items.map(row)}</ul>}
           </>
         )}

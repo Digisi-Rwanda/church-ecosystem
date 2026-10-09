@@ -4,7 +4,8 @@
  */
 import { CATEGORIES, RETIRED_CATEGORIES } from './rules.js';
 
-export const BUDGET_STATUS = ['DRAFT', 'APPROVED'] as const;
+export const BUDGET_STATUS = ['DRAFT', 'SUBMITTED', 'APPROVED'] as const;
+export const FUNDING_KINDS = ['CONTRIBUTION', 'DONATION', 'OTHER'] as const;
 export const PLAN_STATUS = ['PLANNED', 'DONE', 'DROPPED'] as const;
 export const LIST_LEVELS = ['TEAM', 'UNIT'] as const;
 export const LIST_STATUS = ['DRAFT', 'SUBMITTED', 'COMBINED', 'APPROVED', 'RETURNED'] as const;
@@ -130,16 +131,25 @@ export function moneyByPlan(items: PlanLinkedItem[], entries: PlanLinkedEntry[])
 
 /* ───────────── budget lines tied to activities ───────────── */
 
-export interface PlanItemLike { id: string; title: string; amount: number; status: string; category?: string | null; dueMonth?: string | null; planId?: string | null }
+export interface PlanItemLike {
+  id: string; title: string; amount: number; status: string; category?: string | null; dueMonth?: string | null; planId?: string | null;
+  fundingKind?: string | null; fundingCode?: string | null; fundingNote?: string | null;
+}
 export interface BudgetLineRow extends BudgetLineLike { id: string; note?: string | null }
 export interface LineUsage {
-  id: string; kind: 'INCOME' | 'SPENDING'; category: string; planned: number;
+  id: string; kind: 'INCOME' | 'SPENDING'; category: string;
+  /** Income: what was set. Spending: the larger of what was set aside and what the activities add up to. */
+  planned: number;
+  /** Spending only: the amount set aside on the line itself (0 when the line exists only because of activities). */
+  setAside: number;
+  /** True when no line was written for this category: it exists because activities were planned in it. */
+  derived: boolean;
   /** Cost of the activities tied to this line (spending lines only; dropped activities do not count). */
   committed: number;
   /** Money really recorded in the year: income recorded, spending approved. */
   actual: number;
   /** The activities tied to this line, spending lines only. */
-  activities: Array<{ id: string; title: string; amount: number; status: string; dueMonth: string | null; planId: string | null }>;
+  activities: Array<{ id: string; title: string; amount: number; status: string; dueMonth: string | null; planId: string | null; fundingKind: string | null; fundingCode: string | null; fundingNote: string | null }>;
 }
 
 /**
@@ -149,28 +159,53 @@ export interface LineUsage {
  */
 export function budgetUsage(lines: BudgetLineRow[], items: PlanItemLike[], entries: EntryLike[], year: number) {
   const live = items.filter((i) => i.status !== 'DROPPED');
-  const spendingCats = new Set(lines.filter((l) => l.kind === 'SPENDING').map((l) => l.category));
+  const actualOf = (kind: string, category: string) =>
+    entries.filter((e) => e.kind === kind && e.status === (kind === 'INCOME' ? 'RECORDED' : 'APPROVED') && e.category === category && yearOf(e.occurredOn) === year).reduce((s, e) => s + e.amount, 0);
+  const act = (i: PlanItemLike) => ({ id: i.id, title: i.title, amount: i.amount, status: i.status, dueMonth: i.dueMonth ?? null, planId: i.planId ?? null, fundingKind: i.fundingKind ?? null, fundingCode: i.fundingCode ?? null, fundingNote: i.fundingNote ?? null });
   const rows: LineUsage[] = lines.map((l) => {
     const acts = l.kind === 'SPENDING' ? live.filter((i) => i.category === l.category) : [];
-    const counts = l.kind === 'INCOME' ? 'RECORDED' : 'APPROVED';
-    const actual = entries
-      .filter((e) => e.kind === l.kind && e.status === counts && e.category === l.category && yearOf(e.occurredOn) === year)
-      .reduce((s, e) => s + e.amount, 0);
+    const committed = acts.reduce((s, i) => s + i.amount, 0);
     return {
-      id: l.id, kind: l.kind as 'INCOME' | 'SPENDING', category: l.category, planned: l.planned,
-      committed: acts.reduce((s, i) => s + i.amount, 0), actual,
-      activities: acts.map((i) => ({ id: i.id, title: i.title, amount: i.amount, status: i.status, dueMonth: i.dueMonth ?? null, planId: i.planId ?? null })),
+      id: l.id, kind: l.kind as 'INCOME' | 'SPENDING', category: l.category,
+      planned: l.kind === 'SPENDING' ? Math.max(l.planned, committed) : l.planned,
+      setAside: l.kind === 'SPENDING' ? l.planned : 0, derived: false,
+      committed, actual: actualOf(l.kind, l.category), activities: acts.map(act),
     };
   });
-  const loose = live.filter((i) => !i.category || !spendingCats.has(i.category));
-  return { lines: rows, unlinked: { count: loose.length, amount: loose.reduce((s, i) => s + i.amount, 0) } };
+  // A category with activities but no line still has a budget line: the activities themselves are its line items.
+  const have = new Set(lines.filter((l) => l.kind === 'SPENDING').map((l) => l.category));
+  const extra = [...new Set(live.map((i) => i.category).filter((c): c is string => !!c && !have.has(c)))].sort((x, y) => order(x) - order(y));
+  for (const category of extra) {
+    const acts = live.filter((i) => i.category === category);
+    const committed = acts.reduce((s, i) => s + i.amount, 0);
+    rows.push({ id: `derived:${category}`, kind: 'SPENDING', category, planned: committed, setAside: 0, derived: true, committed, actual: actualOf('SPENDING', category), activities: acts.map(act) });
+  }
+  const loose = live.filter((i) => !i.category);
+  return { lines: rows, unlinked: { count: loose.length, amount: loose.reduce((s, i) => s + i.amount, 0) }, funding: fundingOf(live) };
+}
+
+export interface FundingRow { kind: string; code: string | null; planned: number; count: number }
+/** What the activities will be paid from: contributions by type, donations, other, and activities with no source yet. */
+export function fundingOf(items: PlanItemLike[]): FundingRow[] {
+  const m = new Map<string, FundingRow>();
+  for (const i of items.filter((x) => x.status !== 'DROPPED')) {
+    const kind = i.fundingKind ?? 'NONE';
+    const code = kind === 'CONTRIBUTION' ? i.fundingCode ?? null : null;
+    const key = `${kind}|${code ?? ''}`;
+    const r = m.get(key) ?? { kind, code, planned: 0, count: 0 };
+    r.planned += i.amount; r.count += 1;
+    m.set(key, r);
+  }
+  const rank = (k: string) => ['CONTRIBUTION', 'DONATION', 'OTHER', 'NONE'].indexOf(k);
+  return [...m.values()].sort((a, b) => rank(a.kind) - rank(b.kind) || (a.code ?? '').localeCompare(b.code ?? ''));
 }
 
 export interface BudgetSnapshot {
   version: 1; year: number;
   totals: { incomePlanned: number; incomeActual: number; spendingPlanned: number; spendingCommitted: number; spendingActual: number };
   lines: Array<{ kind: 'INCOME' | 'SPENDING'; category: string; planned: number; committed: number; actual: number }>;
-  activities: Array<{ title: string; category: string; dueMonth: string | null; amount: number; status: string; planTitle: string | null }>;
+  activities: Array<{ title: string; category: string; dueMonth: string | null; amount: number; status: string; planTitle: string | null; fundingKind?: string | null; fundingCode?: string | null }>;
+  funding?: FundingRow[];
 }
 
 /** The frozen copy a unit sends to Central: lines, what is committed and recorded, and the activities. */
@@ -183,7 +218,8 @@ export function budgetSnapshot(usage: ReturnType<typeof budgetUsage>, year: numb
       spendingPlanned: sumOf('SPENDING', (l) => l.planned), spendingCommitted: sumOf('SPENDING', (l) => l.committed), spendingActual: sumOf('SPENDING', (l) => l.actual),
     },
     lines: usage.lines.map((l) => ({ kind: l.kind, category: l.category, planned: l.planned, committed: l.committed, actual: l.actual })),
-    activities: usage.lines.flatMap((l) => l.activities.map((a) => ({ title: a.title, category: l.category, dueMonth: a.dueMonth, amount: a.amount, status: a.status, planTitle: a.planId ? planTitles.get(a.planId) ?? null : null }))),
+    activities: usage.lines.flatMap((l) => l.activities.map((a) => ({ title: a.title, category: l.category, dueMonth: a.dueMonth, amount: a.amount, status: a.status, planTitle: a.planId ? planTitles.get(a.planId) ?? null : null, fundingKind: a.fundingKind, fundingCode: a.fundingCode }))),
+    funding: usage.funding,
   };
 }
 
@@ -201,5 +237,14 @@ export function combineBudgets(snaps: Array<{ systemId: string; snapshot: Budget
     }
   }
   const rows = [...byCategory.values()].sort((a, b) => a.kind.localeCompare(b.kind) || order(a.category) - order(b.category));
-  return { totals: t, byCategory: rows };
+  const fund = new Map<string, FundingRow>();
+  for (const { snapshot } of snaps) {
+    for (const f of snapshot.funding ?? []) {
+      const key = `${f.kind}|${f.code ?? ''}`;
+      const cur = fund.get(key) ?? { kind: f.kind, code: f.code, planned: 0, count: 0 };
+      cur.planned += f.planned; cur.count += f.count;
+      fund.set(key, cur);
+    }
+  }
+  return { totals: t, byCategory: rows, funding: [...fund.values()] };
 }
