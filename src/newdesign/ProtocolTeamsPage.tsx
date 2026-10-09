@@ -12,7 +12,7 @@ import { LoadState } from './LoadState';
 import { shiftMonth, thisMonth } from './music';
 import { ROLES, candidatesFor, issuesOfService, openBlocking, protocolErrorKey, sortIssues } from './protocol';
 import { downloadSchedulePdf } from './schedulePdf';
-import { DateTile, useMonthName, useShortDay } from './ScheduleShared';
+import { Bulletin, DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
 import { useLoad } from './useLoad';
 import { EmptyState, PageHeader, SidePanel, StatusChip, Tabs, initialsOf } from './kit';
 
@@ -104,7 +104,7 @@ function TeamEditor({ svc, month, view, act, onClose }: { svc: ProtocolServiceVi
 
 
 /** What Music decided for the month, read-only: the choirs on each service. */
-function ChoirSchedule({ view, state }: { view: ProtocolMonthView; state: 'CONFIRMED' | 'PUBLISHED' }) {
+function ChoirSchedule({ view, state, layout }: { view: ProtocolMonthView; state: 'CONFIRMED' | 'PUBLISHED'; layout: ScheduleViewKey }) {
   const t = useT();
   const monthName = useMonthName();
   const day = useShortDay();
@@ -116,7 +116,9 @@ function ChoirSchedule({ view, state }: { view: ProtocolMonthView; state: 'CONFI
   return (
     <>
       <div className="pt-bar"><span className="muted">v{view.music.version}</span><span className="pt-bar-actions"><button type="button" className="btn secondary" onClick={pdf}>{t('door.sch.pdf')}</button></span></div>
-      <ul className="pt-grid">
+      {layout === 'list' && <ScheduleList rows={view.services.map((s) => ({ id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), names: s.music.map((n) => ({ name: n })) }))} />}
+      {layout === 'bulletin' && <Bulletin title={monthName(view.month)} subtitle={t(`door.sch.tab.${state === 'PUBLISHED' ? 'published' : 'confirmed'}` as 'door.sch.tab.confirmed')} rows={view.services.map((s) => ({ id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), names: s.music.map((n) => ({ name: n })) }))} />}
+      {layout === 'cards' && <ul className="pt-grid">
         {view.services.map((s) => (
           <li key={s.id} className="pt-card">
             <div className="pt-card-head"><DateTile date={s.date} /><div className="pt-card-title"><strong>{t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}</strong></div></div>
@@ -125,7 +127,7 @@ function ChoirSchedule({ view, state }: { view: ProtocolMonthView; state: 'CONFI
             )}
           </li>
         ))}
-      </ul>
+      </ul>}
     </>
   );
 }
@@ -176,6 +178,7 @@ export function ProtocolTeamsPage() {
   const { locale } = useI18n();
   const monthName = useMonthName();
   const day = useShortDay();
+  const [layout, setLayout] = useScheduleView();
   const [month, setMonth] = useState(thisMonth());
   const data = useLoad(() => fetchProtocolMonth(month), `protocol-month|${month}`);
   const history = useLoad(() => fetchProtocolHistory(month), `protocol-history|${month}`);
@@ -212,11 +215,17 @@ export function ProtocolTeamsPage() {
       lines: s.team.length ? s.team.map((m) => `${m.name}${m.role !== 'MEMBER' ? ` - ${t(`door.protocol.role.${m.role}` as 'door.protocol.role.MEMBER')}` : ''}${m.slotKind !== 'REGULAR' ? ` (${t(`door.protocol.slot.${m.slotKind}` as 'door.protocol.slot.EXTRA')})` : ''}`) : ['-'],
     })));
   };
-  const grid = (edit: boolean) => v && (
+  const teamRows = (edit: boolean): ScheduleRow[] => (v?.services ?? []).map((s) => ({
+    id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), note: s.music.join(', ') || undefined,
+    names: s.team.map((m) => ({ name: m.name, tag: m.role !== 'MEMBER' ? t(`door.protocol.role.${m.role}` as 'door.protocol.role.MEMBER') : undefined })),
+    chip: <StatusChip tone={regular(s) >= s.target ? 'success' : 'warn'}>{t('door.protocol.teamSize', { count: String(regular(s)), target: String(s.target) })}</StatusChip>,
+    onEdit: edit ? () => setEditing(s.id) : undefined,
+  }));
+  const grid = (edit: boolean) => v && (layout === 'list' ? <ScheduleList rows={teamRows(edit)} /> : layout === 'bulletin' ? <Bulletin title={monthName(month)} subtitle={t('door.own.teams')} rows={teamRows(false)} /> : (
     <ul className="pt-grid">
       {v.services.map((s) => <ServiceCard key={s.id} svc={s} view={v} onEdit={edit ? () => setEditing(s.id) : undefined} />)}
     </ul>
-  );
+  ));
   const stale = v && v.stale.length > 0 && (
     <div className="pt-next pt-warn" role="status">
       <div className="pt-next-text"><strong>{t('door.protocol.stale.title')}</strong><span className="muted">{t('door.protocol.stale.body', { count: String(v.stale.length) })}</span></div>
@@ -234,8 +243,8 @@ export function ProtocolTeamsPage() {
   ];
   let body: ReactNode = null;
   if (v) {
-    if (tab === 'choirsConfirmed') body = <ChoirSchedule view={v} state="CONFIRMED" />;
-    else if (tab === 'choirsPublished') body = <ChoirSchedule view={v} state="PUBLISHED" />;
+    if (tab === 'choirsConfirmed') body = <ChoirSchedule view={v} state="CONFIRMED" layout={layout} />;
+    else if (tab === 'choirsPublished') body = <ChoirSchedule view={v} state="PUBLISHED" layout={layout} />;
     else if (tab === 'members') body = <Members view={v} />;
     else if (tab === 'draft') {
       if (v.status === 'OPEN') {
@@ -346,7 +355,7 @@ export function ProtocolTeamsPage() {
   }
   return (
     <section className="door-block pt-page" aria-labelledby="door-teams-title">
-      <PageHeader id="door-teams-title" title={t('door.own.teams')} meta={switcher} />
+      <PageHeader id="door-teams-title" title={t('door.own.teams')} meta={switcher} actions={<ViewSwitch value={layout} onChange={setLayout} />} />
       {error && <p className="door-error" role="alert">{error}</p>}
       <Tabs items={tabs} value={tab} onChange={go} label={t('door.own.teams')} />
       <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>{body}</LoadState>

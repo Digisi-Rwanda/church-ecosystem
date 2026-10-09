@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import type { Dashboard } from '../api/frontDoorApi';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { shortDay } from './charts';
+import { hasOwnSchedule } from './menu';
 import { formatRwf } from './money';
 
 function Card({ title, to, children }: { title: string; to: string; children: ReactNode }) {
@@ -45,7 +46,7 @@ export function DashboardOverview({ data, systemId }: { data: Dashboard; systemI
   const day = (iso: string | null) => (iso ? shortDay(iso.slice(0, 10), locale) : '');
   return (
     <>
-      {o.schedule && (
+      {o.schedule && !hasOwnSchedule(systemId) && (
         <Card title={t('door.block.schedule')} to={`${base}/schedule`}>
           {o.schedule.next.length === 0 ? (
             <p className="muted">{t('door.dash.schedule.none')}</p>

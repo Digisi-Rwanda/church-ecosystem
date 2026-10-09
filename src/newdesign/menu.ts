@@ -108,6 +108,9 @@ const MODULE_LABEL: Record<ModuleId, string> = {
   reports: 'door.block.reports', governance: 'door.own.governance', settings: 'door.own.settings',
 };
 
+/** Music and Protocol plan their month on their own pages (the month plan, the teams), so the general Schedule page is not shown there. */
+export const hasOwnSchedule = (systemId: string): boolean => systemId === 'sys-music' || systemId === 'sys-protocol';
+
 /** The Access page (who holds which office, the rules, lending) is for the church's Administrators only. */
 export const isAdministrator = (caps: Capabilities | null): boolean => !!caps?.offices?.some((o) => o.code === 'ADMINISTRATOR');
 
@@ -151,7 +154,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
         ]
       : [],
     schedule: [
-      ...(shared.has('schedule') ? [place('schedule', 'schedule', 'door.block.schedule')] : []),
+      ...(shared.has('schedule') && !hasOwnSchedule(systemId) ? [place('schedule', 'schedule', 'door.block.schedule')] : []),
       ...some(['monthplan', 'teams', 'mine', 'watches', 'pulpit'].map(ownPlace)),
     ],
     ministry: some(['choirs', 'rehearsals', 'repertoire', 'oversight', 'sponsorship', 'roster'].map(ownPlace)),

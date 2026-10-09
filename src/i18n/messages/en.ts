@@ -2589,6 +2589,14 @@ export const en = {
   'door.sch.pdfTitle': 'Choir schedule ({state})',
   'door.sch.pdfTitleTeams': 'Protocol teams ({state})',
 
+  'door.sch.view': 'View',
+  'door.sch.view.cards': 'Cards',
+  'door.sch.view.list': 'List',
+  'door.sch.view.bulletin': 'Bulletin',
+  'door.sch.col.date': 'Date',
+  'door.sch.col.service': 'Service',
+  'door.sch.col.who': 'Who',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

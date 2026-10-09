@@ -2,7 +2,7 @@ import { Link } from 'react-router-dom';
 import { Icon, type IconName } from '../components/ui/Icon';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
-import { buildMenu, buildOwnMenu } from './menu';
+import { buildMenu, buildOwnMenu, hasOwnSchedule } from './menu';
 import { LeaderDashboard } from './Dashboard';
 import { UrgentTile } from './UrgentTile';
 import { PageHeader } from './kit';
@@ -20,7 +20,7 @@ const OWN_ICON: Record<string, IconName> = {
 export function SystemHome({ systemId, systemName }: { systemId: string; systemName: string }) {
   const t = useT();
   const { capabilities } = useFrontDoor();
-  const shared = buildMenu(capabilities, systemId).filter((m) => m.block !== 'home');
+  const shared = buildMenu(capabilities, systemId).filter((m) => m.block !== 'home' && !(m.block === 'schedule' && hasOwnSchedule(systemId)));
   const own = buildOwnMenu(capabilities, systemId);
   const tiles = [
     ...shared.map((m) => ({

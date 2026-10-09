@@ -8,7 +8,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { addableUnits, musicErrorKey, scheduleErrorText, servicesOfMonth } from './music';
-import { DateTile, useMonthName, useShortDay } from './ScheduleShared';
+import { Bulletin, DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
 import { downloadSchedulePdf } from './schedulePdf';
 import { useLoad } from './useLoad';
 import { EmptyState, PageHeader, SidePanel, Tabs } from './kit';
@@ -84,13 +84,20 @@ function EditPanel({ svc, units, edit, onClose }: { svc: ScheduleService; units:
 }
 
 /** The services of a schedule, grouped by month, with the edit panel. */
-function Services({ services, months, units, edit }: { services: ScheduleService[]; months: string[]; units: Units; edit?: Edit }) {
+function Services({ services, months, units, edit, view }: { services: ScheduleService[]; months: string[]; units: Units; edit?: Edit; view: ScheduleViewKey }) {
+  const t = useT();
   const monthName = useMonthName();
   const [editing, setEditing] = useState<string | null>(null);
   const cur = services.find((s) => s.id === editing);
+  const rows: ScheduleRow[] = months.flatMap((m) => servicesOfMonth(services, m)).map((s) => ({
+    id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), names: s.units.map((u) => ({ name: u.name, tag: t(`door.music.role.${u.kind}` as 'door.music.role.PRIMARY') })),
+    onEdit: edit ? () => setEditing(s.id) : undefined,
+  }));
   return (
     <>
-      {months.map((m) => (
+      {view === 'list' && <ScheduleList rows={rows} />}
+      {view === 'bulletin' && <Bulletin rows={rows} title={months.length === 1 ? monthName(months[0]!) : t('door.own.monthplan')} subtitle={months.length > 1 ? `${monthName(months[0]!)} – ${monthName(months[months.length - 1]!)}` : undefined} />}
+      {view === 'cards' && months.map((m) => (
         <div key={m} className="pt-month-block">
           {months.length > 1 && <h3>{monthName(m)}</h3>}
           <ul className="pt-grid">
@@ -145,7 +152,7 @@ function ChangeLog({ month }: { month: string }) {
 }
 
 /** A built draft: confirm it, download it, or throw it away. */
-function DraftBody({ id, state, onDone, show }: { id: string; state: ScheduleState; onDone: (to?: Tab) => void; show: (e: unknown) => void }) {
+function DraftBody({ id, state, onDone, show, view }: { id: string; state: ScheduleState; onDone: (to?: Tab) => void; show: (e: unknown) => void; view: ScheduleViewKey }) {
   const t = useT();
   const day = useShortDay();
   const monthName = useMonthName();
@@ -171,7 +178,7 @@ function DraftBody({ id, state, onDone, show }: { id: string; state: ScheduleSta
             </span>
           </div>
           <Notes list={live.length ? live : d.warnings} />
-          <Services services={d.services} months={d.months.map((m) => m.periodKey)} units={state.units} edit={edit} />
+          <Services services={d.services} months={d.months.map((m) => m.periodKey)} units={state.units} edit={edit} view={view} />
         </>
       )}
     </LoadState>
@@ -179,7 +186,7 @@ function DraftBody({ id, state, onDone, show }: { id: string; state: ScheduleSta
 }
 
 /** A confirmed or published month. */
-function MonthBody({ month, mode, state, onDone, show }: { month: string; mode: 'confirmed' | 'published'; state: ScheduleState; onDone: (to?: Tab) => void; show: (e: unknown) => void }) {
+function MonthBody({ month, mode, state, onDone, show, view }: { month: string; mode: 'confirmed' | 'published'; state: ScheduleState; onDone: (to?: Tab) => void; show: (e: unknown) => void; view: ScheduleViewKey }) {
   const t = useT();
   const day = useShortDay();
   const monthName = useMonthName();
@@ -201,7 +208,7 @@ function MonthBody({ month, mode, state, onDone, show }: { month: string; mode: 
             </span>
           </div>
           <Notes list={m.warnings} />
-          <Services services={m.services} months={[month]} units={state.units} edit={m.canWrite ? edit : undefined} />
+          <Services services={m.services} months={[month]} units={state.units} edit={m.canWrite ? edit : undefined} view={view} />
           {m.canWrite && <ChangeLog month={month} />}
         </>
       )}
@@ -217,6 +224,7 @@ export function MonthPlanPage() {
   const s = state.data;
   const [tab, setTab] = useState<Tab | null>(null);
   const [picked, setPicked] = useState<Record<Tab, string>>({ generated: '', confirmed: '', published: '' });
+  const [view, setView] = useScheduleView();
   const [building, setBuilding] = useState(false);
   const [horizon, setHorizon] = useState<MusicHorizonKey>('MONTH');
   const [start, setStart] = useState('');
@@ -260,6 +268,7 @@ export function MonthPlanPage() {
       <PageHeader
         id="door-plan-title"
         title={t('door.own.monthplan')}
+        actions={<ViewSwitch value={view} onChange={setView} />}
         primary={canWrite ? <button type="button" className="btn" onClick={() => setBuilding(true)}>{t('door.sch.build')}</button> : undefined}
       />
       {error && <p className="door-error" role="alert">{error}</p>}
@@ -273,8 +282,8 @@ export function MonthPlanPage() {
               <>
                 <Picker items={items[current]} value={sel(current)} onPick={(k) => setPicked({ ...picked, [current]: k })} />
                 {current === 'generated'
-                  ? <DraftBody key={sel('generated')} id={sel('generated')} state={s} onDone={onDone} show={show} />
-                  : <MonthBody key={`${current}-${sel(current)}`} month={sel(current)} mode={current} state={s} onDone={onDone} show={show} />}
+                  ? <DraftBody key={sel('generated')} id={sel('generated')} state={s} onDone={onDone} show={show} view={view} />
+                  : <MonthBody key={`${current}-${sel(current)}`} month={sel(current)} mode={current} state={s} onDone={onDone} show={show} view={view} />}
               </>
             )}
           </>
