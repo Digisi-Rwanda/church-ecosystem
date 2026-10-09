@@ -784,6 +784,11 @@ model WorkPlan {
   reportPublishedAt    DateTime?
   /// The frozen report, written once when it is published
   reportJson           String?
+  /// Events: people may register while this is on (set once the event is set up)
+  registrationOpen     Boolean   @default(false)
+  capacity             Int?
+  /// Events: a secret link anyone can use to register, only when the team turns it on
+  publicToken          String?
   createdById          String
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
@@ -812,6 +817,37 @@ model WorkPlanCheck {
   doneById    String?
   doneAt      DateTime?
   createdAt   DateTime  @default(now())
+
+  @@index([planId])
+}
+
+/// A project's milestone: a dated step with a done mark.
+model WorkPlanMilestone {
+  id        String    @id @default(cuid())
+  planId    String
+  title     String
+  dueOn     DateTime?
+  done      Boolean   @default(false)
+  doneById  String?
+  doneAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([planId])
+}
+
+/// An event's registration. A member (personId), a guest added by staff, or a guest from the public link. Attendance is marked on the day.
+model WorkPlanRegistration {
+  id           String    @id @default(cuid())
+  planId       String
+  personId     String?
+  name         String
+  phone        String?
+  /// MEMBER | STAFF | PUBLIC
+  source       String
+  attended     Boolean   @default(false)
+  attendedAt   DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime  @default(now())
 
   @@index([planId])
 }

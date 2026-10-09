@@ -71,6 +71,10 @@ const ERROR_KEYS: Record<string, string> = {
   REPORT_INCOMPLETE: 'door.plan.err.reportIncomplete',
   CHECKLIST_OPEN: 'door.plan.err.checklistOpen',
   TOO_MANY: 'door.plan.err.tooMany',
+  EVENT_FULL: 'door.plan.err.full',
+  ALREADY_REGISTERED: 'door.plan.err.already',
+  REGISTRATION_CLOSED: 'door.plan.err.regClosed',
+  ALREADY_ATTENDED: 'door.plan.err.attended',
   BAD_DATES: 'door.gov.err.badDates',
   PERSON_NOT_ACTIVE: 'door.gov.err.personNotActive',
   UNIT_HAS_NO_SYSTEM: 'door.gov.err.noSystem',
@@ -85,3 +89,6 @@ export function monthKeyOf(iso: string | null): string {
   const d = new Date(new Date(iso).getTime() + 2 * 3600 * 1000);
   return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 }
+
+/** The address a guest opens to register for an event. */
+export const publicEventUrl = (token: string): string => `${window.location.origin}/e/${token}`;

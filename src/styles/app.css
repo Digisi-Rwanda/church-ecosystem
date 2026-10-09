@@ -7540,3 +7540,7 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .door-guide ol { margin: 0.5rem 0 0; padding-left: 1.25rem; display: grid; gap: 0.35rem; }
 .door-guide li.done { opacity: 0.6; }
 .door-guide li.current { border-left: 3px solid var(--accent); padding-left: 0.5rem; margin-left: -0.75rem; }
+
+.door-link { flex: 1; min-width: 12rem; padding: .5rem .6rem; border: 1px solid var(--line, #d0d0d0); border-radius: 6px; background: transparent; color: inherit; font: inherit; }
+.door-guide-box { display: grid; gap: .5rem; margin: .75rem 0; }
+.door-trap { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }

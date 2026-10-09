@@ -36,7 +36,7 @@ function routes(): RouteDef[] {
 }
 
 // Doors that are public or about the caller's own sign-in.
-const PUBLIC = [/^\/api\/health/, /^\/api\/auth\//, /^\/api\/sso\/redeem/, /^\/api\/sso\/handoff/];
+const PUBLIC = [/^\/api\/health/, /^\/api\/auth\//, /^\/api\/sso\/redeem/, /^\/api\/sso\/handoff/, /^\/api\/public\/events\//];
 const isPublic = (p: string) => PUBLIC.some((re) => re.test(p));
 
 beforeEach(async () => {

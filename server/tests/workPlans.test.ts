@@ -53,7 +53,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'workPlan', 'workPlanNote', 'workPlanCheck']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'workPlan', 'workPlanNote', 'workPlanCheck', 'workPlanMilestone', 'workPlanRegistration']) db[k] ??= [];
   for (const s of db.churchSystem) {
     s.code = s.id.replace('sys-', '').toUpperCase();
     s.name = s.id;
@@ -245,6 +245,87 @@ describe('lifecycles by type', () => {
     const j = await running({ planType: 'PROJECT' });
     await post('p-vp', `${B}/${j}/close`);
     expect((await post('p-vp', `${B}/${j}/renew`)).status).toBe(409);
+  });
+});
+
+describe('event registration and attendance', () => {
+  const ev = async () => running({ planType: 'EVENT' });
+  const reg = (as: string, id: string, b: object) => patch(as, `${B}/${id}/registration`, b);
+  it('only the team opens registration, and only while the event is set up or running', async () => {
+    const d = await draft({ planType: 'EVENT' });
+    expect((await reg('p-vp', d, { open: true })).status).toBe(403);
+    const id = await ev();
+    expect((await reg('p-choir-member', id, { open: true })).status).toBe(403);
+    const r = (await reg('p-vp', id, { open: true, capacity: 2 })).body.plan.registration;
+    expect(r).toMatchObject({ open: true, capacity: 2, spotsLeft: 2, canRegister: true });
+  });
+  it('a member registers once, cancels, and the places run out', async () => {
+    const id = await ev();
+    await reg('p-vp', id, { open: true, capacity: 2 });
+    expect((await post('p-choir-member', `${B}/${id}/register`)).status).toBe(201);
+    expect((await post('p-choir-member', `${B}/${id}/register`)).body.code).toBe('ALREADY_REGISTERED');
+    expect((await post('p-vp', `${B}/${id}/registrations`, { name: 'Guest One', phone: '0788000001' })).status).toBe(201);
+    expect((await post('p-vp', `${B}/${id}/registrations`, { name: 'Guest Two', phone: '0788000002' })).body.code).toBe('EVENT_FULL');
+    const mine = (await get('p-choir-member', `${B}/${id}`)).body.plan.registration;
+    expect(mine.count).toBe(2);
+    expect(mine.mine).toBeTruthy();
+    expect((await del('p-choir-member', `${B}/${id}/register`)).body.plan.registration.count).toBe(1);
+  });
+  it('closed registration refuses; projects have none', async () => {
+    const id = await ev();
+    expect((await post('p-choir-member', `${B}/${id}/register`)).body.code).toBe('REGISTRATION_CLOSED');
+    const pj = await running({ planType: 'PROJECT' });
+    expect((await reg('p-vp', pj, { open: true })).status).toBe(403);
+  });
+  it('the team marks attendance while the event runs; others cannot, and the list stays with the team', async () => {
+    const id = await ev();
+    await reg('p-vp', id, { open: true });
+    await post('p-youth-member', `${B}/${id}/register`).catch(() => null);
+    await post('p-vp', `${B}/${id}/registrations`, { name: 'Guest', phone: '0788111111' });
+    const items = (await get('p-vp', `${B}/${id}`)).body.plan.registration.items;
+    expect(items).toHaveLength(1);
+    expect((await patch('p-choir-member', `${B}/${id}/registrations/${items[0].id}`, { attended: true })).body.plan.registration.attended).toBe(1);
+    expect((await get('p-choir-member', `${B}/${id}`)).body.plan.registration.attended).toBe(1);
+  });
+  it('the public link shows an invitation, takes a name and a phone, and nothing else', async () => {
+    const id = await ev();
+    await reg('p-vp', id, { open: true, capacity: 1 });
+    const token = (await reg('p-vp', id, { publicLink: true })).body.plan.registration.publicToken;
+    expect(token).toBeTruthy();
+    expect((await get('p-choir-member', `${B}/${id}`)).body.plan.registration.publicToken).toBeNull();
+    const view = await request(app).get(`/api/public/events/${token}`);
+    expect(view.status).toBe(200);
+    expect(Object.keys(view.body.event).sort()).toEqual(['aim', 'endsOn', 'full', 'location', 'open', 'startsOn', 'title']);
+    expect((await request(app).get('/api/public/events/not-a-real-token-abcdef')).status).toBe(404);
+    expect((await request(app).post(`/api/public/events/${token}`).send({ name: 'Bot', phone: '0788222222', website: 'x' })).status).toBe(201);
+    expect(fake.__db.workPlanRegistration).toHaveLength(0);
+    expect((await request(app).post(`/api/public/events/${token}`).send({ name: 'Mary K', phone: '0788333333' })).status).toBe(201);
+    expect((await request(app).post(`/api/public/events/${token}`).send({ name: 'Other', phone: '0788444444' })).body.code).toBe('EVENT_FULL');
+    await reg('p-vp', id, { publicLink: false });
+    expect((await request(app).get(`/api/public/events/${token}`)).status).toBe(404);
+  });
+  it('attendance is still counted while the event is closing', async () => {
+    const id = await ev();
+    await reg('p-vp', id, { open: true });
+    await post('p-vp', `${B}/${id}/registrations`, { name: 'Guest', phone: '0788555555' });
+    const rid = (await get('p-vp', `${B}/${id}`)).body.plan.registration.items[0].id;
+    await patch('p-vp', `${B}/${id}/registrations/${rid}`, { attended: true });
+    await post('p-vp', `${B}/${id}/close`);
+    expect((await get('p-vp', `${B}/${id}`)).body.plan.registration).toMatchObject({ count: 1, attended: 1 });
+  });
+});
+
+describe('project milestones', () => {
+  it('the team adds milestones and ticks them; events have none', async () => {
+    const id = await running({ planType: 'PROJECT' });
+    expect((await post('p-vp', `${B}/${id}/milestones`, { title: 'Foundation poured', dueOn: '2026-12-01T00:00:00Z' })).status).toBe(201);
+    const m = (await get('p-vp', `${B}/${id}`)).body.plan.milestones;
+    expect(m).toHaveLength(1);
+    expect((await patch('p-choir-member', `${B}/${id}/milestones/${m[0].id}`, { done: true })).body.plan.milestones[0].done).toBe(true);
+    expect((await post('p-choir-member', `${B}/${id}/milestones`, { title: 'x' })).status).toBe(403);
+    expect((await del('p-vp', `${B}/${id}/milestones/${m[0].id}`)).body.plan.milestones).toHaveLength(0);
+    const e = await running({ planType: 'EVENT' });
+    expect((await post('p-vp', `${B}/${e}/milestones`, { title: 'x' })).status).toBe(403);
   });
 });
 

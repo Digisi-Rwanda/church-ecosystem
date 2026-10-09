@@ -22,6 +22,7 @@ import { lettersRouter } from './routes/letters.js';
 import { scheduleRouter } from './routes/schedule.js';
 import { workRouter } from './routes/work.js';
 import { workPlansRouter } from './routes/workPlans.js';
+import { publicEventsRouter } from './routes/publicEvents.js';
 import { moneyRouter } from './routes/money.js';
 import { moneyBlockRouter } from './routes/moneyBlock.js';
 import { collectionsRouter } from './routes/collections.js';
@@ -118,6 +119,7 @@ export function createApp() {
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/work', workRouter);
   app.use('/api/work-plans', workPlansRouter);
+  app.use('/api/public/events', publicEventsRouter);
   app.use('/api/money', moneyRouter);
   app.use('/api/money', moneyBlockRouter);
   app.use('/api/collections', collectionsRouter);

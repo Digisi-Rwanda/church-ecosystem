@@ -3,6 +3,7 @@
  * report. Visibility uses the same four levels as light work. Delete is soft and only for drafts;
  * after submission a plan is cancelled with a reason instead, so its record stays.
  */
+import { randomBytes } from 'node:crypto';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
@@ -28,10 +29,16 @@ interface Plan extends PlanRow {
   planType?: string | null;
   aim?: string | null; needs?: string | null; location?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null;
   rejectedReason?: string | null; cancelReason?: string | null; planningSummary?: string | null; executionSummary?: string | null;
+  registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null;
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
 }
 interface NoteRow { id: string; planId: string; authorId: string; text: string; createdAt: Date | string }
 interface CheckRow { id: string; planId: string; label: string; done: boolean; doneById?: string | null; doneAt?: Date | string | null }
+interface MilestoneRow { id: string; planId: string; title: string; dueOn?: Date | string | null; done: boolean; doneAt?: Date | string | null }
+interface RegRow {
+  id: string; planId: string; personId?: string | null; name: string; phone?: string | null; source: string;
+  attended: boolean; attendedAt?: Date | string | null; cancelledAt?: Date | string | null; createdAt: Date | string;
+}
 interface UnitRow { id: string; name: string; systemId?: string | null }
 
 async function names(ids: Array<string | null | undefined>): Promise<Map<string, string>> {
@@ -66,6 +73,21 @@ const checksOf = async (planId: string) => ((await prisma.workPlanCheck.findMany
 const notesOf = async (planId: string) =>
   ((await prisma.workPlanNote.findMany()) as NoteRow[]).filter((n) => n.planId === planId).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
 
+const MILESTONES_MAX = 30;
+const REGISTRATIONS_MAX = 2000;
+const milestonesOf = async (planId: string) =>
+  ((await prisma.workPlanMilestone.findMany()) as MilestoneRow[]).filter((m) => m.planId === planId).sort((a, b) => {
+    const x = a.dueOn ? new Date(a.dueOn).getTime() : Infinity;
+    const y = b.dueOn ? new Date(b.dueOn).getTime() : Infinity;
+    return x - y;
+  });
+export const registrationsOf = async (planId: string) =>
+  ((await prisma.workPlanRegistration.findMany()) as RegRow[])
+    .filter((r) => r.planId === planId && !r.cancelledAt)
+    .sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+/** Places left, or null when there is no limit. */
+export const spotsLeft = (capacity: number | null | undefined, taken: number) => (capacity ? Math.max(0, capacity - taken) : null);
+
 function flags(p: Plan, c: Ctx, me: string) {
   const manage = canManagePlan(p, me, c.data);
   const team = isOnTeam(p, me);
@@ -87,22 +109,47 @@ function flags(p: Plan, c: Ctx, me: string) {
     canNote: (manage || team) && live,
     canCheck: (manage || team) && live,
     canAddCheck: manage && ['DRAFT', 'SETUP', 'RUNNING', 'PAUSED'].includes(p.status),
+    canManageRegistration: manage && type === 'EVENT' && ['SETUP', 'RUNNING'].includes(p.status),
+    canMarkAttendance: (manage || team) && type === 'EVENT' && ['RUNNING', 'CLOSING'].includes(p.status),
+    canMilestone: manage && type === 'PROJECT' && ['DRAFT', 'SETUP', 'RUNNING', 'PAUSED'].includes(p.status),
+    canTickMilestone: (manage || team) && type === 'PROJECT' && live,
     canCompose: p.status === 'CLOSING' && canComposeReport(me, p.systemId, c.data),
     canPublish: p.status === 'CLOSING' && canPublishReport(me, p.systemId, c.data),
   };
 }
 
+function registrationView(p: Plan, regs: RegRow[], who: Map<string, string>, me: string, fl: ReturnType<typeof flags>) {
+  const mine = regs.find((r) => r.personId === me) ?? null;
+  const staff = fl.canManageRegistration || fl.canMarkAttendance || canSeeList(p, me);
+  const open = !!p.registrationOpen && ['SETUP', 'RUNNING'].includes(p.status);
+  const left = spotsLeft(p.capacity, regs.length);
+  return {
+    open, capacity: p.capacity ?? null, count: regs.length, attended: regs.filter((r) => r.attended).length, spotsLeft: left,
+    canRegister: open && !mine && left !== 0,
+    mine: mine ? { id: mine.id } : null,
+    publicToken: fl.canManageRegistration ? p.publicToken ?? null : null,
+    items: staff
+      ? regs.map((r) => ({ id: r.id, name: r.personId ? who.get(r.personId) ?? r.name : r.name, phone: r.phone ?? '', source: r.source, attended: r.attended }))
+      : [],
+  };
+}
+const canSeeList = (p: Plan, me: string) => isOnTeam(p, me) || p.leaderPersonId === me;
+
 async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
   const team = teamOf(p);
   const levels = levelsOf(p);
   const [notes, checks] = detail ? [await notesOf(p.id), await checksOf(p.id)] : [[], []];
-  const who = await names([p.leaderPersonId, p.createdById, ...team.map((t) => t.personId), ...levels.map((l) => l.byId), ...notes.map((n) => n.authorId)]);
+  const fl = flags(p, c, me);
+  const type = p.planType ?? 'PROJECT';
+  const milestones = detail && type === 'PROJECT' ? await milestonesOf(p.id) : [];
+  const regs = detail && type === 'EVENT' ? await registrationsOf(p.id) : [];
+  const who = await names([...regs.map((r) => r.personId), p.leaderPersonId, p.createdById, ...team.map((t) => t.personId), ...levels.map((l) => l.byId), ...notes.map((n) => n.authorId)]);
   const base = {
     id: p.id, title: p.title, status: p.status, systemId: p.systemId, orgUnitId: p.orgUnitId,
     unitName: c.units.find((u) => u.id === p.orgUnitId)?.name ?? '',
     leaderId: p.leaderPersonId, leaderName: who.get(p.leaderPersonId) ?? '',
     startsOn: iso(p.startsOn), endsOn: iso(p.endsOn), visibility: p.visibility, beyondUnit: p.beyondUnit, planType: p.planType ?? 'PROJECT',
-    mine: isOnTeam(p, me), waitingLevel: currentLevel(p)?.label ?? null, ...flags(p, c, me),
+    mine: isOnTeam(p, me), waitingLevel: currentLevel(p)?.label ?? null, ...fl,
   };
   if (!detail) return base;
   return {
@@ -118,6 +165,8 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
       planningSummary: p.planningSummary ?? '', executionSummary: p.executionSummary ?? '', outcome: p.outcome ?? '',
       composedAt: iso(p.reportComposedAt), publishedAt: iso(p.reportPublishedAt), frozen: !!p.reportJson,
     },
+    milestones: milestones.map((m) => ({ id: m.id, title: m.title, dueOn: iso(m.dueOn), done: m.done, doneAt: iso(m.doneAt) })),
+    registration: type === 'EVENT' ? registrationView(p, regs, who, me, fl) : null,
   };
 }
 
@@ -485,6 +534,7 @@ workPlansRouter.post('/:id/publish', requireAuth, async (req: AuthedRequest, res
     title: p.title, unitName: detail.unitName, aim: detail.aim, needs: detail.needs, location: detail.location, startsOn: detail.startsOn, endsOn: detail.endsOn,
     leaderName: detail.leaderName, team: detail.team, levels: detail.levels, notes: detail.notes, checks: detail.checks,
     planningSummary: p.planningSummary, executionSummary: p.executionSummary, outcome: p.outcome, publishedAt: at.toISOString(),
+    milestones: detail.milestones, attendance: p.planType === 'EVENT' ? { registered: (detail.registration as { count: number }).count, attended: (detail.registration as { attended: number }).attended } : null,
   };
   const row = (await prisma.workPlan.update({
     where: { id: p.id },
@@ -492,4 +542,142 @@ workPlansRouter.post('/:id/publish', requireAuth, async (req: AuthedRequest, res
   })) as Plan;
   await audit(me, p.systemId, 'WORKPLAN_REPORT_PUBLISHED', `Published the report for “${p.title}”`, { planId: p.id });
   res.json({ plan: await shape(row, c, me, true) });
+});
+
+/* ── Projects: milestones ── */
+
+workPlansRouter.post('/:id/milestones', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canMilestone) return fail(res, 403, 'FORBIDDEN', 'You may not add milestones now');
+  const parsed = z.object({ title: z.string().trim().min(1).max(TITLE_MAX), dueOn: z.string().datetime().nullish() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Write the milestone first');
+  if ((await milestonesOf(p.id)).length >= MILESTONES_MAX) return fail(res, 409, 'TOO_MANY', 'The milestone list is full');
+  await prisma.workPlanMilestone.create({ data: { planId: p.id, title: parsed.data.title, dueOn: parsed.data.dueOn ? new Date(parsed.data.dueOn) : null, done: false } });
+  res.status(201).json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.patch('/:id/milestones/:mid', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canTickMilestone) return fail(res, 403, 'FORBIDDEN', 'Only the team ticks milestones, while the work is running');
+  const m = (await milestonesOf(p.id)).find((x) => x.id === String(req.params.mid));
+  if (!m) return fail(res, 404, 'NOT_FOUND', 'Milestone not found');
+  const parsed = z.object({ done: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid milestone');
+  await prisma.workPlanMilestone.update({ where: { id: m.id }, data: { done: parsed.data.done, doneById: parsed.data.done ? me : null, doneAt: parsed.data.done ? new Date() : null } });
+  res.json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.delete('/:id/milestones/:mid', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canMilestone) return fail(res, 403, 'FORBIDDEN', 'You may not change milestones now');
+  const m = (await milestonesOf(p.id)).find((x) => x.id === String(req.params.mid));
+  if (!m) return fail(res, 404, 'NOT_FOUND', 'Milestone not found');
+  await prisma.workPlanMilestone.delete({ where: { id: m.id } });
+  res.json({ plan: await shape(p, c, me, true) });
+});
+
+/* ── Events: registration and attendance ── */
+
+async function addRegistration(p: Plan, data: { personId?: string | null; name: string; phone?: string | null; source: string }): Promise<'FULL' | 'DUPLICATE' | 'OK'> {
+  const regs = await registrationsOf(p.id);
+  if (regs.length >= REGISTRATIONS_MAX) return 'FULL';
+  if (spotsLeft(p.capacity, regs.length) === 0) return 'FULL';
+  const phone = (data.phone ?? '').replace(/\s+/g, '');
+  if (data.personId ? regs.some((r) => r.personId === data.personId) : phone && regs.some((r) => (r.phone ?? '').replace(/\s+/g, '') === phone)) return 'DUPLICATE';
+  await prisma.workPlanRegistration.create({ data: { planId: p.id, personId: data.personId ?? null, name: data.name, phone: data.phone || null, source: data.source } });
+  return 'OK';
+}
+const regFailure = (res: Res, r: 'FULL' | 'DUPLICATE') =>
+  r === 'FULL' ? fail(res, 409, 'EVENT_FULL', 'There are no places left') : fail(res, 409, 'ALREADY_REGISTERED', 'Already registered');
+
+workPlansRouter.patch('/:id/registration', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canManageRegistration) return fail(res, 403, 'FORBIDDEN', 'You may not change registration now');
+  const parsed = z
+    .object({ open: z.boolean().optional(), capacity: z.number().int().min(1).max(100000).nullable().optional(), publicLink: z.boolean().optional() })
+    .safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid registration settings');
+  const d = parsed.data;
+  const data: Record<string, unknown> = {};
+  if (d.open !== undefined) data.registrationOpen = d.open;
+  if (d.capacity !== undefined) data.capacity = d.capacity;
+  if (d.publicLink === true && !p.publicToken) data.publicToken = randomBytes(18).toString('base64url');
+  if (d.publicLink === false) data.publicToken = null;
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data })) as Plan;
+  await audit(me, p.systemId, 'WORKPLAN_REGISTRATION_SET', `Changed registration for “${p.title}”`, { planId: p.id, ...d });
+  res.json({ plan: await shape(row, c, me, true) });
+});
+
+workPlansRouter.post('/:id/register', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if ((p.planType ?? 'PROJECT') !== 'EVENT' || !p.registrationOpen || !['SETUP', 'RUNNING'].includes(p.status)) return fail(res, 409, 'REGISTRATION_CLOSED', 'Registration is not open');
+  const who = await names([me]);
+  const r = await addRegistration(p, { personId: me, name: who.get(me) ?? '', source: 'MEMBER' });
+  if (r !== 'OK') return regFailure(res, r);
+  res.status(201).json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.delete('/:id/register', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  const mine = (await registrationsOf(p.id)).find((r) => r.personId === me);
+  if (!mine) return fail(res, 404, 'NOT_FOUND', 'You are not registered');
+  if (mine.attended) return fail(res, 409, 'ALREADY_ATTENDED', 'Attendance is already marked');
+  await prisma.workPlanRegistration.update({ where: { id: mine.id }, data: { cancelledAt: new Date() } });
+  res.json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.post('/:id/registrations', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  const f = flags(p, c, me);
+  if (!(f.canManageRegistration || f.canMarkAttendance)) return fail(res, 403, 'FORBIDDEN', 'You may not add guests now');
+  const parsed = z
+    .object({ personId: z.string().min(1).optional(), name: z.string().trim().min(1).max(TITLE_MAX).optional(), phone: z.string().trim().max(30).nullish() })
+    .refine((v) => v.personId || v.name)
+    .safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Give a member or a name');
+  const b = parsed.data;
+  if (b.personId && (await peopleProblem([b.personId]))) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose an active member');
+  const who = b.personId ? await names([b.personId]) : new Map<string, string>();
+  const r = await addRegistration(p, { personId: b.personId ?? null, name: b.personId ? who.get(b.personId) ?? '' : b.name!, phone: b.phone, source: 'STAFF' });
+  if (r !== 'OK') return regFailure(res, r);
+  res.status(201).json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.patch('/:id/registrations/:rid', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canMarkAttendance) return fail(res, 403, 'FORBIDDEN', 'Attendance is marked by the team, on the day');
+  const r = (await registrationsOf(p.id)).find((x) => x.id === String(req.params.rid));
+  if (!r) return fail(res, 404, 'NOT_FOUND', 'Registration not found');
+  const parsed = z.object({ attended: z.boolean() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid attendance');
+  await prisma.workPlanRegistration.update({ where: { id: r.id }, data: { attended: parsed.data.attended, attendedAt: parsed.data.attended ? new Date() : null } });
+  res.json({ plan: await shape(p, c, me, true) });
+});
+
+workPlansRouter.delete('/:id/registrations/:rid', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  const f = flags(p, c, me);
+  if (!(f.canManageRegistration || f.canMarkAttendance)) return fail(res, 403, 'FORBIDDEN', 'You may not remove registrations now');
+  const r = (await registrationsOf(p.id)).find((x) => x.id === String(req.params.rid));
+  if (!r) return fail(res, 404, 'NOT_FOUND', 'Registration not found');
+  await prisma.workPlanRegistration.update({ where: { id: r.id }, data: { cancelledAt: new Date() } });
+  res.json({ plan: await shape(p, c, me, true) });
 });

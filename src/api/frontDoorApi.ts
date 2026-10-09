@@ -979,6 +979,7 @@ export type PlanFlags = {
   canEdit: boolean; canSubmit: boolean; canWithdraw: boolean; canApprove: boolean; canReopen: boolean; canStart: boolean; canClose: boolean;
   canPause: boolean; canResume: boolean; canRenew: boolean;
   canCancel: boolean; canDelete: boolean; canNote: boolean; canCheck: boolean; canAddCheck: boolean; canCompose: boolean; canPublish: boolean;
+  canManageRegistration: boolean; canMarkAttendance: boolean; canMilestone: boolean; canTickMilestone: boolean;
 };
 
 export type PlanType = 'PROGRAM' | 'EVENT' | 'PROJECT';
@@ -998,6 +999,13 @@ export type PlanDetail = PlanItem & {
   notes: Array<{ id: string; authorName: string; text: string; at: string | null }>;
   checks: Array<{ id: string; label: string; done: boolean; doneAt: string | null }>;
   report: { planningSummary: string; executionSummary: string; outcome: string; composedAt: string | null; publishedAt: string | null; frozen: boolean };
+  milestones: Array<{ id: string; title: string; dueOn: string | null; done: boolean; doneAt: string | null }>;
+  registration: PlanRegistration | null;
+};
+export type PlanRegistration = {
+  open: boolean; capacity: number | null; count: number; attended: number; spotsLeft: number | null; canRegister: boolean;
+  mine: { id: string } | null; publicToken: string | null;
+  items: Array<{ id: string; name: string; phone: string; source: 'MEMBER' | 'STAFF' | 'PUBLIC'; attended: boolean }>;
 };
 
 export type PlanInput = {
@@ -1036,6 +1044,24 @@ export const tickPlanCheck = (id: string, checkId: string, done: boolean) =>
 export const removePlanCheck = (id: string, checkId: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'DELETE' }));
 export const saveReport = (id: string, body: { planningSummary: string; executionSummary: string; outcome: string }) =>
   planBody(apiFetch(`${P}/${encodeURIComponent(id)}/report`, { method: 'PUT', body }));
+const pid = (id: string) => encodeURIComponent(id);
+export const addMilestone = (id: string, title: string, dueOn: string | null) => planBody(apiFetch(`${P}/${pid(id)}/milestones`, { method: 'POST', body: { title, dueOn } }));
+export const tickMilestone = (id: string, mid: string, done: boolean) => planBody(apiFetch(`${P}/${pid(id)}/milestones/${pid(mid)}`, { method: 'PATCH', body: { done } }));
+export const removeMilestone = (id: string, mid: string) => planBody(apiFetch(`${P}/${pid(id)}/milestones/${pid(mid)}`, { method: 'DELETE' }));
+export const setRegistration = (id: string, body: { open?: boolean; capacity?: number | null; publicLink?: boolean }) =>
+  planBody(apiFetch(`${P}/${pid(id)}/registration`, { method: 'PATCH', body }));
+export const registerMyself = (id: string) => planBody(apiFetch(`${P}/${pid(id)}/register`, { method: 'POST', body: {} }));
+export const cancelMyRegistration = (id: string) => planBody(apiFetch(`${P}/${pid(id)}/register`, { method: 'DELETE' }));
+export const addGuest = (id: string, name: string, phone: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations`, { method: 'POST', body: { name, phone: phone || null } }));
+export const markAttended = (id: string, rid: string, attended: boolean) => planBody(apiFetch(`${P}/${pid(id)}/registrations/${pid(rid)}`, { method: 'PATCH', body: { attended } }));
+export const removeGuest = (id: string, rid: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations/${pid(rid)}`, { method: 'DELETE' }));
+
+export type PublicEvent = { title: string; aim: string; location: string; startsOn: string | null; endsOn: string | null; open: boolean; full: boolean };
+export const fetchPublicEvent = async (token: string): Promise<PublicEvent> =>
+  (await apiFetch<{ event: PublicEvent }>(`/api/public/events/${pid(token)}`, { auth: false })).event;
+export const registerPublic = (token: string, body: { name: string; phone: string; website?: string }) =>
+  apiFetch<{ ok: true }>(`/api/public/events/${pid(token)}`, { method: 'POST', body, auth: false });
+
 export async function fetchDeletedPlans(): Promise<DeletedWork[]> {
   const res = await apiFetch<{ items: DeletedWork[] }>(`${P}/deleted`);
   return res.items;

@@ -35,6 +35,7 @@ import {
   Person360Page,
   PersonCardPage,
   PlanPage,
+  PublicEventPage,
   PlansPage,
   PortalBlockPage,
   PortalPage,
@@ -80,6 +81,7 @@ export function newDesignRoutes() {
   return (
     <Route element={<NewDesignLayout />}>
       <Route path="/signin" element={<NewSignInPage />} />
+      <Route path="/e/:token" element={<PublicEventPage />} />
       <Route element={<RequireSignedIn />}>
         <Route path="/portal" element={<PortalLayout />}>
           <Route index element={<PortalPage />} />

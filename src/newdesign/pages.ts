@@ -74,6 +74,8 @@ const loadPersonCardPage = () => import('./PersonCardPage').then((m) => ({ defau
 export const PersonCardPage = lazy(loadPersonCardPage);
 const loadPlanPage = () => import('./PlanPage').then((m) => ({ default: m.PlanPage }));
 export const PlanPage = lazy(loadPlanPage);
+const loadPublicEventPage = () => import('./PublicEventPage').then((m) => ({ default: m.PublicEventPage }));
+export const PublicEventPage = lazy(loadPublicEventPage);
 const loadPlansPage = () => import('./PlansPage').then((m) => ({ default: m.PlansPage }));
 export const PlansPage = lazy(loadPlansPage);
 const loadPortalBlockPage = () => import('./PortalBlockPage').then((m) => ({ default: m.PortalBlockPage }));
@@ -168,6 +170,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   Person360Page: loadPerson360Page,
   PersonCardPage: loadPersonCardPage,
   PlanPage: loadPlanPage,
+  PublicEventPage: loadPublicEventPage,
   PlansPage: loadPlansPage,
   PortalBlockPage: loadPortalBlockPage,
   PortalPage: loadPortalPage,

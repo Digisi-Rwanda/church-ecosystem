@@ -14,12 +14,14 @@ import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { formatRwf } from './money';
 import { PlanForm } from './PlanForm';
+import { PlanGuests } from './PlanGuests';
+import { PlanMilestones } from './PlanMilestones';
 import { PLAN_STEPS, actionKey, needsApproval, phaseOf, planActions, planErrorKey, planStatusKey, stagesOf, stepIndex } from './plans';
 import { useLoad } from './useLoad';
 import { ListRow, PageHeader, RowList, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | null;
-type Tab = 'overview' | 'team' | 'checklist' | 'money' | 'report' | 'history';
+type Tab = 'overview' | 'team' | 'guests' | 'milestones' | 'checklist' | 'money' | 'report' | 'history';
 
 /** One plan: where it stands in the six steps, its planning record, the execution record and the report. */
 export function PlanPage() {
@@ -79,6 +81,8 @@ export function PlanPage() {
             items={[
               { key: 'overview', label: t('door.plan.tab.overview') },
               { key: 'team', label: t('door.plan.tab.team'), count: p.team.length },
+              ...(p.planType === 'EVENT' && p.registration ? [{ key: 'guests' as const, label: t('door.plan.tab.guests'), count: p.registration.count }] : []),
+              ...(p.planType === 'PROJECT' ? [{ key: 'milestones' as const, label: t('door.plan.tab.milestones'), count: p.milestones.filter((m) => !m.done).length }] : []),
               { key: 'checklist', label: t('door.plan.tab.checklist'), count: p.checks.filter((k) => !k.done).length },
               { key: 'money', label: t('door.plan.tab.money') },
               { key: 'report', label: t('door.plan.tab.report') },
@@ -207,6 +211,9 @@ export function PlanPage() {
                 ))}
               </RowList>
             ))}
+
+          {tab === 'guests' && <PlanGuests p={p} run={run} />}
+          {tab === 'milestones' && <PlanMilestones p={p} run={run} />}
 
           {tab === 'money' && <PlanMoney systemId={systemId} planId={p.id} />}
 
