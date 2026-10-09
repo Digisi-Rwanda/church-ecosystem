@@ -14,7 +14,7 @@ import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { formatRwf } from './money';
 import { PlanForm } from './PlanForm';
-import { PLAN_STEPS, phaseOf, planActions, planErrorKey, planStatusKey, stepIndex } from './plans';
+import { PLAN_STEPS, actionKey, needsApproval, phaseOf, planActions, planErrorKey, planStatusKey, stagesOf, stepIndex } from './plans';
 import { useLoad } from './useLoad';
 import { ListRow, PageHeader, RowList, StatusChip, Tabs } from './kit';
 
@@ -67,7 +67,7 @@ export function PlanPage() {
             purpose={`${p.unitName} · ${t('door.plan.leader')}: ${p.leaderName}${p.startsOn ? ` · ${day(p.startsOn)}${p.endsOn ? ` – ${day(p.endsOn)}` : ''}` : ''}`}
             meta={
               <>
-                <StatusChip tone={p.status === 'PENDING_APPROVAL' || p.status === 'CLOSING' ? 'warn' : p.status === 'RUNNING' ? 'info' : p.status === 'ENDED' ? 'success' : p.status === 'CANCELLED' ? 'danger' : 'neutral'}>{t(planStatusKey(p.status))}</StatusChip>
+                <StatusChip tone={p.status === 'PENDING_APPROVAL' || p.status === 'CLOSING' ? 'warn' : p.status === 'RUNNING' ? 'info' : p.status === 'PAUSED' ? 'warn' : p.status === 'ENDED' ? 'success' : p.status === 'CANCELLED' ? 'danger' : 'neutral'}>{t(planStatusKey(p.status, p.planType))}</StatusChip>
                 <StatusChip>{t(`door.work.visibility.${p.visibility}` as const)}</StatusChip>
               </>
             }
@@ -88,14 +88,27 @@ export function PlanPage() {
           {tab === 'overview' && (
             <>
 
-          <ol className="door-steps" aria-label={t('door.plan.steps')}>
-            {PLAN_STEPS.map((s) => (
-              <li key={s} className={stepIndex(p.status) >= stepIndex(s) && p.status !== 'CANCELLED' ? 'done' : ''} aria-current={p.status === s ? 'step' : undefined}>
-                {t(planStatusKey(s))}
+          <ol className="door-steps" aria-label={t(`door.plan.steps.${p.planType}` as const)}>
+            {PLAN_STEPS.filter((s) => !(s === 'PENDING_APPROVAL' && !needsApproval(p.planType, p.beyondUnit) && p.status !== 'PENDING_APPROVAL')).map((s) => (
+              <li key={s} className={stepIndex(p.status) >= stepIndex(s) && p.status !== 'CANCELLED' ? 'done' : ''} aria-current={p.status === s || (p.status === 'PAUSED' && s === 'RUNNING') ? 'step' : undefined}>
+                {t(planStatusKey(s === 'RUNNING' && p.status === 'PAUSED' ? 'PAUSED' : s, p.planType))}
               </li>
             ))}
           </ol>
           <p className="muted">{t(`door.plan.phase.${phaseOf(p.status)}` as const)}</p>
+          {p.planType === 'EVENT' && !needsApproval(p.planType, p.beyondUnit) && p.status === 'DRAFT' && <p className="muted">{t('door.plan.noApproval')}</p>}
+          {p.planType === 'PROGRAM' && <p className="muted">{t('door.plan.programOpen')}</p>}
+          <details className="door-guide">
+            <summary>{t('door.plan.guide')}</summary>
+            <ol>
+              {stagesOf(p.planType, p.status).map((st) => (
+                <li key={st.n} className={st.state} aria-current={st.state === 'current' ? 'step' : undefined}>
+                  <strong>{t(st.labelKey as 'door.plan.stage.EVENT.1')}</strong>
+                  <span className="muted"> · {t(st.descKey as 'door.plan.stage.EVENT.1.d')}</span>
+                </li>
+              ))}
+            </ol>
+          </details>
           {p.rejectedReason && p.status === 'DRAFT' && <p className="door-error">{t('door.plan.sentBack', { reason: p.rejectedReason })}</p>}
           {p.cancelReason && <p className="door-error">{t('door.plan.cancelled', { reason: p.cancelReason })}</p>}
           {error && (
@@ -106,8 +119,8 @@ export function PlanPage() {
 
           <div className="door-row">
             {planActions(p).map((a) => (
-              <button key={a} type="button" className={a === 'withdraw' || a === 'reopen' ? 'btn ghost' : 'btn'} onClick={() => void run(() => planStep(p.id, a))}>
-                {t(`door.plan.action.${a}` as const)}
+              <button key={a} type="button" className={a === 'withdraw' || a === 'reopen' || a === 'pause' ? 'btn ghost' : 'btn'} onClick={() => void run(() => planStep(p.id, a))}>
+                {t(actionKey(a, p.planType, p.beyondUnit) as 'door.plan.action.submit')}
               </button>
             ))}
             {p.canApprove && (

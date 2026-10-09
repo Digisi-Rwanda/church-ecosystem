@@ -13,7 +13,7 @@ import { notifySafely } from '../lib/notify.js';
 import { NOTE_MAX, TEXT_MAX, TITLE_MAX, VISIBILITIES, canSee } from '../work/rules.js';
 import {
   CHECKS_MAX, ROLE_MAX, TEAM_MAX, approversOf, asWorkRow, buildLevels, canApprove, canComposeReport, canManagePlan, canPublishReport,
-  canWritePlan, currentLevel, isOnTeam, levelsOf, publishProblem, stateProblem, teamOf, type Action, type Level, type PlanRow,
+  canWritePlan, currentLevel, isOnTeam, levelsOf, publishProblem, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
 } from '../work/plan.js';
 
 export const workPlansRouter = Router();
@@ -69,7 +69,8 @@ const notesOf = async (planId: string) =>
 function flags(p: Plan, c: Ctx, me: string) {
   const manage = canManagePlan(p, me, c.data);
   const team = isOnTeam(p, me);
-  const live = ['RUNNING', 'CLOSING'].includes(p.status);
+  const live = ['RUNNING', 'PAUSED', 'CLOSING'].includes(p.status);
+  const type = p.planType ?? 'PROJECT';
   return {
     canEdit: manage && p.status === 'DRAFT',
     canSubmit: manage && p.status === 'DRAFT',
@@ -78,11 +79,14 @@ function flags(p: Plan, c: Ctx, me: string) {
     canReopen: manage && p.status === 'SETUP',
     canStart: manage && p.status === 'SETUP',
     canClose: manage && p.status === 'RUNNING',
+    canPause: manage && p.status === 'RUNNING' && !typeProblem('pause', type),
+    canResume: manage && p.status === 'PAUSED' && !typeProblem('resume', type),
+    canRenew: manage && p.status === 'CLOSING' && !typeProblem('renew', type),
     canCancel: manage && !['ENDED', 'CANCELLED'].includes(p.status),
     canDelete: manage && p.status === 'DRAFT',
     canNote: (manage || team) && live,
     canCheck: (manage || team) && live,
-    canAddCheck: manage && ['DRAFT', 'SETUP', 'RUNNING'].includes(p.status),
+    canAddCheck: manage && ['DRAFT', 'SETUP', 'RUNNING', 'PAUSED'].includes(p.status),
     canCompose: p.status === 'CLOSING' && canComposeReport(me, p.systemId, c.data),
     canPublish: p.status === 'CLOSING' && canPublishReport(me, p.systemId, c.data),
   };
@@ -288,7 +292,7 @@ async function move(req: AuthedRequest, res: Res, step: Step, apply: (p: Plan, m
   if (!got) return;
   const { me, c, p } = got;
   if (!step.allow(p, me, c)) return fail(res, 403, 'FORBIDDEN', 'You may not do this');
-  if (stateProblem(step.action, p.status)) return fail(res, 409, 'WRONG_STATE', 'Not possible in the plan’s current state');
+  if (stateProblem(step.action, p.status) || typeProblem(step.action, p.planType)) return fail(res, 409, 'WRONG_STATE', 'Not possible in the plan’s current state');
   await apply(p, me, c);
   const row = (await prisma.workPlan.findUnique({ where: { id: p.id } })) as Plan;
   await audit(me, p.systemId, `WORKPLAN_${step.action.toUpperCase()}`, `${step.action} “${p.title}”`, { planId: p.id });
@@ -298,7 +302,12 @@ const managers: Step['allow'] = (p, me, c) => canManagePlan(p, me, c.data);
 
 workPlansRouter.post('/:id/submit', requireAuth, (req: AuthedRequest, res) =>
   move(req, res, { action: 'submit', allow: managers }, async (p, me, c) => {
-    const levels = buildLevels(p.systemId, p.beyondUnit, await systemName(p.systemId));
+    const levels = buildLevels(p.systemId, p.beyondUnit, await systemName(p.systemId), p.planType ?? 'PROJECT');
+    // Nothing to approve (an event within its unit): the plan goes straight to set-up.
+    if (levels.length === 0) {
+      await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'SETUP', approvalsJson: '[]', rejectedReason: null } });
+      return;
+    }
     const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'PENDING_APPROVAL', approvalsJson: JSON.stringify(levels), rejectedReason: null } })) as Plan;
     await askApprovers(row, c, me, 'Plan to approve');
   }),
@@ -362,6 +371,23 @@ workPlansRouter.post('/:id/start', requireAuth, (req: AuthedRequest, res) =>
 workPlansRouter.post('/:id/close', requireAuth, (req: AuthedRequest, res) =>
   move(req, res, { action: 'close', allow: managers }, async (p) => {
     await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'CLOSING' } });
+  }),
+);
+
+/** Holding and resuming a project or program; renewing a program after its review. */
+workPlansRouter.post('/:id/pause', requireAuth, (req: AuthedRequest, res) =>
+  move(req, res, { action: 'pause', allow: managers }, async (p) => {
+    await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'PAUSED' } });
+  }),
+);
+workPlansRouter.post('/:id/resume', requireAuth, (req: AuthedRequest, res) =>
+  move(req, res, { action: 'resume', allow: managers }, async (p) => {
+    await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'RUNNING' } });
+  }),
+);
+workPlansRouter.post('/:id/renew', requireAuth, (req: AuthedRequest, res) =>
+  move(req, res, { action: 'renew', allow: managers }, async (p) => {
+    await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'RUNNING' } });
   }),
 );
 

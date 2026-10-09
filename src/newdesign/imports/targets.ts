@@ -179,7 +179,7 @@ export const choirMembersTarget: ImportTarget<MemberRow, MemberCtx> = {
   back: (s) => `/s/${s}/choirs`,
   fields: memberFields('Choir', ['korali', 'chorale', 'group'], 'Youth choir'),
   async load(systemId) {
-    const [people, choirs] = await Promise.all([directory(systemId), fetchChoirs()]);
+    const [people, choirs] = await Promise.all([directory(systemId), fetchChoirs(systemId)]);
     const active = choirs.choirs.filter((c) => c.active);
     const details = await Promise.all(active.map((c) => fetchChoir(c.id)));
     return { people, containers: active.map((c) => ({ id: c.id, name: c.name })), members: new Map(details.map((d) => [d.choir.id, new Set(d.members.map((m) => m.personId))])) };
@@ -397,8 +397,8 @@ export const songsTarget: ImportTarget<SongRow, SongCtx> = {
     { key: 'composer', header: 'Composer', aliases: ['author', 'umuhimbyi', 'compositeur'], example: '' },
     { key: 'key', header: 'Key', aliases: ['song key', 'tone', 'ton'], example: 'G' },
   ],
-  async load() {
-    const choirs = (await fetchChoirs()).choirs.filter((c) => c.active);
+  async load(systemId) {
+    const choirs = (await fetchChoirs(systemId)).choirs.filter((c) => c.active);
     const lists = await Promise.all(choirs.map((c) => fetchSongs(c.id)));
     return { choirs: choirs.map((c) => ({ id: c.id, name: c.name })), songs: new Map(choirs.map((c, i) => [c.id, new Set(lists[i]!.songs.map((s) => k(s.title)))])) };
   },

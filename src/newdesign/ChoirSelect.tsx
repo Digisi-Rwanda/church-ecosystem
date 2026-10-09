@@ -1,3 +1,4 @@
+import { useParams } from 'react-router-dom';
 import { fetchChoirChoices } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField } from '../components/ui/Field';
@@ -10,7 +11,8 @@ export function ChoirSelect({ value, onChange, forRepertoire = false, children }
   value: string; onChange: (id: string) => void; forRepertoire?: boolean; children: (choirId: string) => React.ReactNode;
 }) {
   const t = useT();
-  const list = useLoad(() => fetchChoirChoices(forRepertoire), `choir-choices|${forRepertoire}`);
+  const { systemId } = useParams();
+  const list = useLoad(() => fetchChoirChoices(forRepertoire, systemId), `choir-choices|${forRepertoire}|${systemId ?? ''}`);
   const choirs = list.data?.choirs ?? [];
   const chosen = choirs.some((c) => c.id === value) ? value : choirs[0]?.id ?? '';
   return (

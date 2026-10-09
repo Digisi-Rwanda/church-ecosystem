@@ -7533,3 +7533,10 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .door-budget-total { display: flex; flex-wrap: wrap; gap: 0.5rem 1.25rem; align-items: baseline; padding: 0.75rem 1rem; border-radius: var(--radius); background: var(--accent-soft); margin: 0.5rem 0; }
 .door-unit-budget { border-top: 1px solid var(--border, rgba(0,0,0,.08)); padding: 0.6rem 0; }
 .door-unit-budget summary { cursor: pointer; }
+
+/* Plan guide: the steps of each kind of work */
+.door-guide { margin: 0.5rem 0; }
+.door-guide summary { cursor: pointer; font-size: 0.9rem; }
+.door-guide ol { margin: 0.5rem 0 0; padding-left: 1.25rem; display: grid; gap: 0.35rem; }
+.door-guide li.done { opacity: 0.6; }
+.door-guide li.current { border-left: 3px solid var(--accent); padding-left: 0.5rem; margin-left: -0.75rem; }

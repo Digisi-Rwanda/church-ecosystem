@@ -206,7 +206,7 @@ function peopleList(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables
 
 function workPlans(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
   const ended = s.plans.filter((p) => !p.deletedAt && p.orgUnitId === s.unitId && p.status === 'ENDED' && inPeriod(p.reportPublishedAt, key)).sort((a, b) => +new Date(a.reportPublishedAt!) - +new Date(b.reportPublishedAt!));
-  const open = s.plans.filter((p) => !p.deletedAt && p.orgUnitId === s.unitId && ['SETUP', 'RUNNING', 'CLOSING'].includes(p.status));
+  const open = s.plans.filter((p) => !p.deletedAt && p.orgUnitId === s.unitId && ['SETUP', 'RUNNING', 'PAUSED', 'CLOSING'].includes(p.status));
   return {
     summary: [
       { key: 'ended', value: ended.length, type: 'number' },

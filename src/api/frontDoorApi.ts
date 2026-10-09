@@ -973,10 +973,11 @@ export async function restoreWork(id: string): Promise<void> {
 
 /* ───────────── Full work (slice 3.3) ───────────── */
 
-export type WorkPlanStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'SETUP' | 'RUNNING' | 'CLOSING' | 'ENDED' | 'CANCELLED';
+export type WorkPlanStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'SETUP' | 'RUNNING' | 'PAUSED' | 'CLOSING' | 'ENDED' | 'CANCELLED';
 
 export type PlanFlags = {
   canEdit: boolean; canSubmit: boolean; canWithdraw: boolean; canApprove: boolean; canReopen: boolean; canStart: boolean; canClose: boolean;
+  canPause: boolean; canResume: boolean; canRenew: boolean;
   canCancel: boolean; canDelete: boolean; canNote: boolean; canCheck: boolean; canAddCheck: boolean; canCompose: boolean; canPublish: boolean;
 };
 
@@ -1024,7 +1025,7 @@ export const editPlan = (id: string, input: PlanInput) => planBody(apiFetch(`${P
 export async function deletePlan(id: string): Promise<void> {
   await apiFetch(`${P}/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
-export const planStep = (id: string, step: 'submit' | 'withdraw' | 'reopen' | 'start' | 'close' | 'publish' | 'approve', body: object = {}) =>
+export const planStep = (id: string, step: 'submit' | 'withdraw' | 'reopen' | 'start' | 'close' | 'pause' | 'resume' | 'renew' | 'publish' | 'approve', body: object = {}) =>
   planBody(apiFetch(`${P}/${encodeURIComponent(id)}/${step}`, { method: 'POST', body }));
 export const rejectPlan = (id: string, reason: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } }));
 export const cancelPlan = (id: string, reason: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } }));
@@ -1412,7 +1413,8 @@ export type OversightView = {
   emptyServices: Array<{ id: string; serviceOn: string; kind: MusicServiceKind }>;
 };
 const MU = '/api/music';
-export const fetchChoirs = (): Promise<{ canManage: boolean; choirs: ChoirItem[] }> => apiFetch(`${MU}/choirs`);
+/** Music sees the register of every choir; a choir system (or Worship) passes its id to see only its own. */
+export const fetchChoirs = (systemId?: string): Promise<{ canManage: boolean; choirs: ChoirItem[] }> => apiFetch(`${MU}/choirs${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
 export const fetchChoir = (id: string): Promise<ChoirDetail> => apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`);
 export async function createChoir(input: { name: string; role: ChoirRole }): Promise<void> {
   await apiFetch(`${MU}/choirs`, { method: 'POST', body: input });
@@ -1479,7 +1481,10 @@ export type PledgeItem = { id: string; amount: number; pledgedOn: string; receiv
 export type SponsorItem = { id: string; name: string; kind: 'PERSON' | 'ORGANISATION'; contact: string; pledges: PledgeItem[] };
 const CW = '/api/choir';
 const q = (choirId: string) => `choirId=${encodeURIComponent(choirId)}`;
-export const fetchChoirChoices = (forRepertoire = false): Promise<{ choirs: Array<{ id: string; name: string }> }> => apiFetch(`${CW}/choirs${forRepertoire ? '?for=repertoire' : ''}`);
+export const fetchChoirChoices = (forRepertoire = false, systemId?: string): Promise<{ choirs: Array<{ id: string; name: string }> }> => {
+  const qs = [forRepertoire ? 'for=repertoire' : '', systemId ? `systemId=${encodeURIComponent(systemId)}` : ''].filter(Boolean).join('&');
+  return apiFetch(`${CW}/choirs${qs ? `?${qs}` : ''}`);
+};
 export const fetchRehearsals = (choirId: string): Promise<RehearsalView> => apiFetch(`${CW}/rehearsals?${q(choirId)}`);
 export async function recordRehearsal(input: { choirId: string; heldOn: string; presentIds: string[]; note?: string | null }): Promise<void> {
   await apiFetch(`${CW}/rehearsals`, { method: 'POST', body: input });

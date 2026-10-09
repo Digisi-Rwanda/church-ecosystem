@@ -8,6 +8,7 @@ import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { musicErrorKey, ROLES } from './music';
+import { SystemLink } from './SystemLink';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
 
@@ -15,7 +16,8 @@ import { PageHeader } from './kit';
 export function ChoirsPage() {
   const t = useT();
   const { systemId = '' } = useParams();
-  const list = useLoad(fetchChoirs, 'music-choirs');
+  const list = useLoad(() => fetchChoirs(systemId), `music-choirs|${systemId}`);
+  const isMusic = systemId === 'sys-music';
   const [form, setForm] = useState(false);
   const [name, setName] = useState('');
   const [role, setRole] = useState<ChoirRole>('PRIMARY');
@@ -38,10 +40,16 @@ export function ChoirsPage() {
   return (
     <section className="door-block" aria-labelledby="door-choirs-title">
       <div>
-        <PageHeader id="door-choirs-title" title={t('door.own.choirs')} purpose={t('door.purpose.choirs')} />
-        <p className="muted">{t('door.music.choirs.intro')}</p>
+        <PageHeader id="door-choirs-title" title={t(isMusic ? 'door.own.choirs' : 'door.own.choirsOwn')} purpose={t(isMusic ? 'door.purpose.choirs' : 'door.purpose.choirsOwn')} />
+        <p className="muted">{t(isMusic ? 'door.music.choirs.intro' : 'door.music.choirs.introOwn')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}
+      {!isMusic && (
+        <p className="muted">
+          {t('door.music.choirs.byMusic')}{' '}
+          <SystemLink to="/s/sys-music/choirs" from={systemId}>{t('door.music.choirs.openMusic')}</SystemLink>
+        </p>
+      )}
       {list.data?.canManage && !form && (
         <div className="door-row"><button type="button" className="btn" onClick={() => setForm(true)}>{t('door.music.choirs.new')}</button><ImportLink systemId={systemId} target="choirMembers" /></div>
       )}

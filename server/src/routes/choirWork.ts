@@ -71,7 +71,8 @@ choirWorkRouter.get('/choirs', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
   const data = await accessOf(me);
   const repertoire = req.query.for === 'repertoire';
-  const all = ((await prisma.musicChoir.findMany()) as ChoirRow[]).filter((c) => c.active);
+  const only = typeof req.query.systemId === 'string' && req.query.systemId !== 'sys-music' ? req.query.systemId : null;
+  const all = ((await prisma.musicChoir.findMany()) as ChoirRow[]).filter((c) => c.active && (!only || c.systemId === only));
   const mine = all.filter((c) => {
     if (canReadChoir(me, c.systemId, data)) return true;
     return repertoire && !!c.systemId && (lettersInSystem(me, c.systemId, data, new Date()).SCHEDULING as string[]).includes('R');

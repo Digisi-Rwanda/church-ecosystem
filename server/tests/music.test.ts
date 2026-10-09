@@ -39,6 +39,26 @@ beforeEach(async () => {
 const MUSIC_LEADER = 'p-outsider';
 const choir = async (name = 'Elim', role = 'PRIMARY') => (await post(MUSIC_LEADER, '/api/music/choirs', { name, role })).body.id as string;
 
+describe('Music and Choir are different systems', () => {
+  it('Music holds the register of every choir; a choir system shows only its own and cannot add or retire', async () => {
+    await choir('Elim', 'PRIMARY');
+    await choir('Praise team', 'WORSHIP');
+    const all = await get('p-pastor', '/api/music/choirs');
+    expect(all.body.choirs.map((c: any) => c.name).sort()).toEqual(['Elim', 'Praise team']);
+    expect(all.body.canManage).toBe(true);
+    const inMusic = await get('p-pastor', '/api/music/choirs?systemId=sys-music');
+    expect(inMusic.body.choirs).toHaveLength(2);
+    expect(inMusic.body.canManage).toBe(true);
+    const inChoir = await get('p-pastor', '/api/music/choirs?systemId=sys-choir');
+    expect(inChoir.body.choirs.map((c: any) => c.name)).toEqual(['Elim']);
+    expect(inChoir.body.canManage).toBe(false);
+    const inWorship = await get('p-pastor', '/api/music/choirs?systemId=sys-worship');
+    expect(inWorship.body.choirs.map((c: any) => c.name)).toEqual(['Praise team']);
+    const picks = await get('p-pastor', '/api/choir/choirs?systemId=sys-choir');
+    expect(picks.body.choirs.map((c: any) => c.name)).toEqual(['Elim']);
+  });
+});
+
 describe('choirs and the register', () => {
   it('the Music leader adds choirs; names are unique among active choirs', async () => {
     const id = await choir();

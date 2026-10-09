@@ -4,6 +4,10 @@
  *   Planning:  DRAFT -> PENDING_APPROVAL -> SETUP      (the planning record; frozen once approved)
  *   Execution: RUNNING -> CLOSING -> ENDED             (progress notes, a delivery checklist, then the report)
  *
+ * The three kinds of work share this engine but live differently. An event is approved only when it reaches
+ * beyond its unit; otherwise its plan goes straight to set-up. A project or program can be put on hold (PAUSED)
+ * and resumed. A program has no fixed end: closing it is a review, after which it is renewed or concluded.
+ *
  * Approval is by level: the unit's own approver (letter A in the work's system) and, when the work
  * reaches beyond the unit, the church's (letter A in Central Administration). Nobody approves their
  * own entry. The report is composed in Closing (letter W) and published (letter P), which freezes it.
@@ -11,7 +15,7 @@
 import { lettersInSystem, type AccessData } from '../capabilities/engine.js';
 import { visibilityOf, type Visibility, type WorkRow } from './rules.js';
 
-export const PLAN_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'CLOSING', 'ENDED', 'CANCELLED'] as const;
+export const PLAN_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'PAUSED', 'CLOSING', 'ENDED', 'CANCELLED'] as const;
 export type PlanStatus = (typeof PLAN_STATUSES)[number];
 export const CHURCH_SYSTEM = 'sys-main';
 export const TEAM_MAX = 40;
@@ -36,6 +40,7 @@ export interface PlanRow {
   leaderPersonId: string;
   teamJson?: string | null;
   beyondUnit: boolean;
+  planType?: string | null;
   visibility: string;
   status: string;
   approvalsJson?: string | null;
@@ -56,7 +61,9 @@ export const teamOf = (p: Pick<PlanRow, 'teamJson'>): Array<{ personId: string; 
 export const levelsOf = (p: Pick<PlanRow, 'approvalsJson'>): Level[] => parseJson(p.approvalsJson, []);
 
 /** The levels a submission needs. Work in Central Administration needs only the church's own. */
-export function buildLevels(systemId: string, beyondUnit: boolean, systemName: string): Level[] {
+export function buildLevels(systemId: string, beyondUnit: boolean, systemName: string, planType: string = 'PROJECT'): Level[] {
+  // An event that stays within its unit needs no approval; one that reaches beyond it does.
+  if (planType === 'EVENT' && !beyondUnit) return [];
   const blank = { status: 'PENDING' as const, byId: null, at: null, note: null };
   const out: Level[] = [];
   if (systemId !== CHURCH_SYSTEM) out.push({ levelKey: 'UNIT', label: systemName, systemId, ...blank });
@@ -107,14 +114,17 @@ export function asWorkRow(p: PlanRow): WorkRow {
 }
 export const planVisibility = (p: Pick<PlanRow, 'visibility'>): Visibility => visibilityOf(p.visibility);
 
-export type Action = 'submit' | 'withdraw' | 'reopen' | 'start' | 'close' | 'cancel' | 'edit' | 'delete' | 'compose' | 'publish';
+export type Action = 'submit' | 'withdraw' | 'reopen' | 'start' | 'close' | 'pause' | 'resume' | 'renew' | 'cancel' | 'edit' | 'delete' | 'compose' | 'publish';
 const FROM: Record<Action, PlanStatus[]> = {
   submit: ['DRAFT'],
   withdraw: ['PENDING_APPROVAL'],
   reopen: ['SETUP'],
   start: ['SETUP'],
   close: ['RUNNING'],
-  cancel: ['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'CLOSING'],
+  pause: ['RUNNING'],
+  resume: ['PAUSED'],
+  renew: ['CLOSING'],
+  cancel: ['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'PAUSED', 'CLOSING'],
   edit: ['DRAFT'],
   delete: ['DRAFT'],
   compose: ['CLOSING'],
@@ -128,3 +138,10 @@ export function publishProblem(p: { planningSummary?: string | null; executionSu
   if (checks.some((c) => !c.done)) return 'CHECKLIST_OPEN';
   return null;
 }
+
+/** Which kinds of work may take a step that is not for all: holding is for projects and programs, renewing for programs. */
+const ONLY: Partial<Record<Action, string[]>> = { pause: ['PROJECT', 'PROGRAM'], resume: ['PROJECT', 'PROGRAM'], renew: ['PROGRAM'] };
+export const typeProblem = (action: Action, planType: string | null | undefined): 'WRONG_STATE' | null => {
+  const only = ONLY[action];
+  return only && !only.includes(planType ?? 'PROJECT') ? 'WRONG_STATE' : null;
+};

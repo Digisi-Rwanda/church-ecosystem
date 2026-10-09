@@ -2,13 +2,26 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
-import { buildLevels, publishProblem, stateProblem } from '../src/work/plan';
+import { buildLevels, publishProblem, stateProblem, typeProblem } from '../src/work/plan';
 
 describe('plan rules', () => {
   it('levels: the unit, plus the church when the work reaches beyond the unit; central work needs only the church', () => {
     expect(buildLevels('sys-choir', false, 'Choir').map((l) => l.levelKey)).toEqual(['UNIT']);
     expect(buildLevels('sys-choir', true, 'Choir').map((l) => l.levelKey)).toEqual(['UNIT', 'CHURCH']);
     expect(buildLevels('sys-main', false, 'Central').map((l) => l.levelKey)).toEqual(['CHURCH']);
+  });
+  it('an event within its unit needs no approval; pause, resume and renew belong to certain types', () => {
+    expect(buildLevels('sys-choir', false, 'Choir', 'EVENT')).toEqual([]);
+    expect(buildLevels('sys-choir', true, 'Choir', 'EVENT').map((l) => l.levelKey)).toEqual(['UNIT', 'CHURCH']);
+    expect(buildLevels('sys-choir', false, 'Choir', 'PROGRAM').map((l) => l.levelKey)).toEqual(['UNIT']);
+    expect(typeProblem('pause', 'EVENT')).toBe('WRONG_STATE');
+    expect(typeProblem('pause', 'PROJECT')).toBeNull();
+    expect(typeProblem('renew', 'PROJECT')).toBe('WRONG_STATE');
+    expect(typeProblem('renew', 'PROGRAM')).toBeNull();
+    expect(stateProblem('pause', 'RUNNING')).toBeNull();
+    expect(stateProblem('resume', 'PAUSED')).toBeNull();
+    expect(stateProblem('cancel', 'PAUSED')).toBeNull();
+    expect(stateProblem('renew', 'CLOSING')).toBeNull();
   });
   it('moves are allowed only from the right state', () => {
     expect(stateProblem('submit', 'DRAFT')).toBeNull();
@@ -202,6 +215,36 @@ describe('running the work', () => {
     expect((await post('p-vp', `${B}/${id}/cancel`, { reason: 'Hall unavailable' })).body.plan).toMatchObject({ status: 'CANCELLED', cancelReason: 'Hall unavailable' });
     expect((await post('p-vp', `${B}/${id}/cancel`, { reason: 'again' })).body.code).toBe('WRONG_STATE');
     expect(fake.__db.workPlan).toHaveLength(1);
+  });
+});
+
+describe('lifecycles by type', () => {
+  it('an event within its unit skips approval; beyond the unit it asks', async () => {
+    const a = await draft({ planType: 'EVENT' });
+    expect((await post('p-vp', `${B}/${a}/submit`)).body.plan.status).toBe('SETUP');
+    const b = await draft({ planType: 'EVENT', beyondUnit: true });
+    expect((await post('p-vp', `${B}/${b}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
+    const c = await draft({ planType: 'PROJECT' });
+    expect((await post('p-vp', `${B}/${c}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
+    const d = await draft({ planType: 'PROGRAM' });
+    expect((await post('p-vp', `${B}/${d}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
+  });
+  it('projects and programs pause and resume; events cannot; a paused plan can be cancelled', async () => {
+    const p = await running({ planType: 'PROJECT' });
+    expect((await post('p-vp', `${B}/${p}/pause`)).body.plan.status).toBe('PAUSED');
+    expect((await post('p-vp', `${B}/${p}/resume`)).body.plan.status).toBe('RUNNING');
+    await post('p-vp', `${B}/${p}/pause`);
+    expect((await post('p-vp', `${B}/${p}/cancel`, { reason: 'Funding stopped' })).body.plan.status).toBe('CANCELLED');
+    const e = await running({ planType: 'EVENT' });
+    expect((await post('p-vp', `${B}/${e}/pause`)).status).toBe(409);
+  });
+  it('only a program in review can be renewed', async () => {
+    const g = await running({ planType: 'PROGRAM' });
+    await post('p-vp', `${B}/${g}/close`);
+    expect((await post('p-vp', `${B}/${g}/renew`)).body.plan.status).toBe('RUNNING');
+    const j = await running({ planType: 'PROJECT' });
+    await post('p-vp', `${B}/${j}/close`);
+    expect((await post('p-vp', `${B}/${j}/renew`)).status).toBe(409);
   });
 });
 

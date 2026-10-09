@@ -44,10 +44,12 @@ const membersOf = async () => ((await prisma.musicChoirMember.findMany()) as Mem
 musicRouter.get('/choirs', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
   const data = await accessOf(me);
-  const all = (await choirs()).filter((c) => canReadChoir(me, c.systemId, data));
+  // Music (or no system named) holds the register of every choir; Choir and Worship see only their own choirs.
+  const only = typeof req.query.systemId === 'string' && req.query.systemId !== MUSIC ? req.query.systemId : null;
+  const all = (await choirs()).filter((c) => canReadChoir(me, c.systemId, data) && (!only || c.systemId === only));
   const members = await membersOf();
   res.json({
-    canManage: canManageChoirs(me, data),
+    canManage: canManageChoirs(me, data) && !only,
     choirs: all
       .map((c) => ({ id: c.id, name: c.name, role: c.role, active: c.active, members: members.filter((m) => m.choirId === c.id).length, canWrite: canWriteChoir(me, c.systemId, data) }))
       .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)),

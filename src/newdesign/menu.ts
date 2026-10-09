@@ -123,7 +123,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
   const own = new Map(buildOwnMenu(caps, systemId).map((o) => [o.block as string, o]));
   const ownPlace = (key: string): NavPlace | null => {
     const o = own.get(key);
-    return o ? { key, to: `${base}/${key}`, labelKey: `door.own.${key}${o.variant ? `.${o.variant}` : ''}`, end: false } : null;
+    return o ? { key, to: `${base}/${key}`, labelKey: key === 'choirs' && systemId !== 'sys-music' ? 'door.own.choirsOwn' : `door.own.${key}${o.variant ? `.${o.variant}` : ''}`, end: false } : null;
   };
   const place = (key: string, path: string, labelKey: string, end = false): NavPlace => ({ key, to: path ? `${base}/${path}` : base, labelKey, end });
   const some = (list: Array<NavPlace | null>) => list.filter((x): x is NavPlace => x !== null);

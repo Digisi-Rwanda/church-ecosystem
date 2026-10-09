@@ -33,7 +33,7 @@ export function PlansList({ systemId, planType, creating, onCloseCreate }: { sys
       avatarName={p.leaderName}
       title={p.title}
       detail={`${p.leaderName} · ${p.unitName}${p.waitingLevel ? ` · ${t('door.plan.waiting', { level: p.waitingLevel })}` : ''}`}
-      status={<StatusChip tone={tone(p.status)}>{t(planStatusKey(p.status))}</StatusChip>}
+      status={<StatusChip tone={tone(p.status)}>{t(planStatusKey(p.status, p.planType))}</StatusChip>}
       to={to(p)}
     />
   );
@@ -85,7 +85,7 @@ export function PlansList({ systemId, planType, creating, onCloseCreate }: { sys
           <EmptyState title={t('door.plan.none')} detail={t('door.plan.noneDetail')} />
         ) : layout === 'board' ? (
           <div className="board">
-            {PLAN_STEPS.filter((s) => show === 'all' || s !== 'ENDED').map((st) => {
+            {[...PLAN_STEPS.slice(0, 4), ...(items.some((p) => p.status === 'PAUSED') ? (['PAUSED'] as const) : []), ...PLAN_STEPS.slice(4)].filter((s) => show === 'all' || s !== 'ENDED').map((st) => {
               const col = items.filter((p) => p.status === st);
               return (
                 <div key={st} className="board-col" role="group" aria-label={t(planStatusKey(st))}>

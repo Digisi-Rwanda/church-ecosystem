@@ -59,7 +59,7 @@ export function PortalWorkPage({ part = 'tasks' }: { part?: 'tasks' | 'plans' })
                     <strong>
                       <SystemLink to={`/s/${p.systemId}/work/plans/${p.id}`}>{p.title}</SystemLink>
                     </strong>
-                    <span className="door-chip">{t(planStatusKey(p.status))}</span>
+                    <span className="door-chip">{t(planStatusKey(p.status, p.planType))}</span>
                   </div>
                   <p className="muted">{name(p.systemId)} · {t(`door.plan.type.${p.planType ?? 'PROJECT'}` as 'door.plan.type.PROGRAM')}</p>
                 </div>
