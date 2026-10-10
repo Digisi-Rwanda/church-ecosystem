@@ -1,5 +1,4 @@
 import { ImportLink } from './imports/ImportLink';
-import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { fetchPlanOptions, type PlanType } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -15,7 +14,6 @@ export function PlansPage({ planType }: { planType: PlanType }) {
   const t = useT();
   const { systemId = '' } = useParams();
   const { capabilities } = useFrontDoor();
-  const [creating, setCreating] = useState(false);
   const options = useLoad(fetchPlanOptions, 'plan-options');
   if (lettersFor(capabilities, systemId, 'work').length === 0) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
   const canCreate = !!options.data && options.data.units.some((u) => u.systemId === systemId);
@@ -25,16 +23,9 @@ export function PlansPage({ planType }: { planType: PlanType }) {
         id="door-plans-title"
         title={t(`door.plans.${planType}` as 'door.plans.PROGRAM')}
         purpose={t(`door.purpose.${planType}` as 'door.purpose.PROGRAM')}
-        primary={
-          canCreate ? (
-            <button type="button" className="btn" onClick={() => setCreating(true)}>
-              {t(`door.plan.new.${planType}` as 'door.plan.new.PROGRAM')}
-            </button>
-          ) : undefined
-        }
         actions={canCreate ? <ImportLink systemId={systemId} target="plans" /> : undefined}
       />
-      <PlansList systemId={systemId} planType={planType} creating={creating} onCloseCreate={() => setCreating(false)} />
+      <PlansList systemId={systemId} planType={planType} />
     </section>
   );
 }

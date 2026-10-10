@@ -82,7 +82,7 @@ describe('buildModules', () => {
     const caps = mk(sys('sys-a', { home: ['R'], work: ['R'], schedule: ['R'] }, [{ key: 'roster', letters: ['R'] }, { key: 'groups', letters: [] }]));
     const mods = buildModules(caps, 'sys-a');
     expect(mods.map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'work', 'schedule', 'ministry', 'money', 'settings']);
-    expect(mods.find((m) => m.id === 'work')!.places.map((p) => p.key)).toEqual(['tasks', 'activities', 'programs', 'events', 'projects']);
+    expect(mods.find((m) => m.id === 'work')!.places.map((p) => p.key)).toEqual(['tasks', 'programs', 'events', 'projects']);
     expect(mods.flatMap((m) => m.places.map((p) => p.key))).not.toContain('groups');
     expect(canSeePath(mods, '/s/sys-a/money')).toBe(false);
     expect(canSeePath(mods, '/s/sys-a/groups')).toBe(false);

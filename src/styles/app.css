@@ -7678,3 +7678,34 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .act-when { margin: 0; font-weight: 600; }
 .act-budget { display: grid; gap: 0.4rem; padding-top: 0.5rem; border-top: 1px solid var(--line, #e3e6ea); }
 @media print { .act-list { grid-template-columns: 1fr 1fr; } .act-card { break-inside: avoid; } }
+
+/* Action plan: create an event, a project or a program, one screen at a time */
+.ap { --ap: #1d4fb8; --ap-soft: #e9f0ff; }
+.ap:has(.ap-banner.project) { --ap: #0f6b4b; --ap-soft: #e6f5ee; }
+.ap:has(.ap-banner.program) { --ap: #5b32b4; --ap-soft: #efe9fb; }
+.ap-banner { display: flex; align-items: center; gap: 1rem; padding: 1.1rem 1.4rem; border-radius: 0.8rem; background: var(--ap); color: #fff; }
+.ap-banner .page-head, .ap-banner h2, .ap-banner .page-purpose { color: #fff; margin: 0; }
+.ap-banner-icon { display: grid; place-items: center; width: 3.4rem; height: 3.4rem; border-radius: 0.8rem; background: #fff; color: var(--ap); flex: none; }
+.ap-card { display: grid; gap: 1.1rem; }
+.ap-steps { list-style: none; margin: 0; padding: 0; display: flex; align-items: center; gap: 1.4rem; flex-wrap: wrap; }
+.ap-steps li { display: flex; align-items: center; gap: 0.5rem; font-size: 0.85rem; opacity: 0.65; }
+.ap-steps li.now, .ap-steps li.done { opacity: 1; font-weight: 600; }
+.ap-steps li.now { color: var(--ap); }
+.ap-steps .ap-count { margin-left: auto; font-weight: 400; opacity: 0.7; }
+.ap-dot { display: grid; place-items: center; width: 1.7rem; height: 1.7rem; border-radius: 50%; border: 1.5px solid #c3cada; font-size: 0.8rem; }
+.ap-steps .now .ap-dot, .ap-steps .done .ap-dot { background: var(--ap); border-color: var(--ap); color: #fff; }
+.ap-body { display: grid; grid-template-columns: minmax(11rem, 14rem) minmax(0, 1fr); gap: 1.2rem; }
+.ap-side { display: grid; gap: 0.5rem; align-content: start; padding: 1.1rem; border-radius: 0.8rem; background: var(--ap-soft); }
+.ap-side p { margin: 0; font-size: 0.85rem; }
+.ap-side-icon { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 0.7rem; background: #fff; color: var(--ap); }
+.ap-fields h3 { margin: 0 0 0.8rem; }
+.ap-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.4rem 1rem; }
+.ap-full { grid-column: 1 / -1; }
+.ap-person p { margin: 0.25rem 0 0; font-size: 0.85rem; }
+.ap-actions { display: flex; gap: 0.6rem; justify-content: space-between; margin-top: 1rem; flex-wrap: wrap; }
+.ap-actions .btn:last-child { margin-left: auto; }
+.ap-go { background: var(--ap); border-color: var(--ap); color: #fff; }
+.ap-done { display: flex; gap: 1rem; align-items: center; }
+.ap-done h3 { margin: 0 0 0.2rem; }
+.ap-check { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 50%; background: var(--ap); color: #fff; font-size: 1.4rem; flex: none; }
+@media (max-width: 44rem) { .ap-body { grid-template-columns: 1fr; } .ap-grid { grid-template-columns: 1fr; } }

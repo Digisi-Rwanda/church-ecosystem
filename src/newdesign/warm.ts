@@ -5,7 +5,6 @@ const BY_SEGMENT: Record<string, string> = {
   '': 'SystemBlockPage',
   people: 'PeopleDirectoryPage',
   work: 'WorkPage',
-  activities: 'ActivitiesPage',
   programs: 'PlansPage',
   events: 'PlansPage',
   projects: 'PlansPage',

@@ -349,11 +349,11 @@ describe('the named screens keep their answers', () => {
   });
   it('a draft keeps the event details; unknown keys and locked plans are refused', async () => {
     const e = await draft({ planType: 'EVENT' });
-    const saved = await put('p-vp', `${B}/${e}/details`, { details: { eventKind: 'Concert', agenda: '09:00 Welcome' } });
+    const saved = await put('p-vp', `${B}/${e}/details`, { details: { type: 'CONCERT', agenda: '09:00 Welcome' } });
     expect(saved.status).toBe(200);
-    expect(saved.body.plan.details).toEqual({ eventKind: 'Concert', agenda: '09:00 Welcome' });
+    expect(saved.body.plan.details).toEqual({ type: 'CONCERT', agenda: '09:00 Welcome' });
     const more = await put('p-vp', `${B}/${e}/details`, { details: { outcomes: '200 guests' } });
-    expect(more.body.plan.details).toEqual({ eventKind: 'Concert', agenda: '09:00 Welcome', outcomes: '200 guests' });
+    expect(more.body.plan.details).toEqual({ type: 'CONCERT', agenda: '09:00 Welcome', outcomes: '200 guests' });
     expect((await put('p-vp', `${B}/${e}/details`, { details: { hack: 'x' } })).status).toBe(400);
     expect((await put('p-member', `${B}/${e}/details`, { details: { agenda: 'x' } })).status).toBeGreaterThanOrEqual(403);
   });

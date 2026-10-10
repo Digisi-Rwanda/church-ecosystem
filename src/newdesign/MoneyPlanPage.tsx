@@ -1,6 +1,6 @@
 import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { changeMoneyPlanItem, fetchMoneyPlan, type MoneyPlanItemView } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
@@ -10,7 +10,8 @@ import { ActivityForm, fundingLabel } from './ActivityForm';
 import { categoryKey, formatRwf, moneyErrorKey } from './money';
 import { YearSelect } from './MoneyBlockParts';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { ActivitiesView } from './ActivitiesPage';
+import { PageHeader, Tabs } from './kit';
 
 /** The money action plan: what the unit plans to do this year and what it should cost. */
 export function MoneyPlanPage() {
@@ -19,6 +20,7 @@ export function MoneyPlanPage() {
   const [year, setYear] = useState(new Date().getUTCFullYear());
   const { loading, failed, data, reload } = useLoad(() => fetchMoneyPlan(systemId, year), `mplan|${systemId}|${year}`);
   const [error, setError] = useState('');
+  const [tab, setTab] = useState<'activities' | 'lines'>('activities');
   const run = async (job: () => Promise<void>) => {
     setError('');
     try {
@@ -65,9 +67,24 @@ export function MoneyPlanPage() {
   return (
     <section className="door-block" aria-labelledby="door-mplan-title">
       <div>
-        <PageHeader id="door-mplan-title" title={t('door.money.plan')} purpose={t('door.purpose.moneyPlan')} />
+        <PageHeader
+          id="door-mplan-title"
+          title={t('door.money.plan')}
+          purpose={t('door.purpose.moneyPlan')}
+          actions={
+            <>
+              <Link className="btn ghost" to={`/s/${systemId}/money/plan/new/project`}>{t('door.ap.project.title')}</Link>
+              <Link className="btn ghost" to={`/s/${systemId}/money/plan/new/program`}>{t('door.ap.program.title')}</Link>
+            </>
+          }
+          primary={<Link className="btn" to={`/s/${systemId}/money/plan/new/event`}>{t('door.ap.event.title')}</Link>}
+        />
         <p className="muted">{t('door.money.plan.intro')}</p>
       </div>
+      <Tabs label={t('door.money.plan')} value={tab} onChange={setTab} items={[{ key: 'activities', label: t('door.ap.activities') }, { key: 'lines', label: t('door.ap.lines') }]} />
+      {tab === 'activities' && <ActivitiesView systemId={systemId} />}
+      {tab === 'lines' && (
+        <>
       <YearSelect year={year} onChange={setYear} />
       {data?.canWrite && <div className="door-row"><ImportLink systemId={systemId} target="planItems" /></div>}
       {error && (
@@ -86,6 +103,8 @@ export function MoneyPlanPage() {
           </>
         )}
       </LoadState>
+        </>
+      )}
     </section>
   );
 }

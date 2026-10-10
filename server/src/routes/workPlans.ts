@@ -26,7 +26,7 @@ const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v
 const PLAN_TYPES = ['PROGRAM', 'EVENT', 'PROJECT'] as const;
 
 /** The answers the named screens may hold, by key. Anything else is refused, so the column cannot become a dumping ground. */
-const DETAIL_KEYS = ['eventKind', 'outcomes', 'startTime', 'endTime', 'agenda', 'resources'] as const;
+const DETAIL_KEYS = ['activities',  'agenda',  'allocate',  'authority',  'benefits',  'budgetTag',  'constraints',  'costs',  'deliverables',  'eligibility',  'exclusions',  'impact',  'indicators',  'milestones',  'mission',  'need',  'objectives',  'operatingModel',  'operatingPlan',  'outcomes',  'oversight',  'people',  'policies',  'population',  'problem',  'purpose',  'recruit',  'reporting',  'requirements',  'responsibilities',  'risks',  'services',  'sponsor',  'successCriteria',  'tasks',  'time',  'type'] as const;
 const DETAIL_MAX = 2000;
 const detailsOf = (p: { detailsJson?: string | null }): Record<string, string> => {
   const v = parseJson<Record<string, unknown>>(p.detailsJson, {});

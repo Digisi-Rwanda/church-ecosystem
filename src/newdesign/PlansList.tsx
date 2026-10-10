@@ -1,14 +1,11 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { fetchPlanOptions, fetchPlans, type PlanItem, type PlanType, type WorkPlanStatus } from '../api/frontDoorApi';
+import { fetchPlans, type PlanItem, type PlanType, type WorkPlanStatus } from '../api/frontDoorApi';
 import { SelectField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
-import { PlanForm } from './PlanForm';
-import { EventStart } from './PlanScreens';
 import { PLAN_STEPS, planStatusKey, sortPlans } from './plans';
 import { useLoad } from './useLoad';
-import { EmptyState, ListRow, RowList, Segmented, SidePanel, StatusChip } from './kit';
+import { EmptyState, ListRow, RowList, Segmented, StatusChip } from './kit';
 import { Link } from 'react-router-dom';
 import { monthKeyOf } from './plans';
 
@@ -16,15 +13,13 @@ type Layout = 'list' | 'board' | 'calendar';
 const tone = (s: WorkPlanStatus) => (s === 'PENDING_APPROVAL' || s === 'CLOSING' ? 'warn' : s === 'RUNNING' ? 'info' : s === 'ENDED' ? 'success' : s === 'CANCELLED' ? 'danger' : 'neutral');
 
 /** Full work in one system: plans that are approved, run, closed and reported. */
-export function PlansList({ systemId, planType, creating, onCloseCreate }: { systemId: string; planType?: PlanType; creating: boolean; onCloseCreate: () => void }) {
+export function PlansList({ systemId, planType }: { systemId: string; planType?: PlanType }) {
   const t = useT();
   const { locale } = useI18n();
-  const navigate = useNavigate();
   const [view, setView] = useState<'mine' | 'all'>('all');
   const [show, setShow] = useState<'open' | 'all'>('open');
   const [layout, setLayout] = useState<Layout>('list');
   const list = useLoad(() => fetchPlans({ systemId, view, status: show, type: planType }), `plans|${systemId}|${view}|${show}|${planType ?? ''}`);
-  const options = useLoad(fetchPlanOptions, 'plan-options');
   const items = sortPlans(list.data ?? []);
   const waiting = items.filter((p) => p.canApprove);
   const to = (p: PlanItem) => `/s/${systemId}/work/plans/${p.id}`;
@@ -68,17 +63,6 @@ export function PlansList({ systemId, planType, creating, onCloseCreate }: { sys
           ]}
         />
       </div>
-      <SidePanel open={creating && !!options.data} title={planType ? t(`door.plan.new.${planType}` as 'door.plan.new.PROGRAM') : t('door.plan.new')} purpose={t('door.plan.form.purpose')} onClose={onCloseCreate}>
-        {options.data && (
-          <div className="side-form">
-            {planType === 'EVENT' ? (
-              <EventStart options={options.data} systemId={systemId} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={onCloseCreate} />
-            ) : (
-              <PlanForm options={options.data} systemId={systemId} planType={planType} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={onCloseCreate} />
-            )}
-          </div>
-        )}
-      </SidePanel>
       {waiting.length > 0 && (
         <div className="waiting-strip">
           <h3>{t('door.plan.waitingForYou', { count: waiting.length })}</h3>

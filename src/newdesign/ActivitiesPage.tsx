@@ -1,40 +1,32 @@
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
-import { fetchMoneyPlan, fetchPlanOptions, fetchPlans, type MoneyPlanItemView, type PlanItem, type PlanType } from '../api/frontDoorApi';
+import { Link } from 'react-router-dom';
+import { fetchMoneyPlan, fetchPlans, type MoneyPlanItemView, type PlanItem, type PlanType } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { categoryKey, formatRwf } from './money';
-import { PlanForm } from './PlanForm';
-import { EventStart } from './PlanScreens';
 import { planStatusKey } from './plans';
 import { useLoad } from './useLoad';
-import { PageHeader, PrintButton, Segmented, SidePanel, StatusChip } from './kit';
+import { PrintButton, Segmented, StatusChip } from './kit';
 
 type Filter = 'ALL' | PlanType;
 const yearOf = (iso: string | null) => (iso ? new Date(new Date(iso).getTime() + 2 * 3600 * 1000).getUTCFullYear() : null);
 
 /** Every event, project and program of the system on one page: when it happens and what its budget lines are. */
-export function ActivitiesPage() {
+export function ActivitiesView({ systemId }: { systemId: string }) {
   const t = useT();
   const { locale } = useI18n();
-  const navigate = useNavigate();
-  const { systemId = '' } = useParams();
   const { capabilities } = useFrontDoor();
   const [filter, setFilter] = useState<Filter>('ALL');
-  const [creating, setCreating] = useState(false);
-  const [kind, setKind] = useState<PlanType | null>(null);
   const money = lettersFor(capabilities, systemId, 'money').length > 0;
-  const options = useLoad(fetchPlanOptions, 'plan-options');
   const list = useLoad(async () => {
     const plans = await fetchPlans({ systemId, view: 'all', status: 'all' });
     const years = [...new Set([new Date().getUTCFullYear(), ...plans.map((p) => yearOf(p.startsOn)).filter((y): y is number => y !== null)])].slice(0, 4);
     const lines = money ? (await Promise.all(years.map((y) => fetchMoneyPlan(systemId, y).catch(() => null)))).flatMap((v) => v?.items ?? []) : [];
     return { plans, lines };
   }, `activities|${systemId}|${money}`);
-  const canCreate = !!options.data && options.data.units.some((u) => u.systemId === systemId);
   if (lettersFor(capabilities, systemId, 'work').length === 0) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
   const day = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(iso));
   const when = (p: PlanItem) =>
@@ -42,34 +34,16 @@ export function ActivitiesPage() {
   const items = (list.data?.plans ?? []).filter((p) => filter === 'ALL' || p.planType === filter);
   const linesOf = (p: PlanItem): MoneyPlanItemView[] => (list.data?.lines ?? []).filter((l) => l.planId === p.id && l.status !== 'DROPPED');
   return (
-    <section className="door-block" aria-labelledby="door-activities-title">
-      <PageHeader
-        id="door-activities-title"
-        title={t('door.activities.title')}
-        primary={canCreate ? <button type="button" className="btn" onClick={() => setCreating(true)}>{t('door.activities.new')}</button> : undefined}
-        actions={<PrintButton />}
-      />
-      <Segmented<Filter>
-        label={t('door.activities.filter')}
-        value={filter}
-        onChange={setFilter}
-        items={[{ key: 'ALL', label: t('door.activities.all') }, { key: 'EVENT', label: t('door.plans.EVENT') }, { key: 'PROJECT', label: t('door.plans.PROJECT') }, { key: 'PROGRAM', label: t('door.plans.PROGRAM') }]}
-      />
-      <SidePanel open={creating && !!options.data} title={t('door.activities.new')} purpose={t('door.plan.form.purpose')} onClose={() => { setCreating(false); setKind(null); }}>
-        {options.data && (
-          <div className="side-form">
-            {kind === null ? (
-              <div className="door-row">
-                {(['EVENT', 'PROJECT', 'PROGRAM'] as PlanType[]).map((k) => (<button key={k} type="button" className="btn" onClick={() => setKind(k)}>{t(`door.plan.type.${k}` as 'door.plan.type.EVENT')}</button>))}
-              </div>
-            ) : kind === 'EVENT' ? (
-              <EventStart options={options.data} systemId={systemId} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={() => { setCreating(false); setKind(null); }} />
-            ) : (
-              <PlanForm options={options.data} systemId={systemId} planType={kind} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={() => { setCreating(false); setKind(null); }} />
-            )}
-          </div>
-        )}
-      </SidePanel>
+    <div className="act-view">
+      <div className="view-bar">
+        <Segmented<Filter>
+          label={t('door.activities.filter')}
+          value={filter}
+          onChange={setFilter}
+          items={[{ key: 'ALL', label: t('door.activities.all') }, { key: 'EVENT', label: t('door.plans.EVENT') }, { key: 'PROJECT', label: t('door.plans.PROJECT') }, { key: 'PROGRAM', label: t('door.plans.PROGRAM') }]}
+        />
+        <PrintButton />
+      </div>
       <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
         {items.length === 0 ? (
           <EmptyState title={t('door.plan.none')} detail={t('door.plan.noneDetail')} />
@@ -88,6 +62,7 @@ export function ActivitiesPage() {
                     <StatusChip tone={p.status === 'RUNNING' ? 'info' : p.status === 'ENDED' ? 'success' : p.status === 'CANCELLED' ? 'danger' : p.status === 'PENDING_APPROVAL' || p.status === 'PAUSED' || p.status === 'CLOSING' ? 'warn' : 'neutral'}>{t(planStatusKey(p.status, p.planType))}</StatusChip>
                   </div>
                   <p className="act-when">{when(p)}</p>
+                  {p.status === 'DRAFT' && <Link className="btn ghost sm" to={`/s/${systemId}/money/plan/new/${p.planType.toLowerCase()}?plan=${p.id}`}>{t('door.ap.continue')}</Link>}
                   {money && (
                     <div className="act-budget">
                       {lines.length === 0 ? <span className="muted">{t('door.activities.noBudget')}</span> : (
@@ -106,6 +81,6 @@ export function ActivitiesPage() {
           </ul>
         )}
       </LoadState>
-    </section>
+    </div>
   );
 }

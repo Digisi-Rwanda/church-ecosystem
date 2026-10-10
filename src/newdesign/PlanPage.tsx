@@ -14,7 +14,7 @@ import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { formatRwf } from './money';
 import { PlanBudget } from './PlanBudget';
-import { EventDefine, EventPlan } from './PlanScreens';
+import { PlanDetailsView } from './PlanScreens';
 import { PlanForm } from './PlanForm';
 import { PlanGuests } from './PlanGuests';
 import { PlanLinks } from './PlanLinks';
@@ -25,7 +25,7 @@ import { useLoad } from './useLoad';
 import { ListRow, PageHeader, RowList, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | null;
-type Tab = 'define' | 'plan' | 'overview' | 'team' | 'guests' | 'milestones' | 'governance' | 'indicators' | 'checklist' | 'money' | 'report' | 'history';
+type Tab = 'details' | 'overview' | 'team' | 'guests' | 'milestones' | 'governance' | 'indicators' | 'checklist' | 'money' | 'report' | 'history';
 
 /** One plan: where it stands in the six steps, its planning record, the execution record and the report. */
 export function PlanPage() {
@@ -46,7 +46,7 @@ export function PlanPage() {
   const [report, setReport] = useState<{ planningSummary: string; executionSummary: string; outcome: string } | null>(null);
 
   const p = plan && plan.id === planId ? plan : load.data;
-  const tab: Tab = tab0 ?? (p?.planType === 'EVENT' && p.status === 'DRAFT' ? 'define' : 'overview');
+  const tab: Tab = tab0 ?? 'overview';
   const setTab = (k: Tab) => setTab0(k);
   const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
 
@@ -85,8 +85,8 @@ export function PlanPage() {
             value={tab}
             onChange={setTab}
             items={[
-              ...(p.planType === 'EVENT' ? [{ key: 'define' as const, label: t('door.plan.screen.define') }, { key: 'plan' as const, label: t('door.plan.screen.plan') }] : []),
               { key: 'overview', label: t('door.plan.tab.overview') },
+              { key: 'details', label: t('door.ap.details') },
               { key: 'team', label: t('door.plan.tab.team'), count: p.team.length },
               ...(p.planType === 'EVENT' && p.registration ? [{ key: 'guests' as const, label: t('door.plan.tab.guests'), count: p.registration.count }] : []),
               ...(p.planType === 'PROJECT' ? [{ key: 'milestones' as const, label: t('door.plan.tab.milestones'), count: p.milestones.filter((m) => !m.done).length }] : []),
@@ -97,8 +97,7 @@ export function PlanPage() {
               { key: 'history', label: t('door.plan.tab.history') },
             ]}
           />
-          {tab === 'define' && <EventDefine p={p} onSaved={setPlan} />}
-          {tab === 'plan' && <EventPlan p={p} systemId={systemId} onSaved={setPlan} />}
+          {tab === 'details' && <PlanDetailsView p={p} />}
           {tab === 'overview' && (
             <>
           <PlanLinks p={p} systemId={systemId} run={run} />
