@@ -7898,3 +7898,17 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 .ledger-amt { font-size: 1.15rem; font-variant-numeric: tabular-nums; letter-spacing: -0.01em; }
 .ledger-amt.in { color: var(--success); }
 .ledger-amt.out { color: var(--ink); }
+
+/* ---- Money report ------------------------------------------------------------------------------------- */
+.rep { display: grid; gap: var(--sp-4); }
+.rep-card { background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-2); box-shadow: var(--shadow-xs); padding: var(--sp-4) var(--sp-5); display: grid; gap: var(--sp-3); align-content: start; }
+.rep-title { margin: 0; font-family: Georgia, 'Times New Roman', serif; font-size: 1.15rem; font-weight: 600; letter-spacing: 0.01em; }
+.rep-card .pva { gap: var(--sp-3); }
+.rep-card .pva-card { box-shadow: none; }
+.rep-tiles { display: grid; gap: var(--sp-4); grid-template-columns: repeat(auto-fit, minmax(min(100%, 18rem), 1fr)); }
+.rep-list { list-style: none; margin: 0; padding: 0; display: grid; gap: var(--sp-3); }
+.rep-list li { display: grid; gap: 2px; padding-bottom: var(--sp-3); border-bottom: 1px solid var(--line); }
+.rep-list li:last-child { border-bottom: 0; padding-bottom: 0; }
+.rep-big { font-size: 1.35rem; }
+.pva-table .zero { color: var(--ink-muted); font-weight: 400; }
+.pva-table .pend:not(.zero) { color: var(--warn); font-weight: 600; }
