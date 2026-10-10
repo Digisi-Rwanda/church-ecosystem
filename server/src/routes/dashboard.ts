@@ -124,7 +124,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     const year = now.getUTCFullYear();
     const lines = ((await prisma.moneyBudgetLine.findMany({ where: { systemId } })) as Array<{ systemId: string; year: number; kind: string; planned: number }>).filter((l) => l.systemId === systemId && l.year === year && l.kind === 'SPENDING');
     const spentYear = entries.filter((e) => e.kind === 'SPENDING' && e.status === 'APPROVED' && new Date(e.occurredOn).getUTCFullYear() === year).reduce((a, e) => a + e.amount, 0);
-    if (pendingRows.length > 0) attention.push({ key: 'approvals', count: pendingRows.length, href: `/s/${systemId}/money` });
+    if (pendingRows.length > 0) attention.push({ key: 'approvals', count: pendingRows.length, href: `/s/${systemId}/money?view=expense&show=PENDING_APPROVAL` });
     overview.money = { balance: all.income - all.spent, incomeMonth: b.income, spentMonth: spent[spent.length - 1]!.value, pendingCount: pendingRows.length, pendingAmount: pendingRows.reduce((a, e) => a + e.amount, 0), plannedYear: lines.reduce((a, l) => a + l.planned, 0), spentYear };
   }
 
@@ -175,7 +175,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     plansWaiting: visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').length,
     plansDraft: visiblePlans.filter((p) => p.status === 'DRAFT').length,
   };
-  if (visiblePlans.some((p) => p.status === 'PENDING_APPROVAL')) attention.push({ key: 'plans', count: visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').length, href: `/s/${systemId}/work` });
+  if (visiblePlans.some((p) => p.status === 'PENDING_APPROVAL')) attention.push({ key: 'plans', count: visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').length, href: `/s/${systemId}/work/plans` });
 
   // Schedule: what is coming up in this system.
   if (!central && has('SCHEDULING')) {

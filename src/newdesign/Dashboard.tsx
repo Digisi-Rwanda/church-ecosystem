@@ -33,20 +33,23 @@ function Trend({ value }: { value: number | null }) {
 function KpiCard({ kpi, note }: { kpi: DashKpi; note?: string }) {
   const t = useT();
   const label = t(`door.dash.kpi.${kpi.key}` as 'door.dash.kpi.members');
+  const value = kpi.format === 'rwf' ? formatRwf(kpi.value) : kpi.value.toLocaleString('en-US');
   const body = (
     <>
-      <span className="dash-kpi-icon" aria-hidden="true">
-        <Icon name={KPI_ICON[kpi.key]} size={22} />
-      </span>
-      <span className="dash-kpi-main">
-        <strong className="dash-kpi-value">{kpi.format === 'rwf' ? formatRwf(kpi.value) : kpi.value.toLocaleString('en-US')}</strong>
+      <span className="dash-kpi-head">
         <span className="dash-kpi-label">{label}</span>
+        <span className="dash-kpi-icon" aria-hidden="true">
+          <Icon name={KPI_ICON[kpi.key]} size={18} />
+        </span>
       </span>
-      <Trend value={kpi.trend} />
+      <strong className="dash-kpi-value">{value}</strong>
+      <span className="dash-kpi-foot">
+        <Trend value={kpi.trend} />
+        {kpi.prev !== undefined && kpi.prev !== null && kpi.trend !== null && <span className="dx-prev">{t('door.dash.vsLast', { value: kpi.format === 'rwf' ? formatRwf(kpi.prev) : kpi.prev.toLocaleString('en-US') })}</span>}
+        {note && <span className="dash-flag">{note}</span>}
+        {!note && kpi.tone === 'late' && kpi.key === 'reports' && <span className="dash-flag">{t('door.dash.reports.late')}</span>}
+      </span>
       {kpi.spark && <Spark values={kpi.spark} />}
-      {kpi.prev !== undefined && kpi.prev !== null && kpi.trend !== null && <span className="dx-prev">{t('door.dash.vsLast', { value: kpi.format === 'rwf' ? formatRwf(kpi.prev) : kpi.prev.toLocaleString('en-US') })}</span>}
-      {note && <span className="dash-flag">{note}</span>}
-      {!note && kpi.tone === 'late' && kpi.key === 'reports' && <span className="dash-flag">{t('door.dash.reports.late')}</span>}
     </>
   );
   return kpi.href ? (

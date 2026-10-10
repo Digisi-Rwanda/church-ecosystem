@@ -22,7 +22,7 @@ export function MoneyPage() {
   const side: 'INCOME' | 'SPENDING' = params.get('view') === 'expense' ? 'SPENDING' : 'INCOME';
   const { systemId = '' } = useParams();
   const { capabilities } = useFrontDoor();
-  const [show, setShow] = useState<'all' | 'PENDING_APPROVAL'>('all');
+  const [show, setShow] = useState<'all' | 'PENDING_APPROVAL'>(params.get('show') === 'PENDING_APPROVAL' ? 'PENDING_APPROVAL' : 'all');
   const [month, setMonth] = useState(currentMonth());
   const [form, setForm] = useState<'account' | 'entry' | null>(null);
   const [year, setYear] = useState(new Date().getUTCFullYear());

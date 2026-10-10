@@ -16,7 +16,7 @@ const tone = (s: WorkPlanStatus) => (s === 'PENDING_APPROVAL' || s === 'CLOSING'
 export function PlansList({ systemId, planType }: { systemId: string; planType?: PlanType }) {
   const t = useT();
   const { locale } = useI18n();
-  const [view, setView] = useState<'mine' | 'all'>('all');
+  const view = 'all' as const;
   const [show, setShow] = useState<'open' | 'all'>('open');
   const [layout, setLayout] = useState<Layout>('list');
   const list = useLoad(() => fetchPlans({ systemId, view, status: show, type: planType }), `plans|${systemId}|${view}|${show}|${planType ?? ''}`);
@@ -43,10 +43,6 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
     <>
       <div className="view-bar">
         <div className="door-filters">
-          <SelectField label={t('door.work.view')} name="pl-view" value={view} onChange={(e) => setView(e.target.value as 'mine' | 'all')}>
-            <option value="all">{t('door.work.view.all')}</option>
-            <option value="mine">{t('door.plan.view.mine')}</option>
-          </SelectField>
           <SelectField label={t('door.work.show')} name="pl-show" value={show} onChange={(e) => setShow(e.target.value as 'open' | 'all')}>
             <option value="open">{t('door.work.show.open')}</option>
             <option value="all">{t('door.work.show.all')}</option>

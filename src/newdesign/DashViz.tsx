@@ -131,13 +131,14 @@ export function Spark({ values }: { values: number[] }) {
   const top = Math.max(...values, 1);
   const low = Math.min(...values, 0);
   const span = top - low || 1;
-  const w = 84;
-  const h = 26;
+  const w = 160;
+  const h = 44;
   const px = (i: number) => 2 + (i * (w - 4)) / (values.length - 1);
-  const py = (v: number) => h - 3 - ((v - low) / span) * (h - 6);
+  const py = (v: number) => h - 4 - ((v - low) / span) * (h - 12);
   return (
     <svg className="dx-spark" viewBox={`0 0 ${w} ${h}`} aria-hidden="true">
-      <path d={values.map((v, i) => `${i === 0 ? 'M' : 'L'}${px(i)},${py(v)}`).join(' ')} />
+      <path className="dx-spark-fill" d={`${values.map((v, i) => `${i === 0 ? 'M' : 'L'}${px(i)},${py(v)}`).join(' ')} L${px(values.length - 1)},${h} L${px(0)},${h} Z`} />
+      <path className="dx-spark-line" d={values.map((v, i) => `${i === 0 ? 'M' : 'L'}${px(i)},${py(v)}`).join(' ')} />
       <circle cx={px(values.length - 1)} cy={py(values[values.length - 1]!)} r="3" />
     </svg>
   );
