@@ -1,31 +1,24 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  addPlanCheck, addPlanNote, cancelPlan, deletePlan, fetchPlan, fetchPlanOptions, planStep, rejectPlan, removePlanCheck, saveReport, tickPlanCheck,
+  addPlanNote, cancelPlan, deletePlan, fetchPlan, fetchPlanOptions, planStep, rejectPlan,
   type PlanDetail,
 } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
-import { TextAreaField, TextField } from '../components/ui/Field';
+import { TextAreaField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
-import { fetchPlanMoney } from '../api/frontDoorApi';
-import { useFrontDoor } from './FrontDoorContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
-import { lettersFor } from './menu';
-import { formatRwf } from './money';
-import { PlanBudget } from './PlanBudget';
 import { PlanDetailsView } from './PlanScreens';
+import { PlanRunScreen, STAGES, type Stage } from './PlanRun';
 import { PlanForm } from './PlanForm';
-import { PlanGuests } from './PlanGuests';
 import { PlanLinks } from './PlanLinks';
-import { PlanMilestones } from './PlanMilestones';
-import { PlanGovernance, PlanIndicators } from './PlanProgram';
 import { PLAN_STEPS, actionKey, needsApproval, phaseOf, planActions, planErrorKey, planStatusKey, stagesOf, stepIndex } from './plans';
 import { useLoad } from './useLoad';
-import { ListRow, PageHeader, RowList, StatusChip, Tabs } from './kit';
+import { PageHeader, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | null;
-type Tab = 'details' | 'overview' | 'team' | 'guests' | 'milestones' | 'governance' | 'indicators' | 'checklist' | 'money' | 'report' | 'history';
+type Tab = 'overview' | 'details' | 'history' | Stage;
 
 /** One plan: where it stands in the six steps, its planning record, the execution record and the report. */
 export function PlanPage() {
@@ -40,10 +33,8 @@ export function PlanPage() {
   const [ask, setAsk] = useState<Ask>(null);
   const [reason, setReason] = useState('');
   const [note, setNote] = useState('');
-  const [item, setItem] = useState('');
   const [error, setError] = useState('');
   const [tab0, setTab0] = useState<Tab | null>(null);
-  const [report, setReport] = useState<{ planningSummary: string; executionSummary: string; outcome: string } | null>(null);
 
   const p = plan && plan.id === planId ? plan : load.data;
   const tab: Tab = tab0 ?? 'overview';
@@ -86,14 +77,8 @@ export function PlanPage() {
             onChange={setTab}
             items={[
               { key: 'overview', label: t('door.plan.tab.overview') },
+              ...STAGES[p.planType].map((st) => ({ key: st, label: t(`door.run.${p.planType}.${st}.name` as 'door.run.EVENT.s1.name') })),
               { key: 'details', label: t('door.ap.details') },
-              { key: 'team', label: t('door.plan.tab.team'), count: p.team.length },
-              ...(p.planType === 'EVENT' && p.registration ? [{ key: 'guests' as const, label: t('door.plan.tab.guests'), count: p.registration.count }] : []),
-              ...(p.planType === 'PROJECT' ? [{ key: 'milestones' as const, label: t('door.plan.tab.milestones'), count: p.milestones.filter((m) => !m.done).length }] : []),
-              ...(p.planType === 'PROGRAM' ? [{ key: 'governance' as const, label: t('door.plan.tab.governance'), count: p.program?.reviews.length }, { key: 'indicators' as const, label: t('door.plan.tab.indicators'), count: p.program?.indicators.length }] : []),
-              { key: 'checklist', label: t('door.plan.tab.checklist'), count: p.checks.filter((k) => !k.done).length },
-              { key: 'money', label: t('door.plan.tab.money') },
-              { key: 'report', label: t('door.plan.tab.report') },
               { key: 'history', label: t('door.plan.tab.history') },
             ]}
           />
@@ -211,54 +196,7 @@ export function PlanPage() {
             </>
           )}
 
-          {tab === 'team' &&
-            (p.team.length === 0 ? (
-              <p className="muted">{t('door.plan.team.none')}</p>
-            ) : (
-              <RowList label={t('door.plan.tab.team')}>
-                {p.team.map((m) => (
-                  <ListRow key={m.personId} avatarName={m.name} title={m.name} detail={m.role} />
-                ))}
-              </RowList>
-            ))}
-
-          {tab === 'governance' && <PlanGovernance p={p} run={run} />}
-          {tab === 'indicators' && <PlanIndicators p={p} run={run} />}
-          {tab === 'guests' && <PlanGuests p={p} run={run} />}
-          {tab === 'milestones' && <PlanMilestones p={p} run={run} />}
-
-          {tab === 'money' && <PlanMoney systemId={systemId} planId={p.id} startsOn={p.startsOn} />}
-
-          {tab === 'checklist' && (
-            <div className="panel">
-              <h3>{t('door.plan.tab.checklist')}</h3>
-              {p.checks.length === 0 && <p className="muted">{t('door.plan.checklist.none')}</p>}
-              {p.checks.length > 0 && (
-                <ul className="door-list">
-                  {p.checks.map((k) => (
-                    <li key={k.id}>
-                      <label className="door-check">
-                        <input type="checkbox" checked={k.done} disabled={!p.canCheck} onChange={(e) => void run(() => tickPlanCheck(p.id, k.id, e.target.checked))} /> {k.label}
-                      </label>
-                      {p.canAddCheck && !k.done && (
-                        <button type="button" className="btn ghost sm" onClick={() => void run(() => removePlanCheck(p.id, k.id))}>
-                          {t('door.sched.unassign')}
-                        </button>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {p.canAddCheck && (
-                <div className="door-row">
-                  <TextField label={t('door.plan.checkAdd')} name="p-check" value={item} onChange={(e) => setItem(e.target.value)} />
-                  <button type="button" className="btn secondary sm" disabled={!item.trim()} onClick={() => void run(() => addPlanCheck(p.id, item.trim()), () => setItem(''))}>
-                    {t('door.plan.checkAddGo')}
-                  </button>
-                </div>
-              )}
-            </div>
-          )}
+          {(tab === 's1' || tab === 's2' || tab === 's3' || tab === 's4') && STAGES[p.planType].includes(tab) && <PlanRunScreen p={p} stage={tab} systemId={systemId} run={run} />}
           {tab === 'history' && (
             <>
           {p.levels.length > 0 && (
@@ -300,83 +238,8 @@ export function PlanPage() {
               </div>
             </>
           )}
-          {tab === 'report' && !(p.status === 'CLOSING' || p.status === 'ENDED') && <p className="muted">{t('door.plan.report.notYet')}</p>}
-          {tab === 'report' && (p.status === 'CLOSING' || p.status === 'ENDED') && (
-            <div className="panel">
-              <h3>{t('door.plan.report')}</h3>
-              {p.canCompose ? (
-                <div className="door-form">
-                  {(['planningSummary', 'executionSummary', 'outcome'] as const).map((f) => (
-                    <TextAreaField
-                      key={f}
-                      label={t(`door.plan.report.${f}` as const)}
-                      name={`r-${f}`}
-                      rows={3}
-                      value={(report ?? p.report)[f]}
-                      onChange={(e) => setReport({ ...(report ?? p.report), [f]: e.target.value })}
-                    />
-                  ))}
-                  <div className="door-row">
-                    <button type="button" className="btn secondary" disabled={!report} onClick={() => void run(() => saveReport(p.id, report!), () => setReport(null))}>
-                      {t('door.plan.report.save')}
-                    </button>
-                    {p.canPublish && (
-                      <button type="button" className="btn" disabled={!!report} onClick={() => void run(() => planStep(p.id, 'publish'))}>
-                        {t('door.plan.action.publish')}
-                      </button>
-                    )}
-                  </div>
-                  {p.canPublish && <p className="muted">{t('door.plan.publishHint')}</p>}
-                </div>
-              ) : p.report.outcome || p.report.planningSummary || p.report.executionSummary ? (
-                <>
-                  {p.report.frozen && <p className="muted">{t('door.plan.report.frozen', { when: day(p.report.publishedAt) })}</p>}
-                  {(['planningSummary', 'executionSummary', 'outcome'] as const).map((f) => (
-                    <p key={f}>
-                      <strong>{t(`door.plan.report.${f}` as const)}:</strong> {p.report[f]}
-                    </p>
-                  ))}
-                  {p.canPublish && (
-                    <button type="button" className="btn" onClick={() => void run(() => planStep(p.id, 'publish'))}>
-                      {t('door.plan.action.publish')}
-                    </button>
-                  )}
-                </>
-              ) : (
-                <p className="muted">{t('door.plan.report.notYet')}</p>
-              )}
-            </div>
-          )}
         </section>
       )}
     </LoadState>
-  );
-}
-
-/** What this program, project or event costs and earns; shown only to people who may read the system's money. */
-function PlanMoney({ systemId, planId, startsOn }: { systemId: string; planId: string; startsOn: string | null }) {
-  const t = useT();
-  const { capabilities } = useFrontDoor();
-  const allowed = lettersFor(capabilities, systemId, 'money').length > 0;
-  const money = useLoad(() => (allowed ? fetchPlanMoney(systemId, planId) : Promise.reject(new Error('no'))), `plan-money|${systemId}|${planId}|${allowed}`);
-  if (!allowed || !money.data) return null;
-  const m = money.data;
-  const empty = m.activities === 0 && m.entries === 0;
-  return (
-    <>
-    <div className="panel">
-      <h3>{t('door.plan.money.title')}</h3>
-      {empty ? (
-        <p className="muted">{t('door.plan.money.none')}</p>
-      ) : (
-        <p>{t('door.plan.money.line', { planned: formatRwf(m.planned), income: formatRwf(m.income), spending: formatRwf(m.spending), pending: formatRwf(m.pending) })}</p>
-      )}
-      {m.linked && <p>{t('door.plan.money.linked', { plans: m.linked.plans, planned: formatRwf(m.linked.planned), income: formatRwf(m.linked.income), spending: formatRwf(m.linked.spending), pending: formatRwf(m.linked.pending) })}</p>}
-      <Link className="btn ghost sm" to={`/s/${systemId}/money/plan`}>
-        {t('door.plan.money.open')}
-      </Link>
-    </div>
-    <PlanBudget systemId={systemId} planId={planId} startsOn={startsOn} onSaved={money.reload} />
-    </>
   );
 }

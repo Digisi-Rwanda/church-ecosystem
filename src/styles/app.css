@@ -7702,3 +7702,24 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .ap-done h3, .ap-done p { margin: 0; }
 .ap-check { display: grid; place-items: center; width: 3rem; height: 3rem; border-radius: 50%; background: var(--accent-soft); color: var(--accent-on-soft); font-size: 1.4rem; font-weight: 700; }
 @media (max-width: 40rem) { .ap-grid { grid-template-columns: 1fr; } .ap-step-name { display: none; } .ap-steps li.now .ap-step-name { display: inline; } }
+
+/* Work: the run screens of an event, a project and a program */
+.run { display: grid; gap: var(--sp-4); }
+.run-head h3 { margin: 0; font-size: var(--fs-lg); }
+.run-head p { margin: var(--sp-1) 0 0; }
+.run-tiles { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr)); gap: var(--sp-3); }
+.run-tiles li { display: grid; gap: 0.15rem; padding: var(--sp-3) var(--sp-4); background: var(--surface-2); border: 1px solid var(--line); border-radius: var(--r-2); box-shadow: var(--sh-1); }
+.run-tiles li span { font-size: var(--fs-sm); }
+.run-tiles li strong { font-size: var(--fs-xl); line-height: 1.15; font-family: var(--font-display); overflow-wrap: anywhere; }
+.run-tiles li small { font-size: var(--fs-xs); }
+.run-tiles li.warn { border-color: var(--warn); background: color-mix(in srgb, var(--warn) 10%, var(--surface-2)); }
+.run-two { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: var(--sp-4); align-items: start; }
+.run-schedule { list-style: none; margin: 0; padding: 0; display: grid; gap: 0; }
+.run-schedule li { display: grid; grid-template-columns: 7.5rem minmax(0, 1fr) auto; gap: var(--sp-3); align-items: center; padding: var(--sp-2) 0; border-bottom: 1px solid var(--line); }
+.run-schedule li:last-child { border-bottom: 0; }
+.run-schedule time { font-variant-numeric: tabular-nums; color: var(--role-quiet); font-size: var(--fs-sm); }
+.run-schedule li.done span { text-decoration: line-through; color: var(--role-quiet); }
+.run-schedule li.late time { color: var(--danger); font-weight: 600; }
+.run-finish { display: flex; align-items: center; gap: var(--sp-2); padding-top: var(--sp-3); border-top: 1px solid var(--line); flex-wrap: wrap; }
+.run progress { width: 100%; height: 0.5rem; accent-color: var(--accent); }
+@media (max-width: 52rem) { .run-two { grid-template-columns: 1fr; } .run-schedule li { grid-template-columns: 5.5rem minmax(0, 1fr); } .run-schedule li > :last-child:not(:nth-child(2)) { grid-column: 1 / -1; } }
