@@ -5,7 +5,6 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { ContributionList } from './ContributionList';
-import { DonationsPanel } from './DonationsPanel';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { currentMonth, moneyErrorKey } from './money';
@@ -16,7 +15,7 @@ import { PageHeader } from './kit';
 /**
  * Contribution lists: a team leader records the team's list and submits it to the treasurer; the treasurer
  * combines the team lists (with a Team column) and submits the unit list to the president. A unit with no
- * teams: the treasurer records and submits. Donations are below.
+ * teams: the treasurer records and submits.
  */
 export function ContributionsPage() {
   const t = useT();
@@ -104,7 +103,6 @@ export function ContributionsPage() {
           ))}
         </ul>
       </LoadState>
-      {data?.canWrite !== undefined && (data.canWrite || data.canApprove) && <DonationsPanel systemId={systemId} />}
     </section>
   );
 }

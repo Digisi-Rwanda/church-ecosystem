@@ -28,6 +28,8 @@ const loadContactsPage = () => import('./ContactsPage').then((m) => ({ default: 
 export const ContactsPage = lazy(loadContactsPage);
 const loadContributionsPage = () => import('./ContributionsPage').then((m) => ({ default: m.ContributionsPage }));
 export const ContributionsPage = lazy(loadContributionsPage);
+const loadDonationsPage = () => import('./DonationsPage').then((m) => ({ default: m.DonationsPage }));
+export const DonationsPage = lazy(loadDonationsPage);
 const loadCouplesPage = () => import('./CouplesPage').then((m) => ({ default: m.CouplesPage }));
 export const CouplesPage = lazy(loadCouplesPage);
 const loadDecisionsPage = () => import('./DecisionsPage').then((m) => ({ default: m.DecisionsPage }));
@@ -149,6 +151,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   ContactPage: loadContactPage,
   ContactsPage: loadContactsPage,
   ContributionsPage: loadContributionsPage,
+  DonationsPage: loadDonationsPage,
   CouplesPage: loadCouplesPage,
   DecisionsPage: loadDecisionsPage,
   DeletedWorkPage: loadDeletedWorkPage,

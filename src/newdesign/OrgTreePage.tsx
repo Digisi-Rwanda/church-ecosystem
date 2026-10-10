@@ -1,3 +1,4 @@
+import { isRetiredUnit } from './retiredUnits';
 import { Link, useParams } from 'react-router-dom';
 import { fetchStructure, type UnitRecord } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -15,7 +16,7 @@ export function OrgTreePage() {
   const { systemId = '' } = useParams();
   const { portal } = useFrontDoor();
   const { loading, failed, data, reload } = useLoad(() => fetchStructure(systemId), `units|${systemId}`);
-  const units = data?.units ?? [];
+  const units = (data?.units ?? []).filter((u) => !isRetiredUnit(u.id));
   const inside = new Map<string, number>();
   for (const u of units) if (u.parentId) inside.set(u.parentId, (inside.get(u.parentId) ?? 0) + 1);
   const mine = new Set(portal.map((s) => s.id));

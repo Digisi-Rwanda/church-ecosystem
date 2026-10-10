@@ -320,7 +320,7 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
             </Panel>
           )}
           {mo && (
-            <Panel title={t('door.dash.budget.title')} to={`/s/${systemId}/money`}>
+            <Panel title={t('door.dash.budget.title')} to={`/s/${systemId}/money/budget`}>
               {budget !== null ? (
                 <>
                   <p className="dx-big">{budget}% <span className="muted">{t('door.dash.budget.used')}</span></p>

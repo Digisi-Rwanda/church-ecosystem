@@ -164,8 +164,10 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
         ? [
             place('plan', 'money/plan', 'door.money.plan'),
             place('budget', 'money/budget', 'door.money.budget'),
-            place('accounting', 'money', 'door.money.accounting', true),
+            place('income', 'money/income', 'door.money.income'),
+            place('expense', 'money/expense', 'door.money.expense'),
             place('contributions', 'money/contributions', 'door.money.contributions'),
+            place('donations', 'money/donations', 'door.money.donations'),
             place('moneyreports', 'money/reports', 'door.money.reports'),
           ]
         : []),

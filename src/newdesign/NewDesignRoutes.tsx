@@ -1,4 +1,4 @@
-import { Route } from 'react-router-dom';
+import { Navigate, Route } from 'react-router-dom';
 import {
   AccessPage,
   AddPersonPage,
@@ -15,6 +15,7 @@ import {
   CouplesPage,
   DecisionsPage,
   DeletedWorkPage,
+  DonationsPage,
   GroupPage,
   GroupsPage,
   LetterPage,
@@ -130,11 +131,14 @@ export function newDesignRoutes() {
           <Route path="events" element={<PlansPage planType="EVENT" />} />
           <Route path="projects" element={<PlansPage planType="PROJECT" />} />
           <Route path="work/plans/:planId" element={<PlanPage />} />
-          <Route path="money" element={<MoneyPage />} />
+          <Route path="money" element={<Navigate to="income" replace />} />
+          <Route path="money/income" element={<MoneyPage side="INCOME" />} />
+          <Route path="money/expense" element={<MoneyPage side="SPENDING" />} />
           <Route path="money/plan" element={<MoneyPlanPage />} />
           <Route path="money/plan/new/:kind" element={<ActionPlanCreate />} />
           <Route path="money/budget" element={<MoneyBudgetPage />} />
           <Route path="money/contributions" element={<ContributionsPage />} />
+          <Route path="money/donations" element={<DonationsPage />} />
           <Route path="money/reports" element={<MoneyReportsPage />} />
           <Route path="money/mine" element={<MyContributionPage />} />
           <Route path="reports" element={<ReportsPage />} />

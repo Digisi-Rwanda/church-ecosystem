@@ -1,6 +1,7 @@
 import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
+import type { MoneyEntryItem } from '../api/frontDoorApi';
 import { fetchAccounting, fetchMoneyAccounts, fetchMoneyEntries, fetchMoneyOptions } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
@@ -15,7 +16,7 @@ import { useLoad } from './useLoad';
 import { PageHeader, SidePanel } from './kit';
 
 /** The Money block: accounts with balances, entries, and the president's approval queue. */
-export function MoneyPage() {
+export function MoneyPage({ side }: { side: 'INCOME' | 'SPENDING' }) {
   const t = useT();
   const { systemId = '' } = useParams();
   const { capabilities } = useFrontDoor();
@@ -41,13 +42,14 @@ export function MoneyPage() {
     toCheck.reload();
   };
   const canRecord = !!accounts.data?.canRecord && !!options.data;
-  const list = queueFirst(entries.data ?? []);
+  const ofSide = (rows: MoneyEntryItem[] | null | undefined) => (rows ?? []).filter((e) => e.kind === side);
+  const list = queueFirst(ofSide(entries.data));
   const exportCsv = () => {
     const head = ['date', 'account', 'kind', 'category', 'amount', 'status', 'note', 'plan', 'recordedBy', 'decidedBy', 'reason'];
     const blob = new Blob(['\ufeff', entriesToCsv(list, head)], { type: 'text/csv;charset=utf-8' });
     const a = document.createElement('a');
     a.href = URL.createObjectURL(blob);
-    a.download = `money-${show === 'all' ? month : 'waiting'}.csv`;
+    a.download = `${side === 'INCOME' ? 'income' : 'expense'}-${show === 'all' ? month : 'waiting'}.csv`;
     a.click();
     URL.revokeObjectURL(a.href);
   };
@@ -56,9 +58,9 @@ export function MoneyPage() {
       <div>
         <PageHeader
           id="door-money-title"
-          title={t('door.money.accounting')}
+          title={t(side === 'INCOME' ? 'door.money.income' : 'door.money.expense')}
           purpose={t('door.purpose.money')}
-          primary={canRecord ? <button type="button" className="btn" onClick={() => setForm('entry')}>{t('door.money.entry.new')}</button> : undefined}
+          primary={canRecord ? <button type="button" className="btn" onClick={() => setForm('entry')}>{t(side === 'INCOME' ? 'door.money.income.new' : 'door.money.expense.new')}</button> : undefined}
           actions={
             <>
               {canRecord && <ImportLink systemId={systemId} target="moneyEntries" />}
@@ -91,7 +93,7 @@ export function MoneyPage() {
       <SidePanel open={form === 'entry' && !!options.data && !!accounts.data} title={t('door.money.entry.new')} purpose={t('door.money.entry.purpose')} onClose={() => setForm(null)}>
         {options.data && accounts.data && (
           <div className="side-form">
-            <EntryForm options={options.data} accounts={accounts.data.accounts} systemId={systemId} onDone={() => { setForm(null); reload(); }} onCancel={() => setForm(null)} />
+            <EntryForm fixedKind={side} options={options.data} accounts={accounts.data.accounts} systemId={systemId} onDone={() => { setForm(null); reload(); }} onCancel={() => setForm(null)} />
           </div>
         )}
       </SidePanel>
@@ -100,15 +102,17 @@ export function MoneyPage() {
           { key: 'check', load: toCheck, label: t('door.money.queue.check'), hint: t('door.money.queue.checkHint') },
           { key: 'approve', load: waiting, label: t('door.money.queue.approve'), hint: t('door.money.queue.approveHint') },
           { key: 'record', load: declined, label: t('door.money.queue.record'), hint: t('door.money.queue.recordHint') },
-        ].map((q) => (
+        ]
+          .filter((q) => side === 'SPENDING' || q.key === 'check')
+          .map((q) => (
           <div key={q.key} className="panel queue-card">
             <h3>
-              {q.label} <span className="muted">{q.load.data?.length ?? 0}</span>
+              {q.label} <span className="muted">{ofSide(q.load.data).length}</span>
             </h3>
             <p className="muted">{q.hint}</p>
-            {(q.load.data ?? []).length > 0 && (
+            {ofSide(q.load.data).length > 0 && (
               <ul className="door-notices">
-                {(q.load.data ?? []).slice(0, 5).map((e) => (
+                {ofSide(q.load.data).slice(0, 5).map((e) => (
                   <EntryRow key={e.id} entry={e} onChange={reload} />
                 ))}
               </ul>

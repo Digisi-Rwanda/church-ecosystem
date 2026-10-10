@@ -62,11 +62,11 @@ export function AccountForm({ options, systemId, onDone, onCancel }: { options: 
 }
 
 /** Record income (kept at once) or spending (waits for the president's approval). */
-export function EntryForm({ options, accounts, systemId, onDone, onCancel }: { options: MoneyOptions; accounts: MoneyAccountItem[]; systemId: string; onDone: () => void; onCancel: () => void }) {
+export function EntryForm({ options, accounts, systemId, onDone, onCancel, fixedKind }: { fixedKind?: MoneyEntryKind; options: MoneyOptions; accounts: MoneyAccountItem[]; systemId: string; onDone: () => void; onCancel: () => void }) {
   const t = useT();
   const open = accounts.filter((a) => a.status === 'ACTIVE');
   const [accountId, setAccountId] = useState(open.length === 1 ? open[0].id : '');
-  const [kind, setKind] = useState<MoneyEntryKind>('INCOME');
+  const [kind, setKind] = useState<MoneyEntryKind>(fixedKind ?? 'INCOME');
   const [amount, setAmount] = useState('');
   const [day, setDay] = useState(new Date().toISOString().slice(0, 10));
   const [category, setCategory] = useState(options.categories[0] ?? 'OTHER');
@@ -100,10 +100,12 @@ export function EntryForm({ options, accounts, systemId, onDone, onCancel }: { o
           </option>
         ))}
       </SelectField>
-      <SelectField label={t('door.money.entry.kind')} name="m-kind" hint={kind === 'SPENDING' ? t('door.money.entry.spendingHint') : t('door.money.entry.incomeHint')} value={kind} onChange={(e) => setKind(e.target.value as MoneyEntryKind)}>
+      {!fixedKind && (
+        <SelectField label={t('door.money.entry.kind')} name="m-kind" hint={kind === 'SPENDING' ? t('door.money.entry.spendingHint') : t('door.money.entry.incomeHint')} value={kind} onChange={(e) => setKind(e.target.value as MoneyEntryKind)}>
         <option value="INCOME">{t('door.money.kind.INCOME')}</option>
         <option value="SPENDING">{t('door.money.kind.SPENDING')}</option>
       </SelectField>
+      )}
       <TextField label={t('door.money.entry.amount')} name="m-amount" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
       <TextField label={t('door.money.entry.day')} name="m-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
       <SelectField label={t('door.money.entry.category')} name="m-cat" value={category} onChange={(e) => setCategory(e.target.value)}>

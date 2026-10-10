@@ -162,15 +162,15 @@ describe('buildPortalModules', () => {
     const central = buildModules(mk(sys('sys-main', { people: ['R'] }, [{ key: 'settings', letters: ['R'] }])), 'sys-main').find((m) => m.id === 'settings');
     expect(central?.places.map((p) => p.to)).toEqual(['/s/sys-main/settings', '/s/sys-main/preferences']);
   });
-  it('Money: five screens for those who hold money letters, and My contribution for every member', async () => {
+  it('Money: eight screens for those who hold money letters, and My contribution for every member', async () => {
     const { buildModules, resolveActive } = await import('./menu');
     const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
     const mk = (blocks: object) => ({ blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'], systems: [{ id: 'sys-a', blocks: { ...none, ...blocks }, own: [] }] }) as unknown as Capabilities;
     const keys = (caps: Capabilities) => buildModules(caps, 'sys-a').find((m) => m.id === 'money')!.places.map((p) => p.key);
-    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'accounting', 'contributions', 'moneyreports', 'mine']);
+    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'income', 'expense', 'contributions', 'donations', 'moneyreports', 'mine']);
     expect(keys(mk({ people: ['R'] }))).toEqual(['mine']);
     const mods = buildModules(mk({ money: ['R'] }), 'sys-a');
-    expect(resolveActive(mods, '/s/sys-a/money')?.place?.key).toBe('accounting');
+    expect(resolveActive(mods, '/s/sys-a/money/income')?.place?.key).toBe('income');
     expect(resolveActive(mods, '/s/sys-a/money/budget')?.place?.key).toBe('budget');
     // a team leader without money letters may still open the contribution lists, under Money
     const lead = buildModules(mk({ people: ['R'] }), 'sys-a');
