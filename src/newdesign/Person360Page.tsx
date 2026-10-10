@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { fetchP360, fetchP360Access, fetchP360Participation, type P360Participation, type P360Record, type P360Section, type P360View } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -8,33 +8,33 @@ import { formatRwf } from './money';
 import { SECTION_ORDER, SINGLE_SECTIONS, sectionKey } from './person360';
 import { Facts, RecordCard, RecordForm } from './Person360Parts';
 import { useLoad } from './useLoad';
-import { PageHeader, Tabs, initialsOf } from './kit';
+import { PageHeader, StatusChip, Tabs, initialsOf } from './kit';
 
 type Tab = 'timeline' | 'records' | 'callings';
 
 /** Contributions, donations, sponsorships: everything this person gave, from every system, for the Church Leader. */
-function Participation({ personId }: { personId: string }) {
+function Participation({ load }: { load: { loading: boolean; failed: boolean; data?: P360Participation | null; reload: () => void } }) {
   const t = useT();
-  const { locale } = useI18n();
-  const load = useLoad(() => fetchP360Participation(personId), `p360-part|${personId}`);
   const [all, setAll] = useState(false);
-  const d: P360Participation | undefined = load.data ?? undefined;
-  const day = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
-  const shown = d ? (all ? d.items : d.items.slice(0, 5)) : [];
+  const d = load.data ?? undefined;
+  const shown = d ? (all ? d.items : d.items.slice(0, 6)) : [];
   return (
     <section className="panel p360-part" aria-labelledby="p360-part-h">
-      <h3 id="p360-part-h">{t('door.p360.part.title')}</h3>
+      <div className="door-row">
+        <h3 id="p360-part-h">{t('door.p360.part.title')}</h3>
+        {d && <span className="muted">{d.year}</span>}
+      </div>
       <LoadState loading={load.loading} failed={load.failed} retry={load.reload}>
         {d && (
           <>
             <div className="p360-totals">
-              <div>
-                <strong>{formatRwf(d.totals.given)}</strong>
+              <div className="p360-tile">
                 <span className="muted">{t('door.p360.part.given', { year: String(d.year) })}</span>
+                <strong>{formatRwf(d.totals.given)}</strong>
               </div>
-              <div>
-                <strong>{formatRwf(d.totals.pledged)}</strong>
+              <div className="p360-tile warn">
                 <span className="muted">{t('door.p360.part.pledged')}</span>
+                <strong>{formatRwf(d.totals.pledged)}</strong>
               </div>
             </div>
             {d.items.length === 0 ? (
@@ -42,24 +42,39 @@ function Participation({ personId }: { personId: string }) {
             ) : (
               <ul className="p360-feed">
                 {shown.map((i) => (
-                  <li key={`${i.kind}-${i.id}`}>
-                    <div>
-                      <span className={`door-chip${i.status === 'PLEDGED' ? ' warn' : ''}`}>{t(`door.p360.part.kind.${i.kind}` as 'door.p360.part.kind.DONATION')}</span>
-                      <strong> {i.label}</strong>
-                      <p className="muted">{[i.system, day(i.day)].filter(Boolean).join(' · ')}</p>
-                    </div>
-                    <span>{formatRwf(i.amount)}</span>
-                  </li>
+                  <GiftRow key={`${i.kind}-${i.id}`} i={i} />
                 ))}
               </ul>
             )}
-            {(d.items.length > 5 || d.more) && !all && (
+            {(d.items.length > 6 || d.more) && !all && (
               <button type="button" className="btn ghost sm" onClick={() => setAll(true)}>{t('door.p360.part.all')}</button>
             )}
           </>
         )}
       </LoadState>
     </section>
+  );
+}
+
+type Gift = P360Participation['items'][number];
+const KIND_MARK: Record<Gift['kind'], string> = { CONTRIBUTION: 'C', DONATION: 'D', SPONSORSHIP: 'S', CLAIM: 'R' };
+
+function GiftRow({ i }: { i: Gift }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const day = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${i.day}T12:00:00Z`));
+  return (
+    <li>
+      <span className={`p360-mark ${i.kind.toLowerCase()}`} aria-hidden="true">{KIND_MARK[i.kind]}</span>
+      <div>
+        <strong>{i.label}</strong>
+        <p className="muted">{[t(`door.p360.part.kind.${i.kind}` as 'door.p360.part.kind.DONATION'), i.system, day].filter(Boolean).join(' · ')}</p>
+      </div>
+      <span className="p360-amt">
+        {formatRwf(i.amount)}
+        {i.status === 'PLEDGED' && <small className="muted">{t('door.p360.part.pledgedTag')}</small>}
+      </span>
+    </li>
   );
 }
 
@@ -100,26 +115,29 @@ function Sections({ v, personId, only, reload }: { v: P360View; personId: string
   );
 }
 
-function Timeline({ records }: { records: P360Record[] }) {
+function Timeline({ records, gifts }: { records: P360Record[]; gifts: Gift[] }) {
   const t = useT();
   const { locale } = useI18n();
-  const rows = records.filter((r) => r.status === 'CURRENT').sort((a, b) => (b.recordedAt ?? '').localeCompare(a.recordedAt ?? ''));
-  if (rows.length === 0) return <EmptyState title={t('door.p360.none')} />;
-  const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
+  const fmt = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(iso));
+  type Ev = { key: string; at: string; node: ReactNode; dot: string };
+  const evs: Ev[] = [
+    ...records.filter((r) => r.status === 'CURRENT' && r.recordedAt).map((r): Ev => ({
+      key: `r${r.id}`, at: r.recordedAt as string, dot: 'record',
+      node: (<><strong>{t(sectionKey(r.section))}</strong><Facts r={r} /><p className="muted">{t('door.p360.recorded', { name: r.recordedByName, date: fmt(r.recordedAt as string) })}</p></>),
+    })),
+    ...gifts.map((g): Ev => ({ key: `g${g.kind}${g.id}`, at: `${g.day}T12:00:00Z`, dot: g.kind.toLowerCase(), node: <ul className="p360-feed"><GiftRow i={g} /></ul> })),
+  ].sort((a, b) => b.at.localeCompare(a.at));
+  if (evs.length === 0) return <EmptyState title={t('door.p360.none')} />;
   return (
-    <ul className="door-notices">
-      {rows.map((r) => (
-        <li key={r.id} className="panel door-notice">
-          <div className="door-notice-main">
-            <div className="door-row">
-              <strong>{t(sectionKey(r.section))}</strong>
-              <span className="muted">{day(r.recordedAt)}</span>
-            </div>
-            <Facts r={r} />
-          </div>
+    <ol className="p360-timeline">
+      {evs.map((e) => (
+        <li key={e.key}>
+          <span className={`p360-dot ${e.dot}`} aria-hidden="true" />
+          <time className="muted" dateTime={e.at}>{fmt(e.at)}</time>
+          <div>{e.node}</div>
         </li>
       ))}
-    </ul>
+    </ol>
   );
 }
 
@@ -135,10 +153,17 @@ export function Person360Page() {
     ? [['gender', p.gender], ['dateOfBirth', p.dateOfBirth], ['phone', p.phone], ['address', p.address], ['joinedChurchOn', p.joinedChurchOn]]
     : [];
   const spouse = v?.records.find((r) => r.section === 'FAMILY' && r.status === 'CURRENT' && r.data.relation === 'SPOUSE')?.relatedName;
+  const cur = (sec: P360Section) => (v ? v.records.filter((r) => r.section === sec && r.status === 'CURRENT') : []);
+  const baptism = cur('BAPTISM')[0];
+  const callings = cur('CALLING');
+  const family = cur('FAMILY').length;
+  const age = p?.dateOfBirth ? Math.floor((Date.now() - new Date(p.dateOfBirth).getTime()) / 31557600000) : null;
   const study = v ? v.records.filter((r) => r.status === 'CURRENT' && (r.section === 'EDUCATION' || r.section === 'EMPLOYMENT')) : [];
   // The participation feed answers 404 to anyone but the Church Leader, so the card is only offered to them.
   const access = useLoad(fetchP360Access, 'p360-access');
   const isLeader = !!access.data?.leader;
+  const part = useLoad(() => (isLeader ? fetchP360Participation(personId) : Promise.resolve(null as P360Participation | null)), `p360-part|${personId}|${isLeader}`);
+  const gifts = part.data?.items ?? [];
   return (
     <div className="door-block">
       <Link className="btn ghost sm door-back" to={`/s/${systemId}/people`}>{t('door.people.back')}</Link>
@@ -146,39 +171,45 @@ export function Person360Page() {
         {v && p && (
           <>
             {p.archived && <p className="door-error">{t('door.p360.err.archived')}</p>}
+            <section className="panel p360-card">
+              <span className="p360-avatar" aria-hidden="true">{initialsOf(p.fullName)}</span>
+              <div className="p360-who">
+                <div className="door-row">
+                  <PageHeader title={p.fullName} />
+                  <StatusChip tone={p.status === 'ACTIVE' ? 'success' : 'neutral'}>{t(`door.status.${p.status}` as 'door.status.ACTIVE')}</StatusChip>
+                </div>
+                <p className="muted">{[p.memberCode, age !== null ? t('door.p360.age', { n: String(age) }) : null].filter(Boolean).join(' · ')}</p>
+                {p.email && <p><a href={`mailto:${p.email}`}>{p.email}</a></p>}
+                {p.nationalId && <p className="p360-nid"><span className="muted">{t('door.p360.f.nationalId')}</span> <strong>{p.nationalId}</strong></p>}
+              </div>
+              <div className="p360-actions">
+                {p.email && <a className="btn" href={`mailto:${p.email}`}>{t('door.p360.send')}</a>}
+                {p.phone && <a className="btn ghost" href={`tel:${p.phone}`}>{t('door.p360.call')}</a>}
+              </div>
+              <dl className="p360-facts">
+                {facts.filter(([, val]) => val).map(([k, val]) => (
+                  <div key={k}><dt>{t(`door.p360.f.${k}` as 'door.p360.f.phone')}</dt><dd>{val}</dd></div>
+                ))}
+                {spouse && <div><dt>{t('door.p360.spouse')}</dt><dd>{spouse}</dd></div>}
+                {baptism && <div><dt>{t('door.p360.section.BAPTISM')}</dt><dd>{String(baptism.data.date ?? '✓')}</dd></div>}
+                {callings.length > 0 && <div><dt>{t('door.p360.section.CALLING')}</dt><dd>{callings.length}</dd></div>}
+                {family > 0 && <div><dt>{t('door.p360.section.FAMILY')}</dt><dd>{family}</dd></div>}
+              </dl>
+            </section>
             <div className="p360-grid">
               <div className="p360-main">
-                <section className="panel p360-card">
-                  <span className="p360-avatar" aria-hidden="true">{initialsOf(p.fullName)}</span>
-                  <div className="p360-who">
-                    <PageHeader title={p.fullName} />
-                    <p className="muted">{[p.memberCode, t(`door.status.${p.status}` as 'door.status.ACTIVE')].filter(Boolean).join(' · ')}</p>
-                    {p.email && <p><a href={`mailto:${p.email}`}>{p.email}</a></p>}
-                    {p.nationalId && <p className="p360-nid"><span className="muted">{t('door.p360.f.nationalId')}</span> {p.nationalId}</p>}
-                    <div className="door-row">
-                      {p.email && <a className="btn sm" href={`mailto:${p.email}`}>{t('door.p360.send')}</a>}
-                      {p.phone && <a className="btn ghost sm" href={`tel:${p.phone}`}>{t('door.p360.call')}</a>}
-                    </div>
-                  </div>
-                  <dl className="door-facts p360-facts">
-                    {facts.filter(([, val]) => val).map(([k, val]) => (
-                      <div key={k}><dt>{t(`door.p360.f.${k}` as 'door.p360.f.phone')}</dt><dd>{val}</dd></div>
-                    ))}
-                    {spouse && <div><dt>{t('door.p360.spouse')}</dt><dd>{spouse}</dd></div>}
-                  </dl>
-                </section>
                 <Tabs<Tab>
                   label={t('door.p360.title')}
                   value={tab}
                   onChange={setTab}
-                  items={[{ key: 'timeline', label: t('door.p360.tab.timeline') }, { key: 'records', label: t('door.p360.tab.records') }, { key: 'callings', label: t('door.p360.section.CALLING') }]}
+                  items={[{ key: 'timeline', label: t('door.p360.tab.timeline') }, { key: 'records', label: t('door.p360.tab.records') }, { key: 'callings', label: t('door.p360.section.CALLING'), count: callings.length }]}
                 />
-                {tab === 'timeline' && <Timeline records={v.records} />}
+                {tab === 'timeline' && <Timeline records={v.records} gifts={gifts} />}
                 {tab === 'records' && <Sections v={v} personId={personId} only={SECTION_ORDER.filter((s) => s !== 'CALLING')} reload={load.reload} />}
                 {tab === 'callings' && <Sections v={v} personId={personId} only={['CALLING']} reload={load.reload} />}
               </div>
               <aside className="p360-side">
-                {isLeader && <Participation personId={personId} />}
+                {isLeader && <Participation load={part} />}
                 <section className="panel">
                   <h3>{t('door.p360.edu')}</h3>
                   {study.length === 0 ? <EmptyState title={t('door.p360.none')} /> : (

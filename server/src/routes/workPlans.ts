@@ -14,7 +14,7 @@ import { notifySafely } from '../lib/notify.js';
 import { NOTE_MAX, TEXT_MAX, TITLE_MAX, VISIBILITIES, canSee } from '../work/rules.js';
 import {
   CHECKS_MAX, ROLE_MAX, TEAM_MAX, approversOf, asWorkRow, buildLevels, canApprove, canComposeReport, canManagePlan, canPublishReport,
-  canWritePlan, currentLevel, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, publishProblem, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
+  canWritePlan, currentLevel, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, parseJson, publishProblem, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
 } from '../work/plan.js';
 
 export const workPlansRouter = Router();
@@ -25,11 +25,19 @@ const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v
 
 const PLAN_TYPES = ['PROGRAM', 'EVENT', 'PROJECT'] as const;
 
+/** The answers the named screens may hold, by key. Anything else is refused, so the column cannot become a dumping ground. */
+const DETAIL_KEYS = ['eventKind', 'outcomes', 'startTime', 'endTime', 'agenda', 'resources'] as const;
+const DETAIL_MAX = 2000;
+const detailsOf = (p: { detailsJson?: string | null }): Record<string, string> => {
+  const v = parseJson<Record<string, unknown>>(p.detailsJson, {});
+  return Object.fromEntries(DETAIL_KEYS.filter((k) => typeof v[k] === 'string').map((k) => [k, v[k] as string]));
+};
+
 interface Plan extends PlanRow {
   planType?: string | null;
   aim?: string | null; needs?: string | null; location?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null;
   rejectedReason?: string | null; cancelReason?: string | null; planningSummary?: string | null; executionSummary?: string | null;
-  parentId?: string | null; steeringJson?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null;
+  parentId?: string | null; steeringJson?: string | null; detailsJson?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null;
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
 }
 interface NoteRow { id: string; planId: string; authorId: string; text: string; createdAt: Date | string }
@@ -200,7 +208,7 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
   if (!detail) return base;
   return {
     ...base,
-    aim: p.aim ?? '', needs: p.needs ?? '', location: p.location ?? '',
+    aim: p.aim ?? '', needs: p.needs ?? '', location: p.location ?? '', details: detailsOf(p),
     team: team.map((t) => ({ personId: t.personId, name: who.get(t.personId) ?? '', role: t.role })),
     createdByName: who.get(p.createdById) ?? '',
     levels: levels.map((l) => ({ levelKey: l.levelKey, label: l.label, status: l.status, byName: l.byId ? who.get(l.byId) ?? '' : null, at: l.at, note: l.note })),
@@ -368,6 +376,21 @@ workPlansRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
     },
   })) as Plan;
   await audit(me, p.systemId, 'WORKPLAN_EDITED', `Edited “${row.title}”`, { planId: p.id });
+  res.json({ plan: await shape(row, c, me, true) });
+});
+
+workPlansRouter.put('/:id/details', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!canManagePlan(p, me, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not change this plan');
+  if (stateProblem('edit', p.status)) return fail(res, 409, 'PLAN_LOCKED', 'Only a draft can be changed. Reopen it first.');
+  const shape1 = Object.fromEntries(DETAIL_KEYS.map((k) => [k, z.string().trim().max(DETAIL_MAX).optional()]));
+  const parsed = z.object({ details: z.object(shape1).strict() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid details');
+  const next = { ...detailsOf(p), ...Object.fromEntries(Object.entries(parsed.data.details).filter(([, v]) => v !== undefined)) };
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { detailsJson: JSON.stringify(next) } })) as Plan;
+  await audit(me, p.systemId, 'WORKPLAN_EDITED', `Updated the details of “${row.title}”`, { planId: p.id });
   res.json({ plan: await shape(row, c, me, true) });
 });
 

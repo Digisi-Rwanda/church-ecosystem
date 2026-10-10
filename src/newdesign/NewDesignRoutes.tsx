@@ -36,6 +36,7 @@ import {
   PersonCardPage,
   PlanPage,
   PublicEventPage,
+  ActivitiesPage,
   PlansPage,
   PortalBlockPage,
   PortalPage,
@@ -125,6 +126,7 @@ export function newDesignRoutes() {
           <Route path="schedule/mine" element={<MyAssignmentsPage />} />
           <Route path="import/:target" element={<ImportPage />} />
           <Route path="work" element={<WorkPage />} />
+          <Route path="activities" element={<ActivitiesPage />} />
           <Route path="programs" element={<PlansPage planType="PROGRAM" />} />
           <Route path="events" element={<PlansPage planType="EVENT" />} />
           <Route path="projects" element={<PlansPage planType="PROJECT" />} />

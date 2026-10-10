@@ -7,13 +7,14 @@ import {
 import { EmptyState } from '../components/ui/EmptyState';
 import { TextAreaField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
-import { fetchMoneyPlan, fetchPlanMoney } from '../api/frontDoorApi';
-import { ActivityForm, fundingLabel } from './ActivityForm';
+import { fetchPlanMoney } from '../api/frontDoorApi';
 import { useFrontDoor } from './FrontDoorContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
-import { categoryKey, formatRwf } from './money';
+import { formatRwf } from './money';
+import { PlanBudget } from './PlanBudget';
+import { EventDefine, EventPlan } from './PlanScreens';
 import { PlanForm } from './PlanForm';
 import { PlanGuests } from './PlanGuests';
 import { PlanLinks } from './PlanLinks';
@@ -24,7 +25,7 @@ import { useLoad } from './useLoad';
 import { ListRow, PageHeader, RowList, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | null;
-type Tab = 'overview' | 'team' | 'guests' | 'milestones' | 'governance' | 'indicators' | 'checklist' | 'money' | 'report' | 'history';
+type Tab = 'define' | 'plan' | 'overview' | 'team' | 'guests' | 'milestones' | 'governance' | 'indicators' | 'checklist' | 'money' | 'report' | 'history';
 
 /** One plan: where it stands in the six steps, its planning record, the execution record and the report. */
 export function PlanPage() {
@@ -41,10 +42,12 @@ export function PlanPage() {
   const [note, setNote] = useState('');
   const [item, setItem] = useState('');
   const [error, setError] = useState('');
-  const [tab, setTab] = useState<Tab>('overview');
+  const [tab0, setTab0] = useState<Tab | null>(null);
   const [report, setReport] = useState<{ planningSummary: string; executionSummary: string; outcome: string } | null>(null);
 
   const p = plan && plan.id === planId ? plan : load.data;
+  const tab: Tab = tab0 ?? (p?.planType === 'EVENT' && p.status === 'DRAFT' ? 'define' : 'overview');
+  const setTab = (k: Tab) => setTab0(k);
   const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
 
   const run = async (job: () => Promise<PlanDetail | void>, after?: () => void) => {
@@ -82,6 +85,7 @@ export function PlanPage() {
             value={tab}
             onChange={setTab}
             items={[
+              ...(p.planType === 'EVENT' ? [{ key: 'define' as const, label: t('door.plan.screen.define') }, { key: 'plan' as const, label: t('door.plan.screen.plan') }] : []),
               { key: 'overview', label: t('door.plan.tab.overview') },
               { key: 'team', label: t('door.plan.tab.team'), count: p.team.length },
               ...(p.planType === 'EVENT' && p.registration ? [{ key: 'guests' as const, label: t('door.plan.tab.guests'), count: p.registration.count }] : []),
@@ -93,6 +97,8 @@ export function PlanPage() {
               { key: 'history', label: t('door.plan.tab.history') },
             ]}
           />
+          {tab === 'define' && <EventDefine p={p} onSaved={setPlan} />}
+          {tab === 'plan' && <EventPlan p={p} systemId={systemId} onSaved={setPlan} />}
           {tab === 'overview' && (
             <>
           <PlanLinks p={p} systemId={systemId} run={run} />
@@ -351,15 +357,10 @@ export function PlanPage() {
 /** What this program, project or event costs and earns; shown only to people who may read the system's money. */
 function PlanMoney({ systemId, planId, startsOn }: { systemId: string; planId: string; startsOn: string | null }) {
   const t = useT();
-  const year = startsOn ? new Date(new Date(startsOn).getTime() + 2 * 3600 * 1000).getUTCFullYear() : new Date().getUTCFullYear();
   const { capabilities } = useFrontDoor();
   const allowed = lettersFor(capabilities, systemId, 'money').length > 0;
   const money = useLoad(() => (allowed ? fetchPlanMoney(systemId, planId) : Promise.reject(new Error('no'))), `plan-money|${systemId}|${planId}|${allowed}`);
-  const budget = useLoad(() => (allowed ? fetchMoneyPlan(systemId, year) : Promise.reject(new Error('no'))), `plan-budget|${systemId}|${year}|${allowed}`);
   if (!allowed || !money.data) return null;
-  const mine = (budget.data?.items ?? []).filter((i) => i.planId === planId);
-  const live = mine.filter((i) => i.status !== 'DROPPED');
-  const budgetTotal = live.reduce((n, i) => n + i.amount, 0);
   const m = money.data;
   const empty = m.activities === 0 && m.entries === 0;
   return (
@@ -376,31 +377,7 @@ function PlanMoney({ systemId, planId, startsOn }: { systemId: string; planId: s
         {t('door.plan.money.open')}
       </Link>
     </div>
-    <div className="panel">
-      <h3>{t('door.plan.budget.title')}</h3>
-      <p className="muted">{t('door.plan.budget.hint', { year })}</p>
-      {mine.length === 0 ? (
-        <p className="muted">{t('door.plan.budget.none')}</p>
-      ) : (
-        <>
-          <ul className="door-list">
-            {mine.map((i) => (
-              <li key={i.id}>
-                <strong>{i.title}</strong> · {formatRwf(i.amount)} · {t(categoryKey(i.category) as 'door.money.cat.OTHER')} · {t('door.money.activity.paidFrom')}:{' '}
-                {fundingLabel(t, i.fundingKind || null, i.fundingCode ? budget.data?.fundingTypes.find((x) => x.code === i.fundingCode)?.name ?? i.fundingCode : null, i.fundingNote)}
-                {i.status === 'DROPPED' ? ` · ${t('door.money.plan.status.DROPPED')}` : ''}
-              </li>
-            ))}
-          </ul>
-          <p><strong>{t('door.plan.budget.total')}</strong> {formatRwf(budgetTotal)}</p>
-        </>
-      )}
-      {budget.data?.canWrite && <ActivityForm systemId={systemId} year={year} view={budget.data} fixedPlanId={planId} onSaved={() => { budget.reload(); money.reload(); }} />}
-      {budget.data && !budget.data.canWrite && <p className="muted">{t('door.plan.budget.readOnly')}</p>}
-      <Link className="btn ghost sm" to={`/s/${systemId}/money/budget`}>
-        {t('door.plan.budget.open')}
-      </Link>
-    </div>
+    <PlanBudget systemId={systemId} planId={planId} startsOn={startsOn} onSaved={money.reload} />
     </>
   );
 }

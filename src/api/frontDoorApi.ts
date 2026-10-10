@@ -993,7 +993,7 @@ export type PlanItem = PlanFlags & {
 };
 
 export type PlanDetail = PlanItem & {
-  aim: string; needs: string; location: string; createdByName: string;
+  aim: string; needs: string; location: string; createdByName: string; details: Record<string, string>;
   team: Array<{ personId: string; name: string; role: string }>;
   levels: Array<{ levelKey: 'UNIT' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null; note: string | null }>;
   rejectedReason: string | null; cancelReason: string | null;
@@ -1034,6 +1034,7 @@ export type PlanOptions = {
 
 const P = '/api/work-plans';
 const planBody = async (p: Promise<{ plan: PlanDetail }>): Promise<PlanDetail> => (await p).plan;
+export const savePlanDetails = (id: string, details: Record<string, string>) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/details`, { method: 'PUT', body: { details } }));
 export const fetchPlanOptions = (): Promise<PlanOptions> => apiFetch(`${P}/options`);
 export async function fetchPlans(opts: { systemId?: string; view?: 'mine' | 'all'; status?: string; q?: string; type?: PlanType } = {}): Promise<PlanItem[]> {
   const qs = new URLSearchParams();
