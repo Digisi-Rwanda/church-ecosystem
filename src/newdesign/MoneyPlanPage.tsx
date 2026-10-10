@@ -73,11 +73,11 @@ export function MoneyPlanPage() {
           purpose={t('door.purpose.moneyPlan')}
           actions={
             <>
-              <Link className="btn ghost" to={`/s/${systemId}/money/plan/new/project`}>{t('door.ap.project.title')}</Link>
-              <Link className="btn ghost" to={`/s/${systemId}/money/plan/new/program`}>{t('door.ap.program.title')}</Link>
+              <Link className="btn ghost" to={`/s/${systemId}/money/plan/new/project`}>{t('door.plan.new.PROJECT')}</Link>
+              <Link className="btn ghost" to={`/s/${systemId}/money/plan/new/program`}>{t('door.plan.new.PROGRAM')}</Link>
             </>
           }
-          primary={<Link className="btn" to={`/s/${systemId}/money/plan/new/event`}>{t('door.ap.event.title')}</Link>}
+          primary={<Link className="btn" to={`/s/${systemId}/money/plan/new/event`}>{t('door.plan.new.EVENT')}</Link>}
         />
         <p className="muted">{t('door.money.plan.intro')}</p>
       </div>

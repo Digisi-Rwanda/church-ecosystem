@@ -18,15 +18,6 @@ const BUDGET_TAGS = ['EVENT', 'SUPPLIES', 'SERVICES', 'TRANSPORT', 'AID', 'DONAT
 type Val = string | { id: string; name: string };
 const str = (v: Val | undefined) => (typeof v === 'string' ? v : v?.name ?? '');
 
-const ICON: Record<FlowKind, string> = {
-  event: 'M7 2v3M17 2v3M3 8h18M5 5h14a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2z',
-  project: 'M3 6a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v10a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z',
-  program: 'M12 3l9 5-9 5-9-5 9-5zM3 13l9 5 9-5M3 17l9 5 9-5',
-};
-const Icon = ({ kind }: { kind: FlowKind }) => (
-  <svg viewBox="0 0 24 24" width="28" height="28" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d={ICON[kind]} /></svg>
-);
-
 /** Create an event, a project or a program: the screens of the church's design, a step at a time, saved as a draft the whole way. */
 export function ActionPlanCreate() {
   const t = useT();
@@ -112,8 +103,7 @@ export function ActionPlanCreate() {
   const next = (e: FormEvent) => {
     e.preventDefault();
     if (!gate()) return;
-    const last = step === flow.steps.length - 1;
-    void run(() => (last ? setDone(true) : (setStep(step + 1), window.scrollTo?.({ top: 0 }))));
+    void run(() => (step === flow.steps.length - 1 ? setDone(true) : (setStep(step + 1), window.scrollTo?.({ top: 0 }))));
   };
   const draft = () => {
     if (!plan && (!unit || !str(vals[flow.steps[0].fields.find((f) => f.map === 'name')!.key]).trim())) return setError(t('door.ap.required'));
@@ -157,67 +147,65 @@ export function ActionPlanCreate() {
   };
 
   if (resumeId && resume.failed) return <EmptyState variant="error" title={t('door.work.err.gone')} />;
+  const last = step === flow.steps.length - 1;
   return (
     <section className="door-block ap" aria-labelledby="door-ap-title">
-      <div className={`ap-banner ${flow.kind}`}>
-        <span className="ap-banner-icon"><Icon kind={kind} /></span>
-        <div><PageHeader id="door-ap-title" title={t(`door.ap.${kind}.title` as 'door.ap.event.title')} purpose={t(`door.ap.${kind}.sub` as 'door.ap.event.sub')} /></div>
-      </div>
+      <PageHeader
+        id="door-ap-title"
+        title={t(`door.plan.new.${flow.planType}` as 'door.plan.new.EVENT')}
+        back={<Link to={back}>← {t('door.money.plan')}</Link>}
+        purpose={t(`door.ap.${kind}.sub` as 'door.ap.event.sub')}
+      />
       <LoadState loading={options.loading || (!!resumeId && resume.loading)} failed={options.failed} retry={options.reload}>
         {done && plan ? (
-          <div className={`panel ap-done ${kind}`}>
+          <div className="panel ap-done" role="status">
             <span className="ap-check" aria-hidden="true">✓</span>
-            <div>
-              <h3>{t(`door.ap.done.${kind}` as 'door.ap.done.event')}</h3>
-              <p className="muted">{t(`door.ap.doneText.${kind}` as 'door.ap.doneText.event')}</p>
-              <div className="door-row">
-                <button type="button" className="btn ghost" onClick={() => navigate(`/s/${systemId}/work/plans/${plan.id}`)}>{t(`door.ap.view.${kind}` as 'door.ap.view.event')}</button>
-                <button type="button" className="btn ap-go" onClick={() => { setDone(false); setPlan(null); setVals({}); setStep(0); setUnitId(''); navigate(`/s/${systemId}/money/plan/new/${kind}`, { replace: true }); }}>{t(`door.ap.another.${kind}` as 'door.ap.another.event')}</button>
-              </div>
+            <h3>{t(`door.ap.done.${kind}` as 'door.ap.done.event')}</h3>
+            <p className="muted">{t(`door.ap.doneText.${kind}` as 'door.ap.doneText.event')}</p>
+            <div className="door-row">
+              <button type="button" className="btn" onClick={() => navigate(`/s/${systemId}/work/plans/${plan.id}`)}>{t(`door.ap.view.${kind}` as 'door.ap.view.event')}</button>
+              <button type="button" className="btn ghost" onClick={() => { setDone(false); setPlan(null); setVals({}); setStep(0); setUnitId(''); navigate(`/s/${systemId}/money/plan/new/${kind}`, { replace: true }); }}>{t(`door.ap.another.${kind}` as 'door.ap.another.event')}</button>
             </div>
           </div>
         ) : (
           <form className="panel ap-card" onSubmit={next} noValidate>
-            <ol className="ap-steps" aria-label={t(`door.ap.${kind}.title` as 'door.ap.event.title')}>
-              {flow.steps.map((s, i) => (
-                <li key={s.id} className={i < step ? 'done' : i === step ? 'now' : ''} aria-current={i === step ? 'step' : undefined}>
-                  <span className="ap-dot">{i < step ? '✓' : i + 1}</span>
-                  <span>{t(`door.ap.s.${kind}.${s.id}.name` as 'door.ap.s.event.define.name')}</span>
-                </li>
-              ))}
-              <li className="ap-count">{t('door.ap.step', { n: step + 1, total: flow.steps.length })}</li>
-            </ol>
-            <div className="ap-body">
-              <aside className={`ap-side ${kind}`}>
-                <span className="ap-side-icon"><Icon kind={kind} /></span>
-                <strong>{t(`door.ap.s.${kind}.${cur.id}.side` as 'door.ap.s.event.define.side')}</strong>
-                <p className="muted">{t(`door.ap.s.${kind}.${cur.id}.sideText` as 'door.ap.s.event.define.sideText')}</p>
-              </aside>
-              <div className="ap-fields">
-                <h3>{t(`door.ap.s.${kind}.${cur.id}.heading` as 'door.ap.s.event.define.heading')}</h3>
-                <div className="ap-grid">
-                  {step === 0 && !plan && units.length > 1 && (
-                    <div className="ap-full">
-                      <SelectField label={`${t('door.ap.unit')} *`} name="ap-unit" value={unit} onChange={(e) => setUnitId(e.target.value)}>
-                        <option value="">{t('door.gov.meeting.choose')}</option>
-                        {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
-                      </SelectField>
-                    </div>
-                  )}
-                  {cur.fields.map(field)}
+            <div className="ap-top">
+              <ol className="ap-steps" aria-label={t(`door.plan.new.${flow.planType}` as 'door.plan.new.EVENT')}>
+                {flow.steps.map((s, i) => (
+                  <li key={s.id} className={i < step ? 'done' : i === step ? 'now' : ''} aria-current={i === step ? 'step' : undefined}>
+                    <span className="ap-dot">{i < step ? '✓' : i + 1}</span>
+                    <span className="ap-step-name">{t(`door.ap.s.${kind}.${s.id}.name` as 'door.ap.s.event.define.name')}</span>
+                  </li>
+                ))}
+              </ol>
+              <span className="muted ap-count">{t('door.ap.step', { n: step + 1, total: flow.steps.length })}</span>
+            </div>
+            <div className="ap-head">
+              <h3>{t(`door.ap.s.${kind}.${cur.id}.heading` as 'door.ap.s.event.define.heading')}</h3>
+              <p className="muted">{t(`door.ap.s.${kind}.${cur.id}.sideText` as 'door.ap.s.event.define.sideText')}</p>
+            </div>
+            <div className="ap-grid">
+              {step === 0 && !plan && units.length > 1 && (
+                <div className="ap-full">
+                  <SelectField label={`${t('door.ap.unit')} *`} name="ap-unit" value={unit} onChange={(e) => setUnitId(e.target.value)}>
+                    <option value="">{t('door.gov.meeting.choose')}</option>
+                    {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
+                  </SelectField>
                 </div>
-                {error && <p className="door-error" role="alert">{error}</p>}
-                {note && <p className="muted" role="status">{note}</p>}
-                <div className="ap-actions">
-                  {step === 0 ? (
-                    <Link className="btn ghost" to={back}>{t('door.settings.cancel')}</Link>
-                  ) : (
-                    <button type="button" className="btn ghost" onClick={() => { setError(''); setStep(step - 1); }}>← {t('door.ap.back')}</button>
-                  )}
-                  <button type="button" className="btn ghost" disabled={busy} onClick={draft}>{t('door.ap.draft')}</button>
-                  <button type="submit" className="btn ap-go" disabled={busy}>{step === flow.steps.length - 1 ? t(`door.ap.create.${kind}` as 'door.ap.create.event') : `${t('door.ap.next')} →`}</button>
-                </div>
-              </div>
+              )}
+              {cur.fields.map(field)}
+            </div>
+            {error && <p className="door-error" role="alert">{error}</p>}
+            {note && <p className="muted" role="status">{note}</p>}
+            <div className="ap-actions">
+              {step === 0 ? (
+                <Link className="btn ghost" to={back}>{t('door.settings.cancel')}</Link>
+              ) : (
+                <button type="button" className="btn ghost" onClick={() => { setError(''); setStep(step - 1); }}>← {t('door.ap.back')}</button>
+              )}
+              <span className="ap-spacer" />
+              <button type="button" className="btn ghost" disabled={busy} onClick={draft}>{t('door.ap.draft')}</button>
+              <button type="submit" className="btn" disabled={busy}>{last ? t(`door.ap.create.${kind}` as 'door.ap.create.event') : `${t('door.ap.next')} →`}</button>
             </div>
           </form>
         )}
