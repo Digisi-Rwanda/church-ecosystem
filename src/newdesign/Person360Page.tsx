@@ -8,7 +8,9 @@ import { formatRwf } from './money';
 import { SECTION_ORDER, SINGLE_SECTIONS, sectionKey, valueKey } from './person360';
 import { RecordCard, RecordForm } from './Person360Parts';
 import { useLoad } from './useLoad';
-import { PageHeader, initialsOf } from './kit';
+import { PageHeader, SidePanel, initialsOf } from './kit';
+import { BasicsForm, Documents } from './Person360Edit';
+import { useCanWritePeople } from './usePeopleAccess';
 
 type Tab = 'timeline' | 'files' | 'callings';
 type Gift = P360Participation['items'][number];
@@ -180,6 +182,8 @@ export function Person360Page() {
   const isLeader = !!access.data?.leader;
   const part = useLoad(() => (isLeader ? fetchP360Participation(personId) : Promise.resolve(null as P360Participation | null)), `p360-part|${personId}|${isLeader}`);
   const [tab, setTab] = useState<Tab>('timeline');
+  const [editing, setEditing] = useState(false);
+  const canWritePeople = useCanWritePeople();
   const v = load.data;
   const p = v?.person;
   const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(iso)) : null);
@@ -194,7 +198,19 @@ export function Person360Page() {
   const callings = v ? v.records.filter((r) => r.section === 'CALLING' && r.status === 'CURRENT').length : 0;
   return (
     <div className="door-block p360">
-      <PageHeader title={t('door.p360.title')} back={<Link to={`/s/${systemId}/people`}>← {t('door.people.back')}</Link>} />
+      <PageHeader
+        title={t('door.p360.title')}
+        back={<Link to={`/s/${systemId}/people`}>← {t('door.people.back')}</Link>}
+        primary={v && !v.person.archived && (v.write.length > 0 || canWritePeople) ? <button type="button" className="btn" onClick={() => setEditing(true)}>{t('door.p360.edit')}</button> : undefined}
+      />
+      {v && (
+        <SidePanel open={editing} title={t('door.p360.edit.title')} purpose={t('door.p360.edit.purpose')} onClose={() => setEditing(false)} wide>
+          <div className="side-form p360-edit">
+            {canWritePeople && <BasicsForm person={v.person} onSaved={load.reload} />}
+            <Sections v={v} personId={personId} only={SECTION_ORDER} reload={load.reload} />
+          </div>
+        </SidePanel>
+      )}
       <LoadState loading={load.loading} failed={load.failed} retry={load.reload}>
         {v && p && (
           <>
@@ -220,7 +236,7 @@ export function Person360Page() {
                     ))}
                   </div>
                   {tab === 'timeline' && <Timeline records={v.records} gifts={part.data?.items ?? []} />}
-                  {tab === 'files' && <Sections v={v} personId={personId} only={SECTION_ORDER.filter((s) => !['CALLING', 'EDUCATION', 'EMPLOYMENT'].includes(s))} reload={load.reload} />}
+                  {tab === 'files' && <Documents personId={personId} />}
                   {tab === 'callings' && <Sections v={v} personId={personId} only={['CALLING']} reload={load.reload} />}
                 </section>
               </div>

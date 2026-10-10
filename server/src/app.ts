@@ -69,6 +69,7 @@ export function createApp() {
   );
   // Bigger bodies for the module documents; mounted before the 1 MB parser.
   app.use('/api/schedule-state', scheduleStateRouter);
+  app.use('/api/person360/:personId/documents', express.json({ limit: '3mb' }));
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/', (_req, res) => {

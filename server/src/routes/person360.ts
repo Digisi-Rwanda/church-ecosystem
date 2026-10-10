@@ -213,6 +213,61 @@ person360Router.get('/:personId/participation', requireAuth, async (req: AuthedR
   });
 });
 
+/* ── Files and documents on a profile: small files kept as base64, for those who may read or record here ── */
+
+const DOC_MAX = 1_500_000;
+const DOC_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp', 'text/plain', 'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+interface DocRow { id: string; personId: string; name: string; mime: string; size: number; dataBase64?: string; note?: string | null; uploadedById: string; uploadedAt: Date | string; deletedAt?: Date | string | null }
+
+person360Router.get('/:personId/documents', requireAuth, async (req: AuthedRequest, res) => {
+  const a = await access(req.auth!.personId);
+  const p = await personOf(String(req.params.personId));
+  if (a.read.length === 0 || !p) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  const rows = ((await prisma.personDocument.findMany()) as DocRow[]).filter((d) => d.personId === p.id && !d.deletedAt).sort((x, y) => +new Date(y.uploadedAt) - +new Date(x.uploadedAt));
+  const who = await names(rows.map((d) => d.uploadedById));
+  res.json({
+    canWrite: a.write.length > 0 && !archived(p),
+    items: rows.map((d) => ({ id: d.id, name: d.name, mime: d.mime, size: d.size, note: d.note ?? '', uploadedByName: who.get(d.uploadedById) ?? '', uploadedAt: iso(d.uploadedAt) })),
+  });
+});
+
+person360Router.post('/:personId/documents', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const a = await access(me);
+  const p = await personOf(String(req.params.personId));
+  if (a.read.length === 0 || !p) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (a.write.length === 0) return fail(res, 403, 'FORBIDDEN', 'You may not add files here');
+  if (archived(p)) return fail(res, 409, 'PERSON_ARCHIVED', 'This person is archived');
+  const parsed = z.object({ name: z.string().trim().min(1).max(160), mime: z.string().max(120), data: z.string().min(1), note: z.string().trim().max(300).nullish() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the file');
+  const b = parsed.data;
+  if (!DOC_TYPES.includes(b.mime)) return fail(res, 400, 'BAD_TYPE', 'That kind of file is not accepted');
+  if (!/^[A-Za-z0-9+/]+={0,2}$/.test(b.data)) return fail(res, 400, 'BAD_INPUT', 'Check the file');
+  const size = Math.floor((b.data.length * 3) / 4) - (b.data.endsWith('==') ? 2 : b.data.endsWith('=') ? 1 : 0);
+  if (size > DOC_MAX) return fail(res, 413, 'TOO_BIG', 'The file is too big (1.5 MB at most)');
+  const row = (await prisma.personDocument.create({ data: { personId: p.id, name: b.name, mime: b.mime, size, dataBase64: b.data, note: b.note || null, uploadedById: me } })) as DocRow;
+  await audit(me, 'PERSON_DOCUMENT_ADDED', `${b.name} for ${p.fullName}`, { documentId: row.id, personId: p.id });
+  res.status(201).json({ id: row.id });
+});
+
+person360Router.get('/documents/:docId/file', requireAuth, async (req: AuthedRequest, res) => {
+  const a = await access(req.auth!.personId);
+  const d = (await prisma.personDocument.findUnique({ where: { id: String(req.params.docId) } })) as DocRow | null;
+  if (a.read.length === 0 || !d || d.deletedAt) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  res.json({ name: d.name, mime: d.mime, data: d.dataBase64 ?? '' });
+});
+
+person360Router.delete('/documents/:docId', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const a = await access(me);
+  const d = (await prisma.personDocument.findUnique({ where: { id: String(req.params.docId) } })) as DocRow | null;
+  if (a.read.length === 0 || !d || d.deletedAt) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (a.write.length === 0) return fail(res, 403, 'FORBIDDEN', 'You may not remove files here');
+  await prisma.personDocument.update({ where: { id: d.id }, data: { deletedAt: new Date(), deletedById: me } });
+  await audit(me, 'PERSON_DOCUMENT_REMOVED', `${d.name}`, { documentId: d.id, personId: d.personId });
+  res.json({ ok: true });
+});
+
 person360Router.post('/:personId/records', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
   const section = req.body?.section;

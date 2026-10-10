@@ -158,6 +158,11 @@ export async function createPerson(body: NewPerson): Promise<DirectoryPerson> {
   return res.person;
 }
 
+export type PersonEdit = Partial<{ fullName: string; phone: string | null; email: string | null; dateOfBirth: string | null; gender: string | null; address: string | null; nationalId: string | null; joinedChurchOn: string | null }>;
+export async function updatePerson(id: string, body: PersonEdit): Promise<void> {
+  await apiFetch(`/api/people/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+}
+
 export async function archivePerson(id: string, reason?: string): Promise<DirectoryPerson> {
   const res = await apiFetch<{ person: DirectoryPerson }>(`/api/people/${encodeURIComponent(id)}/archive`, {
     method: 'POST',
@@ -1347,6 +1352,15 @@ export type P360Person = {
 export type P360View = { person: P360Person; read: P360Section[]; write: P360Section[]; records: P360Record[] };
 export type P360Cohort = { id: string; name: string; cohortLabel: string; learners: Array<{ personId: string; name: string; baptised: boolean }> };
 const P3 = '/api/person360';
+export type P360Document = { id: string; name: string; mime: string; size: number; note: string; uploadedByName: string; uploadedAt: string | null };
+export const fetchP360Documents = (personId: string): Promise<{ canWrite: boolean; items: P360Document[] }> => apiFetch(`${P3}/${encodeURIComponent(personId)}/documents`);
+export async function uploadP360Document(personId: string, b: { name: string; mime: string; data: string }): Promise<void> {
+  await apiFetch(`${P3}/${encodeURIComponent(personId)}/documents`, { method: 'POST', body: b });
+}
+export const fetchP360DocumentFile = (id: string): Promise<{ name: string; mime: string; data: string }> => apiFetch(`${P3}/documents/${encodeURIComponent(id)}/file`);
+export async function deleteP360Document(id: string): Promise<void> {
+  await apiFetch(`${P3}/documents/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
 export const fetchP360Access = (): Promise<{ read: P360Section[]; write: P360Section[]; allowed: boolean; leader?: boolean }> => apiFetch(`${P3}/access`);
 export type P360Participation = {
   year: number; totals: { given: number; pledged: number }; more: boolean;

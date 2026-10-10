@@ -2921,6 +2921,23 @@ export const en = {
   'door.run.status.late': 'Late',
   'door.run.status.open': 'Open',
 
+  'door.p360.edit': 'Edit',
+  'door.p360.edit.title': 'Edit person',
+  'door.p360.edit.purpose': 'Change the details and record what the church knows about this person.',
+  'door.p360.edit.basics': 'Details',
+  'door.p360.edit.fullName': 'Full name',
+  'door.p360.edit.nameRequired': 'Write the person\'s name.',
+  'door.p360.edit.saved': 'Saved.',
+  'door.p360.docs.add': 'Add file',
+  'door.p360.docs.hint': 'PDF, picture, Word or Excel, up to 1.5 MB.',
+  'door.p360.docs.none': 'No files yet.',
+  'door.p360.docs.download': 'Download',
+  'door.p360.docs.remove': 'Remove',
+  'door.p360.docs.confirm': 'Remove it',
+  'door.p360.docs.by': 'Added by {name}',
+  'door.p360.docs.type': 'That kind of file is not accepted.',
+  'door.p360.docs.tooBig': 'The file is too big (1.5 MB at most).',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

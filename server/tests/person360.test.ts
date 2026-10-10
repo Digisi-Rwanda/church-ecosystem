@@ -156,3 +156,27 @@ describe('person 360 routes', () => {
     expect((await get('p-sec', '/api/person360/access')).body.leader).toBe(false);
   });
 });
+
+describe('files and documents on a profile', () => {
+  const data = Buffer.from('hello certificate').toString('base64');
+  it('those who may record add, list, download and remove a file; the rest see nothing', async () => {
+    fake.__db.personDocument ??= [];
+    const up = await post('p-sec', '/api/person360/p-member/documents', { name: 'Baptism certificate.pdf', mime: 'application/pdf', data });
+    expect(up.status).toBe(201);
+    const list = await get('p-sec', '/api/person360/p-member/documents');
+    expect(list.body.items).toHaveLength(1);
+    expect(list.body.items[0]).toMatchObject({ name: 'Baptism certificate.pdf', size: 17, uploadedByName: 'Secretary' });
+    expect(list.body.canWrite).toBe(true);
+    const file = await get('p-sec', `/api/person360/documents/${up.body.id}/file`);
+    expect(Buffer.from(file.body.data, 'base64').toString()).toBe('hello certificate');
+    expect((await get('p-choir-leader', '/api/person360/p-member/documents')).status).toBe(404);
+    expect((await request(app).delete(`/api/person360/documents/${up.body.id}`).set(bearer('p-sec'))).status).toBe(200);
+    expect((await get('p-sec', '/api/person360/p-member/documents')).body.items).toHaveLength(0);
+  });
+  it('refuses unknown kinds and files that are too big', async () => {
+    fake.__db.personDocument ??= [];
+    expect((await post('p-sec', '/api/person360/p-member/documents', { name: 'x.exe', mime: 'application/x-msdownload', data })).body.code).toBe('BAD_TYPE');
+    const big = Buffer.alloc(1_600_000, 1).toString('base64');
+    expect((await post('p-sec', '/api/person360/p-member/documents', { name: 'big.pdf', mime: 'application/pdf', data: big })).status).toBe(413);
+  });
+});

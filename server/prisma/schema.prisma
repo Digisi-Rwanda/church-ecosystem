@@ -1662,3 +1662,20 @@ model Donation {
   @@index([systemId, status])
   @@index([donorPersonId])
 }
+
+/// A file kept on a person's profile (a certificate, a letter, an ID copy). Stored as base64 text; small files only.
+model PersonDocument {
+  id           String    @id @default(cuid())
+  personId     String
+  name         String
+  mime         String
+  size         Int
+  dataBase64   String
+  note         String?
+  uploadedById String
+  uploadedAt   DateTime  @default(now())
+  deletedAt    DateTime?
+  deletedById  String?
+
+  @@index([personId])
+}
