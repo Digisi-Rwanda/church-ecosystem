@@ -8,6 +8,7 @@ import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { categoryKey, formatRwf } from './money';
 import { PlanForm } from './PlanForm';
+import { EventStart } from './PlanScreens';
 import { planStatusKey } from './plans';
 import { useLoad } from './useLoad';
 import { PageHeader, PrintButton, Segmented, SidePanel, StatusChip } from './kit';
@@ -24,6 +25,7 @@ export function ActivitiesPage() {
   const { capabilities } = useFrontDoor();
   const [filter, setFilter] = useState<Filter>('ALL');
   const [creating, setCreating] = useState(false);
+  const [kind, setKind] = useState<PlanType | null>(null);
   const money = lettersFor(capabilities, systemId, 'money').length > 0;
   const options = useLoad(fetchPlanOptions, 'plan-options');
   const list = useLoad(async () => {
@@ -53,10 +55,18 @@ export function ActivitiesPage() {
         onChange={setFilter}
         items={[{ key: 'ALL', label: t('door.activities.all') }, { key: 'EVENT', label: t('door.plans.EVENT') }, { key: 'PROJECT', label: t('door.plans.PROJECT') }, { key: 'PROGRAM', label: t('door.plans.PROGRAM') }]}
       />
-      <SidePanel open={creating && !!options.data} title={t('door.activities.new')} purpose={t('door.plan.form.purpose')} onClose={() => setCreating(false)}>
+      <SidePanel open={creating && !!options.data} title={t('door.activities.new')} purpose={t('door.plan.form.purpose')} onClose={() => { setCreating(false); setKind(null); }}>
         {options.data && (
           <div className="side-form">
-            <PlanForm options={options.data} systemId={systemId} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={() => setCreating(false)} />
+            {kind === null ? (
+              <div className="door-row">
+                {(['EVENT', 'PROJECT', 'PROGRAM'] as PlanType[]).map((k) => (<button key={k} type="button" className="btn" onClick={() => setKind(k)}>{t(`door.plan.type.${k}` as 'door.plan.type.EVENT')}</button>))}
+              </div>
+            ) : kind === 'EVENT' ? (
+              <EventStart options={options.data} systemId={systemId} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={() => { setCreating(false); setKind(null); }} />
+            ) : (
+              <PlanForm options={options.data} systemId={systemId} planType={kind} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={() => { setCreating(false); setKind(null); }} />
+            )}
           </div>
         )}
       </SidePanel>

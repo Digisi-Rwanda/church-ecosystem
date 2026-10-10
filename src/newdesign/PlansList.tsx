@@ -5,6 +5,7 @@ import { SelectField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { PlanForm } from './PlanForm';
+import { EventStart } from './PlanScreens';
 import { PLAN_STEPS, planStatusKey, sortPlans } from './plans';
 import { useLoad } from './useLoad';
 import { EmptyState, ListRow, RowList, Segmented, SidePanel, StatusChip } from './kit';
@@ -70,7 +71,11 @@ export function PlansList({ systemId, planType, creating, onCloseCreate }: { sys
       <SidePanel open={creating && !!options.data} title={planType ? t(`door.plan.new.${planType}` as 'door.plan.new.PROGRAM') : t('door.plan.new')} purpose={t('door.plan.form.purpose')} onClose={onCloseCreate}>
         {options.data && (
           <div className="side-form">
-            <PlanForm options={options.data} systemId={systemId} planType={planType} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={onCloseCreate} />
+            {planType === 'EVENT' ? (
+              <EventStart options={options.data} systemId={systemId} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={onCloseCreate} />
+            ) : (
+              <PlanForm options={options.data} systemId={systemId} planType={planType} onDone={(p) => navigate(`/s/${systemId}/work/plans/${p.id}`)} onCancel={onCloseCreate} />
+            )}
           </div>
         )}
       </SidePanel>

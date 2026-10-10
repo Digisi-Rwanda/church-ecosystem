@@ -331,9 +331,10 @@ workPlansRouter.get('/:id', requireAuth, async (req: AuthedRequest, res) => {
 
 workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const parsed = z.object({ ...fields, unitId: z.string().min(1) }).safeParse(req.body);
+  // The leader is optional on a new plan: the person writing it leads it until another is chosen.
+  const parsed = z.object({ ...fields, leaderId: z.string().min(1).optional(), unitId: z.string().min(1) }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid plan');
-  const b = parsed.data;
+  const b = { ...parsed.data, leaderId: parsed.data.leaderId ?? me };
   const c = await ctx(me);
   const unit = c.units.find((u) => u.id === b.unitId);
   if (!unit) return fail(res, 404, 'NOT_FOUND', 'Unit not found');

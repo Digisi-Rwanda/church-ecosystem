@@ -340,6 +340,13 @@ describe('project milestones', () => {
 });
 
 describe('the named screens keep their answers', () => {
+  it('a new event needs only a name and a unit: the writer leads it until another is chosen', async () => {
+    const full = body({ planType: 'EVENT' }) as Record<string, unknown>;
+    const { leaderId: _l, ...rest } = full;
+    const res = await post('p-vp', B, rest);
+    expect(res.status).toBe(201);
+    expect(res.body.plan.leaderId).toBe('p-vp');
+  });
   it('a draft keeps the event details; unknown keys and locked plans are refused', async () => {
     const e = await draft({ planType: 'EVENT' });
     const saved = await put('p-vp', `${B}/${e}/details`, { details: { eventKind: 'Concert', agenda: '09:00 Welcome' } });

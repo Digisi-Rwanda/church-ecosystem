@@ -2649,6 +2649,20 @@ export const en = {
   'door.activities.undated': 'No date yet',
   'door.activities.noBudget': 'No budget lines yet',
 
+  'door.p360.f.memberCode': 'Member code',
+  'door.p360.memberStatus': 'Member status',
+  'door.p360.registered': 'Registered date',
+  'door.p360.showPrevious': 'Show previous',
+  'door.p360.showLess': 'Show less',
+  'door.p360.col.type': 'Type',
+  'door.p360.col.detail': 'Detail',
+  'door.p360.col.system': 'System',
+  'door.p360.col.by': 'Recorded by',
+  'door.p360.tab.files': 'Files/Documents',
+  'door.p360.addShort': 'Add',
+
+  'door.plan.screen.start': 'Start the event',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

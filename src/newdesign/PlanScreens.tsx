@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { editPlan, savePlanDetails, type PlanDetail, type PlanInput } from '../api/frontDoorApi';
+import { createPlan, editPlan, savePlanDetails, type PlanDetail, type PlanInput, type PlanOptions } from '../api/frontDoorApi';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
@@ -129,5 +129,43 @@ export function EventPlan({ p, systemId, onSaved }: { p: PlanDetail; systemId: s
       </form>
       <PlanBudget systemId={systemId} planId={p.id} startsOn={p.startsOn} />
     </>
+  );
+}
+
+/** Start an event: just a name (and the unit when there are several). The two screens, Define and Plan, then open on the event itself. */
+export function EventStart({ options, systemId, onDone, onCancel }: { options: PlanOptions; systemId: string; onDone: (p: PlanDetail) => void; onCancel: () => void }) {
+  const t = useT();
+  const units = options.units.filter((u) => u.systemId === systemId);
+  const [unitId, setUnitId] = useState(units.length === 1 ? units[0].id : '');
+  const [title, setTitle] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !unitId) return setError(t('door.plan.form.incomplete'));
+    setBusy(true);
+    setError('');
+    try {
+      onDone(await createPlan(unitId, { title: title.trim(), aim: '', needs: null, location: null, startsOn: null, endsOn: null, team: [], beyondUnit: false, visibility: 'SYSTEM', planType: 'EVENT' }));
+    } catch (err) {
+      setError(t(planErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="panel door-form" onSubmit={submit} noValidate>
+      {units.length > 1 && (
+        <SelectField label={t('door.work.form.unit')} name="ev-unit" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+          <option value="">{t('door.gov.meeting.choose')}</option>
+          {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
+        </SelectField>
+      )}
+      <TextField label={t('door.plan.screen.name')} name="ev-start-name" value={title} maxLength={options.limits.titleMax} onChange={(e) => setTitle(e.target.value)} />
+      {error && <p className="door-error" role="alert">{error}</p>}
+      <div className="door-row">
+        <button type="submit" className="btn" disabled={busy}>{t('door.plan.screen.start')}</button>
+        <button type="button" className="btn ghost" onClick={onCancel}>{t('door.settings.cancel')}</button>
+      </div>
+    </form>
   );
 }

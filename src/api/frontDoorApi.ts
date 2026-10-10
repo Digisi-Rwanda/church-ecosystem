@@ -1024,7 +1024,7 @@ export type PlanRegistration = {
 
 export type PlanInput = {
   title: string; aim: string; needs: string | null; location: string | null; startsOn: string | null; endsOn: string | null;
-  leaderId: string; team: Array<{ personId: string; role: string }>; beyondUnit: boolean; visibility: WorkVisibility; planType?: PlanType;
+  leaderId?: string; team: Array<{ personId: string; role: string }>; beyondUnit: boolean; visibility: WorkVisibility; planType?: PlanType;
 };
 export type PlanOptions = {
   units: Array<{ id: string; name: string; systemId: string }>;
