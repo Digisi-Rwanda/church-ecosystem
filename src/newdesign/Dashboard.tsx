@@ -1,8 +1,11 @@
 import { Link } from 'react-router-dom';
-import { fetchDashboard, type DashKpi, type DashPoint, type Dashboard } from '../api/frontDoorApi';
+import { useRef, useState } from 'react';
+import { fetchDashboard, type DashKpi, type Dashboard } from '../api/frontDoorApi';
 import { Icon, type IconName } from '../components/ui/Icon';
 import { useI18n, useT } from '../i18n/I18nContext';
-import { chartBars, compactNumber, roundedTopBar, shortDay, shortMonth } from './charts';
+import { shortDay } from './charts';
+import { MonthsChart, SegBar, Spark, type VizSeries } from './DashViz';
+import { Segmented } from './kit';
 import { useFrontDoor } from './FrontDoorContext';
 import { DashboardOverview } from './DashboardOverview';
 import { GlanceDashboard } from './GlanceDashboard';
@@ -10,7 +13,7 @@ import { formatRwf } from './money';
 import { SystemLink } from './SystemLink';
 import { useLoad } from './useLoad';
 
-const KPI_ICON: Record<DashKpi['key'], IconName> = { members: 'users', attendance: 'pulse', giving: 'wallet', money: 'wallet', units: 'layers', reports: 'folder' };
+const KPI_ICON: Record<DashKpi['key'], IconName> = { members: 'users', attendance: 'pulse', giving: 'wallet', money: 'wallet', units: 'layers', reports: 'folder', work: 'task', done: 'task' };
 
 /** "Up 12%" / "Down 3%" / "Same": the words travel with the arrow, so colour is never the only signal. */
 function Trend({ value }: { value: number | null }) {
@@ -27,7 +30,7 @@ function Trend({ value }: { value: number | null }) {
   );
 }
 
-function KpiCard({ kpi }: { kpi: DashKpi }) {
+function KpiCard({ kpi, note }: { kpi: DashKpi; note?: string }) {
   const t = useT();
   const label = t(`door.dash.kpi.${kpi.key}` as 'door.dash.kpi.members');
   const body = (
@@ -40,7 +43,10 @@ function KpiCard({ kpi }: { kpi: DashKpi }) {
         <span className="dash-kpi-label">{label}</span>
       </span>
       <Trend value={kpi.trend} />
-      {kpi.tone === 'late' && <span className="dash-flag">{t('door.dash.reports.late')}</span>}
+      {kpi.spark && <Spark values={kpi.spark} />}
+      {kpi.prev !== undefined && kpi.prev !== null && kpi.trend !== null && <span className="dx-prev">{t('door.dash.vsLast', { value: kpi.format === 'rwf' ? formatRwf(kpi.prev) : kpi.prev.toLocaleString('en-US') })}</span>}
+      {note && <span className="dash-flag">{note}</span>}
+      {!note && kpi.tone === 'late' && kpi.key === 'reports' && <span className="dash-flag">{t('door.dash.reports.late')}</span>}
     </>
   );
   return kpi.href ? (
@@ -49,77 +55,6 @@ function KpiCard({ kpi }: { kpi: DashKpi }) {
     </Link>
   ) : (
     <div className="panel dash-kpi">{body}</div>
-  );
-}
-
-const W = 320;
-const H = 150;
-const FLOOR = 124;
-const TOP = 16;
-
-function AttendanceChart({ points, title }: { points: DashPoint[]; title: string }) {
-  const { locale } = useI18n();
-  const top = Math.max(...points.map((p) => p.value), 1);
-  const bars = chartBars(points.map((p) => p.value), top, FLOOR - TOP - 10);
-  const step = W / points.length;
-  const bar = Math.min(26, step - 10);
-  return (
-    <svg className="dash-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
-      <line x1="0" y1={FLOOR} x2={W} y2={FLOOR} stroke="var(--line-strong)" />
-      {bars.map((b, i) => {
-        const p = points[i];
-        const x = i * step + (step - bar) / 2;
-        return (
-          <g key={p.label}>
-            {b.height > 0 && (
-              <path d={roundedTopBar(x, FLOOR - b.height, bar, b.height)} fill="var(--accent)">
-                <title>{`${shortMonth(p.label, locale)}: ${p.value}`}</title>
-              </path>
-            )}
-            <text x={i * step + step / 2} y={FLOOR - b.height - 4} textAnchor="middle" fontSize="10" fill="var(--ink-muted)">
-              {b.value > 0 ? compactNumber(b.value) : ''}
-            </text>
-            <text x={i * step + step / 2} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--ink-muted)">
-              {shortMonth(p.label, locale)}
-            </text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
-
-type Line = { key: string; points: DashPoint[]; color: string; text: string };
-
-function LineChart({ lines, title, money }: { lines: Line[]; title: string; money: boolean }) {
-  const { locale } = useI18n();
-  const n = lines[0]?.points.length ?? 0;
-  if (n < 2) return null;
-  const top = Math.max(...lines.flatMap((l) => l.points.map((p) => p.value)), 1);
-  const x = (i: number) => 12 + (i * (W - 24)) / (n - 1);
-  const y = (v: number) => FLOOR - (Math.max(v, 0) / top) * (FLOOR - TOP);
-  const path = (l: Line) => l.points.map((p, i) => `${i === 0 ? 'M' : 'L'}${x(i)},${y(p.value)}`).join(' ');
-  const show = (v: number) => (money ? formatRwf(v) : String(v));
-  return (
-    <svg className="dash-svg" viewBox={`0 0 ${W} ${H}`} role="img" aria-label={title}>
-      <line x1="0" y1={FLOOR} x2={W} y2={FLOOR} stroke="var(--line-strong)" />
-      {lines.length === 1 && <path d={`${path(lines[0])} L${x(n - 1)},${FLOOR} L${x(0)},${FLOOR} Z`} fill={lines[0].color} opacity="0.14" />}
-      {lines.map((l) => (
-        <path key={l.key} d={path(l)} fill="none" stroke={l.color} strokeWidth="2" strokeLinejoin="round" strokeLinecap="round" />
-      ))}
-      {lines.map((l) =>
-        l.points.map((p, i) => (
-          <circle key={`${l.key}${p.label}`} cx={x(i)} cy={y(p.value)} r="4" fill={l.color} stroke="var(--surface-2)" strokeWidth="2">
-            <title>{`${l.text} · ${shortMonth(p.label, locale)}: ${show(p.value)}`}</title>
-          </circle>
-        )),
-      )}
-      {lines[0].points.map((p, i) => (
-        <text key={p.label} x={x(i)} y={H - 8} textAnchor="middle" fontSize="10" fill="var(--ink-muted)">
-          {shortMonth(p.label, locale)}
-        </text>
-      ))}
-    </svg>
   );
 }
 
@@ -243,17 +178,69 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
   );
 }
 
+const RANGES = [3, 6, 12] as const;
+
+/** What needs this person first: short links with a count, or a calm "all clear". */
+function Attention({ items }: { items: NonNullable<Dashboard['attention']> }) {
+  const t = useT();
+  if (items.length === 0) return <p className="dx-clear" role="status"><Icon name="check" size={16} /> {t('door.dash.att.clear')}</p>;
+  return (
+    <section className="dx-attention" aria-label={t('door.dash.att.title')}>
+      <strong>{t('door.dash.att.title')}</strong>
+      <ul>
+        {items.map((a) => (
+          <li key={a.key}>
+            <Link to={a.href}><span className="dx-count">{a.count}</span> {t(`door.dash.att.${a.key}` as 'door.dash.att.approvals', { count: String(a.count) })}</Link>
+          </li>
+        ))}
+      </ul>
+    </section>
+  );
+}
+
+/** Contributions per unit, split by church-wide type and the unit's own, with donations beside them. Offerings are never mixed in. */
+function ByUnit({ data }: { data: NonNullable<Dashboard['byUnit']> }) {
+  const t = useT();
+  if (data.units.length === 0) return <p className="muted">{t('door.dash.byUnit.none')}</p>;
+  const top = Math.max(...data.units.map((u) => u.total), 1);
+  const names = [...data.types, ...(data.units.some((u) => u.own > 0) ? [t('door.dash.byUnit.own')] : []), ...(data.units.some((u) => u.donations > 0) ? [t('door.dash.byUnit.donations')] : [])];
+  return (
+    <div className="dx-byunit">
+      <ul className="dx-legend">
+        {names.map((n, i) => (<li key={n}><span className={`dx-swatch dx-s${i + 1}`} aria-hidden="true" />{n}</li>))}
+      </ul>
+      <ul className="dx-units">
+        {data.units.map((u) => {
+          const parts = [...data.types.map((ty, i) => ({ slot: i + 1, value: u.byType[ty] ?? 0, name: ty })), { slot: data.types.length + 1, value: u.own, name: t('door.dash.byUnit.own') }, { slot: data.types.length + 2, value: u.donations, name: t('door.dash.byUnit.donations') }].filter((p) => p.value > 0);
+          return (
+            <li key={u.systemId}>
+              <span className="dx-unit-name">{u.name}</span>
+              <SegBar parts={parts} total={top} label={`${u.name}: ${formatRwf(u.total)}`} />
+              <strong className="dx-unit-total">{formatRwf(u.total)}</strong>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
+}
+
 /**
- * The leader's dashboard: figures, two charts and three short lists for this system (the whole
- * church for Central Administration). The server answers only for leaders and only with what their
- * letters allow, so anyone else — or a failure — gets the plain figures instead.
+ * The leader's dashboard: what needs action first, the figures with their trend, charts you can hover, and
+ * short lists for this system (the whole church for Central Administration). The server answers only for
+ * leaders and only with what their letters allow, so anyone else — or a failure — gets the plain figures.
  */
 export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: string; systemName: string; fallback?: React.ReactNode }) {
   const t = useT();
   const { locale } = useI18n();
   const { personName } = useFrontDoor();
-  const { data, loading } = useLoad(() => fetchDashboard(systemId), `dash|${systemId}`);
-  if (loading) return null;
+  const [range, setRange] = useState<(typeof RANGES)[number]>(6);
+  const fresh = useLoad(() => fetchDashboard(systemId, range), `dash|${systemId}|${range}`);
+  // Keep showing the last answer while another range loads, so the page does not blink away.
+  const last = useRef<Dashboard | undefined>(undefined);
+  if (fresh.data) last.current = fresh.data;
+  const data = fresh.data ?? (last.current?.systemId === systemId ? last.current : undefined);
+  if (fresh.loading && !data) return null;
   if (!data) {
     return (
       <>
@@ -264,67 +251,95 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
   }
 
   const date = new Intl.DateTimeFormat(locale, { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' }).format(new Date());
+  const rwf = (n: number) => formatRwf(n);
+  const count = (n: number) => n.toLocaleString('en-US');
   const second = data.second;
-  const lines: Line[] = (second?.series ?? [])
+  const moneySeries: VizSeries[] = (second?.series ?? [])
     .filter((s) => s.points.length > 1)
-    .map((s) => ({
-      key: s.key,
-      points: s.points,
-      color: s.key === 'spent' ? 'var(--warn)' : s.key === 'giving' ? 'var(--success)' : 'var(--accent)',
-      text: t(`door.dash.legend.${s.key}` as 'door.dash.legend.income'),
-    }));
-  const hasSecond = lines.some((l) => l.points.some((p) => p.value > 0));
+    .map((s, i) => ({ key: s.key, name: t(`door.dash.legend.${s.key}` as 'door.dash.legend.income'), slot: s.key === 'spent' ? 2 : i === 0 ? 1 : 3, points: s.points }));
+  const hasSecond = moneySeries.some((l) => l.points.some((p) => p.value > 0));
   const secondTitle = t(second?.kind === 'giving' ? 'door.dash.giving.title' : 'door.dash.money.title');
   const attTitle = t('door.dash.attendance.title');
   const hasAtt = !!data.attendance && data.attendance.some((p) => p.value > 0);
+  const workSeries: VizSeries[] = (data.workSeries ?? []).map((s) => ({ key: s.key, name: t(`door.dash.work.${s.key}` as 'door.dash.work.created'), slot: s.key === 'created' ? 1 : 3, points: s.points }));
+  const hasWork = workSeries.some((s) => s.points.some((p) => p.value > 0));
+  const w = data.overview.work;
+  const mo = data.overview.money;
+  const budget = mo && mo.plannedYear > 0 ? Math.round((mo.spentYear / mo.plannedYear) * 100) : null;
+  const rangeLabel = t('door.dash.lastN', { n: String(data.range ?? range) });
 
   return (
     <div className="dash">
       <div className="dash-greet">
         <div>
           <h2>{t('door.dash.welcome', { name: personName || systemName })}</h2>
-          <p className="muted">{t('door.dash.sub', { system: systemName })}</p>
+          <p className="muted">{t('door.dash.sub', { system: systemName })} · {date}</p>
         </div>
-        <span className="dash-date-now">{date}</span>
+        <Segmented label={t('door.dash.range')} value={String(range) as '3' | '6' | '12'} onChange={(k) => setRange(Number(k) as (typeof RANGES)[number])} items={RANGES.map((n) => ({ key: String(n) as '3' | '6' | '12', label: t('door.dash.months', { n: String(n) }) }))} />
       </div>
+      <Attention items={data.attention ?? []} />
       <ul className="dash-kpis">
         {data.kpis.map((k) => (
           <li key={k.key}>
-            <KpiCard kpi={k} />
+            <KpiCard kpi={k} note={k.key === 'work' && w?.overdue ? t('door.dash.work.overdueN', { count: String(w.overdue) }) : undefined} />
           </li>
         ))}
       </ul>
-      {(data.attendance || second) && (
+      {(data.attendance || second || hasWork) && (
         <div className="dash-charts">
           {data.attendance && (
             <Panel title={attTitle}>
-              <span className="dash-range">{t('door.dash.last6')}</span>
-              {hasAtt ? <AttendanceChart points={data.attendance} title={attTitle} /> : <p className="muted">{t('door.dash.noData')}</p>}
+              <span className="dash-range">{rangeLabel}</span>
+              {hasAtt ? <MonthsChart kind="bars" series={[{ key: 'att', name: attTitle, slot: 1, points: data.attendance }]} title={attTitle} format={count} /> : <p className="muted">{t('door.dash.noData')}</p>}
             </Panel>
           )}
           {second && (
             <Panel title={secondTitle}>
-              <span className="dash-range">{t('door.dash.last6')}</span>
-              {hasSecond ? (
-                <>
-                  <LineChart lines={lines} title={secondTitle} money />
-                  {lines.length > 1 && (
-                    <ul className="dash-legend">
-                      {lines.map((l) => (
-                        <li key={l.key}>
-                          <span className="dash-dot" style={{ background: l.color }} aria-hidden="true" />
-                          {l.text}
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </>
-              ) : (
-                <p className="muted">{t('door.dash.noData')}</p>
-              )}
+              <span className="dash-range">{rangeLabel}</span>
+              {hasSecond ? <MonthsChart kind="lines" series={moneySeries} title={secondTitle} format={rwf} /> : <p className="muted">{t('door.dash.noData')}</p>}
+            </Panel>
+          )}
+          {hasWork && (
+            <Panel title={t('door.dash.work.chart')} to={`/s/${systemId}/work`}>
+              <span className="dash-range">{rangeLabel}</span>
+              <MonthsChart kind="bars" series={workSeries} title={t('door.dash.work.chart')} format={count} />
             </Panel>
           )}
         </div>
+      )}
+      {(w || mo) && (
+        <div className="dash-charts">
+          {w && (
+            <Panel title={t('door.dash.plans.title')} to={`/s/${systemId}/money/plan`}>
+              <SegBar label={t('door.dash.plans.title')} parts={[{ slot: 1, value: w.plansRunning, name: t('door.dash.work.running') }, { slot: 2, value: w.plansWaiting, name: t('door.dash.work.waiting') }, { slot: 3, value: w.plansDraft, name: t('door.dash.work.drafts') }]} />
+              <ul className="dx-legend">
+                <li><span className="dx-swatch dx-s1" aria-hidden="true" />{t('door.dash.work.running')}: {w.plansRunning}</li>
+                <li><span className="dx-swatch dx-s2" aria-hidden="true" />{t('door.dash.work.waiting')}: {w.plansWaiting}</li>
+                <li><span className="dx-swatch dx-s3" aria-hidden="true" />{t('door.dash.work.drafts')}: {w.plansDraft}</li>
+              </ul>
+            </Panel>
+          )}
+          {mo && (
+            <Panel title={t('door.dash.budget.title')} to={`/s/${systemId}/money`}>
+              {budget !== null ? (
+                <>
+                  <p className="dx-big">{budget}% <span className="muted">{t('door.dash.budget.used')}</span></p>
+                  <SegBar label={t('door.dash.budget.title')} total={mo.plannedYear} parts={[{ slot: budget > 100 ? 2 : 1, value: mo.spentYear, name: t('door.dash.budget.spent') }]} />
+                  <p className="muted">{formatRwf(mo.spentYear)} / {formatRwf(mo.plannedYear)}{budget > 100 ? ` · ${t('door.dash.budget.over')}` : ''}</p>
+                </>
+              ) : (
+                <p className="muted">{t('door.dash.budget.none')}</p>
+              )}
+              <p className="muted">{t('door.dash.money.balance')}: <strong>{formatRwf(mo.balance)}</strong></p>
+            </Panel>
+          )}
+        </div>
+      )}
+      {data.byUnit && (
+        <Panel title={t('door.dash.byUnit.title', { year: String(data.byUnit.year) })}>
+          <p className="muted">{t('door.dash.byUnit.hint')}</p>
+          <ByUnit data={data.byUnit} />
+        </Panel>
       )}
       <div className="dash-masonry">
         <DashboardOverview data={data} systemId={systemId} />

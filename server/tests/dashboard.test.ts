@@ -22,7 +22,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'workTask', 'workPlan', 'unitGroup', 'groupSession', 'moneyEntry', 'offeringCount', 'report', 'reportSchedule']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'workTask', 'workPlan', 'unitGroup', 'groupSession', 'moneyEntry', 'offeringCount', 'report', 'reportSchedule', 'contributionList', 'contributionLine', 'donation', 'systemSetting']) db[k] ??= [];
   db.orgUnit.push(
     { id: 'ou-church', name: 'ADEPR Kacyiru', code: 'KAC', kind: 'CENTRAL', type: 'ORGANISATION', parentId: null, systemId: 'sys-main' },
     { id: 'ou-youth', name: 'Youth', code: 'KAC-YOU', kind: 'MINISTRY', type: 'MINISTRY', parentId: 'ou-church', systemId: 'sys-youth' },
@@ -111,5 +111,46 @@ describe('leader dashboard', () => {
     expect(y.body.overview.money).toMatchObject({ balance: 9000, pendingCount: 1, pendingAmount: 4000 });
     const c = await get('p-pastor', '/api/dashboard?systemId=sys-main');
     expect(c.body.overview.money).toBeUndefined();
+  });
+});
+
+describe('range, work figures, attention and contributions by unit', () => {
+  it('honours the range and sends sparklines for the cards', async () => {
+    const r12 = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth&range=12');
+    expect(r12.body.range).toBe(12);
+    const r = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth&range=5');
+    expect(r.body.range).toBe(6);
+    const members = r.body.kpis.find((k: { key: string }) => k.key === 'members');
+    expect(members.spark).toHaveLength(6);
+  });
+  it('shows work figures and an attention line for overdue tasks', async () => {
+    const now = new Date();
+    const long = new Date(now.getTime() - 5 * 86400000);
+    fake.__db.workTask.push(
+      { id: 't1', title: 'Late', ownerPersonId: 'p-youth-leader', systemId: 'sys-youth', visibility: 'MINISTRY', status: 'TODO', dueDate: long, createdAt: long, updatedAt: long },
+      { id: 't2', title: 'Done', ownerPersonId: 'p-youth-leader', systemId: 'sys-youth', visibility: 'MINISTRY', status: 'DONE', createdAt: long, updatedAt: now },
+    );
+    const r = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
+    expect(keys(r)).toContain('work');
+    expect(r.body.overview.work).toMatchObject({ overdue: 1, doneThisMonth: 1, openTasks: 1 });
+    expect(r.body.attention).toContainEqual({ key: 'overdue', count: 1, href: '/s/sys-youth/work' });
+    expect(r.body.workSeries.map((x: { key: string }) => x.key)).toEqual(['created', 'done']);
+  });
+  it('Central shows contributions and donations by unit on church-wide types; ministries do not', async () => {
+    const db = fake.__db;
+    const year = new Date().getUTCFullYear();
+    db.systemSetting.push({ systemId: 'sys-main', moneyJson: JSON.stringify({ types: [{ code: 'BUILD', name: 'Building' }] }) });
+    db.contributionList.push(
+      { id: 'cl1', systemId: 'sys-youth', level: 'UNIT', status: 'APPROVED', typeCode: 'BUILD', typeName: 'Building', month: `${year}-01` },
+      { id: 'cl2', systemId: 'sys-youth', level: 'UNIT', status: 'APPROVED', typeCode: 'OWN1', typeName: 'Camp', month: `${year}-02` },
+      { id: 'cl3', systemId: 'sys-youth', level: 'TEAM', status: 'DRAFT', typeCode: 'BUILD', typeName: 'Building', month: `${year}-02` },
+    );
+    db.contributionLine.push({ id: 'l1', listId: 'cl1', name: 'A', amount: 4000 }, { id: 'l2', listId: 'cl2', name: 'B', amount: 1500 }, { id: 'l3', listId: 'cl3', name: 'C', amount: 9999 });
+    db.donation.push({ id: 'd1', systemId: 'sys-youth', accountId: 'a', donorName: 'X', amount: 700, receivedOn: new Date(), status: 'APPROVED' });
+    const c = await get('p-pastor', '/api/dashboard?systemId=sys-main');
+    expect(c.body.byUnit.types).toEqual(['Building']);
+    expect(c.body.byUnit.units[0]).toMatchObject({ systemId: 'sys-youth', byType: { Building: 4000 }, own: 1500, donations: 700, total: 6200 });
+    const y = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
+    expect(y.body.byUnit).toBeNull();
   });
 });

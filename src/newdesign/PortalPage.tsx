@@ -4,6 +4,7 @@ import { useT } from '../i18n/I18nContext';
 import { AnnouncementsStrip } from './AnnouncementsStrip';
 import { useFrontDoor } from './FrontDoorContext';
 import { landingPath } from './portalHome';
+import { PortalWeek } from './PortalWeek';
 import { SystemCards } from './SystemCards';
 import { CardsSkeleton, PageHeader } from './kit';
 
@@ -21,6 +22,7 @@ export function PortalPage() {
         <PageHeader title={t('door.portal.greeting', { name: personName })} purpose={t('door.portal.subtitle')} />
       </div>
 
+      {status === 'in' && <PortalWeek />}
       {status === 'in' && <AnnouncementsStrip />}
 
       {status === 'loading' && (

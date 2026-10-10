@@ -457,6 +457,7 @@ export type AnnouncementItem = {
   authorName: string;
   publishedAt: string | null;
   expiresAt: string | null;
+  editedAt?: string | null;
   read: boolean;
   mine: boolean;
   canWithdraw: boolean;
@@ -485,8 +486,12 @@ export async function postAnnouncement(body: { title: string; body: string; audi
   await apiFetch('/api/announcements', { method: 'POST', body });
 }
 
-export async function withdrawAnnouncement(id: string, reason: string): Promise<void> {
-  await apiFetch(`/api/announcements/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: { reason } });
+export async function withdrawAnnouncement(id: string, reason?: string): Promise<void> {
+  await apiFetch(`/api/announcements/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: reason ? { reason } : {} });
+}
+
+export async function editAnnouncement(id: string, body: { title: string; body: string; expiresAt: string | null }): Promise<void> {
+  await apiFetch(`/api/announcements/${encodeURIComponent(id)}`, { method: 'PATCH', body });
 }
 
 export async function markAnnouncementsRead(body: { ids?: string[]; all?: boolean }): Promise<number> {
@@ -1616,17 +1621,22 @@ export const fetchGlance = (systemId: string): Promise<{ systemId: string; tiles
 
 /* ─── Leader dashboard ─── */
 export type DashPoint = { label: string; value: number };
-export type DashKpi = { key: 'members' | 'attendance' | 'giving' | 'money' | 'units' | 'reports'; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok' };
+export type DashKpi = { key: 'members' | 'attendance' | 'giving' | 'money' | 'units' | 'reports' | 'work' | 'done'; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok'; prev?: number | null; spark?: number[] };
+export type DashByUnit = { year: number; types: string[]; units: Array<{ systemId: string; name: string; byType: Record<string, number>; own: number; donations: number; total: number }> };
 export type Dashboard = {
   systemId: string;
   central: boolean;
+  range?: number;
   kpis: DashKpi[];
+  attention?: Array<{ key: string; count: number; href: string }>;
+  workSeries?: Array<{ key: 'created' | 'done'; points: DashPoint[] }>;
+  byUnit?: DashByUnit | null;
   attendance: DashPoint[] | null;
   second: { kind: 'giving' | 'money'; series: Array<{ key: 'giving' | 'income' | 'spent'; points: DashPoint[] }> } | null;
   /** Each part appears only when this person's access opens it. */
   overview: {
     people?: { members: number; joinedThisMonth: number; units: number };
-    work?: { openTasks: number; plansRunning: number; plansWaiting: number; plansDraft: number };
+    work?: { overdue?: number; doneThisMonth?: number; openTasks: number; plansRunning: number; plansWaiting: number; plansDraft: number };
     schedule?: { next: Array<{ id: string; title: string; kind: string; startsAt: string | null }> };
     money?: { balance: number; incomeMonth: number; spentMonth: number; pendingCount: number; pendingAmount: number; plannedYear: number; spentYear: number };
     governance?: { nextMeeting: { id: string; title: string; at: string | null } | null; decisionsWaiting: number; lettersOpen: number };
@@ -1639,7 +1649,7 @@ export type Dashboard = {
   reports: Array<{ id: string; title: string; kind: string; periodKey: string; late: boolean; href: string }> | null;
   work: Array<{ id: string; title: string; status: string; at: string | null; href: string }>;
 };
-export const fetchDashboard = (systemId: string): Promise<Dashboard> => apiFetch(`/api/dashboard?systemId=${encodeURIComponent(systemId)}`);
+export const fetchDashboard = (systemId: string, range = 6): Promise<Dashboard> => apiFetch(`/api/dashboard?systemId=${encodeURIComponent(systemId)}&range=${range}`);
 
 // ── Protocol (slice 3.16): the old team engine ─────────────────────────────────
 export type ProtocolOffice = 'PRESIDENT' | 'VP' | 'SECRETARY' | 'TREASURER' | 'COORDINATOR' | 'MEMBER';

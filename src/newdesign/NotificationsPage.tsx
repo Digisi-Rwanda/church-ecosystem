@@ -7,12 +7,13 @@ import {
   type NoticeItem,
 } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
-import { SelectField } from '../components/ui/Field';
+import { SearchSelect } from '../components/ui/SearchSelect';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { badge, dayLabel, safeHref, unreadKeys, withRead } from './notices';
 import { useLoad } from './useLoad';
+import { noticesChanged } from './useNoticeSummary';
 import { PageHeader } from './kit';
 
 type Tab = 'waiting' | 'info';
@@ -28,6 +29,7 @@ export function NotificationsPage() {
   // What the person has just marked, shown at once; the server keeps the real state.
   const [marked, setMarked] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
+  const [showRead, setShowRead] = useState(false);
   const items: NoticeItem[] = (data?.items ?? []).map((i) => (i.key in marked ? { ...i, read: marked[i.key] } : i));
   const countOf = (k: 'waiting' | 'info') => items.filter((i) => i.kind === (k === 'waiting' ? 'WAITING_FOR_ME' : 'FOR_INFORMATION') && !i.read).length;
   const remember = (list: NoticeItem[], keys: string[], read: boolean) => {
@@ -37,8 +39,10 @@ export function NotificationsPage() {
   const forget = (keys: string[]) => setMarked((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !keys.includes(k))));
 
   const kind = tab === 'waiting' ? 'WAITING_FOR_ME' : 'FOR_INFORMATION';
-  const shown = items.filter((i) => i.kind === kind);
-  const unread = shown.filter((i) => !i.read).length;
+  const ofKind = items.filter((i) => i.kind === kind);
+  const unread = ofKind.filter((i) => !i.read).length;
+  const shown = showRead ? ofKind : ofKind.filter((i) => !i.read);
+  const readCount = ofKind.length - unread;
   const systemName = (id: string) => portal.find((s) => s.id === id)?.shortName ?? id;
 
   const setTab = (next: Tab) => {
@@ -53,6 +57,7 @@ export function NotificationsPage() {
     try {
       if (n.read) await markNoticesUnread([n.key]);
       else await markNoticesRead({ keys: [n.key] });
+      noticesChanged();
     } catch {
       forget([n.key]);
       setError(t('door.people.actionFailed'));
@@ -60,10 +65,11 @@ export function NotificationsPage() {
   };
   const readAll = async () => {
     setError('');
-    const keys = unreadKeys(shown);
+    const keys = unreadKeys(ofKind);
     remember(items, keys, true);
     try {
       await markNoticesRead({ all: true, tab, system: system || undefined });
+      noticesChanged();
     } catch {
       forget(keys);
       setError(t('door.people.actionFailed'));
@@ -90,24 +96,25 @@ export function NotificationsPage() {
         })}
       </nav>
       <div className="door-filters">
-        <SelectField
+        <SearchSelect
           label={t('door.notices.system')}
           name="system"
           value={system}
-          onChange={(e) => {
+          empty={t('door.notices.allSystems')}
+          placeholder={t('door.notices.systemSearch')}
+          none={t('door.portal.search.none')}
+          options={portal.map((s) => ({ value: s.id, label: s.shortName, hint: s.name }))}
+          onChange={(v) => {
             const p = new URLSearchParams(params);
-            if (e.target.value) p.set('system', e.target.value);
+            if (v) p.set('system', v);
             else p.delete('system');
             setParams(p, { replace: true });
           }}
-        >
-          <option value="">{t('door.notices.allSystems')}</option>
-          {portal.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.shortName}
-            </option>
-          ))}
-        </SelectField>
+        />
+        <label className="door-check">
+          <input type="checkbox" checked={showRead} onChange={(e) => setShowRead(e.target.checked)} />
+          {t('door.notices.showRead', { count: String(readCount) })}
+        </label>
         <button type="button" className="btn secondary" disabled={unread === 0} onClick={() => void readAll()}>
           {t('door.notices.markAll')}
         </button>

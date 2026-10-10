@@ -3,6 +3,7 @@ import {
   fetchAnnouncementOptions,
   fetchAnnouncements,
   markAnnouncementsRead,
+  editAnnouncement,
   postAnnouncement,
   withdrawAnnouncement,
   type AnnouncementItem,
@@ -11,11 +12,13 @@ import {
 } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
+import { SearchSelect } from '../components/ui/SearchSelect';
 import { useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { announceErrorKey, audienceKinds, buildAudience, canCompose, dayOf, errorCode, formReady, markedRead, unreadIds } from './announcements';
 import { dayLabel } from './notices';
 import { useLoad } from './useLoad';
+import { announcementsChanged } from './useAnnouncementSummary';
 import { PageHeader } from './kit';
 
 /** The audience line under a post, in words a member understands. */
@@ -43,6 +46,7 @@ export function AnnouncementsPage() {
     setMarked((m) => [...m, id]);
     try {
       await markAnnouncementsRead({ ids: [id] });
+      announcementsChanged();
     } catch {
       setMarked((m) => m.filter((x) => x !== id));
       setError(t('door.people.actionFailed'));
@@ -53,6 +57,7 @@ export function AnnouncementsPage() {
     setMarked((m) => [...m, ...ids]);
     try {
       await markAnnouncementsRead({ all: true });
+      announcementsChanged();
     } catch {
       setMarked((m) => m.filter((x) => !ids.includes(x)));
       setError(t('door.people.actionFailed'));
@@ -96,6 +101,7 @@ export function AnnouncementsPage() {
             setComposing(false);
             setNotice(t('door.announce.posted'));
             list.reload();
+            announcementsChanged();
           }}
         />
       )}
@@ -105,7 +111,7 @@ export function AnnouncementsPage() {
         ) : (
           <ul className="door-notices">
             {items.map((a) => (
-              <Post key={a.id} item={a} onRead={() => void readOne(a.id)} onWithdrawn={list.reload} />
+              <Post key={a.id} item={a} onRead={() => void readOne(a.id)} onWithdrawn={() => { list.reload(); announcementsChanged(); }} />
             ))}
           </ul>
         )}
@@ -117,6 +123,7 @@ export function AnnouncementsPage() {
 function Post({ item, onRead, onWithdrawn }: { item: AnnouncementItem; onRead: () => void; onWithdrawn: () => void }) {
   const t = useT();
   const [taking, setTaking] = useState(false);
+  const [editing, setEditing] = useState(false);
   const when = item.publishedAt ? dayLabel(item.publishedAt) : null;
   return (
     <li className={`panel door-notice${item.read ? '' : ' unread'}`}>
@@ -125,7 +132,11 @@ function Post({ item, onRead, onWithdrawn }: { item: AnnouncementItem; onRead: (
           {!item.read && <span className="door-dot" role="img" aria-label={t('door.announce.unread')} />}
           <strong>{item.title}</strong>
         </div>
-        <p className="door-announce-body">{item.body}</p>
+        {editing ? (
+          <EditForm item={item} onDone={() => { setEditing(false); onWithdrawn(); }} onCancel={() => setEditing(false)} />
+        ) : (
+          <p className="door-announce-body">{item.body}</p>
+        )}
         <p className="muted door-notice-meta">
           <span className="door-chip">
             <AudienceLine item={item} />
@@ -133,6 +144,7 @@ function Post({ item, onRead, onWithdrawn }: { item: AnnouncementItem; onRead: (
           {t('door.announce.by', { name: item.authorName || '—' })}
           {when && ` · ${when.kind === 'date' ? when.date : t(when.kind === 'today' ? 'door.notices.today' : 'door.notices.yesterday')}`}
           {item.expiresAt && ` · ${t('door.announce.until', { date: dayOf(item.expiresAt) })}`}
+          {item.editedAt && ` · ${t('door.announce.edited')}`}
         </p>
         {taking && <WithdrawForm id={item.id} onDone={onWithdrawn} onCancel={() => setTaking(false)} />}
       </div>
@@ -142,13 +154,53 @@ function Post({ item, onRead, onWithdrawn }: { item: AnnouncementItem; onRead: (
             {t('door.announce.markRead')}
           </button>
         )}
-        {item.canWithdraw && !taking && (
+        {item.canWithdraw && !editing && !taking && (
+          <button type="button" className="btn ghost sm" onClick={() => setEditing(true)}>
+            {t('door.announce.edit')}
+          </button>
+        )}
+        {item.canWithdraw && !taking && !editing && (
           <button type="button" className="btn ghost sm" onClick={() => setTaking(true)}>
             {t('door.announce.withdraw')}
           </button>
         )}
       </div>
     </li>
+  );
+}
+
+function EditForm({ item, onDone, onCancel }: { item: AnnouncementItem; onDone: () => void; onCancel: () => void }) {
+  const t = useT();
+  const [title, setTitle] = useState(item.title);
+  const [body, setBody] = useState(item.body);
+  const [expires, setExpires] = useState(item.expiresAt ? dayOf(item.expiresAt) : '');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (title.trim().length < 3 || !body.trim()) return setError(t('door.announce.form.incomplete'));
+    setBusy(true);
+    setError('');
+    try {
+      await editAnnouncement(item.id, { title: title.trim(), body: body.trim(), expiresAt: expires || null });
+      onDone();
+    } catch (err) {
+      setError(t(announceErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="door-form door-end" onSubmit={submit} noValidate>
+      <TextField label={t('door.announce.form.title')} name={`edit-title-${item.id}`} value={title} onChange={(e) => setTitle(e.target.value)} />
+      <TextAreaField label={t('door.announce.form.body')} name={`edit-body-${item.id}`} rows={5} value={body} onChange={(e) => setBody(e.target.value)} />
+      <TextField label={t('door.announce.form.expires')} name={`edit-exp-${item.id}`} type="date" value={expires} onChange={(e) => setExpires(e.target.value)} hint={t('door.announce.form.expiresHint')} />
+      <p className="muted">{t('door.announce.edit.note')}</p>
+      {error && <p className="door-error" role="alert">{error}</p>}
+      <div className="door-row">
+        <button type="submit" className="btn" disabled={busy}>{t('door.announce.edit.save')}</button>
+        <button type="button" className="btn ghost" onClick={onCancel}>{t('door.announce.form.cancel')}</button>
+      </div>
+    </form>
   );
 }
 
@@ -159,14 +211,10 @@ function WithdrawForm({ id, onDone, onCancel }: { id: string; onDone: () => void
   const [error, setError] = useState('');
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (reason.trim().length < 3) {
-      setError(t('door.announce.withdraw.reasonRequired'));
-      return;
-    }
     setBusy(true);
     setError('');
     try {
-      await withdrawAnnouncement(id, reason.trim());
+      await withdrawAnnouncement(id, reason.trim() || undefined);
       onDone();
     } catch (err) {
       setError(t(announceErrorKey(errorCode(err)) as 'door.people.actionFailed'));
@@ -237,14 +285,16 @@ function ComposeForm({ options, onDone, onCancel }: { options: AnnouncementOptio
         ))}
       </SelectField>
       {kind === 'SYSTEM' && (
-        <SelectField label={t('door.announce.form.system')} name="system" value={systemId} onChange={(e) => setSystemId(e.target.value)}>
-          <option value="">{t('door.announce.form.choose')}</option>
-          {options.systems.map((s) => (
-            <option key={s.id} value={s.id}>
-              {s.shortName}
-            </option>
-          ))}
-        </SelectField>
+        <SearchSelect
+          label={t('door.announce.form.system')}
+          name="system"
+          value={systemId}
+          empty={t('door.announce.form.choose')}
+          placeholder={t('door.notices.systemSearch')}
+          none={t('door.portal.search.none')}
+          options={options.systems.map((x) => ({ value: x.id, label: x.shortName, hint: x.name }))}
+          onChange={setSystemId}
+        />
       )}
       {kind === 'OFFICE' && (
         <SelectField label={t('door.announce.form.office')} name="office" value={office} onChange={(e) => setOffice(e.target.value)}>

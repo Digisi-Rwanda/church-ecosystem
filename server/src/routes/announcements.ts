@@ -72,6 +72,7 @@ async function visibleTo(personId: string, data: AccessData, now = new Date()) {
     authorName: who.get(a.authorId) ?? '',
     publishedAt: iso(a.publishedAt),
     expiresAt: iso(a.expiresAt),
+    editedAt: iso(a.editedAt),
     read: seen.has(readKey(a.id)) || a.authorId === personId,
     mine: a.authorId === personId,
     canWithdraw: canWithdraw(a, personId, data, now),
@@ -173,11 +174,11 @@ announcementsRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   res.status(201).json({ announcement: { id: row.id } });
 });
 
-const withdrawSchema = z.object({ reason: z.string().trim().min(3).max(300) });
+const withdrawSchema = z.object({ reason: z.string().trim().max(300).optional() });
 
 announcementsRouter.post('/:id/withdraw', requireAuth, async (req: AuthedRequest, res) => {
   const parsed = withdrawSchema.safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_REQUEST', 'Say why you are taking it down');
+  if (!parsed.success) return fail(res, 400, 'BAD_REQUEST', 'Check the reason');
   const me = req.auth!.personId;
   const now = new Date();
   const row = (await prisma.announcement.findUnique({ where: { id: String(req.params.id) } })) as AnnouncementRow | null;
@@ -187,7 +188,7 @@ announcementsRouter.post('/:id/withdraw', requireAuth, async (req: AuthedRequest
   if (!canWithdraw(row, me, data, now)) return fail(res, 403, 'NOT_ALLOWED', 'You may not take this down');
   await prisma.announcement.update({
     where: { id: row.id },
-    data: { status: 'WITHDRAWN', withdrawnAt: now, withdrawnById: me, withdrawnReason: parsed.data.reason },
+    data: { status: 'WITHDRAWN', withdrawnAt: now, withdrawnById: me, withdrawnReason: parsed.data.reason || null },
   });
   await prisma.auditEvent.create({
     data: {
@@ -197,8 +198,42 @@ announcementsRouter.post('/:id/withdraw', requireAuth, async (req: AuthedRequest
       action: 'ANNOUNCEMENT_WITHDRAWN',
       resource: 'ANNOUNCEMENT',
       detail: `Took down “${row.title}”`,
-      metaJson: JSON.stringify({ announcementId: row.id, reason: parsed.data.reason }),
+      metaJson: JSON.stringify({ announcementId: row.id, reason: parsed.data.reason || null }),
     },
+  });
+  res.json({ ok: true });
+});
+
+const editSchema = z.object({
+  title: z.string().trim().min(3).max(TITLE_MAX),
+  body: z.string().trim().min(1).max(BODY_MAX),
+  /** A calendar day, or null to show it until it is taken down. */
+  expiresAt: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).nullable().optional(),
+});
+
+/** Change what a post says or how long it shows. Who it was sent to stays as it was. Same people as may take it down. */
+announcementsRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = editSchema.safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_REQUEST', 'Give a title and a message');
+  const me = req.auth!.personId;
+  const now = new Date();
+  const row = (await prisma.announcement.findUnique({ where: { id: String(req.params.id) } })) as AnnouncementRow | null;
+  if (!row) return fail(res, 404, 'NOT_FOUND', 'Announcement not found');
+  if (row.status !== 'PUBLISHED') return fail(res, 409, 'ALREADY_WITHDRAWN', 'This announcement is already down');
+  const { data } = await loadAccessData(me);
+  if (!canWithdraw(row, me, data, now)) return fail(res, 403, 'NOT_ALLOWED', 'You may not change this');
+  let expiresAt: Date | null | undefined;
+  if (parsed.data.expiresAt === null) expiresAt = null;
+  else if (parsed.data.expiresAt) {
+    expiresAt = new Date(`${parsed.data.expiresAt}T00:00:00.000Z`);
+    if (Number.isNaN(expiresAt.getTime()) || expiresAt.getTime() + 24 * 3600 * 1000 <= now.getTime()) return fail(res, 400, 'BAD_DATES', 'The last day must not be in the past');
+  }
+  await prisma.announcement.update({
+    where: { id: row.id },
+    data: { title: parsed.data.title, body: parsed.data.body, editedAt: now, ...(expiresAt !== undefined ? { expiresAt } : {}) },
+  });
+  await prisma.auditEvent.create({
+    data: { at: now, actorId: me, systemId: row.systemId, action: 'ANNOUNCEMENT_EDITED', resource: 'ANNOUNCEMENT', detail: `Changed “${row.title}”`, metaJson: JSON.stringify({ announcementId: row.id }) },
   });
   res.json({ ok: true });
 });

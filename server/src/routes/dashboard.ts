@@ -16,6 +16,7 @@ import { COLLECTIONS_SYSTEM } from './collections.js';
 import { reportsReceived } from './reports.js';
 import { canReadReports } from '../reports/access.js';
 import { lastMonths, monthOf, percentChange, sumByMonth } from '../glance/rules.js';
+import { counts as listCounts } from '../money/block.js';
 
 export const dashboardRouter = Router();
 
@@ -25,7 +26,7 @@ interface CountRow { systemId: string; amount: number; status: string; serviceOn
 interface GroupRow { id: string; systemId: string; status: string }
 interface SessionRow { groupId: string; heldOn: Date | string; presentJson: string }
 interface UnitRow { id: string; systemId?: string | null; kind?: string | null; status?: string | null }
-interface TaskRow extends WorkRow { id: string; title: string; status: string; updatedAt?: Date | string | null; createdAt?: Date | string | null }
+interface TaskRow extends WorkRow { id: string; title: string; status: string; dueDate?: Date | string | null; updatedAt?: Date | string | null; createdAt?: Date | string | null }
 type PlanFull = PlanRow & { id: string; title: string; planType?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null; status: string };
 
 const present = (json: string): number => {
@@ -51,14 +52,18 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const central = systemId === COLLECTIONS_SYSTEM;
   const letters = lettersInSystem(me, systemId, data, now);
   const has = (m: 'PEOPLE' | 'MONEY' | 'SCHEDULING' | 'MISSION' | 'GOVERNANCE') => (letters[m] as string[]).includes('R');
-  const months = lastMonths(now);
+  const asked = Number(req.query.range);
+  const range = [3, 6, 12].includes(asked) ? asked : 6;
+  const months = lastMonths(now, range);
   const thisMonth = months[months.length - 1]!;
   const lastMonth = months[months.length - 2]!;
-  const kpis: Array<{ key: string; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok' }> = [];
+  const kpis: Array<{ key: string; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok'; prev?: number | null; spark?: number[] }> = [];
+  const attention: Array<{ key: string; count: number; href: string }> = [];
   // null = this person's letters do not open that part, so the page leaves it out; [] = allowed, nothing yet.
   const lists: { events: unknown[]; members: unknown[] | null; work: unknown[]; reports: unknown[] | null } = { events: [], members: null, work: [], reports: null };
   const overview: Record<string, unknown> = {};
   let attendance: Array<{ label: string; value: number }> | null = null;
+  let workSeries: Array<{ key: string; points: Array<{ label: string; value: number }> }> = [];
   let second: { kind: 'giving' | 'money'; series: Array<{ key: string; points: Array<{ label: string; value: number }> }> } | null = null;
 
   // People: members, recent joiners, attendance at groups.
@@ -71,7 +76,11 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     const nowCount = new Set(scoped.filter((m) => m.status === 'ACTIVE').map((m) => m.personId)).size;
     const joinedThisMonth = new Set(scoped.filter((m) => m.status === 'ACTIVE' && new Date(m.startDate) >= monthStart).map((m) => m.personId)).size;
     overview.people = { members: nowCount, joinedThisMonth, units: 0 };
-    kpis.push({ key: 'members', value: nowCount, format: 'count', trend: percentChange(nowCount, countAt(monthStart)), href: `/s/${systemId}/people` });
+    const monthEnd = (m: string) => {
+      const [y, mo] = m.split('-').map(Number) as [number, number];
+      return new Date(Date.UTC(y, mo, 1));
+    };
+    kpis.push({ key: 'members', value: nowCount, format: 'count', trend: percentChange(nowCount, countAt(monthStart)), prev: countAt(monthStart), spark: months.map((m) => countAt(monthEnd(m))), href: `/s/${systemId}/people` });
 
     const seen = new Set<string>();
     const recent = scoped
@@ -92,7 +101,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
       attendance = sumByMonth(sessions, months, (s) => s.heldOn, (s) => present(s.presentJson));
       const last = attendance[attendance.length - 1]!.value;
       const before = attendance[attendance.length - 2]!.value;
-      kpis.push({ key: 'attendance', value: last, format: 'count', trend: percentChange(last, before), href: `/s/${systemId}/groups` });
+      kpis.push({ key: 'attendance', value: last, format: 'count', trend: percentChange(last, before), prev: before, spark: attendance.map((p) => p.value), href: `/s/${systemId}/groups` });
     }
   }
 
@@ -101,20 +110,21 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     const counts = ((await prisma.offeringCount.findMany()) as CountRow[]).filter((c) => c.status !== 'VOIDED');
     const points = sumByMonth(counts, months, (c) => c.serviceOn, (c) => c.amount);
     const cur = points[points.length - 1]!.value;
-    kpis.push({ key: 'giving', value: cur, format: 'rwf', trend: percentChange(cur, points[points.length - 2]!.value), href: `/s/${systemId}/collections` });
+    kpis.push({ key: 'giving', value: cur, format: 'rwf', trend: percentChange(cur, points[points.length - 2]!.value), prev: points[points.length - 2]!.value, spark: points.map((p) => p.value), href: `/s/${systemId}/collections` });
     second = { kind: 'giving', series: [{ key: 'giving', points }] };
   } else if (!central && has('MONEY')) {
     const entries = ((await prisma.moneyEntry.findMany({ where: { systemId } })) as EntryRow[]).filter((e) => e.systemId === systemId);
     const income = sumByMonth(entries.filter((e) => e.kind === 'INCOME' && e.status === 'RECORDED'), months, (e) => e.occurredOn, (e) => e.amount);
     const spent = sumByMonth(entries.filter((e) => e.kind === 'SPENDING' && e.status === 'APPROVED'), months, (e) => e.occurredOn, (e) => e.amount);
     const b = balances(entries.filter((e) => monthOf(e.occurredOn) === thisMonth));
-    kpis.push({ key: 'money', value: b.income, format: 'rwf', trend: percentChange(b.income, income.find((p) => p.label === lastMonth)?.value ?? 0), href: `/s/${systemId}/money` });
+    kpis.push({ key: 'money', value: b.income, format: 'rwf', trend: percentChange(b.income, income.find((p) => p.label === lastMonth)?.value ?? 0), prev: income.find((p) => p.label === lastMonth)?.value ?? 0, spark: income.map((p) => p.value), href: `/s/${systemId}/money` });
     second = { kind: 'money', series: [{ key: 'income', points: income }, { key: 'spent', points: spent }] };
     const all = balances(entries);
     const pendingRows = entries.filter((e) => e.kind === 'SPENDING' && e.status === 'PENDING_APPROVAL');
     const year = now.getUTCFullYear();
     const lines = ((await prisma.moneyBudgetLine.findMany({ where: { systemId } })) as Array<{ systemId: string; year: number; kind: string; planned: number }>).filter((l) => l.systemId === systemId && l.year === year && l.kind === 'SPENDING');
     const spentYear = entries.filter((e) => e.kind === 'SPENDING' && e.status === 'APPROVED' && new Date(e.occurredOn).getUTCFullYear() === year).reduce((a, e) => a + e.amount, 0);
+    if (pendingRows.length > 0) attention.push({ key: 'approvals', count: pendingRows.length, href: `/s/${systemId}/money` });
     overview.money = { balance: all.income - all.spent, incomeMonth: b.income, spentMonth: spent[spent.length - 1]!.value, pendingCount: pendingRows.length, pendingAmount: pendingRows.reduce((a, e) => a + e.amount, 0), plannedYear: lines.reduce((a, l) => a + l.planned, 0), spentYear };
   }
 
@@ -142,12 +152,30 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     .sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime())
     .slice(0, 4);
   lists.work = tasks.map((w) => ({ id: w.id, title: w.title, status: w.status, at: iso(w.updatedAt ?? w.createdAt), href: `/s/${w.systemId}/work` }));
+  const isOpen = (w: TaskRow) => w.status !== 'DONE' && w.status !== 'CANCELLED';
+  const overdue = visibleTasks.filter((w) => isOpen(w) && w.dueDate && new Date(w.dueDate).getTime() < now.getTime()).length;
+  const doneAll = visibleTasks.filter((w) => w.status === 'DONE');
+  workSeries = [
+    { key: 'created', points: sumByMonth(visibleTasks, months, (w) => w.createdAt ?? now, () => 1) },
+    { key: 'done', points: sumByMonth(doneAll, months, (w) => w.updatedAt ?? w.createdAt ?? now, () => 1) },
+  ];
+  const doneNow = workSeries[1]!.points[workSeries[1]!.points.length - 1]!.value;
+  const donePrev = workSeries[1]!.points[workSeries[1]!.points.length - 2]!.value;
+  const openNow = visibleTasks.filter(isOpen).length;
+  if (visibleTasks.length > 0 || has('MISSION')) {
+    kpis.push({ key: 'work', value: openNow, format: 'count', trend: null, href: `/s/${systemId}/work`, tone: overdue > 0 ? 'late' : 'ok' });
+    kpis.push({ key: 'done', value: doneNow, format: 'count', trend: percentChange(doneNow, donePrev), prev: donePrev, spark: workSeries[1]!.points.map((p) => p.value), href: `/s/${systemId}/work` });
+  }
+  if (overdue > 0) attention.push({ key: 'overdue', count: overdue, href: `/s/${systemId}/work` });
   overview.work = {
-    openTasks: visibleTasks.filter((w) => w.status !== 'DONE' && w.status !== 'CANCELLED').length,
+    overdue,
+    doneThisMonth: doneNow,
+    openTasks: openNow,
     plansRunning: visiblePlans.filter((p) => p.status === 'RUNNING' || p.status === 'SETUP').length,
     plansWaiting: visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').length,
     plansDraft: visiblePlans.filter((p) => p.status === 'DRAFT').length,
   };
+  if (visiblePlans.some((p) => p.status === 'PENDING_APPROVAL')) attention.push({ key: 'plans', count: visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').length, href: `/s/${systemId}/work` });
 
   // Schedule: what is coming up in this system.
   if (!central && has('SCHEDULING')) {
@@ -166,6 +194,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
       .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
     const decisions = mine((await prisma.decision.findMany(central ? undefined : { where: { systemId } })) as Array<{ systemId: string; status: string }>).filter((d) => d.status === 'DRAFT');
     const letters = mine((await prisma.letter.findMany(central ? undefined : { where: { systemId } })) as Array<{ systemId: string; status: string }>).filter((l) => l.status === 'DRAFT');
+    if (decisions.length > 0) attention.push({ key: 'decisions', count: decisions.length, href: `/s/${systemId}/governance` });
     overview.governance = { nextMeeting: meetings[0] ? { id: meetings[0].id, title: meetings[0].title, at: iso(meetings[0].scheduledAt) } : null, decisionsWaiting: decisions.length, lettersOpen: letters.length };
   }
 
@@ -204,11 +233,57 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     const published = mine(got.reports);
     const thisPeriod = published.filter((r) => r.periodKey === thisMonth || r.periodKey === lastMonth).length;
     kpis.push({ key: 'reports', value: late.length > 0 ? late.length : thisPeriod, format: 'count', trend: null, href: `/s/${systemId}/reports`, tone: late.length > 0 ? 'late' : 'ok' });
+    if (late.length > 0) attention.push({ key: 'reportsLate', count: late.length, href: `/s/${systemId}/reports` });
     lists.reports = [
       ...late.map((r) => ({ id: `late-${r.scheduleId}`, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: true, href: `/s/${r.systemId}/reports` })),
       ...published.map((r) => ({ id: r.id, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: false, href: `/s/${r.systemId}/reports/${r.id}` })),
     ].slice(0, 4);
   }
 
-  res.json({ systemId, central, kpis, attendance, second, overview, ...lists });
+  // Central: what each unit gave through contributions (grouped by the church-wide types, then the unit's own) and donations, this year.
+  let byUnit: unknown = null;
+  if (central && (has('MONEY') || has('GOVERNANCE'))) byUnit = await contributionsByUnit(now);
+
+  res.json({ systemId, central, range, kpis, attention, attendance, second, workSeries, overview, byUnit, ...lists });
 });
+
+interface ListRow { id: string; systemId: string; level: string; status: string; typeCode: string; typeName: string; month: string }
+interface LineRow { listId: string; amount: number }
+interface DonationRow { systemId: string; amount: number; status: string; receivedOn: Date | string }
+
+/** Contributions per unit on approved lists, sorted into the church-wide types and the unit's own, plus approved donations. */
+async function contributionsByUnit(now: Date) {
+  const year = String(now.getUTCFullYear());
+  const settings = (await prisma.systemSetting.findMany()) as Array<{ systemId: string; moneyJson?: string | null }>;
+  const codesOf = (id: string): Array<{ code: string; name: string }> => {
+    try {
+      const row = settings.find((x) => x.systemId === id);
+      const v = row?.moneyJson ? (JSON.parse(row.moneyJson) as { types?: Array<{ code: string; name: string }> }) : null;
+      return v?.types ?? [];
+    } catch {
+      return [];
+    }
+  };
+  const wide = new Map(codesOf('sys-main').map((t) => [t.code, t.name]));
+  const lists = ((await prisma.contributionList.findMany()) as ListRow[]).filter((l) => l.month.startsWith(year) && listCounts(l));
+  const lines = (await prisma.contributionLine.findMany()) as LineRow[];
+  const sums = new Map<string, number>();
+  for (const l of lines) sums.set(l.listId, (sums.get(l.listId) ?? 0) + l.amount);
+  const donations = ((await prisma.donation.findMany()) as DonationRow[]).filter((d) => d.status === 'APPROVED' && new Date(d.receivedOn).getUTCFullYear() === now.getUTCFullYear());
+  const systems = (await prisma.churchSystem.findMany()) as Array<{ id: string; name: string; shortName?: string | null }>;
+  const unitIds = new Set<string>([...lists.map((l) => l.systemId), ...donations.map((d) => d.systemId)]);
+  const units = [...unitIds].map((id) => {
+    const byType: Record<string, number> = {};
+    let own = 0;
+    for (const l of lists.filter((x) => x.systemId === id)) {
+      const amount = sums.get(l.id) ?? 0;
+      if (wide.has(l.typeCode)) byType[wide.get(l.typeCode)!] = (byType[wide.get(l.typeCode)!] ?? 0) + amount;
+      else own += amount;
+    }
+    const don = donations.filter((d) => d.systemId === id).reduce((a, d) => a + d.amount, 0);
+    const sys = systems.find((x) => x.id === id);
+    return { systemId: id, name: sys?.shortName || sys?.name || id, byType, own, donations: don, total: Object.values(byType).reduce((a, n) => a + n, 0) + own + don };
+  }).filter((u) => u.total > 0).sort((a, b) => b.total - a.total).slice(0, 8);
+  const types = [...new Set(units.flatMap((u) => Object.keys(u.byType)))].slice(0, 6);
+  return { year: Number(year), types, units };
+}

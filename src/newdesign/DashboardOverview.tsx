@@ -91,6 +91,7 @@ export function DashboardOverview({ data, systemId }: { data: Dashboard; systemI
               [t('door.dash.money.balance'), formatRwf(o.money.balance)],
               [t('door.dash.money.inMonth'), formatRwf(o.money.incomeMonth)],
               [t('door.dash.money.spentMonth'), formatRwf(o.money.spentMonth)],
+              [t('door.dash.money.netMonth'), formatRwf(o.money.incomeMonth - o.money.spentMonth), o.money.spentMonth > o.money.incomeMonth],
               [t('door.dash.money.pending'), o.money.pendingCount > 0 ? `${o.money.pendingCount} · ${formatRwf(o.money.pendingAmount)}` : '0', o.money.pendingCount > 0],
               ...(o.money.plannedYear > 0 ? ([[t('door.dash.money.budget'), `${formatRwf(o.money.spentYear)} / ${formatRwf(o.money.plannedYear)}`]] as Array<[string, ReactNode]>) : []),
             ]}
@@ -105,6 +106,7 @@ export function DashboardOverview({ data, systemId }: { data: Dashboard; systemI
               [t('door.dash.work.running'), o.work.plansRunning],
               [t('door.dash.work.waiting'), o.work.plansWaiting, o.work.plansWaiting > 0],
               [t('door.dash.work.drafts'), o.work.plansDraft],
+              ...(o.work.overdue !== undefined ? ([[t('door.dash.work.overdueLabel'), o.work.overdue, o.work.overdue > 0], [t('door.dash.work.doneMonth'), o.work.doneThisMonth ?? 0]] as Array<[string, ReactNode, boolean?]>) : []),
             ]}
           />
         </Card>

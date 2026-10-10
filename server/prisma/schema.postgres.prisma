@@ -611,6 +611,7 @@ model Announcement {
   withdrawnAt      DateTime?
   withdrawnById    String?
   withdrawnReason  String?
+  editedAt         DateTime?
 
   @@index([publishedAt])
 }

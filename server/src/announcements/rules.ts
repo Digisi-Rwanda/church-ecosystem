@@ -32,6 +32,7 @@ export interface AnnouncementRow {
   expiresAt?: Date | string | null;
   withdrawnAt?: Date | string | null;
   withdrawnReason?: string | null;
+  editedAt?: Date | string | null;
 }
 
 export interface Audience {

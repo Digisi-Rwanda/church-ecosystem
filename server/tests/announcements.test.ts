@@ -238,8 +238,8 @@ describe('taking a post down', () => {
     const r = await post('p-choir-leader', '/api/announcements', { title: 'Rehearsal', body: 'Friday', audience: choir });
     id = r.body.announcement.id;
   });
-  it('needs a reason and the right to', async () => {
-    expect((await post('p-choir-leader', `/api/announcements/${id}/withdraw`, {})).status).toBe(400);
+  it('needs the right to; the reason is optional', async () => {
+    expect((await post('p-choir-leader', `/api/announcements/${id}/withdraw`, { reason: 'x'.repeat(301) })).status).toBe(400);
     expect((await post('p-choir-member', `/api/announcements/${id}/withdraw`, { reason: 'mistake' })).body.code).toBe('NOT_ALLOWED');
     expect((await post('p-choir-leader', '/api/announcements/zzz/withdraw', { reason: 'mistake' })).status).toBe(404);
   });
@@ -250,6 +250,24 @@ describe('taking a post down', () => {
     expect((await get('p-choir-member', '/api/announcements')).body.items).toEqual([]);
     expect((await post('p-choir-leader', `/api/announcements/${id}/withdraw`, { reason: 'again' })).body.code).toBe('ALREADY_WITHDRAWN');
     expect(fake.__db.auditEvent.find((e: any) => e.action === 'ANNOUNCEMENT_WITHDRAWN')).toMatchObject({ actorId: 'p-pastor' });
+  });
+  it('takes it down without a reason when none is given', async () => {
+    expect((await post('p-choir-leader', `/api/announcements/${id}/withdraw`, {})).status).toBe(200);
+    expect(fake.__db.announcement[0]).toMatchObject({ status: 'WITHDRAWN', withdrawnReason: null });
+  });
+  it('the author or the Church Leader changes the text; others may not; audience stays', async () => {
+    const patch = (as: string, body: object) => request(app).patch(`/api/announcements/${id}`).set(bearer(as)).send(body);
+    expect((await patch('p-choir-member', { title: 'Hacked', body: 'x' })).body.code).toBe('NOT_ALLOWED');
+    expect((await patch('p-choir-leader', { title: 'Hi', body: '' })).status).toBe(400);
+    const r = await patch('p-choir-leader', { title: 'Rehearsal moved', body: 'Saturday instead' });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(fake.__db.announcement[0]).toMatchObject({ title: 'Rehearsal moved', body: 'Saturday instead', audienceKind: 'SYSTEM' });
+    const seen = (await get('p-choir-member', '/api/announcements')).body.items[0];
+    expect(seen.title).toBe('Rehearsal moved');
+    expect(seen.editedAt).toBeTruthy();
+    expect(fake.__db.auditEvent.find((e: any) => e.action === 'ANNOUNCEMENT_EDITED')).toMatchObject({ actorId: 'p-choir-leader' });
+    await post('p-choir-leader', `/api/announcements/${id}/withdraw`, {});
+    expect((await patch('p-choir-leader', { title: 'Again', body: 'x' })).body.code).toBe('ALREADY_WITHDRAWN');
   });
   it('tells each reader whether they may take it down', async () => {
     const lead = (await get('p-choir-leader', '/api/announcements')).body.items[0];
