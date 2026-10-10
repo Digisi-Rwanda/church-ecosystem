@@ -135,7 +135,7 @@ export function MoneyPage() {
         {accounts.data && accounts.data.accounts.length === 0 ? (
           <EmptyState title={t('door.money.account.none')} detail={t('door.money.account.noneDetail')} />
         ) : (
-          <ul className="door-notices">
+          <ul className="door-notices acct-list">
             {(accounts.data?.accounts ?? []).map((a) => (
               <AccountCard key={a.id} account={a} canClose={!!accounts.data?.canRecord} onChange={reload} />
             ))}

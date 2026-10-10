@@ -155,10 +155,10 @@ export function EntryRow({ entry, onChange }: { entry: MoneyEntryItem; onChange:
   const day = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${entry.occurredOn}T00:00:00Z`));
   const sign = entry.kind === 'INCOME' ? '+' : '−';
   return (
-    <li className="panel door-notice">
+    <li className="panel door-notice ledger">
       <div className="door-notice-main">
         <div className="door-row">
-          <strong>
+          <strong className={`ledger-amt ${entry.kind === 'INCOME' ? 'in' : 'out'}`}>
             {sign} {formatRwf(entry.amount)}
           </strong>
           <span className={`door-chip${entry.status === 'PENDING_APPROVAL' ? ' warn' : ''}`}>{t(moneyStatusKey(entry.status))}</span>
@@ -232,20 +232,35 @@ export function AccountCard({ account, canClose, onChange }: { account: MoneyAcc
     }
   };
   return (
-    <li className="panel door-notice">
-      <div className="door-notice-main">
-        <div className="door-row">
-          <strong>{account.name}</strong>
-          {account.status === 'CLOSED' && <span className="door-chip">{t('door.money.account.closed')}</span>}
+    <li className="panel acct-card">
+      <div className="acct-top">
+        <div>
+          <strong className="acct-name">{account.name}</strong>
+          <span className="acct-unit">{account.unitName}</span>
         </div>
-        <p className="muted">{account.unitName}</p>
-        <p>
-          <strong>{t('door.money.balance')}:</strong> {formatRwf(account.balance)}
-        </p>
-        <p className="muted">
-          {t('door.money.income')} {formatRwf(account.income)} · {t('door.money.spent')} {formatRwf(account.spent)}
-          {account.pending > 0 ? ` · ${t('door.money.pending')} ${formatRwf(account.pending)}` : ''}
-        </p>
+        {account.status === 'CLOSED' && <span className="door-chip">{t('door.money.account.closed')}</span>}
+      </div>
+      <div className="acct-balance">
+        <span className="acct-label">{t('door.money.balance')}</span>
+        <strong>{formatRwf(account.balance)}</strong>
+      </div>
+      <dl className="acct-figs">
+        <div>
+          <dt>{t('door.money.income')}</dt>
+          <dd className="good">{formatRwf(account.income)}</dd>
+        </div>
+        <div>
+          <dt>{t('door.money.spent')}</dt>
+          <dd>{formatRwf(account.spent)}</dd>
+        </div>
+        {account.pending > 0 && (
+          <div>
+            <dt>{t('door.money.pending')}</dt>
+            <dd className="warn">{formatRwf(account.pending)}</dd>
+          </div>
+        )}
+      </dl>
+      <div className="acct-foot">
         {canClose && account.status === 'ACTIVE' && (
           <button type="button" className="btn ghost sm" onClick={() => void close()}>
             {t('door.money.account.close')}
