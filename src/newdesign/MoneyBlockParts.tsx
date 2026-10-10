@@ -87,10 +87,17 @@ function Side({ title, side, kind }: { title: string; side: AccountingSideView; 
 }
 
 /** Planned against actual, income then spending, then what is left. Totals are computed, never typed. */
-export function PlanVsActual({ view }: { view: AccountingView }) {
+export function PlanVsActual({ view, only }: { view: AccountingView; only?: 'in' | 'out' }) {
   const t = useT();
   const empty = view.income.rows.length === 0 && view.spending.rows.length === 0;
   if (empty) return <p className="muted">{t('door.money.pva.empty')}</p>;
+  if (only) {
+    return (
+      <div className="pva">
+        <div className="pva-grid one">{only === 'in' ? <Side title={t('door.money.kind.INCOME')} side={view.income} kind="in" /> : <Side title={t('door.money.kind.SPENDING')} side={view.spending} kind="out" />}</div>
+      </div>
+    );
+  }
   return (
     <div className="pva">
       <div className="pva-net" role="group" aria-label={t('door.money.net')}>

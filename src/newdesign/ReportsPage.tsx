@@ -13,17 +13,22 @@ import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { boardCounts, kindKey, lastMonth, periodLabel, reportErrorKey, sortReports, stateKey } from './reports';
 import { useLoad } from './useLoad';
-import { ListRow, PageHeader, RowList, SidePanel, StatusChip, Tabs } from './kit';
+import { ListRow, PageHeader, RowList, Segmented, SidePanel, StatusChip, Tabs } from './kit';
 
 function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportOptions; systemId: string; onDone: (id: string) => void; onCancel: () => void }) {
   const t = useT();
+  const { locale } = useI18n();
   const units = options.units.filter((u) => u.systemId === systemId && u.kinds.length > 0);
   const [unitId, setUnitId] = useState(units.length === 1 ? units[0].id : '');
   const [kind, setKind] = useState<ReportKind | ''>('');
-  const [period, setPeriod] = useState(lastMonth());
+  const [mode, setMode] = useState<'month' | 'year'>('month');
+  const [month, setMonth] = useState(lastMonth());
+  const [year, setYear] = useState(String(new Date().getUTCFullYear()));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   const kinds = units.find((u) => u.id === unitId)?.kinds ?? [];
+  const period = mode === 'month' ? month : year;
+  const thisYear = new Date().getUTCFullYear();
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!unitId || !kind || !/^\d{4}(-\d{2})?$/.test(period)) return setError(t('door.reports.err.input'));
@@ -36,9 +41,9 @@ function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportO
       setBusy(false);
     }
   };
+  const unitName = units.find((u) => u.id === unitId)?.name ?? '';
   return (
     <form className="panel door-form" onSubmit={submit} noValidate>
-      <h3>{t('door.reports.new')}</h3>
       {units.length > 1 && (
         <SelectField label={t('door.work.form.unit')} name="r-unit" value={unitId} onChange={(e) => { setUnitId(e.target.value); setKind(''); }}>
           <option value="">{t('door.gov.meeting.choose')}</option>
@@ -49,22 +54,52 @@ function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportO
           ))}
         </SelectField>
       )}
-      <SelectField label={t('door.reports.kind')} name="r-kind" value={kind} onChange={(e) => setKind(e.target.value as ReportKind)}>
-        <option value="">{t('door.gov.meeting.choose')}</option>
-        {kinds.map((k) => (
-          <option key={k} value={k}>
-            {t(kindKey(k))}
-          </option>
-        ))}
-      </SelectField>
-      <TextField label={t('door.reports.period')} name="r-period" hint={t('door.reports.periodHint')} value={period} placeholder="2026-10" onChange={(e) => setPeriod(e.target.value.trim())} />
+      <div role="radiogroup" aria-label={t('door.reports.pickKind')} className="rk-wrap">
+        <p className="rk-title">{t('door.reports.pickKind')}</p>
+        <div className="rk-grid">
+          {kinds.length === 0 && <p className="muted">{t('door.gov.meeting.choose')}</p>}
+          {kinds.map((k) => (
+            <button key={k} type="button" role="radio" aria-checked={kind === k} className={`rk-card${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>
+              <strong>{t(kindKey(k))}</strong>
+              <span>{t(`door.reports.help.${k}` as 'door.reports.help.MONEY')}</span>
+            </button>
+          ))}
+        </div>
+      </div>
+      <Segmented
+        label={t('door.reports.period')}
+        value={mode}
+        onChange={setMode}
+        items={[
+          { key: 'month', label: t('door.reports.mode.month') },
+          { key: 'year', label: t('door.reports.mode.year') },
+        ]}
+      />
+      {mode === 'month' ? (
+        <div className="rk-period">
+          <TextField label={t('door.reports.period')} name="r-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+          <div className="door-row">
+            <button type="button" className="btn ghost sm" onClick={() => setMonth(lastMonth())}>{t('door.reports.lastMonth')}</button>
+            <button type="button" className="btn ghost sm" onClick={() => setMonth(new Date().toISOString().slice(0, 7))}>{t('door.reports.thisMonth')}</button>
+          </div>
+        </div>
+      ) : (
+        <SelectField label={t('door.reports.period')} name="r-year" value={year} onChange={(e) => setYear(e.target.value)}>
+          {[thisYear, thisYear - 1, thisYear - 2, thisYear - 3].map((y) => (
+            <option key={y} value={String(y)}>
+              {y}
+            </option>
+          ))}
+        </SelectField>
+      )}
+      {kind && unitId && /^\d{4}(-\d{2})?$/.test(period) && <p className="rk-summary">{t('door.reports.summary', { kind: t(kindKey(kind)), unit: unitName, period: periodLabel(period, locale) })}</p>}
       {error && (
         <p className="door-error" role="alert">
           {error}
         </p>
       )}
       <div className="door-row">
-        <button type="submit" className="btn" disabled={busy}>
+        <button type="submit" className="btn" disabled={busy || !unitId || !kind}>
           {t('door.reports.compose')}
         </button>
         <button type="button" className="btn ghost" onClick={onCancel}>

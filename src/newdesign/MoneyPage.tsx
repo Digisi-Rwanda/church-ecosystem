@@ -92,7 +92,7 @@ export function MoneyPage() {
       />
       <YearSelect year={year} onChange={setYear} />
       <LoadState loading={plan.loading} failed={plan.failed} retry={plan.reload}>
-        {plan.data && <PlanVsActual view={plan.data} />}
+        {plan.data && <PlanVsActual view={plan.data} only={side === 'INCOME' ? 'in' : 'out'} />}
       </LoadState>
       <SidePanel open={form === 'account' && !!options.data} title={t('door.money.account.new')} onClose={() => setForm(null)}>
         {options.data && (

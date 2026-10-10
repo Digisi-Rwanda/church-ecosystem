@@ -11,6 +11,7 @@ import { fundingLabel } from './ActivityForm';
 import { YearSelect } from './MoneyBlockParts';
 import { SystemLink } from './SystemLink';
 import { useLoad } from './useLoad';
+import { SegBar } from './DashViz';
 import { PageHeader } from './kit';
 
 /** The budget of one unit for one year: a planned amount per kind of money. Totals are computed. */
@@ -45,18 +46,12 @@ export function MoneyBudgetPage() {
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && (
           <>
-            <div className="door-budget-total">
-              <strong>{t('door.money.budget.total')}</strong>
-              <span>{t('door.money.kind.INCOME')}: {formatRwf(data.totals.income)}</span>
-              <span>{t('door.money.kind.SPENDING')}: {formatRwf(data.totals.spending)}</span>
-              <span>{t('door.money.net')}: {formatRwf(data.totals.net)}</span>
+            <BudgetHero data={data} />
+            <div className="pva-grid bud-grid">
+              {(['INCOME', 'SPENDING'] as const).map((kind) => (
+                <BudgetSide key={kind} kind={kind} data={data} systemId={systemId} year={year} run={run} />
+              ))}
             </div>
-            <p>
-              <span className={`door-chip${data.status !== 'APPROVED' ? ' warn' : ''}`}>{t(`door.money.budget.status.${data.status}` as 'door.money.budget.status.DRAFT')}</span>
-            </p>
-            {(['INCOME', 'SPENDING'] as const).map((kind) => (
-              <BudgetSide key={kind} kind={kind} data={data} systemId={systemId} year={year} run={run} />
-            ))}
             <FundingPanel rows={data.funding} total={data.totals.spending} />
             {data.unlinked.count > 0 && (
               <p className="door-error" role="status">
@@ -64,9 +59,6 @@ export function MoneyBudgetPage() {
                 <SystemLink from={systemId} to={`/s/${systemId}/money/plan`}>{t('door.money.plan')}</SystemLink>
               </p>
             )}
-            <p>
-              <strong>{t('door.money.net')}</strong> {formatRwf(data.totals.net)}
-            </p>
             {data.canApprove && data.status === 'DRAFT' && (
               <button type="button" className="btn" onClick={() => void run(() => setBudgetApproval(systemId, year, true))}>
                 {t('door.money.budget.approve')}
@@ -99,30 +91,31 @@ function BudgetSide({ kind, data, systemId, year, run }: { kind: BudgetKind; dat
     return run(() => saveBudgetLine({ systemId, year, kind, category, planned: n }));
   };
   return (
-    <div className="panel door-form" style={{ maxWidth: 'none' }}>
-      <h3>{t(`door.money.kind.${kind}` as 'door.money.kind.INCOME')}</h3>
+    <section className={`pva-card bud-card ${kind === 'INCOME' ? 'in' : 'out'}`} aria-label={t(`door.money.kind.${kind}` as 'door.money.kind.INCOME')}>
+      <header className="pva-head">
+        <h3>{t(`door.money.kind.${kind}` as 'door.money.kind.INCOME')}</h3>
+        <span className="pva-total">{formatRwf(sum)}</span>
+      </header>
       {lines.length === 0 && <p className="muted">{t('door.money.budget.noLines')}</p>}
       {lines.map((l) => {
         const over = kind === 'SPENDING' && l.setAside > 0 && l.committed > l.setAside;
-        const used = l.planned > 0 ? Math.min(100, Math.round(((kind === 'SPENDING' ? l.committed : l.actual) / l.planned) * 100)) : 0;
         return (
-          <div key={l.id} className="door-budget-line">
-            <div className="door-row">
-              <span className="door-check-label">{t(categoryKey(l.category) as 'door.money.cat.OTHER')}</span>
-              {data.canWrite && !l.derived ? (
-                <TextField label={kind === 'SPENDING' ? t('door.money.budget.setAside') : t('door.money.col.planned')} name={`b-${kind}-${l.category}`} inputMode="numeric" defaultValue={String(kind === 'SPENDING' ? l.setAside : l.planned)} onBlur={(e) => e.target.value !== String(kind === 'SPENDING' ? l.setAside : l.planned) && void save(l.category, e.target.value)} />
-              ) : (
-                <span>{formatRwf(l.planned)}</span>
-              )}
-              {kind === 'SPENDING' && <span className="muted">{t('door.money.col.planned')}: {formatRwf(l.planned)}</span>}
+          <div key={l.id} className="bud-line">
+            <div className="bud-line-top">
+              <span className="bud-cat">{t(categoryKey(l.category) as 'door.money.cat.OTHER')}</span>
+              <strong className="bud-amt">{formatRwf(l.planned)}</strong>
+            </div>
+            <LayerBar planned={l.planned} done={l.actual} promised={kind === 'SPENDING' ? l.committed : 0} bad={over} label={t('door.money.col.progress')} />
+            <p className="bud-legend">
+              <span className="k done">{t('door.money.col.actual')} {formatRwf(l.actual)}</span>
+              {kind === 'SPENDING' && <span className="k promised">{t('door.money.col.committed')} {formatRwf(l.committed)}</span>}
+              {kind === 'SPENDING' && <span className="k left">{t('door.money.col.left')} {formatRwf(Math.max(0, l.planned - l.committed))}</span>}
               {l.derived && <span className="door-chip">{t('door.money.budget.fromActivities')}</span>}
               {over && <span className="door-chip warn">{t('door.money.budget.over', { amount: formatRwf(l.committed - l.setAside) })}</span>}
-            </div>
-            <progress className="door-progress" max={100} value={used} aria-label={t('door.money.col.progress')} />
-            <p className="muted">
-              {kind === 'SPENDING' && <>{t('door.money.col.committed')}: {formatRwf(l.committed)} · {t('door.money.col.left')}: {formatRwf(Math.max(0, l.planned - l.committed))} · </>}
-              {t('door.money.col.actual')}: {formatRwf(l.actual)}
             </p>
+            {data.canWrite && !l.derived && (
+              <TextField label={kind === 'SPENDING' ? t('door.money.budget.setAside') : t('door.money.col.planned')} name={`b-${kind}-${l.category}`} inputMode="numeric" defaultValue={String(kind === 'SPENDING' ? l.setAside : l.planned)} onBlur={(e) => e.target.value !== String(kind === 'SPENDING' ? l.setAside : l.planned) && void save(l.category, e.target.value)} />
+            )}
             {kind === 'SPENDING' && (
               <details>
                 <summary>{t('door.money.budget.activities')} ({l.activities.length})</summary>
@@ -168,10 +161,7 @@ function BudgetSide({ kind, data, systemId, year, run }: { kind: BudgetKind; dat
           </button>
         </div>
       )}
-      <p>
-        <strong>{t('door.money.total')}</strong> {formatRwf(sum)}
-      </p>
-    </div>
+    </section>
   );
 }
 
@@ -179,19 +169,69 @@ function BudgetSide({ kind, data, systemId, year, run }: { kind: BudgetKind; dat
 function FundingPanel({ rows, total }: { rows: FundingRowView[]; total: number }) {
   const t = useT();
   if (rows.length === 0) return null;
+  const name = (r: FundingRowView) => (r.kind === 'NONE' ? t('door.money.activity.fundingNone') : fundingLabel(t, r.kind, r.name ?? r.code));
+  const parts = rows.slice(0, 8).map((r, i) => ({ slot: i + 1, value: r.planned, name: name(r) }));
   return (
-    <div className="panel door-form" style={{ maxWidth: 'none' }}>
-      <h3>{t('door.money.budget.fundingTitle')}</h3>
+    <section className="rep-card" aria-label={t('door.money.budget.fundingTitle')}>
+      <h3 className="rep-title">{t('door.money.budget.fundingTitle')}</h3>
       <p className="muted">{t('door.money.budget.fundingHint')}</p>
-      <ul className="door-list">
-        {rows.map((r) => (
+      <SegBar parts={parts} total={total} label={t('door.money.budget.fundingTitle')} />
+      <ul className="bud-fund">
+        {rows.map((r, i) => (
           <li key={`${r.kind}|${r.code ?? ''}`}>
-            <strong>{r.kind === 'NONE' ? t('door.money.activity.fundingNone') : fundingLabel(t, r.kind, r.name ?? r.code)}</strong> · {formatRwf(r.planned)} ({t('door.money.budget.fundingCount', { count: r.count })})
+            <span className={`dx-swatch dx-s${Math.min(i + 1, 8)}`} aria-hidden="true" />
+            <span className="bud-fund-name">{name(r)}</span>
+            <span className="muted">{t('door.money.budget.fundingCount', { count: r.count })}</span>
+            <strong>{formatRwf(r.planned)}</strong>
           </li>
         ))}
       </ul>
-      <p><strong>{t('door.money.total')}</strong> {formatRwf(total)}</p>
+    </section>
+  );
+}
+
+/** The year at a glance: money in, money out and what is left, how far spending reaches into income, and the status. */
+function BudgetHero({ data }: { data: BudgetView }) {
+  const t = useT();
+  const { income, spending, net } = data.totals;
+  const cover = income > 0 ? Math.round((spending / income) * 100) : spending > 0 ? 100 : 0;
+  return (
+    <div className="bud-hero">
+      <div className="bud-hero-main">
+        <div>
+          <span className="pva-net-label">{t('door.money.kind.INCOME')}</span>
+          <strong>{formatRwf(income)}</strong>
+        </div>
+        <div>
+          <span className="pva-net-label">{t('door.money.kind.SPENDING')}</span>
+          <strong>{formatRwf(spending)}</strong>
+        </div>
+        <div>
+          <span className="pva-net-label">{t('door.money.net')}</span>
+          <strong className={net < 0 ? 'bad' : 'good'}>{`${net > 0 ? '+' : net < 0 ? '−' : ''}${formatRwf(Math.abs(net))}`}</strong>
+        </div>
+        <span className={`door-chip${data.status !== 'APPROVED' ? ' warn' : ''}`}>{t(`door.money.budget.status.${data.status}` as 'door.money.budget.status.DRAFT')}</span>
+      </div>
+      <div className="bud-cover">
+        <svg viewBox="0 0 100 6" preserveAspectRatio="none" role="img" aria-label={`${t('door.money.kind.SPENDING')} / ${t('door.money.kind.INCOME')}: ${cover}%`}>
+          <rect className="pva-track" x="0" y="0" width="100" height="6" rx="3" />
+          <rect className={cover > 100 ? 'bud-over' : 'pva-fill'} x="0" y="0" width={Math.min(100, cover)} height="6" rx="3" />
+        </svg>
+        <span className="muted">{t('door.money.budget.cover', { percent: String(cover) })}</span>
+      </div>
     </div>
+  );
+}
+
+/** Planned amount as the full line; what is done (solid) and what is promised by activities (lighter) fill it. */
+function LayerBar({ planned, done, promised, bad, label }: { planned: number; done: number; promised: number; bad: boolean; label: string }) {
+  const pct = (n: number) => (planned > 0 ? Math.max(0, Math.min(100, (n / planned) * 100)) : 0);
+  return (
+    <svg className="pva-line bud-layer" viewBox="0 0 100 4" preserveAspectRatio="none" role="img" aria-label={`${label}: ${Math.round(pct(done))}%`}>
+      <rect className="pva-track" x="0" y="0" width="100" height="4" rx="2" />
+      {promised > 0 && <rect className={bad ? 'bud-over soft' : 'bud-promised'} x="0" y="0" width={pct(promised)} height="4" rx="2" />}
+      {done > 0 && <rect className="pva-fill" x="0" y="0" width={pct(done)} height="4" rx="2" />}
+    </svg>
   );
 }
 
@@ -202,8 +242,8 @@ function SendToChurchLeader({ data, send, reopen }: { data: BudgetView; send: ()
   if (data.isCentral) return null;
   const sub = data.submission;
   return (
-    <div className="panel door-form" style={{ maxWidth: 'none' }}>
-      <h3>{t('door.money.budget.leaderTitle')}</h3>
+    <section className="rep-card" aria-label={t('door.money.budget.leaderTitle')}>
+      <h3 className="rep-title">{t('door.money.budget.leaderTitle')}</h3>
       <p className="muted">{t('door.money.budget.leaderHint')}</p>
       <p>{t('door.money.budget.sends', { total: formatRwf(data.totals.spending), lines: data.lines.length, activities: data.activitiesCount })}</p>
       {data.status === 'DRAFT' && sub?.status === 'RETURNED' && (
@@ -222,7 +262,7 @@ function SendToChurchLeader({ data, send, reopen }: { data: BudgetView; send: ()
           {data.status === 'SUBMITTED' ? t('door.money.budget.withdraw') : t('door.money.budget.reopen')}
         </button>
       )}
-    </div>
+    </section>
   );
 }
 
