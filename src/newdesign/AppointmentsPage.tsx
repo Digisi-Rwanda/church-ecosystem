@@ -9,17 +9,16 @@ import {
   fetchVacancies,
   type AppointmentRow,
   type DirectoryPerson,
-  type Vacancy,
 } from '../api/frontDoorApi';
 import { ApiError } from '../api/client';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import type { OfficeCode } from '../../server/src/shared/vocabulary';
-import { accessErrorKey, groupByUnit, officesFor, sortVacancies } from './access';
+import { accessErrorKey, groupByUnit, officesFor } from './access';
 import { LoadState } from './LoadState';
 import { flattenTree } from './structure';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { PageHeader, SidePanel, initialsOf } from './kit';
 
 const bodyCode = (e: unknown): string | undefined =>
   e instanceof ApiError ? (e.body as { code?: string } | undefined)?.code : undefined;
@@ -36,95 +35,114 @@ export function AppointmentsPage() {
   }, `appointments|${systemId}|${showEnded}`);
 
   const [prefill, setPrefill] = useState<{ unitId: string; office: OfficeCode } | null>(null);
+  const [formOpen, setFormOpen] = useState(false);
   const [ending, setEnding] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
   const units = useMemo(() => data?.structure.units ?? [], [data]);
-  const groups = useMemo(
-    () => (data ? groupByUnit(data.list.appointments, flattenTree(units).map((r) => r.unit)) : []),
-    [data, units],
-  );
+  const cards = useMemo(() => {
+    if (!data) return [];
+    const groups = groupByUnit(data.list.appointments, flattenTree(units).map((r) => r.unit));
+    const empty = data.vac.vacancies.filter((v) => v.reason === 'EMPTY');
+    const out = groups.map((g) => ({ ...g, vacant: empty.filter((v) => v.unitId === g.key) }));
+    for (const v of empty) {
+      if (!out.some((g) => g.key === v.unitId)) out.push({ key: v.unitId, unitName: v.unitName, unitCode: null, rows: [], vacant: empty.filter((x) => x.unitId === v.unitId) });
+    }
+    return out.filter((g, i) => out.findIndex((x) => x.key === g.key) === i);
+  }, [data, units]);
   const canAct = !!data && (data.list.canAppoint || data.list.canAppointLeader);
+  const live = data ? data.list.appointments.filter((r) => r.live).length : 0;
+  const vacant = data ? data.vac.vacancies.filter((v) => v.reason === 'EMPTY').length : 0;
+  const soon = data ? data.list.appointments.filter((r) => r.live && r.endsSoon).length : 0;
+  const open = (next: { unitId: string; office: OfficeCode } | null) => {
+    setPrefill(next);
+    setFormOpen(true);
+  };
 
   return (
     <div className="door-block">
-      <PageHeader title={t('door.access.appointments.title')} purpose={t('door.purpose.appointments')} />
-      <p className="muted">{t('door.access.appointments.intro')}</p>
+      <PageHeader
+        title={t('door.access.appointments.title')}
+        purpose={t('door.purpose.appointments')}
+        primary={canAct ? <button type="button" className="btn" onClick={() => open(null)}>{t('door.access.form.title')}</button> : undefined}
+      />
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && (
           <>
-            <VacancyPanel
-              vacancies={data.vac.vacancies}
-              conflicts={data.vac.conflicts}
-              admins={systemId === 'sys-main' ? data.vac.administrators : undefined}
-              onFill={canAct ? (unitId, office) => setPrefill({ unitId, office }) : undefined}
-            />
-            {message && (
-              <p className="door-ok" role="status">
-                {message}
-              </p>
-            )}
-            {canAct && (
-              <AppointForm
-                key={prefill ? `${prefill.unitId}|${prefill.office}` : 'blank'}
-                units={units}
-                isLeader={data.list.canAppoint}
-                isAdministrator={data.list.canAppointLeader}
-                prefill={prefill}
-                onDone={() => {
-                  setMessage(t('door.access.appointed'));
-                  setPrefill(null);
-                  reload();
-                }}
-              />
-            )}
+            <ul className="seat-stats" aria-label={t('door.access.appointments.title')}>
+              <li><strong>{live}</strong><span>{t('door.access.stat.leaders')}</span></li>
+              <li className={vacant ? 'warn' : ''}><strong>{vacant}</strong><span>{t('door.access.stat.vacant')}</span></li>
+              <li className={soon ? 'warn' : ''}><strong>{soon}</strong><span>{t('door.access.stat.soon')}</span></li>
+            </ul>
+            <Concerns conflicts={data.vac.conflicts} admins={systemId === 'sys-main' ? data.vac.administrators : undefined} />
+            {message && <p className="door-ok" role="status">{message}</p>}
             <label className="door-check">
               <input type="checkbox" checked={showEnded} onChange={(e) => setShowEnded(e.target.checked)} />
               {t('door.access.showEnded')}
             </label>
-            {groups.length === 0 ? (
+            {cards.length === 0 ? (
               <p className="muted">{t('door.access.noAppointments')}</p>
             ) : (
-              groups.map((g) => (
-                <div className="panel" key={g.key}>
-                  <h3>
-                    {g.unitName}
-                    {g.unitCode && <span className="muted"> · {g.unitCode}</span>}
-                  </h3>
-                  <ul className="door-list">
-                    {g.rows.map((r) => (
-                      <li key={r.id} className="door-appt">
-                        <div>
-                          <strong>{t(`door.office.${r.office}` as const)}</strong>
-                          {' · '}
-                          <Link to={`${base}/${r.personId}`}>{r.personName}</Link>
-                          {r.memberCode && <span className="muted"> {r.memberCode}</span>}
-                          <div className="muted">
-                            {t('door.access.since', { date: r.startDate ?? '—' })}
-                            {r.endDate && ` · ${t(r.live ? 'door.access.termEnds' : 'door.access.ended', { date: r.endDate })}`}
-                            {r.endsSoon && <span className="door-chip warn"> {t('door.access.endsSoon')}</span>}
-                          </div>
-                        </div>
-                        {r.live && canAct && (r.office === 'CHURCH_LEADER' ? data.list.canAppointLeader : data.list.canAppoint) && (
-                          <button type="button" className="btn ghost sm" onClick={() => setEnding(ending === r.id ? null : r.id)}>
-                            {t('door.access.end')}
-                          </button>
-                        )}
-                        {ending === r.id && (
-                          <EndForm
-                            row={r}
-                            onDone={() => {
-                              setEnding(null);
-                              setMessage(t('door.access.ended.done'));
-                              reload();
-                            }}
-                          />
-                        )}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              ))
+              <div className="seat-grid">
+                {cards.map((g) => (
+                  <section className="seat-card" key={g.key} aria-label={g.unitName}>
+                    <header>
+                      <strong>{g.unitName}</strong>
+                      {g.unitCode && <small>{g.unitCode}</small>}
+                      <span className={`seat-count${g.vacant.length ? ' warn' : ''}`}>{g.rows.filter((r) => r.live).length}/{g.rows.filter((r) => r.live).length + g.vacant.length}</span>
+                    </header>
+                    <ul className="seat-list">
+                      {g.rows.map((r) => (
+                        <li key={r.id} className={`seat${r.live ? '' : ' ended'}`}>
+                          <span className="seat-avatar" aria-hidden="true">{initialsOf(r.personName)}</span>
+                          <span className="seat-main">
+                            <small className="seat-office">{t(`door.office.${r.office}` as const)}</small>
+                            <Link to={`${base}/${r.personId}`}>{r.personName}</Link>
+                            <small className="muted">
+                              {t('door.access.since', { date: r.startDate ?? '—' })}
+                              {r.endDate && ` · ${t(r.live ? 'door.access.termEnds' : 'door.access.ended', { date: r.endDate })}`}
+                              {r.endsSoon && <span className="door-chip warn"> {t('door.access.endsSoon')}</span>}
+                            </small>
+                          </span>
+                          {r.live && canAct && (r.office === 'CHURCH_LEADER' ? data.list.canAppointLeader : data.list.canAppoint) && (
+                            <button type="button" className="btn ghost sm" onClick={() => setEnding(ending === r.id ? null : r.id)}>{t('door.access.end')}</button>
+                          )}
+                          {ending === r.id && (
+                            <EndForm row={r} onDone={() => { setEnding(null); setMessage(t('door.access.ended.done')); reload(); }} />
+                          )}
+                        </li>
+                      ))}
+                      {g.vacant.map((v) => (
+                        <li key={`${v.unitId}|${v.office}`} className="seat vacant">
+                          <span className="seat-avatar" aria-hidden="true">+</span>
+                          <span className="seat-main">
+                            <small className="seat-office">{t(`door.office.${v.office}` as const)}</small>
+                            <strong>{t('door.access.vacancies.empty')}</strong>
+                          </span>
+                          {canAct && <button type="button" className="btn sm" onClick={() => open({ unitId: v.unitId, office: v.office })}>{t('door.access.vacancies.fill')}</button>}
+                        </li>
+                      ))}
+                    </ul>
+                  </section>
+                ))}
+              </div>
+            )}
+            {canAct && (
+              <SidePanel open={formOpen} title={t('door.access.form.title')} purpose={t('door.access.appointments.intro')} onClose={() => setFormOpen(false)}>
+                <AppointForm
+                  key={prefill ? `${prefill.unitId}|${prefill.office}` : 'blank'}
+                  units={units}
+                  isLeader={data.list.canAppoint}
+                  isAdministrator={data.list.canAppointLeader}
+                  prefill={prefill}
+                  onDone={() => {
+                    setMessage(t('door.access.appointed'));
+                    setPrefill(null);
+                    setFormOpen(false);
+                    reload();
+                  }}
+                />
+              </SidePanel>
             )}
           </>
         )}
@@ -133,51 +151,17 @@ export function AppointmentsPage() {
   );
 }
 
-function VacancyPanel({
-  vacancies,
-  conflicts,
-  admins,
-  onFill,
-}: {
-  vacancies: Vacancy[];
-  conflicts: Array<{ unitId: string; unitName: string; office: OfficeCode }>;
-  /** The church-wide Administrator count: shown in Central Administration only. */
-  admins?: { count: number; minimum: number };
-  onFill?: (unitId: string, office: OfficeCode) => void;
-}) {
+/** Problems that are not an empty seat: two people in one office, too few Administrators. */
+function Concerns({ conflicts, admins }: { conflicts: Array<{ unitId: string; unitName: string; office: OfficeCode }>; admins?: { count: number; minimum: number } }) {
   const t = useT();
-  const sorted = sortVacancies(vacancies);
   const short = !!admins && admins.count < admins.minimum;
-  if (sorted.length === 0 && conflicts.length === 0 && !short) {
-    return <p className="door-ok">{t('door.access.vacancies.none')}</p>;
-  }
+  if (conflicts.length === 0 && !short) return null;
   return (
     <div className="panel door-attention" role="region" aria-label={t('door.access.vacancies.title')}>
-      <h3>{t('door.access.vacancies.title')}</h3>
       {short && <p className="door-warn">{t('door.access.vacancies.admins', { count: String(admins?.count ?? 0), minimum: String(admins?.minimum ?? 0) })}</p>}
       {conflicts.map((c) => (
-        <p key={`${c.unitId}|${c.office}`} className="door-warn">
-          {t('door.access.vacancies.conflict', { office: t(`door.office.${c.office}` as const), unit: c.unitName })}
-        </p>
+        <p key={`${c.unitId}|${c.office}`} className="door-warn">{t('door.access.vacancies.conflict', { office: t(`door.office.${c.office}` as const), unit: c.unitName })}</p>
       ))}
-      <ul className="door-list">
-        {sorted.map((v) => (
-          <li key={`${v.unitId}|${v.office}|${v.reason}`} className="door-appt">
-            <span>
-              <strong>{t(`door.office.${v.office}` as const)}</strong> · {v.unitName}{' '}
-              <span className={`door-chip${v.reason === 'EMPTY' ? ' warn' : ''}`}>
-                {v.reason === 'EMPTY' ? t('door.access.vacancies.empty') : t('door.access.vacancies.endsOn', { date: v.endsOn ?? '' })}
-              </span>
-              {v.reason === 'ENDS_SOON' && v.holderName && <span className="muted"> {v.holderName}</span>}
-            </span>
-            {onFill && v.reason === 'EMPTY' && (
-              <button type="button" className="btn secondary sm" onClick={() => onFill(v.unitId, v.office)}>
-                {t('door.access.vacancies.fill')}
-              </button>
-            )}
-          </li>
-        ))}
-      </ul>
     </div>
   );
 }

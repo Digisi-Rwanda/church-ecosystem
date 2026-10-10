@@ -6,7 +6,7 @@ import {
 import { SelectField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
-import { FIELDS, fieldKey, formData, p360ErrorKey, sectionKey, valueKey } from './person360';
+import { fieldsFor, formData, labelKey, p360ErrorKey, sectionKey, valueKey } from './person360';
 import { PersonPicker } from './PersonPicker';
 
 /** Add a record to a section, or (with `existing`) change it: the old one stays in history. */
@@ -36,9 +36,9 @@ export function RecordForm({ personId, section, existing, onDone, onCancel }: { 
     <form className="panel door-form" onSubmit={submit} noValidate>
       <h3>{existing ? t('door.p360.change', { section: t(sectionKey(section)) }) : t('door.p360.add', { section: t(sectionKey(section)) })}</h3>
       {existing && <p className="muted">{t('door.p360.historyKept')}</p>}
-      {FIELDS[section].map((f) =>
+      {fieldsFor(section, values).map((f) =>
         f.type === 'select' ? (
-          <SelectField key={f.key} label={t(fieldKey(f.key) as 'door.p360.f.status')} name={`p-${f.key}`} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}>
+          <SelectField key={f.key} label={t(labelKey(section, f.key, values) as 'door.p360.f.status')} name={`p-${f.key}`} value={values[f.key] ?? ''} onChange={(e) => set(f.key, e.target.value)}>
             <option value="">{t('door.gov.meeting.choose')}</option>
             {f.options?.map((o) => (
               <option key={o} value={o}>
@@ -49,7 +49,7 @@ export function RecordForm({ personId, section, existing, onDone, onCancel }: { 
         ) : f.type === 'person' ? (
           <div key={f.key}>
             <p>
-              <strong>{t(fieldKey(f.key) as 'door.p360.f.relatedPersonId')}:</strong> {pickedName || <span className="muted">{t('door.p360.noMember')}</span>}
+              <strong>{t(labelKey(section, f.key, values) as 'door.p360.f.relatedPersonId')}:</strong> {pickedName || <span className="muted">{t('door.p360.noMember')}</span>}
             </p>
             <PersonPicker
               label={t('door.p360.pickMember')}
@@ -63,7 +63,7 @@ export function RecordForm({ personId, section, existing, onDone, onCancel }: { 
         ) : (
           <TextField
             key={f.key}
-            label={t(fieldKey(f.key) as 'door.p360.f.date')}
+            label={t(labelKey(section, f.key, values) as 'door.p360.f.date')}
             name={`p-${f.key}`}
             type={f.type === 'date' ? 'date' : 'text'}
             inputMode={f.type === 'number' ? 'numeric' : undefined}
@@ -97,13 +97,13 @@ export function Facts({ r }: { r: P360Record }) {
     <dl className="door-facts">
       {entries.map(([k, v]) => (
         <div key={k}>
-          <dt>{t(fieldKey(k) as 'door.p360.f.date')}</dt>
+          <dt>{t(labelKey(r.section, k, r.data) as 'door.p360.f.date')}</dt>
           <dd>{typeof v === 'string' && /^[A-Z_]+$/.test(v) ? t(valueKey(v) as 'door.p360.v.EMPLOYED') : String(v)}</dd>
         </div>
       ))}
       {r.relatedName && (
         <div>
-          <dt>{t(fieldKey(r.section === 'MARRIAGE' ? 'spousePersonId' : 'relatedPersonId') as 'door.p360.f.relatedPersonId')}</dt>
+          <dt>{t((r.section === 'MARRIAGE' ? 'door.p360.f.spousePersonId' : 'door.p360.f.relatedPersonId') as 'door.p360.f.relatedPersonId')}</dt>
           <dd>{r.relatedName}</dd>
         </div>
       )}
@@ -181,7 +181,7 @@ export function RecordCard({ record, personId, onChange }: { record: P360Record;
           <ul className="door-list">
             {history.map((h) => (
               <li key={h.id}>
-                <span className="door-chip">{t(`door.p360.status.${h.status}` as const)}</span> {Object.entries(h.data).filter(([k]) => !k.endsWith('PersonId')).map(([k, v]) => `${t(fieldKey(k) as 'door.p360.f.date')}: ${v}`).join(' · ')}
+                <span className="door-chip">{t(`door.p360.status.${h.status}` as const)}</span> {Object.entries(h.data).filter(([k]) => !k.endsWith('PersonId')).map(([k, v]) => `${t(labelKey(h.section, k, h.data) as 'door.p360.f.date')}: ${v}`).join(' · ')}
                 <span className="muted"> — {h.recordedByName}, {day(h.recordedAt)}{h.voidReason ? ` — ${h.voidReason}` : ''}</span>
               </li>
             ))}

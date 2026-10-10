@@ -11,7 +11,13 @@ describe('person 360 rules', () => {
     expect(cleanData('FAMILY', { relation: 'CHILD' })).toBeNull();
     expect(cleanData('FAMILY', { relation: 'CHILD', name: 'Eric' })).toEqual({ relation: 'CHILD', name: 'Eric' });
     expect(cleanData('EDUCATION', { level: 'TVET', year: 2015 })).toEqual({ level: 'TVET', year: 2015 });
-    expect(cleanData('EDUCATION', { level: 'NONE' })).toBeNull();
+    expect(cleanData('EDUCATION', { level: 'NONE', field: 'Law', school: 'X', startYear: 2000 })).toEqual({ level: 'NONE' });
+    expect(cleanData('EDUCATION', { level: 'PRIMARY', field: 'Law', school: 'GS Kacyiru', endYear: 2000 })).toEqual({ level: 'PRIMARY', school: 'GS Kacyiru' });
+    expect(cleanData('EDUCATION', { level: 'BACHELOR', field: 'Law', school: 'UR', startYear: 2010, endYear: 2013 })).toEqual({ level: 'BACHELOR', field: 'Law', school: 'UR', startYear: 2010, endYear: 2013 });
+    expect(cleanData('EDUCATION', { level: 'BACHELOR', startYear: 2013, endYear: 2010 })).toBeNull();
+    expect(cleanData('EMPLOYMENT', { status: 'UNEMPLOYED', employer: 'MTN', role: 'Clerk', since: '2025-01-01' })).toEqual({ status: 'UNEMPLOYED', since: '2025-01-01' });
+    expect(cleanData('EMPLOYMENT', { status: 'STUDENT', employer: 'MTN', school: 'UR', field: 'IT' })).toEqual({ status: 'STUDENT', school: 'UR', field: 'IT' });
+    expect(cleanData('EMPLOYMENT', { status: 'SELF_EMPLOYED', business: 'Shop', employer: 'x', role: 'y' })).toEqual({ status: 'SELF_EMPLOYED', business: 'Shop' });
     expect(cleanData('MARRIAGE', { date: '2020-01-01', spouseName: 'Ann' })).toEqual({ date: '2020-01-01', spouseName: 'Ann' });
   });
   it('nobody without a church-wide office has any access', () => {
@@ -96,12 +102,12 @@ describe('person 360 routes', () => {
   });
   it('a change keeps the old record in history; a void needs a reason', async () => {
     const a = (await rec('p-sec', 'EMPLOYMENT', { status: 'EMPLOYED', employer: 'MTN' })).body.id;
-    const b = await patch('p-sec', `/api/person360/records/${a}`, { data: { status: 'SELF_EMPLOYED', employer: 'Own shop' } });
+    const b = await patch('p-sec', `/api/person360/records/${a}`, { data: { status: 'SELF_EMPLOYED', business: 'Own shop' } });
     expect(b.status).toBe(200);
     expect((await patch('p-sec', `/api/person360/records/${a}`, { data: { status: 'RETIRED' } })).status).toBe(409);
     const page = (await get('p-sec', '/api/person360/p-member')).body;
     expect(page.records.length).toBe(1);
-    expect(page.records[0].data.employer).toBe('Own shop');
+    expect(page.records[0].data.business).toBe('Own shop');
     const h = (await get('p-sec', `/api/person360/records/${b.body.id}/history`)).body.history;
     expect(h.map((x: any) => x.status)).toEqual(['CURRENT', 'SUPERSEDED']);
     expect((await post('p-sec', `/api/person360/records/${b.body.id}/void`)).body.code).toBe('REASON_REQUIRED');
@@ -178,5 +184,29 @@ describe('files and documents on a profile', () => {
     expect((await post('p-sec', '/api/person360/p-member/documents', { name: 'x.exe', mime: 'application/x-msdownload', data })).body.code).toBe('BAD_TYPE');
     const big = Buffer.alloc(1_600_000, 1).toString('base64');
     expect((await post('p-sec', '/api/person360/p-member/documents', { name: 'big.pdf', mime: 'application/pdf', data: big })).status).toBe(413);
+  });
+});
+
+describe('good deeds', () => {
+  it('any Unit Secretary records a deed; the Church Leader sees it under participation; members cannot', async () => {
+    const db = fake.__db;
+    db.personDeed ??= [];
+    db.person.push({ id: 'p-usec', fullName: 'Unit Secretary', status: 'ACTIVE' });
+    db.position.push({ id: 'pos-usec', personId: 'p-usec', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Secretary', office: 'SECRETARY', status: 'ACTIVE', startDate: new Date('2022-01-01') });
+    const ok = await post('p-usec', '/api/person360/p-member/deeds', { note: 'Visited the sick every week', day: '2026-04-02' });
+    expect(ok.status).toBe(201);
+    expect((await post('p-member', '/api/person360/p-member/deeds', { note: 'I am kind' })).status).toBe(403);
+    expect((await post('p-usec', '/api/person360/p-member/deeds', { note: 'x' })).status).toBe(400);
+    const list = await get('p-usec', '/api/person360/p-member/deeds');
+    expect(list.body.canRecord).toBe(true);
+    expect(list.body.items[0]).toMatchObject({ note: 'Visited the sick every week', unitName: 'Choir', recordedByName: 'Unit Secretary', mine: true });
+    expect((await get('p-member', '/api/person360/p-member/deeds')).status).toBe(404);
+    const part = await get('p-pastor', '/api/person360/p-member/participation');
+    expect(part.body.items.find((i: any) => i.kind === 'GOOD_DEED')).toMatchObject({ label: 'Visited the sick every week', day: '2026-04-02', amount: 0 });
+    expect((await post('p-sec', `/api/person360/p-member/deeds`, { note: 'Helped a widow' })).status).toBe(201);
+    const id = ok.body.id;
+    expect((await request(app).delete(`/api/person360/deeds/${id}`).set(bearer('p-sec'))).status).toBe(403);
+    expect((await request(app).delete(`/api/person360/deeds/${id}`).set(bearer('p-usec'))).status).toBe(200);
+    expect((await get('p-usec', '/api/person360/p-member/deeds')).body.items).toHaveLength(1);
   });
 });

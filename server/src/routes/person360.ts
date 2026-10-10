@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
+import { liveHoldings } from '../capabilities/engine.js';
 import { counts } from '../money/block.js';
 import { SECTIONS, SINGLE, accessFor, cleanData, isSection, type Section } from '../person360/rules.js';
 
@@ -174,7 +175,7 @@ person360Router.get('/:personId/participation', requireAuth, async (req: AuthedR
   const systems = new Map(((await prisma.churchSystem.findMany()) as Array<{ id: string; name: string; shortName?: string | null }>).map((x) => [x.id, x.shortName || x.name]));
   const sysName = (id: string) => systems.get(id) ?? id;
   const day = (v: Date | string) => iso(v)!.slice(0, 10);
-  type Item = { id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'SPONSORSHIP' | 'CLAIM'; amount: number; day: string; system: string; label: string; status: string };
+  type Item = { id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'SPONSORSHIP' | 'CLAIM' | 'GOOD_DEED'; amount: number; day: string; system: string | null; label: string; status: string };
   const items: Item[] = [];
 
   const lines = (await prisma.contributionLine.findMany({ where: { personId: p.id } })) as Array<{ id: string; listId: string; amount: number }>;
@@ -201,6 +202,9 @@ person360Router.get('/:personId/participation', requireAuth, async (req: AuthedR
   }
   for (const c of (await prisma.contributionClaim.findMany({ where: { personId: p.id } })) as Array<{ id: string; systemId: string; typeLabel: string; amount: number; confirmedAmount?: number | null; occurredOn: Date | string; status: string }>) {
     if (c.status === 'CONFIRMED' || c.status === 'PARTIAL') items.push({ id: c.id, kind: 'CLAIM', amount: c.confirmedAmount ?? c.amount, day: day(c.occurredOn), system: sysName(c.systemId), label: c.typeLabel, status: 'COUNTED' });
+  }
+  for (const d of ((await prisma.personDeed.findMany()) as DeedRow[]).filter((x) => x.personId === p.id && !x.deletedAt)) {
+    items.push({ id: d.id, kind: 'GOOD_DEED', amount: 0, day: d.day, system: d.unitId ? sysName(d.unitId) : null, label: d.note, status: 'COUNTED' });
   }
   items.sort((x, y) => y.day.localeCompare(x.day));
   const year = new Date().toISOString().slice(0, 4);
@@ -265,6 +269,58 @@ person360Router.delete('/documents/:docId', requireAuth, async (req: AuthedReque
   if (a.write.length === 0) return fail(res, 403, 'FORBIDDEN', 'You may not remove files here');
   await prisma.personDocument.update({ where: { id: d.id }, data: { deletedAt: new Date(), deletedById: me } });
   await audit(me, 'PERSON_DOCUMENT_REMOVED', `${d.name}`, { documentId: d.id, personId: d.personId });
+  res.json({ ok: true });
+});
+
+/* ── Good deeds: any Unit Secretary (or the Church Secretary, Pastor, Church Leader) records them; the Church Leader sees them under Participation ── */
+
+interface DeedRow { id: string; personId: string; note: string; day: string; recordedById: string; unitId?: string | null; recordedAt: Date | string; deletedAt?: Date | string | null }
+const DEED_OFFICES = ['SECRETARY', 'CHURCH_SECRETARY', 'PASTOR', 'CHURCH_LEADER'];
+async function deedSeats(me: string) {
+  const { data } = await loadAccessData(me);
+  return liveHoldings(me, data).filter((h) => DEED_OFFICES.includes(String(h.office)));
+}
+const unitNames = async (): Promise<Map<string, string>> => new Map(((await prisma.orgUnit.findMany()) as Array<{ id: string; name: string }>).map((u) => [u.id, u.name]));
+
+person360Router.get('/:personId/deeds', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const seats = await deedSeats(me);
+  const a = await access(me);
+  const p = await personOf(String(req.params.personId));
+  if ((seats.length === 0 && a.read.length === 0) || !p) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  const rows = ((await prisma.personDeed.findMany()) as DeedRow[]).filter((d) => d.personId === p.id && !d.deletedAt).sort((x, y) => y.day.localeCompare(x.day) || +new Date(y.recordedAt) - +new Date(x.recordedAt));
+  const who = await names(rows.map((d) => d.recordedById));
+  const units = await unitNames();
+  res.json({
+    canRecord: seats.length > 0 && !archived(p),
+    items: rows.map((d) => ({ id: d.id, note: d.note, day: d.day, recordedByName: who.get(d.recordedById) ?? '', unitName: d.unitId ? units.get(d.unitId) ?? '' : '', mine: d.recordedById === me || a.leader })),
+  });
+});
+
+person360Router.post('/:personId/deeds', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const seats = await deedSeats(me);
+  const p = await personOf(String(req.params.personId));
+  if (!p) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (seats.length === 0) return fail(res, 403, 'FORBIDDEN', 'Only a secretary may record a good deed');
+  if (archived(p)) return fail(res, 409, 'PERSON_ARCHIVED', 'This person is archived');
+  const parsed = z.object({ note: z.string().trim().min(3).max(300), day: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional() }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Describe the good deed');
+  const day = parsed.data.day ?? new Date().toISOString().slice(0, 10);
+  if (day > new Date().toISOString().slice(0, 10)) return fail(res, 400, 'BAD_INPUT', 'The date cannot be in the future');
+  const row = (await prisma.personDeed.create({ data: { personId: p.id, note: parsed.data.note, day, recordedById: me, unitId: seats.find((h) => h.orgUnitId)?.orgUnitId ?? null } })) as DeedRow;
+  await audit(me, 'PERSON_DEED_ADDED', `Good deed for ${p.fullName}`, { deedId: row.id, personId: p.id });
+  res.status(201).json({ id: row.id });
+});
+
+person360Router.delete('/deeds/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const a = await access(me);
+  const d = (await prisma.personDeed.findUnique({ where: { id: String(req.params.id) } })) as DeedRow | null;
+  if (!d || d.deletedAt) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (d.recordedById !== me && !a.leader) return fail(res, 403, 'FORBIDDEN', 'Only who recorded it, or the Church Leader, may remove it');
+  await prisma.personDeed.update({ where: { id: d.id }, data: { deletedAt: new Date(), deletedById: me } });
+  await audit(me, 'PERSON_DEED_REMOVED', 'Good deed removed', { deedId: d.id, personId: d.personId });
   res.json({ ok: true });
 });
 

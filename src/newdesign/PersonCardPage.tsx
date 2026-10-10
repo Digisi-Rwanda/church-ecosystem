@@ -17,6 +17,7 @@ import { useCanWritePeople } from './usePeopleAccess';
 import { belongingOf } from './structure';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
+import { GoodDeeds } from './Person360Deeds';
 import { shortDay, timelineOf } from './peopleTools';
 
 const today = () => new Date().toISOString().slice(0, 10);
@@ -45,6 +46,7 @@ export function PersonCardPage() {
           <>
             <PersonHeader person={data.person} />
             <PersonFacts person={data.person} />
+            <GoodDeeds personId={personId} />
             {p360.data?.allowed && (<p><Link className="btn" to={`${base}/${personId}/360`}>{t('door.p360.open')}</Link>{p360.data.write.includes('BAPTISM') && <> <Link className="btn ghost" to={`${base}/baptism`}>{t('door.p360.cohort.title')}</Link></>}</p>)}
             <div className="panel">
               <h3>{t('door.people.belongs')}</h3>

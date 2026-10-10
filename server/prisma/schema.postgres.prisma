@@ -1680,3 +1680,18 @@ model PersonDocument {
 
   @@index([personId])
 }
+
+/// A good deed of a member, recorded by a Unit Secretary (or the Church Secretary, Pastor, Church Leader).
+model PersonDeed {
+  id           String    @id @default(cuid())
+  personId     String
+  note         String
+  day          String
+  recordedById String
+  unitId       String?
+  recordedAt   DateTime  @default(now())
+  deletedAt    DateTime?
+  deletedById  String?
+
+  @@index([personId])
+}

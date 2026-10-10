@@ -10,6 +10,7 @@ import { RecordCard, RecordForm } from './Person360Parts';
 import { useLoad } from './useLoad';
 import { PageHeader, SidePanel, initialsOf } from './kit';
 import { BasicsForm, Documents } from './Person360Edit';
+import { GoodDeeds } from './Person360Deeds';
 import { useCanWritePeople } from './usePeopleAccess';
 
 type Tab = 'timeline' | 'files' | 'callings';
@@ -71,7 +72,7 @@ function Timeline({ records, gifts }: { records: P360Record[]; gifts: Gift[] }) 
       key: `r${r.id}`, at: r.recordedAt as string, day: date(r.recordedAt as string, 'Africa/Kigali'), type: t(sectionKey(r.section)), detail: summary(t as never, r) || '—', by: r.recordedByName, gift: false,
     })),
     ...gifts.map((g): Ev => ({
-      key: `g${g.kind}${g.id}`, at: `${g.day}T12:00:00Z`, day: date(`${g.day}T12:00:00Z`, 'UTC'), type: t(`door.p360.part.kind.${g.kind}` as 'door.p360.part.kind.DONATION'), detail: `${g.label} · ${formatRwf(g.amount)}`, by: g.system ?? '—', gift: true,
+      key: `g${g.kind}${g.id}`, at: `${g.day}T12:00:00Z`, day: date(`${g.day}T12:00:00Z`, 'UTC'), type: t(`door.p360.part.kind.${g.kind}` as 'door.p360.part.kind.DONATION'), detail: g.kind === 'GOOD_DEED' ? g.label : `${g.label} · ${formatRwf(g.amount)}`, by: g.system ?? '—', gift: true,
     })),
   ].sort((a, b) => b.at.localeCompare(a.at));
   const shown = older ? evs : evs.slice(0, 5);
@@ -104,7 +105,9 @@ function Participation({ load }: { load: { loading: boolean; failed: boolean; da
   const [all, setAll] = useState(false);
   const d = load.data ?? undefined;
   const day = (iso: string) => new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
-  const line = (i: Gift) => `${t(`door.p360.part.kind.${i.kind}` as 'door.p360.part.kind.DONATION')} · ${i.label} · ${formatRwf(i.amount)}${i.status === 'PLEDGED' ? ` (${t('door.p360.part.pledgedTag')})` : ''}`;
+  const line = (i: Gift) => i.kind === 'GOOD_DEED'
+    ? `${t('door.p360.part.kind.GOOD_DEED')} · ${i.label}${i.system ? ` (${i.system})` : ''}`
+    : `${t(`door.p360.part.kind.${i.kind}` as 'door.p360.part.kind.DONATION')} · ${i.label} · ${formatRwf(i.amount)}${i.status === 'PLEDGED' ? ` (${t('door.p360.part.pledgedTag')})` : ''}`;
   return (
     <section className="card" aria-labelledby="p360-part-h">
       <div className="p360-card-head">
@@ -188,11 +191,17 @@ export function Person360Page() {
   const p = v?.person;
   const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(iso)) : null);
   const spouse = v?.records.find((r) => r.section === 'FAMILY' && r.status === 'CURRENT' && r.data.relation === 'SPOUSE')?.relatedName;
+  const recordDate = (section: P360Section) => {
+    const d = v?.records.find((r) => r.section === section && r.status === 'CURRENT')?.data.date;
+    return typeof d === 'string' ? d : null;
+  };
+  const baptism = recordDate('BAPTISM');
+  const marriage = recordDate('MARRIAGE');
   const facts: Array<[string, string | null | undefined]> = p
     ? [
         [t('door.p360.f.gender'), p.gender], [t('door.p360.f.dateOfBirth'), day(p.dateOfBirth)], [t('door.p360.f.phone'), p.phone],
         [t('door.p360.f.address'), p.address], [t('door.p360.spouse'), spouse], [t('door.p360.f.memberCode'), p.memberCode],
-        [t('door.p360.memberStatus'), t(`door.status.${p.status}` as 'door.status.ACTIVE')], [t('door.p360.registered'), day(p.joinedChurchOn)],
+        [t('door.p360.memberStatus'), t(`door.status.${p.status}` as 'door.status.ACTIVE')], [t('door.p360.registered'), day(baptism)], [t('door.p360.marriageDate'), day(marriage)],
       ]
     : [];
   const callings = v ? v.records.filter((r) => r.section === 'CALLING' && r.status === 'CURRENT').length : 0;
@@ -242,6 +251,7 @@ export function Person360Page() {
               </div>
               <aside className="p360-right">
                 {isLeader && <Participation load={part} />}
+                {isLeader && <GoodDeeds personId={personId} onChanged={part.reload} />}
                 <Education v={v} personId={personId} reload={load.reload} />
               </aside>
             </div>
