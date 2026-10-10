@@ -1,6 +1,6 @@
 import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import type { MoneyEntryItem } from '../api/frontDoorApi';
 import { fetchAccounting, fetchMoneyAccounts, fetchMoneyEntries, fetchMoneyOptions } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -13,11 +13,13 @@ import { currentMonth, entriesToCsv, queueFirst } from './money';
 import { PlanVsActual, YearSelect } from './MoneyBlockParts';
 import { AccountCard, AccountForm, EntryForm, EntryRow } from './MoneyParts';
 import { useLoad } from './useLoad';
-import { PageHeader, SidePanel } from './kit';
+import { PageHeader, SidePanel, Tabs } from './kit';
 
 /** The Money block: accounts with balances, entries, and the president's approval queue. */
-export function MoneyPage({ side }: { side: 'INCOME' | 'SPENDING' }) {
+export function MoneyPage() {
   const t = useT();
+  const [params, setParams] = useSearchParams();
+  const side: 'INCOME' | 'SPENDING' = params.get('view') === 'expense' ? 'SPENDING' : 'INCOME';
   const { systemId = '' } = useParams();
   const { capabilities } = useFrontDoor();
   const [show, setShow] = useState<'all' | 'PENDING_APPROVAL'>('all');
@@ -58,7 +60,7 @@ export function MoneyPage({ side }: { side: 'INCOME' | 'SPENDING' }) {
       <div>
         <PageHeader
           id="door-money-title"
-          title={t(side === 'INCOME' ? 'door.money.income' : 'door.money.expense')}
+          title={t('door.money.accounting')}
           purpose={t('door.purpose.money')}
           primary={canRecord ? <button type="button" className="btn" onClick={() => setForm('entry')}>{t(side === 'INCOME' ? 'door.money.income.new' : 'door.money.expense.new')}</button> : undefined}
           actions={
@@ -79,6 +81,15 @@ export function MoneyPage({ side }: { side: 'INCOME' | 'SPENDING' }) {
         <p className="muted">{t('door.money.apart')}</p>
         {accounts.data && !accounts.data.canRecord && <p className="muted">{t('door.money.hint.notTreasurer')}</p>}
       </div>
+      <Tabs
+        label={t('door.money.accounting')}
+        value={side === 'INCOME' ? 'income' : 'expense'}
+        onChange={(k) => setParams(k === 'expense' ? { view: 'expense' } : {}, { replace: true })}
+        items={[
+          { key: 'income', label: t('door.money.income') },
+          { key: 'expense', label: t('door.money.expense') },
+        ]}
+      />
       <YearSelect year={year} onChange={setYear} />
       <LoadState loading={plan.loading} failed={plan.failed} retry={plan.reload}>
         {plan.data && <PlanVsActual view={plan.data} />}

@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams, useSearchParams } from 'react-router-dom';
 import { combineContributionLists, fetchContributionLists, startContributionList } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
@@ -10,7 +10,8 @@ import { LoadState } from './LoadState';
 import { currentMonth, moneyErrorKey } from './money';
 import { listsInOrder } from './moneyBlock';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { DonationsPage } from './DonationsPage';
+import { PageHeader, Tabs } from './kit';
 
 /**
  * Contribution lists: a team leader records the team's list and submits it to the treasurer; the treasurer
@@ -20,6 +21,8 @@ import { PageHeader } from './kit';
 export function ContributionsPage() {
   const t = useT();
   const { systemId = '' } = useParams();
+  const [params, setParams] = useSearchParams();
+  const donations = params.get('view') === 'donations';
   const [month, setMonth] = useState(currentMonth());
   const { loading, failed, data, reload } = useLoad(() => fetchContributionLists(systemId, month), `clists|${systemId}|${month}`);
   const [typeCode, setTypeCode] = useState('');
@@ -45,7 +48,18 @@ export function ContributionsPage() {
         <PageHeader id="door-clists-title" title={t('door.money.contributions')} />
         <p className="muted">{t('door.money.contributions.intro')}</p>
       </div>
-      <TextField label={t('door.money.month')} name="cl-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
+      <Tabs
+        label={t('door.money.contributions')}
+        value={donations ? 'donations' : 'contribution'}
+        onChange={(k) => setParams(k === 'donations' ? { view: 'donations' } : {}, { replace: true })}
+        items={[
+          { key: 'contribution', label: t('door.money.contribution') },
+          { key: 'donations', label: t('door.money.donations') },
+        ]}
+      />
+      {donations && <DonationsPage />}
+      {!donations && <TextField label={t('door.money.month')} name="cl-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />}
+      {!donations && (
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && data.types.length === 0 && <EmptyState title={t('door.money.contributions.noTypes')} detail={t('door.money.contributions.noTypesDetail')} />}
         {data && data.types.length > 0 && (
@@ -103,6 +117,7 @@ export function ContributionsPage() {
           ))}
         </ul>
       </LoadState>
+      )}
     </section>
   );
 }

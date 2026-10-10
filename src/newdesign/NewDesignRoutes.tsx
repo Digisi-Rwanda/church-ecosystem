@@ -1,4 +1,4 @@
-import { Navigate, Route } from 'react-router-dom';
+import { Route } from 'react-router-dom';
 import {
   AccessPage,
   AddPersonPage,
@@ -15,11 +15,8 @@ import {
   CouplesPage,
   DecisionsPage,
   DeletedWorkPage,
-  DonationsPage,
   GroupPage,
   GroupsPage,
-  LetterPage,
-  LettersPage,
   MeetingPage,
   MeetingsPage,
   MoneyBudgetPage,
@@ -31,7 +28,6 @@ import {
   MyContributionPage,
   NotificationsPage,
   OrgTreePage,
-  OversightPage,
   PeopleDirectoryPage,
   Person360Page,
   PersonCardPage,
@@ -117,8 +113,6 @@ export function newDesignRoutes() {
             <Route path="meetings/:meetingId" element={<MeetingPage />} />
             <Route path="decisions" element={<DecisionsPage />} />
             <Route path="collections" element={<CollectionsPage />} />
-            <Route path="letters" element={<LettersPage />} />
-            <Route path="letters/:letterId" element={<LetterPage />} />
           </Route>
           <Route path="central" element={<CentralHomePage />} />
           <Route path="settings" element={<SettingsPage />} />
@@ -131,14 +125,11 @@ export function newDesignRoutes() {
           <Route path="events" element={<PlansPage planType="EVENT" />} />
           <Route path="projects" element={<PlansPage planType="PROJECT" />} />
           <Route path="work/plans/:planId" element={<PlanPage />} />
-          <Route path="money" element={<Navigate to="income" replace />} />
-          <Route path="money/income" element={<MoneyPage side="INCOME" />} />
-          <Route path="money/expense" element={<MoneyPage side="SPENDING" />} />
+          <Route path="money" element={<MoneyPage />} />
           <Route path="money/plan" element={<MoneyPlanPage />} />
           <Route path="money/plan/new/:kind" element={<ActionPlanCreate />} />
           <Route path="money/budget" element={<MoneyBudgetPage />} />
           <Route path="money/contributions" element={<ContributionsPage />} />
-          <Route path="money/donations" element={<DonationsPage />} />
           <Route path="money/reports" element={<MoneyReportsPage />} />
           <Route path="money/mine" element={<MyContributionPage />} />
           <Route path="reports" element={<ReportsPage />} />
@@ -156,7 +147,6 @@ export function newDesignRoutes() {
           <Route path="choirs" element={<ChoirsPage />} />
           <Route path="choirs/:choirId" element={<ChoirPage />} />
           <Route path="monthplan" element={<MonthPlanPage />} />
-          <Route path="oversight" element={<OversightPage />} />
           <Route path="rehearsals" element={<RehearsalsPage />} />
           <Route path="repertoire" element={<RepertoirePage />} />
           <Route path="sponsorship" element={<SponsorshipPage />} />

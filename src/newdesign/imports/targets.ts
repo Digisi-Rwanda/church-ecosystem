@@ -354,7 +354,7 @@ interface DonationCtx { accounts: Array<{ id: string; name: string }>; existing:
 interface DonationRow { accountId: string; donorName: string; amount: number; receivedOn: string; note: string | null }
 export const donationsTarget: ImportTarget<DonationRow, DonationCtx> = {
   key: 'donations',
-  back: (s) => `/s/${s}/money/donations`,
+  back: (s) => `/s/${s}/money/contributions?view=donations`,
   fields: [
     { key: 'account', header: 'Account', aliases: ['konti', 'compte'], required: true, example: 'Main account' },
     { key: 'donor', header: 'Donor', aliases: ['name', 'giver', 'umuterankunga', 'donateur'], required: true, example: 'Aline Mukamana' },

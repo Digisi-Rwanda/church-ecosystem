@@ -57,7 +57,7 @@ export function SystemFrame() {
       subtitle={`${system.name} · ${t('door.portal.role', { role: system.role })}`}
       brandSub={system.name}
       roleLabel={system.role}
-      backTo="/portal"
+      backTo={capabilities && capabilities.systems.length > 1 ? '/portal' : undefined}
       notificationsTo={`/s/${systemId}/notifications?system=${encodeURIComponent(systemId)}`}
       notificationCount={counts?.bySystem[systemId] ?? 0}
     >

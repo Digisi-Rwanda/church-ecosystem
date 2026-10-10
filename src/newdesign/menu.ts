@@ -157,17 +157,15 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
       ...(shared.has('schedule') && !hasOwnSchedule(systemId) ? [place('schedule', 'schedule', 'door.block.schedule')] : []),
       ...some(['monthplan', 'teams', 'mine', 'watches', 'pulpit'].map(ownPlace)),
     ],
-    ministry: some(['choirs', 'rehearsals', 'repertoire', 'oversight', 'sponsorship', 'roster'].map(ownPlace)),
+    ministry: some(['choirs', 'rehearsals', 'repertoire', 'sponsorship', 'roster'].map(ownPlace)),
     // The money screens in the order of the design; My contribution is for every member of the system.
     money: [
       ...(shared.has('money')
         ? [
             place('plan', 'money/plan', 'door.money.plan'),
             place('budget', 'money/budget', 'door.money.budget'),
-            place('income', 'money/income', 'door.money.income'),
-            place('expense', 'money/expense', 'door.money.expense'),
+            place('accounting', 'money', 'door.money.accounting', true),
             place('contributions', 'money/contributions', 'door.money.contributions'),
-            place('donations', 'money/donations', 'door.money.donations'),
             place('moneyreports', 'money/reports', 'door.money.reports'),
           ]
         : []),
@@ -180,7 +178,6 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
           place('meetings', 'governance', 'door.gov.tab.meetings'),
           place('decisions', 'governance/decisions', 'door.gov.tab.decisions'),
           ...(central ? [place('collections', 'governance/collections', 'door.gov.tab.collections')] : []),
-          place('letters', 'governance/letters', 'door.gov.tab.letters'),
         ]
       : [],
     // Every system has its own Settings; Central Administration also keeps the church-wide ones.

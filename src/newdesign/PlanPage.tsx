@@ -13,7 +13,7 @@ import { PlanDetailsView } from './PlanScreens';
 import { PlanRunScreen, STAGES, type Stage } from './PlanRun';
 import { PlanForm } from './PlanForm';
 import { PlanLinks } from './PlanLinks';
-import { PLAN_STEPS, actionKey, needsApproval, phaseOf, planActions, planErrorKey, planStatusKey, stagesOf, stepIndex } from './plans';
+import { actionKey, planActions, planErrorKey, planStatusKey } from './plans';
 import { useLoad } from './useLoad';
 import { PageHeader, StatusChip, Tabs } from './kit';
 
@@ -87,27 +87,6 @@ export function PlanPage() {
             <>
           <PlanLinks p={p} systemId={systemId} run={run} />
 
-          <ol className="door-steps" aria-label={t(`door.plan.steps.${p.planType}` as const)}>
-            {PLAN_STEPS.filter((s) => !(s === 'PENDING_APPROVAL' && !needsApproval(p.planType, p.beyondUnit) && p.status !== 'PENDING_APPROVAL')).map((s) => (
-              <li key={s} className={stepIndex(p.status) >= stepIndex(s) && p.status !== 'CANCELLED' ? 'done' : ''} aria-current={p.status === s || (p.status === 'PAUSED' && s === 'RUNNING') ? 'step' : undefined}>
-                {t(planStatusKey(s === 'RUNNING' && p.status === 'PAUSED' ? 'PAUSED' : s, p.planType))}
-              </li>
-            ))}
-          </ol>
-          <p className="muted">{t(`door.plan.phase.${phaseOf(p.status)}` as const)}</p>
-          {p.planType === 'EVENT' && !needsApproval(p.planType, p.beyondUnit) && p.status === 'DRAFT' && <p className="muted">{t('door.plan.noApproval')}</p>}
-          {p.planType === 'PROGRAM' && <p className="muted">{t('door.plan.programOpen')}</p>}
-          <details className="door-guide">
-            <summary>{t('door.plan.guide')}</summary>
-            <ol>
-              {stagesOf(p.planType, p.status).map((st) => (
-                <li key={st.n} className={st.state} aria-current={st.state === 'current' ? 'step' : undefined}>
-                  <strong>{t(st.labelKey as 'door.plan.stage.EVENT.1')}</strong>
-                  <span className="muted"> · {t(st.descKey as 'door.plan.stage.EVENT.1.d')}</span>
-                </li>
-              ))}
-            </ol>
-          </details>
           {p.rejectedReason && p.status === 'DRAFT' && <p className="door-error">{t('door.plan.sentBack', { reason: p.rejectedReason })}</p>}
           {p.cancelReason && <p className="door-error">{t('door.plan.cancelled', { reason: p.cancelReason })}</p>}
           {error && (
@@ -188,7 +167,7 @@ export function PlanPage() {
               )}
               {p.location && (
                 <p>
-                  <strong>{t('door.plan.form.location')}:</strong> {p.location}
+                  <strong>{t('door.plan.place')}:</strong> {p.location}
                 </p>
               )}
             </div>
