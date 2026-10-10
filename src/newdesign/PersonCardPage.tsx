@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useParams } from 'react-router-dom';
+import { Link, Navigate, useParams } from 'react-router-dom';
 import {
   archivePerson,
   fetchP360,
@@ -34,6 +34,7 @@ export function PersonCardPage() {
     return { person, belonging: belongingOf(personId, structure, today()), p360 };
   }, `person|${personId}`);
 
+  if (p360.data?.allowed && p360.data.leader) return <Navigate replace to={`${base}/${personId}/360`} />;
   return (
     <div className="door-block">
       <Link className="btn ghost sm door-back" to={base}>

@@ -90,7 +90,7 @@ export function RecordForm({ personId, section, existing, onDone, onCancel }: { 
   );
 }
 
-function Facts({ r }: { r: P360Record }) {
+export function Facts({ r }: { r: P360Record }) {
   const t = useT();
   const entries = Object.entries(r.data).filter(([k]) => k !== 'relatedPersonId' && k !== 'spousePersonId');
   return (

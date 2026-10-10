@@ -8,6 +8,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
+import { counts } from '../money/block.js';
 import { SECTIONS, SINGLE, accessFor, cleanData, isSection, type Section } from '../person360/rules.js';
 
 export const person360Router = Router();
@@ -70,7 +71,7 @@ async function shapeRecords(rows: RecordRow[], a: { write: Section[] }) {
 /** What this person may do in Person 360 at all. 404 for everyone else, so it is not even confirmed to exist. */
 person360Router.get('/access', requireAuth, async (req: AuthedRequest, res) => {
   const a = await access(req.auth!.personId);
-  res.json({ read: a.read, write: a.write, allowed: a.read.length > 0 });
+  res.json({ read: a.read, write: a.write, allowed: a.read.length > 0, leader: a.leader });
 });
 
 person360Router.get('/cohorts', requireAuth, async (req: AuthedRequest, res) => {
@@ -158,6 +159,57 @@ person360Router.get('/:personId', requireAuth, async (req: AuthedRequest, res) =
     read: a.read,
     write: archived(p) ? [] : a.write,
     records: await shapeRecords(rows, { write: archived(p) ? [] : a.write }),
+  });
+});
+
+/**
+ * What a person has given or pledged anywhere in the church: contributions on approved lists, approved
+ * donations, sponsorship pledges and confirmed claims. For the Church Leader only; everyone else gets a 404.
+ */
+person360Router.get('/:personId/participation', requireAuth, async (req: AuthedRequest, res) => {
+  const a = await access(req.auth!.personId);
+  if (!a.leader) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  const p = await personOf(String(req.params.personId));
+  if (!p) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  const systems = new Map(((await prisma.churchSystem.findMany()) as Array<{ id: string; name: string; shortName?: string | null }>).map((x) => [x.id, x.shortName || x.name]));
+  const sysName = (id: string) => systems.get(id) ?? id;
+  const day = (v: Date | string) => iso(v)!.slice(0, 10);
+  type Item = { id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'SPONSORSHIP' | 'CLAIM'; amount: number; day: string; system: string; label: string; status: string };
+  const items: Item[] = [];
+
+  const lines = (await prisma.contributionLine.findMany({ where: { personId: p.id } })) as Array<{ id: string; listId: string; amount: number }>;
+  if (lines.length) {
+    const lists = (await prisma.contributionList.findMany()) as Array<{ id: string; systemId: string; level: string; status: string; typeName: string; month: string; decidedAt?: Date | string | null }>;
+    for (const x of lines) {
+      const l = lists.find((y) => y.id === x.listId);
+      if (l && counts(l)) items.push({ id: x.id, kind: 'CONTRIBUTION', amount: x.amount, day: l.decidedAt ? day(l.decidedAt) : `${l.month}-01`, system: sysName(l.systemId), label: l.typeName, status: 'COUNTED' });
+    }
+  }
+  for (const d of (await prisma.donation.findMany({ where: { donorPersonId: p.id } })) as Array<{ id: string; systemId: string; amount: number; receivedOn: Date | string; status: string; note?: string | null }>) {
+    if (d.status === 'APPROVED') items.push({ id: d.id, kind: 'DONATION', amount: d.amount, day: day(d.receivedOn), system: sysName(d.systemId), label: d.note ?? '', status: 'COUNTED' });
+  }
+  const sponsors = (await prisma.choirSponsor.findMany({ where: { personId: p.id } })) as Array<{ id: string; choirId: string }>;
+  if (sponsors.length) {
+    const choirs = (await prisma.musicChoir.findMany()) as Array<{ id: string; name: string; systemId?: string | null }>;
+    const pledges = (await prisma.sponsorPledge.findMany()) as Array<{ id: string; sponsorId: string; amount: number; pledgedOn: Date | string; receivedOn?: Date | string | null; status: string }>;
+    for (const sp of sponsors) {
+      const c = choirs.find((y) => y.id === sp.choirId);
+      for (const pl of pledges.filter((y) => y.sponsorId === sp.id && y.status !== 'CANCELLED')) {
+        items.push({ id: pl.id, kind: 'SPONSORSHIP', amount: pl.amount, day: day(pl.status === 'RECEIVED' && pl.receivedOn ? pl.receivedOn : pl.pledgedOn), system: sysName(c?.systemId ?? 'sys-music'), label: c?.name ?? '', status: pl.status === 'RECEIVED' ? 'COUNTED' : 'PLEDGED' });
+      }
+    }
+  }
+  for (const c of (await prisma.contributionClaim.findMany({ where: { personId: p.id } })) as Array<{ id: string; systemId: string; typeLabel: string; amount: number; confirmedAmount?: number | null; occurredOn: Date | string; status: string }>) {
+    if (c.status === 'CONFIRMED' || c.status === 'PARTIAL') items.push({ id: c.id, kind: 'CLAIM', amount: c.confirmedAmount ?? c.amount, day: day(c.occurredOn), system: sysName(c.systemId), label: c.typeLabel, status: 'COUNTED' });
+  }
+  items.sort((x, y) => y.day.localeCompare(x.day));
+  const year = new Date().toISOString().slice(0, 4);
+  const sum = (list: Item[]) => list.reduce((n, i) => n + i.amount, 0);
+  res.json({
+    year,
+    totals: { given: sum(items.filter((i) => i.status === 'COUNTED' && i.day.startsWith(year))), pledged: sum(items.filter((i) => i.status === 'PLEDGED')) },
+    items: items.slice(0, 100),
+    more: items.length > 100,
   });
 });
 

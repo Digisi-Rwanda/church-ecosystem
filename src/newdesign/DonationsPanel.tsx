@@ -7,6 +7,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { formatRwf, moneyErrorKey, parseAmount } from './money';
 import { donationStatusKey } from './moneyBlock';
+import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
 
 /** Donations: the treasurer or vice president records, the president approves, and only then it counts as income. */
@@ -17,6 +18,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
   const open = (accounts.data?.accounts ?? []).filter((a) => a.status === 'ACTIVE');
   const [form, setForm] = useState(false);
   const [donor, setDonor] = useState('');
+  const [donorPersonId, setDonorPersonId] = useState<string | null>(null);
   const [amount, setAmount] = useState('');
   const [day, setDay] = useState(new Date().toISOString().slice(0, 10));
   const [accountId, setAccountId] = useState('');
@@ -39,7 +41,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
     const n = parseAmount(amount);
     const acc = accountId || (open.length === 1 ? open[0].id : '');
     if (!donor.trim() || n === null || !acc) return setError(t('door.money.form.incomplete'));
-    void run(() => recordDonation({ systemId, accountId: acc, donorName: donor.trim(), amount: n, receivedOn: day }));
+    void run(() => recordDonation({ systemId, accountId: acc, donorName: donor.trim(), amount: n, receivedOn: day, donorPersonId }));
   };
   return (
     <div className="door-form" style={{ maxWidth: 'none' }}>
@@ -56,7 +58,8 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
         )}
         {form && (
           <form className="panel door-form" onSubmit={submit} noValidate>
-            <TextField label={t('door.money.donations.donor')} name="d-donor" maxLength={80} value={donor} onChange={(e) => setDonor(e.target.value)} />
+            <PersonPicker label={t('door.p360.part.member')} name="d-member" onPick={(p) => { setDonorPersonId(p.id); setDonor(p.fullName); }} />
+            <TextField label={t('door.money.donations.donor')} name="d-donor" maxLength={80} value={donor} onChange={(e) => { setDonor(e.target.value); setDonorPersonId(null); }} />
             <TextField label={t('door.money.entry.amount')} name="d-amount" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
             <TextField label={t('door.money.donations.day')} name="d-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
             {open.length > 1 && (

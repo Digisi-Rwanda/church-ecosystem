@@ -7616,3 +7616,17 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .pt-bulletin h4 { margin: 0; font-size: 1.05rem; border-bottom: 1px solid #bbb; padding-bottom: 0.15rem; }
 .pt-bulletin p { margin: 0; }
 @media (max-width: 640px) { .pt-bulletin { padding: 1.25rem; } }
+
+/* Person 360 profile */
+.p360-grid { display: grid; gap: 1rem; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); align-items: start; }
+.p360-main, .p360-side { display: grid; gap: 1rem; min-width: 0; }
+.p360-card { display: grid; grid-template-columns: auto 1fr; gap: 0.75rem 1rem; align-items: start; }
+.p360-card .p360-facts { grid-column: 1 / -1; }
+.p360-avatar { display: grid; place-items: center; width: 4rem; height: 4rem; border-radius: 50%; background: var(--surface-2, #eef0f3); font-weight: 700; }
+.p360-who h2, .p360-who p { margin: 0 0 0.25rem; }
+.p360-totals { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; margin-bottom: 0.75rem; }
+.p360-totals div { display: grid; gap: 0.15rem; }
+.p360-feed { list-style: none; margin: 0 0 0.5rem; padding: 0; display: grid; gap: 0.6rem; }
+.p360-feed li { display: flex; justify-content: space-between; gap: 0.75rem; }
+.p360-feed p { margin: 0; }
+@media (max-width: 52rem) { .p360-grid { grid-template-columns: 1fr; } }

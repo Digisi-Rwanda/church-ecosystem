@@ -1286,12 +1286,15 @@ model ChoirSponsor {
   /// PERSON | ORGANISATION
   kind        String   @default("PERSON")
   contact     String?
+  /// The member, when the sponsor is a person of the church (optional)
+  personId    String?
   /// ACTIVE | ENDED
   status      String   @default("ACTIVE")
   createdById String
   createdAt   DateTime @default(now())
 
   @@index([choirId])
+  @@index([personId])
 }
 
 model SponsorPledge {
@@ -1640,6 +1643,8 @@ model Donation {
   systemId     String
   accountId    String
   donorName    String
+  /// The member who gave, when the treasurer picked one (optional)
+  donorPersonId String?
   amount       Int
   receivedOn   DateTime
   note         String?
@@ -1653,4 +1658,5 @@ model Donation {
   entryId      String?
 
   @@index([systemId, status])
+  @@index([donorPersonId])
 }

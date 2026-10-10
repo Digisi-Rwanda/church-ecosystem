@@ -2597,6 +2597,23 @@ export const en = {
   'door.sch.col.service': 'Service',
   'door.sch.col.who': 'Who',
 
+  'door.p360.part.title': 'Participation updates',
+  'door.p360.part.given': 'Given in {year}',
+  'door.p360.part.pledged': 'Pledged, not yet received',
+  'door.p360.part.none': 'Nothing given or pledged yet.',
+  'door.p360.part.all': 'See all',
+  'door.p360.part.member': 'Member (optional)',
+  'door.p360.part.kind.CONTRIBUTION': 'Contribution',
+  'door.p360.part.kind.DONATION': 'Donation',
+  'door.p360.part.kind.SPONSORSHIP': 'Sponsorship',
+  'door.p360.part.kind.CLAIM': 'Reimbursement',
+  'door.p360.send': 'Send message',
+  'door.p360.call': 'Call',
+  'door.p360.spouse': 'Spouse',
+  'door.p360.tab.timeline': 'Timeline',
+  'door.p360.tab.records': 'Records',
+  'door.p360.edu': 'Education and employment',
+
   // Test and demo markers
   'demo.ribbon': 'TEST SITE — demo data only. Nothing here is real, and it may be reset.',
 } as const;

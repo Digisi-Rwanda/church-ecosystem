@@ -1237,7 +1237,7 @@ export async function combineContributionLists(systemId: string, typeCode: strin
 export type DonationView = { id: string; donorName: string; amount: number; receivedOn: string; note: string; status: 'PENDING' | 'APPROVED' | 'REJECTED'; recordedByName: string; decisionNote: string | null; canDecide: boolean };
 export type DonationsView = { canRecord: boolean; canApprove: boolean; donations: DonationView[] };
 export const fetchDonations = (systemId: string): Promise<DonationsView> => apiFetch(`${M}/donations?${qs({ systemId })}`);
-export async function recordDonation(b: { systemId: string; accountId: string; donorName: string; amount: number; receivedOn: string; note?: string | null }): Promise<void> {
+export async function recordDonation(b: { systemId: string; accountId: string; donorName: string; amount: number; receivedOn: string; note?: string | null; donorPersonId?: string | null }): Promise<void> {
   await apiFetch(`${M}/donations`, { method: 'POST', body: b });
 }
 export async function decideDonation(id: string, approve: boolean, reason?: string): Promise<void> {
@@ -1346,7 +1346,12 @@ export type P360Person = {
 export type P360View = { person: P360Person; read: P360Section[]; write: P360Section[]; records: P360Record[] };
 export type P360Cohort = { id: string; name: string; cohortLabel: string; learners: Array<{ personId: string; name: string; baptised: boolean }> };
 const P3 = '/api/person360';
-export const fetchP360Access = (): Promise<{ read: P360Section[]; write: P360Section[]; allowed: boolean }> => apiFetch(`${P3}/access`);
+export const fetchP360Access = (): Promise<{ read: P360Section[]; write: P360Section[]; allowed: boolean; leader?: boolean }> => apiFetch(`${P3}/access`);
+export type P360Participation = {
+  year: number; totals: { given: number; pledged: number }; more: boolean;
+  items: Array<{ id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'SPONSORSHIP' | 'CLAIM'; amount: number; day: string; system: string | null; label: string; status: string }>;
+};
+export const fetchP360Participation = (personId: string): Promise<P360Participation> => apiFetch(`${P3}/${encodeURIComponent(personId)}/participation`);
 export const fetchP360 = (personId: string): Promise<P360View> => apiFetch(`${P3}/${encodeURIComponent(personId)}`);
 export async function addP360Record(personId: string, section: P360Section, data: Record<string, string | number>): Promise<void> {
   await apiFetch(`${P3}/${encodeURIComponent(personId)}/records`, { method: 'POST', body: { section, data } });
@@ -1564,7 +1569,7 @@ export async function retireSong(id: string): Promise<void> {
   await apiFetch(`${CW}/songs/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });
 }
 export const fetchSponsors = (choirId: string): Promise<{ canWrite: boolean; totals: { pledged: number; received: number }; sponsors: SponsorItem[] }> => apiFetch(`${CW}/sponsors?${q(choirId)}`);
-export async function addSponsor(input: { choirId: string; name: string; kind: 'PERSON' | 'ORGANISATION'; contact?: string | null }): Promise<void> {
+export async function addSponsor(input: { choirId: string; name: string; kind: 'PERSON' | 'ORGANISATION'; contact?: string | null; personId?: string | null }): Promise<void> {
   await apiFetch(`${CW}/sponsors`, { method: 'POST', body: input });
 }
 export async function endSponsor(id: string): Promise<void> {

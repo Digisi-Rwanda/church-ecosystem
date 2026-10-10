@@ -127,4 +127,32 @@ describe('person 360 routes', () => {
     const m = (await get('p-cat', '/api/person360/p-member')).body.records[0];
     expect(m.programName).toBe('Baptism class 2026');
   });
+  it('the Church Leader sees everything a person gave, pledged or donated; nobody else sees it', async () => {
+    const db = fake.__db;
+    for (const k of ['contributionLine', 'contributionList', 'donation', 'choirSponsor', 'sponsorPledge', 'contributionClaim', 'musicChoir']) db[k] ??= [];
+    const year = new Date().toISOString().slice(0, 4);
+    db.contributionList.push(
+      { id: 'cl1', systemId: 'sys-choir', level: 'UNIT', status: 'APPROVED', typeName: 'Building', month: `${year}-03` },
+      { id: 'cl2', systemId: 'sys-choir', level: 'TEAM', status: 'DRAFT', typeName: 'Building', month: `${year}-04` },
+    );
+    db.contributionLine.push({ id: 'ln1', listId: 'cl1', personId: 'p-member', amount: 5000 }, { id: 'ln2', listId: 'cl2', personId: 'p-member', amount: 9999 });
+    db.donation.push(
+      { id: 'd1', systemId: 'sys-choir', donorName: 'Member', donorPersonId: 'p-member', amount: 2000, receivedOn: new Date(`${year}-05-02T00:00:00Z`), status: 'APPROVED' },
+      { id: 'd2', systemId: 'sys-choir', donorName: 'Member', donorPersonId: 'p-member', amount: 777, receivedOn: new Date(`${year}-05-03T00:00:00Z`), status: 'PENDING' },
+    );
+    db.musicChoir.push({ id: 'ch1', name: 'Imanzi', systemId: 'sys-choir' });
+    db.choirSponsor.push({ id: 'sp1', choirId: 'ch1', name: 'Member', kind: 'PERSON', personId: 'p-member', status: 'ACTIVE' });
+    db.sponsorPledge.push(
+      { id: 'pl1', sponsorId: 'sp1', amount: 3000, pledgedOn: new Date(`${year}-06-01T00:00:00Z`), status: 'PLEDGED' },
+      { id: 'pl2', sponsorId: 'sp1', amount: 1000, pledgedOn: new Date(`${year}-02-01T00:00:00Z`), receivedOn: new Date(`${year}-02-10T00:00:00Z`), status: 'RECEIVED' },
+    );
+    const r = await get('p-pastor', '/api/person360/p-member/participation');
+    expect(r.status).toBe(200);
+    expect(r.body.items.map((i: any) => i.kind).sort()).toEqual(['CONTRIBUTION', 'DONATION', 'SPONSORSHIP', 'SPONSORSHIP']);
+    expect(r.body.totals).toEqual({ given: 5000 + 2000 + 1000, pledged: 3000 });
+    expect((await get('p-sec', '/api/person360/p-member/participation')).status).toBe(404);
+    expect((await get('p-choir-leader', '/api/person360/p-member/participation')).status).toBe(404);
+    expect((await get('p-pastor', '/api/person360/access')).body.leader).toBe(true);
+    expect((await get('p-sec', '/api/person360/access')).body.leader).toBe(false);
+  });
 });

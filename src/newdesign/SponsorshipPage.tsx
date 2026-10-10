@@ -8,6 +8,7 @@ import { ChoirSelect } from './ChoirSelect';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { formatRwf, parseAmount } from './money';
+import { PersonPicker } from './PersonPicker';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
 
@@ -77,6 +78,7 @@ function Sponsors({ choirId }: { choirId: string }) {
   const [name, setName] = useState('');
   const [kind, setKind] = useState<'PERSON' | 'ORGANISATION'>('PERSON');
   const [contact, setContact] = useState('');
+  const [personId, setPersonId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const fail = (err: unknown) => setError(t(choirWorkErrorKey(errorCode(err)) as 'door.people.actionFailed'));
   const submit = async (e: FormEvent) => {
@@ -84,7 +86,7 @@ function Sponsors({ choirId }: { choirId: string }) {
     if (!name.trim()) return setError(t('door.caring.err.input'));
     setError('');
     try {
-      await addSponsor({ choirId, name: name.trim(), kind, contact: contact.trim() || null });
+      await addSponsor({ choirId, name: name.trim(), kind, contact: contact.trim() || null, personId: kind === 'PERSON' ? personId : null });
       setForm(false);
       setName('');
       setContact('');
@@ -107,11 +109,12 @@ function Sponsors({ choirId }: { choirId: string }) {
       {form && (
         <form className="panel door-form" onSubmit={submit} noValidate>
           <h3>{t('door.choirwork.sp.new')}</h3>
-          <TextField label={t('door.choirwork.sp.name')} name="sp-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+          <TextField label={t('door.choirwork.sp.name')} name="sp-name" value={name} maxLength={80} onChange={(e) => { setName(e.target.value); setPersonId(null); }} />
           <SelectField label={t('door.choirwork.sp.kindLabel')} name="sp-kind" value={kind} onChange={(e) => setKind(e.target.value as 'PERSON' | 'ORGANISATION')}>
             <option value="PERSON">{t('door.choirwork.sp.kind.PERSON')}</option>
             <option value="ORGANISATION">{t('door.choirwork.sp.kind.ORGANISATION')}</option>
           </SelectField>
+          {kind === 'PERSON' && <PersonPicker label={t('door.p360.part.member')} name="sp-member" onPick={(p) => { setPersonId(p.id); setName(p.fullName); }} />}
           <TextField label={t('door.choirwork.sp.contact')} name="sp-contact" value={contact} maxLength={120} onChange={(e) => setContact(e.target.value)} />
           <div className="door-row">
             <button type="submit" className="btn">{t('door.choirwork.sp.save')}</button>

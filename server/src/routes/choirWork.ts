@@ -190,12 +190,14 @@ choirWorkRouter.get('/sponsors', requireAuth, async (req: AuthedRequest, res) =>
 });
 
 choirWorkRouter.post('/sponsors', requireAuth, async (req: AuthedRequest, res) => {
-  const parsed = z.object({ choirId: z.string().min(1), name: z.string().trim().min(1).max(80), kind: z.enum(['PERSON', 'ORGANISATION']).default('PERSON'), contact: z.string().trim().max(120).nullish() }).safeParse(req.body);
+  const parsed = z.object({ choirId: z.string().min(1), name: z.string().trim().min(1).max(80), kind: z.enum(['PERSON', 'ORGANISATION']).default('PERSON'), contact: z.string().trim().max(120).nullish(), personId: z.string().max(80).nullish() }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the sponsor');
   const b = parsed.data;
   const got = await openChoir(req, res, 'write', b.choirId);
   if (!got) return;
-  const row = (await prisma.choirSponsor.create({ data: { choirId: got.c.id, name: b.name, kind: b.kind, contact: b.contact || null, status: 'ACTIVE', createdById: got.me } })) as SponsorRow;
+  const member = b.personId && b.kind === 'PERSON' ? await prisma.person.findUnique({ where: { id: b.personId } }) : null;
+  if (b.personId && b.kind === 'PERSON' && !member) return fail(res, 400, 'BAD_INPUT', 'Choose a member of the church');
+  const row = (await prisma.choirSponsor.create({ data: { choirId: got.c.id, name: b.name, kind: b.kind, contact: b.contact || null, personId: member ? b.personId : null, status: 'ACTIVE', createdById: got.me } })) as SponsorRow;
   await audit(got.me, got.c.systemId, 'PEOPLE', 'SPONSOR_ADDED', `Added sponsor “${b.name}” to “${got.c.name}”`, { choirId: got.c.id, sponsorId: row.id });
   res.status(201).json({ id: row.id });
 });
