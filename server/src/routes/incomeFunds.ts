@@ -7,6 +7,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
+import { sweepSettlements } from '../money/settlement.js';
 import { canReadMoney, canRecord, isDay, amountProblem, NOTE_MAX } from '../money/rules.js';
 import { SOURCE_KINDS, codeFor, computePots, potId, POOL_CODE, type EarmarkLike, type IncomeLike, type Pot } from '../money/funds.js';
 import { moneySchema, parseStored, EMPTY_MONEY } from '../systemSettings/rules.js';
@@ -42,6 +43,7 @@ const HOLDING = (p: PlanLite) => !p.deletedAt && p.status !== 'CANCELLED';
 
 /** Every pot of a unit with its figures. `exceptPlanId` leaves one activity's own earmark out, to check a new list against the rest. */
 export async function potsOf(systemId: string, exceptPlanId?: string): Promise<Pot[]> {
+  await sweepSettlements(systemId);
   const own = await ownTypes(systemId);
   const lists = ((await prisma.contributionList.findMany({ where: { systemId } })) as ListRow[]).filter((l) => l.systemId === systemId && l.level === 'UNIT' && l.status === 'APPROVED');
   const lines = (await prisma.contributionLine.findMany()) as LineRow[];

@@ -18,13 +18,16 @@ import { SOURCE_KINDS, codeFor, earmarkProblem, potId } from '../money/funds.js'
 import { adjustLevels, afterEdit, allVerified, checkNote, figures, liveLines, submitProblem, type MoneyCheck } from '../money/planMoney.js';
 import { canReadMoney } from '../money/rules.js';
 import { potsOf } from './incomeFunds.js';
+import { settleView } from './planSettle.js';
+import { finalize, postSettlement, syncFundraising, warnPool } from '../money/settlement.js';
+import { settlementLapsed } from '../money/settle.js';
 
 export const planMoneyRouter = Router();
 
 type Res = import('express').Response;
 const fail = (res: Res, status: number, code: string, error: string, extra: object = {}) => res.status(status).json({ error, code, ...extra });
 
-interface Plan extends PlanRow { title: string; moneyCheckJson?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null; planType?: string | null; timingKind?: string | null; repeatJson?: string | null; budgetCycle?: string | null; budgetCycles?: number | null }
+interface Plan extends PlanRow { title: string; moneyCheckJson?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null; planType?: string | null; timingKind?: string | null; repeatJson?: string | null; budgetCycle?: string | null; budgetCycles?: number | null; fundraising?: boolean | null; fundTarget?: number | null; doneAt?: Date | string | null; settledAt?: Date | string | null; settlementJson?: string | null; createdById: string }
 interface Amend { id: string; planId: string; systemId: string; kind: string; status: string; oldTotal: number; newTotal: number; justification: string; linesJson: string; sourcesJson: string; reserveJson: string; requestedById: string; requestedAt: Date | string; decidedById: string | null; decidedAt: Date | string | null; decisionNote: string | null; reviewedAt: Date | string | null }
 interface Entry { id: string; planId: string | null; kind: string; status: string; amount: number; occurredOn: Date | string }
 interface Line { id: string; planId: string | null; systemId: string; title: string; amount: number; category: string | null; status: string; note: string | null; checkState: string | null; checkedById: string | null; checkedAt: Date | string | null; year: number; createdAt: Date | string }
@@ -140,6 +143,7 @@ async function view(p: Plan, me: string, data: Awaited<ReturnType<typeof loadAcc
     sources: sources.map((s) => ({ kind: s.kind, code: s.code, amount: s.amount, potId: potId(s.kind, s.code) })),
     pots, check: check ? { result: check.result, note: check.note, at: check.at, byName: who.get(check.byId) ?? '' } : null,
     ...(await extras(p, me, data, f, live)),
+    ...(await settleView(p, me, data, f.planned, f.earmarked)),
   };
 }
 
@@ -482,11 +486,15 @@ planMoneyRouter.post('/:id/renew-month', requireAuth, async (req: AuthedRequest,
  * Spending is always recorded. After it is saved, this tells the right people when it took the activity past its plan: the whole activity
  * for a one-off, each cycle's allowance for a repeat, and any spending in an ongoing program's month that was not released.
  */
-export async function flagOverspend(planId: string | null | undefined, spentBy: string): Promise<void> {
+export async function flagOverspend(planId: string | null | undefined, spentBy: string, entry?: { id: string; amount: number }): Promise<void> {
   try {
     if (!planId) return;
-    const p = (await prisma.workPlan.findUnique({ where: { id: planId } })) as Plan | null;
+    let p = (await prisma.workPlan.findUnique({ where: { id: planId } })) as Plan | null;
     if (!p || p.deletedAt || !['SETUP', 'RUNNING', 'PAUSED', 'CLOSING', 'ENDED'].includes(p.status)) return;
+    // The settlement period may have run out without anyone finalizing: settle first, leaving this entry out of it.
+    if (p.status === 'ENDED' && settlementLapsed(p)) { await finalize(p, p.createdById, 'PERIOD', entry?.id); p = (await prisma.workPlan.findUnique({ where: { id: planId } })) as Plan; }
+    if (p.status === 'ENDED' && p.settledAt) { if (entry) await postSettlement(p, entry, spentBy); return; }
+    if (p.status === 'ENDED' && p.fundraising && p.doneAt) { await syncFundraising(p, spentBy); await warnPool(p, spentBy); }
     const { data } = await loadAccessData(spentBy);
     const live = liveLines(await linesOf(p.id));
     const actual = await actualOf(p);

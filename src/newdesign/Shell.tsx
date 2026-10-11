@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { EmptyState } from '../components/ui/EmptyState';
-import { Icon } from '../components/ui/Icon';
+import { Icon, type IconName } from '../components/ui/Icon';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
@@ -12,6 +12,15 @@ import { LanguageSwitch } from './LanguageSwitch';
 import { OfflineBanner } from './OfflineBanner';
 import { warm } from './warm';
 import { MODULE_ICON } from './moduleIcons';
+
+/** The icon beside each place in an opened module: one glance tells a directory from an organisation or a list of leaders. */
+const PLACE_ICON: Record<string, IconName> = {
+  directory: 'user', organisation: 'building', units: 'building', appointments: 'users', access: 'lock', admin: 'settings', preferences: 'settings',
+  home: 'home', mine: 'user', tasks: 'task', plans: 'task', programs: 'program', projects: 'layers', events: 'event', meetings: 'users', schedule: 'calendar',
+  funds: 'wallet', budget: 'wallet', plan: 'wallet', accounting: 'wallet', contributions: 'hand', collections: 'hand', moneyreports: 'chart', reports: 'folder',
+  decisions: 'board', notifications: 'inbox', announcements: 'inbox',
+};
+const placeIcon = (key: string): IconName => PLACE_ICON[key] ?? 'chevron-right';
 
 function weekOfLabel(locale: string, d = new Date()) {
   const start = new Date(d);
@@ -181,7 +190,9 @@ export function Shell({
                           <li key={p.key}>
                             {p.external ? (
                               <a href={p.to} target="_blank" rel="noopener noreferrer" onClick={close}>
+                                <Icon name={placeIcon(p.key)} size={16} className="nav-place-icon" />
                                 <span className="nav-label">{p.label ?? t(p.labelKey as 'door.block.home')}</span>
+                                <Icon name="external" size={13} className="nav-go" />
                               </a>
                             ) : (
                               <NavLink
@@ -192,7 +203,9 @@ export function Shell({
                                 className={() => (current?.id === m.id && active?.place?.key === p.key ? 'active' : undefined)}
                                 aria-current={current?.id === m.id && active?.place?.key === p.key ? 'page' : undefined}
                               >
+                                <Icon name={placeIcon(p.key)} size={16} className="nav-place-icon" />
                                 <span className="nav-label">{p.label ?? t(p.labelKey as 'door.block.home')}</span>
+                                <Icon name="chevron-right" size={14} className="nav-go" />
                               </NavLink>
                             )}
                           </li>

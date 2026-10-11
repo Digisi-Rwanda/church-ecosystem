@@ -178,7 +178,7 @@ const FROM: Record<Action, PlanStatus[]> = {
   withdraw: ['PENDING_APPROVAL'],
   reopen: ['SETUP'],
   start: ['SETUP'],
-  close: ['RUNNING'],
+  close: ['SETUP', 'RUNNING'],
   pause: ['RUNNING'],
   resume: ['PAUSED'],
   renew: ['CLOSING'],

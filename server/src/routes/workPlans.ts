@@ -17,6 +17,8 @@ import {
   canWritePlan, canDecideForChurch, currentLevel, treasurerExists, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, parseJson, publishProblem, skipUnitLevel, stateOf, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
 } from '../work/plan.js';
 import { figures, submitProblem } from '../money/planMoney.js';
+import { fundraisingProblem } from '../money/settle.js';
+import { onDone } from './planSettle.js';
 import { cycleProblem, multiplierOf } from '../money/cycles.js';
 import { potsOf } from './incomeFunds.js';
 import { earmarkProblem } from '../money/funds.js';
@@ -45,6 +47,7 @@ interface Plan extends PlanRow {
   parentId?: string | null; steeringJson?: string | null; detailsJson?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null;
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
   timingKind?: string | null; startTime?: string | null; endTime?: string | null; repeatJson?: string | null; dateChangeJson?: string | null; reviewDue?: boolean | null;
+  fundraising?: boolean | null; fundTarget?: number | null; doneAt?: Date | string | null; settledAt?: Date | string | null;
 }
 interface NoteRow { id: string; planId: string; authorId: string; text: string; createdAt: Date | string }
 interface CheckRow { id: string; planId: string; label: string; done: boolean; doneById?: string | null; doneAt?: Date | string | null }
@@ -130,7 +133,7 @@ function flags(p: Plan, c: Ctx, me: string) {
     canCheckMoney: p.status === 'PENDING_APPROVAL' && currentLevel(p)?.levelKey === 'TREASURER' && canApprove(p, me, c.data),
     canReopen: manage && p.status === 'SETUP',
     canStart: manage && p.status === 'SETUP',
-    canClose: manage && p.status === 'RUNNING',
+    canClose: manage && ['SETUP', 'RUNNING'].includes(p.status),
     canPause: manage && p.status === 'RUNNING' && !typeProblem('pause', type),
     canResume: manage && p.status === 'PAUSED' && !typeProblem('resume', type),
     canRenew: manage && p.status === 'CLOSING' && !typeProblem('renew', type),
@@ -224,6 +227,7 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
     leaderId: p.leaderPersonId, leaderName: who.get(p.leaderPersonId) ?? '',
     startsOn: iso(p.startsOn), endsOn: iso(p.endsOn), visibility: p.visibility, beyondUnit: p.beyondUnit, planType: p.planType ?? 'PROJECT',
     state: stateOf(p.status),
+    fundraising: !!p.fundraising, fundTarget: p.fundTarget ?? null, doneAt: p.doneAt ? new Date(p.doneAt).toISOString() : null, settledAt: p.settledAt ? new Date(p.settledAt).toISOString() : null,
     timingKind: p.timingKind ?? 'RANGE', startTime: p.startTime ?? null, endTime: p.endTime ?? null, repeat: repeatOf(p.repeatJson), reviewDue: !!p.reviewDue,
     mine: isOnTeam(p, me), waitingLevel: currentLevel(p)?.label ?? null, ...fl,
   };
@@ -264,6 +268,8 @@ const fields = {
   startTime: z.string().max(5).nullish(),
   endTime: z.string().max(5).nullish(),
   repeat: repeatSchema.nullish(),
+  fundraising: z.boolean().optional(),
+  fundTarget: z.number().int().min(0).max(2_000_000_000).nullish(),
 };
 const timingOf = (b: { timingKind: string; startsOn?: string | null; endsOn?: string | null; startTime?: string | null; endTime?: string | null; repeat?: unknown }) =>
   normalizeTiming({ timingKind: b.timingKind, startsOn: b.startsOn ?? null, endsOn: b.endsOn ?? null, startTime: b.startTime ?? null, endTime: b.endTime ?? null, repeatJson: b.repeat ? JSON.stringify(b.repeat) : null });
@@ -385,8 +391,12 @@ workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
     const bad = await parentCheck(b.planType, b.parentId, unit.systemId, me, c, null);
     if (bad) return fail(res, 400, bad, 'That plan cannot be the parent');
   }
+  const fraise = b.fundraising ?? false;
+  const fbad = fundraisingProblem(fraise, b.fundTarget, b.planType);
+  if (fbad) return fail(res, 400, fbad, fbad === 'TARGET_NEEDED' ? 'Set a target above zero for a fundraising event' : 'Only an event can be a fundraiser');
   const row = (await prisma.workPlan.create({
     data: {
+      fundraising: fraise, fundTarget: fraise ? b.fundTarget ?? null : null,
       parentId: b.parentId || null, orgUnitId: unit.id, systemId: unit.systemId, title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null,
       ...timingData(b), leaderPersonId: b.leaderId,
       teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility, planType: b.planType, status: 'DRAFT', approvalsJson: '[]', createdById: me,
@@ -409,9 +419,14 @@ workPlansRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
   const tbad = timingCheck(b);
   if (tbad) return fail(res, 400, tbad.code, tbad.msg);
   if (await peopleProblem([b.leaderId, ...b.team.map((t) => t.personId)])) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose people who are active members');
+  const fraise = b.fundraising ?? !!p.fundraising;
+  const target = b.fundTarget === undefined ? p.fundTarget ?? null : b.fundTarget;
+  const fbad = fundraisingProblem(fraise, target, b.planType ?? p.planType ?? 'PROJECT');
+  if (fbad) return fail(res, 400, fbad, fbad === 'TARGET_NEEDED' ? 'Set a target above zero for a fundraising event' : 'Only an event can be a fundraiser');
   const row = (await prisma.workPlan.update({
     where: { id: p.id },
     data: {
+      fundraising: fraise, fundTarget: fraise ? target : null,
       title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null, ...timingData(b), leaderPersonId: b.leaderId, teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility,
       planType: b.planType ?? p.planType ?? 'PROJECT',
     },
@@ -576,6 +591,7 @@ workPlansRouter.post('/:id/close', requireAuth, (req: AuthedRequest, res) =>
       return;
     }
     await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'ENDED', outcome: one.data.outcome, reportPublishedAt: new Date(), reportPublishedById: me } });
+    await onDone(p.id, me);
     for (const to of new Set([p.createdById, p.leaderPersonId, ...teamOf(p).map((t) => t.personId)].filter((x) => x !== me))) await tellOne(to, p, `Done: ${p.title}`, `plan-done:${p.id}:${to}`);
   }),
 );

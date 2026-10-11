@@ -157,8 +157,8 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
 };
 
 /*
- * Work (the Mission module): only a President creates and changes work (tasks, events, programs, projects),
- * and approves it. A Vice President gets W only when the President lends it for a few days. Everyone else
+ * Work (the Mission module): a President creates, changes and approves work (tasks, events, programs, projects).
+ * A Vice President holds the Write letter and can draft it, and the President approves that draft. Everyone else
  * reads, and the person a piece of work is given to moves their own work along.
  */
 

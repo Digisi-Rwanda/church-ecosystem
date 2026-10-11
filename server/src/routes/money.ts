@@ -180,7 +180,7 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
       });
     }
   }
-  if (spending && b.planId) await flagOverspend(b.planId, me);
+  if (spending && b.planId) await flagOverspend(b.planId, me, { id: row.id, amount: row.amount });
   await audit(me, acc.systemId, spending ? 'MONEY_SPENDING_REQUESTED' : 'MONEY_INCOME_RECORDED', `${b.kind} ${b.amount} RWF`, { entryId: row.id, accountId: acc.id });
   res.status(201).json({ id: row.id, status: row.status });
 });

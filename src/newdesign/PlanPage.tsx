@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  addPlanNote, cancelPlan, deletePlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, rejectPlan,
+  cancelPlan, deletePlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, rejectPlan,
   type ActivityMoney, type PlanDetail,
 } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -10,7 +10,8 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PlanDetailsView } from './PlanScreens';
-import { PlanRunScreen, STAGES, type Stage } from './PlanRun';
+import { NotesTab, WorkTab } from './PlanWork';
+import { RevenueTab } from './PlanSettle';
 import { PlanForm } from './PlanForm';
 import { PlanLinks } from './PlanLinks';
 import { GapLine, PlanMoney } from './PlanMoney';
@@ -21,9 +22,9 @@ import { useLoad } from './useLoad';
 import { PageHeader, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | 'done' | 'approve' | null;
-type Tab = 'overview' | 'money' | 'details' | 'history' | Stage;
+type Tab = 'overview' | 'money' | 'revenue' | 'work' | 'notes' | 'details' | 'history';
 
-/** One plan: where it stands in the six steps, its planning record, the execution record and the report. */
+/** One activity: its overview and, once approved, three working tabs (Checklist, Money, Notes) plus Revenue for a fundraiser; details and history. */
 export function PlanPage() {
   const t = useT();
   const { locale } = useI18n();
@@ -38,11 +39,11 @@ export function PlanPage() {
   const [editing, setEditing] = useState(false);
   const [ask, setAsk] = useState<Ask>(null);
   const [reason, setReason] = useState('');
-  const [note, setNote] = useState('');
   const [error, setError] = useState('');
   const [tab0, setTab0] = useState<Tab | null>(null);
 
   const p = plan && plan.id === planId ? plan : load.data;
+  const live = !!p && (p.state === 'APPROVED' || p.state === 'DONE');
   const tab: Tab = tab0 ?? 'overview';
   const setTab = (k: Tab) => setTab0(k);
   const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
@@ -86,13 +87,18 @@ export function PlanPage() {
             onChange={setTab}
             items={[
               { key: 'overview', label: t('door.plan.tab.overview') },
+              ...(live ? [{ key: 'work' as const, label: t(`door.plan.tab.work.${p.planType}` as 'door.plan.tab.work.EVENT') }] : []),
               ...(m ? [{ key: 'money' as const, label: t('door.plan.tab.money') }] : []),
-              ...STAGES[p.planType].map((st) => ({ key: st, label: t(`door.run.${p.planType}.${st}.name` as 'door.run.EVENT.s1.name') })),
+              ...(live && m?.fundraising ? [{ key: 'revenue' as const, label: t('door.plan.tab.revenue') }] : []),
+              ...(live ? [{ key: 'notes' as const, label: t('door.plan.tab.notes') }] : []),
               { key: 'details', label: t('door.ap.details') },
               { key: 'history', label: t('door.plan.tab.history') },
             ]}
           />
           {tab === 'details' && <PlanDetailsView p={p} />}
+          {tab === 'work' && live && <WorkTab p={p} run={run} systemId={systemId} />}
+          {tab === 'notes' && live && <NotesTab p={p} run={run} />}
+          {tab === 'revenue' && live && m && <RevenueTab p={p} m={m} onChange={() => { moneyLoad.reload(); load.reload(); }} />}
           {tab === 'money' && m && <PlanMoney p={p} m={m} onChange={(next) => { if (next) setMoney(next); moneyLoad.reload(); load.reload(); }} />}
           {tab === 'overview' && (
             <>
@@ -217,7 +223,6 @@ export function PlanPage() {
             </>
           )}
 
-          {(tab === 's1' || tab === 's2' || tab === 's3' || tab === 's4') && STAGES[p.planType].includes(tab) && <PlanRunScreen p={p} stage={tab} systemId={systemId} run={run} />}
           {tab === 'history' && (
             <>
           {p.levels.length > 0 && (
@@ -235,28 +240,6 @@ export function PlanPage() {
             </div>
           )}
 
-
-              <div className="panel">
-                <h3>{t('door.plan.record.execution')}</h3>
-                {p.notes.length === 0 && <p className="muted">{t('door.plan.history.none')}</p>}
-              {p.notes.length > 0 && (
-                <ul className="door-list">
-                  {p.notes.map((n) => (
-                    <li key={n.id}>
-                      <strong>{n.authorName}</strong> <span className="muted">{day(n.at)}</span> — {n.text}
-                    </li>
-                  ))}
-                </ul>
-              )}
-              {p.canNote && (
-                <div className="door-form">
-                  <TextAreaField label={t('door.plan.noteAdd')} name="p-note" rows={2} value={note} onChange={(e) => setNote(e.target.value)} />
-                  <button type="button" className="btn secondary sm" disabled={!note.trim()} onClick={() => void run(() => addPlanNote(p.id, note.trim()), () => setNote(''))}>
-                    {t('door.plan.noteGo')}
-                  </button>
-                </div>
-              )}
-              </div>
             </>
           )}
         </section>

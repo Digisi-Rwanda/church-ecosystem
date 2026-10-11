@@ -6,28 +6,7 @@ export const planStatusKey = (s: WorkPlanStatus, type?: PlanType) => (type ? (`d
 /** The engine's steps, in order. "On hold" sits beside Running. */
 export const PLAN_STEPS: WorkPlanStatus[] = ['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'CLOSING', 'ENDED'];
 const RANK: Record<WorkPlanStatus, number> = { DRAFT: 0, PENDING_APPROVAL: 1, SETUP: 2, RUNNING: 3, PAUSED: 3, CLOSING: 4, ENDED: 5, CANCELLED: -1 };
-export const phaseOf = (s: WorkPlanStatus): 'planning' | 'execution' | 'cancelled' => (s === 'CANCELLED' ? 'cancelled' : RANK[s] <= 2 ? 'planning' : 'execution');
 export const stepIndex = (s: WorkPlanStatus): number => RANK[s];
-
-/**
- * The steps of each kind of work, as the church lives them. Each step belongs to one or more statuses of the shared
- * engine; the status the plan is in lights the steps that belong to it. An event has six steps, a project seven, a program eight.
- */
-const STAGES: Record<PlanType, WorkPlanStatus[][]> = {
-  EVENT: [['DRAFT'], ['DRAFT', 'PENDING_APPROVAL'], ['SETUP'], ['SETUP'], ['RUNNING', 'PAUSED'], ['CLOSING']],
-  PROJECT: [['DRAFT'], ['DRAFT'], ['DRAFT'], ['PENDING_APPROVAL', 'SETUP'], ['RUNNING', 'PAUSED'], ['RUNNING', 'PAUSED'], ['CLOSING']],
-  PROGRAM: [['DRAFT'], ['DRAFT'], ['DRAFT'], ['DRAFT', 'PENDING_APPROVAL'], ['SETUP'], ['RUNNING', 'PAUSED'], ['RUNNING', 'PAUSED'], ['CLOSING']],
-};
-export type StageView = { n: number; labelKey: string; descKey: string; state: 'done' | 'current' | 'todo' };
-export function stagesOf(type: PlanType, status: WorkPlanStatus): StageView[] {
-  const r = RANK[status];
-  return STAGES[type].map((statuses, i) => {
-    const n = i + 1;
-    const ranks = statuses.map((x) => RANK[x]);
-    const state = status === 'CANCELLED' ? 'todo' : status === 'ENDED' || r > Math.max(...ranks) ? 'done' : statuses.includes(status) ? 'current' : 'todo';
-    return { n, labelKey: `door.plan.stage.${type}.${n}`, descKey: `door.plan.stage.${type}.${n}.d`, state };
-  });
-}
 
 /** Every activity is approved by the Church Leader before it runs, whatever its kind or size. */
 export const needsApproval = (_type?: PlanType, _beyondUnit?: boolean) => true;
@@ -38,7 +17,6 @@ export function planActions(p: Pick<PlanDetail, 'canSubmit' | 'canWithdraw' | 'c
   const out: PlanAction[] = [];
   if (p.canSubmit) out.push('submit');
   if (p.canWithdraw) out.push('withdraw');
-  if (p.canStart) out.push('start');
   if (p.canReopen) out.push('reopen');
   if (p.canResume) out.push('resume');
   if (p.canClose) out.push('close');
@@ -64,6 +42,13 @@ export function sortPlans(list: PlanItem[]): PlanItem[] {
 }
 
 const ERROR_KEYS: Record<string, string> = {
+  TARGET_NEEDED: 'door.fr.err.target',
+  FUNDRAISING_EVENT_ONLY: 'door.fr.err.eventOnly',
+  NOT_FUNDRAISING: 'door.fr.err.notFundraising',
+  NOT_APPROVED: 'door.fr.err.notApproved',
+  SETTLED: 'door.fr.err.settled',
+  NOT_DONE: 'door.fr.err.notDone',
+  AMOUNT: 'door.fr.err.amount',
   PLAN_LOCKED: 'door.plan.err.locked',
   WRONG_STATE: 'door.plan.err.wrongState',
   OWN_ENTRY: 'door.plan.err.ownEntry',
@@ -115,4 +100,3 @@ export const stateTone = (s: ActivityState): 'neutral' | 'warn' | 'info' | 'succ
   s === 'WAITING' ? 'warn' : s === 'APPROVED' ? 'info' : s === 'DONE' ? 'success' : s === 'CANCELLED' ? 'danger' : 'neutral';
 
 /** An approved activity runs from its approval; only an older plan can still be waiting to be started. */
-export const isApproved = (p: Pick<PlanItem, 'state'>): boolean => p.state === 'APPROVED';

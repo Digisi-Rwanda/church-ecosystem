@@ -9,6 +9,7 @@ import { errorCode } from './governance';
 import { formatRwf } from './money';
 import { planErrorKey } from './plans';
 import { AmendForm, CyclePanel, OngoingMonth, PendingAmendment, SpendingVsPlan } from './PlanAmend';
+import { FundraisingLine, SettlementPanel } from './PlanSettle';
 import { StatusChip } from './kit';
 
 /** "Planned spending X · Money set aside Y · Gap Z": the live line that decides whether Submit is on. */
@@ -53,10 +54,12 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
     <div className="panel">
       <h3>{t('door.pm.title')}</h3>
       <GapLine m={m} />
+      <FundraisingLine m={m} />
       {m.gap > 0 && m.canEdit && <p className="muted">{t('door.pm.gapNote')}</p>}
       {m.gap < 0 && m.canEdit && <p className="muted">{t('door.pm.over')}</p>}
       {!m.open && <p className="muted">{t('door.pm.locked')}</p>}
       <OngoingMonth p={p} m={m} onChange={onChange} />
+      <SettlementPanel p={p} m={m} onChange={() => onChange()} />
       {m.pendingAmendment && <PendingAmendment p={p} a={m.pendingAmendment} m={m} go={go} />}
       {m.canRequestAmendment && !amending && (
         <button type="button" className="btn" onClick={() => setAmending(true)}>{t('door.pm.amend.request')}</button>

@@ -1,20 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanItem } from '../api/frontDoorApi';
-import { actionKey, needsApproval, phaseOf, planActions, planErrorKey, sortPlans, stagesOf, stateTone, stepIndex } from './plans';
+import { actionKey, needsApproval, planActions, planErrorKey, sortPlans, stateTone, stepIndex } from './plans';
 
 const flags = { canSubmit: false, canWithdraw: false, canReopen: false, canStart: false, canClose: false, canPause: false, canResume: false, canRenew: false };
 
 describe('plan helpers', () => {
-  it('puts the six steps in two phases', () => {
-    expect(['DRAFT', 'PENDING_APPROVAL', 'SETUP'].map((s) => phaseOf(s as never))).toEqual(['planning', 'planning', 'planning']);
-    expect(['RUNNING', 'CLOSING', 'ENDED'].map((s) => phaseOf(s as never))).toEqual(['execution', 'execution', 'execution']);
-    expect(phaseOf('CANCELLED')).toBe('cancelled');
+  it('ranks the steps in order', () => {
+    expect(stepIndex('DRAFT')).toBeLessThan(stepIndex('SETUP'));
     expect(stepIndex('CLOSING')).toBe(4);
   });
   it('offers only the next steps a person may take', () => {
     expect(planActions(flags)).toEqual([]);
     expect(planActions({ ...flags, canSubmit: true })).toEqual(['submit']);
-    expect(planActions({ ...flags, canStart: true, canReopen: true })).toEqual(['start', 'reopen']);
+    expect(planActions({ ...flags, canStart: true, canReopen: true })).toEqual(['reopen']);
     expect(planActions({ ...flags, canClose: true })).toEqual(['close']);
   });
   it('offers pause, resume and renew', () => {
@@ -36,10 +34,7 @@ describe('plan helpers', () => {
     expect(planErrorKey('BAD_TIME')).toBe('door.when.err.time');
     expect(planErrorKey('DATE_REQUIRED')).toBe('door.when.err.date');
   });
-  it('has stages per type', () => {
-    expect(stagesOf('EVENT', 'DRAFT').length).toBe(6);
-    expect(stagesOf('PROJECT', 'DRAFT').length).toBe(7);
-    expect(stagesOf('PROGRAM', 'DRAFT').length).toBe(8);
+  it('words every action', () => {
     expect(typeof actionKey('submit', 'EVENT', false)).toBe('string');
   });
   it('sorts open plans by step, then closed ones', () => {

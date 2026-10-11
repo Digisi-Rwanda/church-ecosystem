@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import { createPlan, editPlan, PLAN_TYPES, type DirectoryPerson, type PlanDetail, type PlanOptions, type PlanType, type WorkVisibility } from '../api/frontDoorApi';
-import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
+import { CheckboxField, SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { PersonPicker } from './PersonPicker';
@@ -37,6 +37,8 @@ export function PlanForm({
   const [team, setTeam] = useState<Array<{ personId: string; name: string; role: string }>>(existing?.team ?? []);
   const [role, setRole] = useState('');
   const [visibility, setVisibility] = useState<WorkVisibility>(existing?.visibility ?? 'SYSTEM');
+  const [fundraising, setFundraising] = useState(existing?.fundraising ?? false);
+  const [target, setTarget] = useState(existing?.fundTarget ? String(existing.fundTarget) : '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -52,7 +54,11 @@ export function PlanForm({
     if (!title.trim() || !leader || (!existing && !unitId)) return setError(t('door.plan.form.incomplete'));
     const bad = whenProblem(when);
     if (bad) return setError(t(planErrorKey(bad) as 'door.people.actionFailed'));
+    const raise = planType === 'EVENT' && fundraising;
+    const goal = Math.max(0, Math.floor(Number(target) || 0));
+    if (raise && goal < 1) return setError(t(planErrorKey('TARGET_NEEDED') as 'door.people.actionFailed'));
     const input = {
+      fundraising: raise, fundTarget: raise ? goal : null,
       title: title.trim(), aim: aim.trim(), needs: needs.trim() || null, location: location.trim() || null,
       ...whenToInput(when), leaderId: leader.id,
       team: team.map((m) => ({ personId: m.personId, role: m.role })), beyondUnit: false, visibility, planType,
@@ -82,6 +88,12 @@ export function PlanForm({
           </SelectField>
         )}
       </div>
+      {planType === 'EVENT' && (
+        <>
+          <CheckboxField id="p-fund" label={t('door.plan.form.fundraising')} checked={fundraising} onChange={setFundraising} />
+          {fundraising && <TextField label={t('door.plan.form.fundTarget')} name="p-target" inputMode="numeric" value={target} onChange={(e) => setTarget(e.target.value)} />}
+        </>
+      )}
       <WhenFields value={when} onChange={setWhen} idPrefix="p-when" />
       <TextField label={t('door.plan.form.location')} name="p-loc" value={location} maxLength={options.limits.titleMax} onChange={(e) => setLocation(e.target.value)} />
       <p>

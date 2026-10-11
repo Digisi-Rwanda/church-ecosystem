@@ -8,6 +8,7 @@ import { MonthsChart, SegBar, Spark, type VizSeries } from './DashViz';
 import { Segmented } from './kit';
 import { useFrontDoor } from './FrontDoorContext';
 import { DashboardOverview } from './DashboardOverview';
+import { DashFunds } from './DashFunds';
 import { GlanceDashboard } from './GlanceDashboard';
 import { formatRwf } from './money';
 import { SystemLink } from './SystemLink';
@@ -300,6 +301,7 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
       )}
       {(w || mo) && (
         <div className="dash-charts">
+          {mo && <DashFunds systemId={systemId} />}
           {w && (
             <Panel title={t('door.dash.plans.title')} to={`/s/${systemId}/money/plan`}>
               <SegBar label={t('door.dash.plans.title')} parts={[{ slot: 1, value: w.plansRunning, name: t('door.dash.work.running') }, { slot: 2, value: w.plansWaiting, name: t('door.dash.work.waiting') }, { slot: 3, value: w.plansDraft, name: t('door.dash.work.drafts') }]} />

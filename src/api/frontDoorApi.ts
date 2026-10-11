@@ -1013,6 +1013,7 @@ export type PlanItem = PlanFlags & {
 };
 
 export type PlanDetail = PlanItem & {
+  fundraising: boolean; fundTarget: number | null; doneAt: string | null; settledAt: string | null;
   aim: string; needs: string; location: string; createdByName: string; details: Record<string, string>;
   team: Array<{ personId: string; name: string; role: string }>;
   levels: Array<{ levelKey: 'UNIT' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null; note: string | null }>;
@@ -1046,6 +1047,7 @@ export type PlanInput = {
   title: string; aim: string; needs: string | null; location: string | null; startsOn: string | null; endsOn: string | null;
   leaderId?: string; team: Array<{ personId: string; role: string }>; beyondUnit: boolean; visibility: WorkVisibility; planType?: PlanType;
   timingKind?: TimingKind; startTime?: string | null; endTime?: string | null; repeat?: RepeatRule | null;
+  fundraising?: boolean; fundTarget?: number | null;
 };
 export type PlanTiming = { timingKind: TimingKind; startsOn: string | null; endsOn: string | null; startTime: string | null; endTime: string | null; repeat: RepeatRule | null; location?: string | null };
 export type PlanOptions = {
@@ -1224,11 +1226,6 @@ export async function changeMoneyPlanItem(id: string, b: Partial<{ title: string
 
 export type PlanLink = { id: string; title: string; planType: string; status: string };
 export const fetchPlanLinks = async (systemId: string): Promise<PlanLink[]> => (await apiFetch<{ plans: PlanLink[] }>(`${M}/plan-links?${qs({ systemId })}`)).plans;
-export type PlanMoney = {
-  planned: number; income: number; spending: number; pending: number; activities: number; entries: number;
-  linked: { plans: number; planned: number; income: number; spending: number; pending: number } | null;
-};
-export const fetchPlanMoney = (systemId: string, planId: string): Promise<PlanMoney> => apiFetch(`${M}/plan-money?${qs({ systemId, planId })}`);
 
 export type AccountingRowView = { kind: BudgetKind; category: string; planned: number; actual: number; difference: number };
 export type AccountingSideView = { rows: AccountingRowView[]; planned: number; actual: number };
@@ -1817,6 +1814,15 @@ export type ActivityMoney = {
   canSetCycle: boolean; actual: number; over: number; perCycle: Array<{ key: string; spent: number; allowance: number; over: number }>;
   ongoingMonth: { month: string; released: boolean; renewed: string[] } | null; canRenew: boolean;
   canRequestAmendment: boolean; canWithdrawAmendment: boolean; pendingAmendment: AmendmentView | null; amendments: AmendmentView[];
+  fundraising: FundraisingView | null; settlement: SettlementView | null;
+};
+export type FundraisingView = {
+  target: number; projectedNet: number; revenueTotal: number; revenue: Array<{ id: string; label: string; amount: number; receivedOn: string }>;
+  canLogRevenue: boolean; net: number | null; outcome: 'PROFIT' | 'DEFICIT' | 'EVEN' | null;
+};
+export type SettlementView = {
+  doneAt: string; due: string; days: number; settled: boolean; open: boolean; canFinalize: boolean; toRelease: number;
+  result: { released: number; spent: number; earmarked: number; why: 'TREASURER' | 'PERIOD'; at: string } | null;
 };
 export type BudgetCycle = 'PER_OCCURRENCE' | 'MONTHLY' | 'QUARTERLY';
 export type AmendmentView = {
@@ -1843,3 +1849,6 @@ export const renewMonth = (id: string, month?: string) => apiFetch<ActivityMoney
 export type TransferToReview = { id: string; planId: string; systemId: string; title: string; justification: string; oldTotal: number; newTotal: number; decidedByName: string; decidedAt: string | null };
 export const fetchTransfersReview = () => apiFetch<{ items: TransferToReview[] }>('/api/work-plans/transfers-review');
 export const markTransferReviewed = (aid: string) => apiFetch(`/api/work-plans/amendments/${encodeURIComponent(aid)}/reviewed`, { method: 'POST', body: {} });
+export const logRevenue = (id: string, input: { label: string; amount: number; receivedOn?: string }) => apiFetch(`${PM(id)}/revenue`, { method: 'POST', body: input });
+export const removeRevenue = (id: string, rid: string) => apiFetch(`${PM(id)}/revenue/${encodeURIComponent(rid)}`, { method: 'DELETE' });
+export const finalizeSettlement = (id: string) => apiFetch<{ ok: true; released: number }>(`${PM(id)}/finalize`, { method: 'POST', body: {} });
