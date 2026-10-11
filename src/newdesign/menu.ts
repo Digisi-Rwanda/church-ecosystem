@@ -36,47 +36,14 @@ export function firstBlock(menu: MenuItem[]): SharedBlock | null {
   return menu.find((m) => m.block === 'home')?.block ?? menu[0]?.block ?? null;
 }
 
-/** Blocks that get a place on the Portal bar. Money is deliberately left to each system's own menu. */
-export const PORTAL_BLOCKS = ['work', 'people', 'schedule', 'reports'] as const satisfies readonly SharedBlock[];
-export type PortalBlock = (typeof PORTAL_BLOCKS)[number];
-
-export type PortalNavItem =
-  | { key: 'systems' }
-  | { key: PortalBlock }
-  | { key: 'notifications' }
-  | { key: 'announcements' };
-
-export function isPortalBlock(value: string | undefined): value is PortalBlock {
-  return !!value && (PORTAL_BLOCKS as readonly string[]).includes(value);
-}
+export type PortalNavItem = { key: 'systems' } | { key: 'notifications' } | { key: 'announcements' };
 
 /**
- * The Portal bar: Systems first, then each shared block the person holds a letter in
- * in at least one system (Work, People, Schedule, Reports), then Notifications and Announcements.
- * Built only from the server's capabilities, so it never offers a block the person lacks.
+ * The Portal bar is only Home (the systems), Notifications and Announcements. Work, People, Schedule, Reports and Money
+ * live inside each system, so the Portal never offers them.
  */
-export function buildPortalNav(caps: Capabilities | null): PortalNavItem[] {
-  const items: PortalNavItem[] = [{ key: 'systems' }];
-  if (caps) {
-    for (const block of PORTAL_BLOCKS) {
-      if (caps.systems.some((s) => (s.blocks[block] ?? []).length > 0)) items.push({ key: block });
-    }
-  }
-  items.push({ key: 'notifications' }, { key: 'announcements' });
-  return items;
-}
-
-/** The systems in which the person holds access to a block, with their letters. */
-export function systemsWithBlock(
-  caps: Capabilities | null,
-  portal: Array<{ id: string }>,
-  block: SharedBlock,
-): Array<{ systemId: string; letters: AccessLetter[] }> {
-  if (!caps) return [];
-  const mine = new Set(portal.map((s) => s.id));
-  return caps.systems
-    .filter((s) => mine.has(s.id) && (s.blocks[block] ?? []).length > 0)
-    .map((s) => ({ systemId: s.id, letters: s.blocks[block] }));
+export function buildPortalNav(_caps?: Capabilities | null): PortalNavItem[] {
+  return [{ key: 'systems' }, { key: 'notifications' }, { key: 'announcements' }];
 }
 
 export type OwnMenuItem = { block: OwnBlock; letters: AccessLetter[]; variant?: string };
@@ -220,40 +187,14 @@ export function canSeePath(modules: NavModule[], pathname: string): boolean {
   return resolveActive(modules, pathname) !== null;
 }
 
-/**
- * The Portal's own sidebar, before any system: Home (the systems), Notifications and Announcements
- * from every system, then Work, People, Schedule and Reports for each block the person holds in at
- * least one system. Built only from the server's capabilities.
- */
-export function buildPortalModules(caps: Capabilities | null, portal: Array<{ id: string; shortName: string }> = []): NavModule[] {
+/** The Portal's own sidebar, before any system: Home (the systems), Notifications and Announcements, and nothing else. */
+export function buildPortalModules(_caps?: Capabilities | null, _portal: Array<{ id: string; shortName: string }> = []): NavModule[] {
   const one = (id: ModuleId, path: string, labelKey: string, end: boolean): NavModule => ({
     id, labelKey, to: path, places: [{ key: id, to: path, labelKey, end }],
   });
-  const mods: NavModule[] = [
+  return [
     one('home', '/portal', 'door.portal.nav.systems', true),
     one('notifications', '/portal/notifications', MODULE_LABEL.notifications, false),
     one('announcements', '/portal/announcements', MODULE_LABEL.announcements, false),
   ];
-  for (const nav of buildPortalNav(caps)) {
-    if (nav.key === 'work') {
-      mods.push({
-        id: 'work', labelKey: MODULE_LABEL.work, to: '/portal/work',
-        places: [
-          { key: 'tasks', to: '/portal/work', labelKey: 'door.work.tasks', end: true },
-          { key: 'plans', to: '/portal/work/plans', labelKey: 'door.portal.work.plans', end: false },
-        ],
-      });
-    } else if (nav.key === 'people' || nav.key === 'schedule' || nav.key === 'reports') {
-      // Overview first, then each system where the person holds the block (opens in its own tab).
-      const where = systemsWithBlock(caps, portal, nav.key).map(({ systemId }): NavPlace => ({
-        key: `sys-${systemId}`, to: `/s/${systemId}/${nav.key}`, labelKey: MODULE_LABEL[nav.key],
-        label: portal.find((s) => s.id === systemId)?.shortName ?? systemId, end: false, external: true,
-      }));
-      mods.push({
-        id: nav.key, labelKey: MODULE_LABEL[nav.key], to: `/portal/${nav.key}`,
-        places: [{ key: nav.key, to: `/portal/${nav.key}`, labelKey: 'door.portal.nav.overview', end: true }, ...where],
-      });
-    }
-  }
-  return mods;
 }

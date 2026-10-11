@@ -37,9 +37,7 @@ import {
   ActionPlanCreate,
   ActivityNew,
   PlansPage,
-  PortalBlockPage,
   PortalPage,
-  PortalWorkPage,
   PreferencesPage,
   ProtocolMinePage,
   ProtocolReportsPage,
@@ -87,10 +85,7 @@ export function newDesignRoutes() {
           <Route index element={<PortalPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
-          <Route path="work" element={<PortalWorkPage part="tasks" />} />
-          <Route path="work/plans" element={<PortalWorkPage part="plans" />} />
           <Route path="notifications/preferences" element={<PreferencesPage />} />
-          <Route path=":block" element={<PortalBlockPage />} />
         </Route>
         <Route path="/s/:systemId" element={<SystemFrame />}>
           <Route index element={<SystemBlockPage />} />

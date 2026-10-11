@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { Capabilities } from '../api/frontDoorApi';
-import { buildMenu, buildPortalNav, firstBlock, isPortalBlock, isSharedBlock, lettersFor, systemsWithBlock } from './menu';
+import { buildMenu, buildPortalNav, firstBlock, isSharedBlock, lettersFor } from './menu';
 
 const none: Capabilities['systems'][number]['blocks'] = {
   home: [],
@@ -49,27 +49,11 @@ describe('menu from capabilities', () => {
 });
 
 describe('Portal bar', () => {
-  it('always has Systems first, Announcements last and Notifications before it', () => {
-    const keys = buildPortalNav(caps).map((i) => i.key);
-    expect(keys[0]).toBe('systems');
-    expect(keys[keys.length - 1]).toBe('announcements');
-    expect(buildPortalNav(null).map((i) => i.key)).toEqual(['systems', 'notifications', 'announcements']);
-  });
-  it('offers a block only when the person holds a letter in it somewhere', () => {
-    expect(buildPortalNav(caps).map((i) => i.key)).toEqual(['systems', 'work', 'people', 'notifications', 'announcements']);
-  });
-  it('never puts Money or Home on the Portal bar', () => {
+  it('is only Home, Notifications and Announcements, whatever the person holds', () => {
     const rich: Capabilities = { ...caps, systems: [{ id: 'sys-x', blocks: { home: ['R'], people: ['R'], work: ['R'], schedule: ['R'], money: ['V'], reports: ['R'] } }] };
-    const keys = buildPortalNav(rich).map((i) => i.key);
-    expect(keys).toEqual(['systems', 'work', 'people', 'schedule', 'reports', 'notifications', 'announcements']);
-    expect(isPortalBlock('money')).toBe(false);
-    expect(isPortalBlock('work')).toBe(true);
-  });
-  it('lists only the systems the person may enter that hold the block', () => {
-    const portal = [{ id: 'sys-main' }, { id: 'sys-choir' }];
-    expect(systemsWithBlock(caps, portal, 'work')).toEqual([{ systemId: 'sys-choir', letters: ['R', 'W', 'A'] }]);
-    expect(systemsWithBlock(caps, [{ id: 'sys-main' }], 'work')).toEqual([]);
-    expect(systemsWithBlock(null, portal, 'work')).toEqual([]);
+    expect(buildPortalNav(rich).map((i) => i.key)).toEqual(['systems', 'notifications', 'announcements']);
+    expect(buildPortalNav(caps).map((i) => i.key)).toEqual(['systems', 'notifications', 'announcements']);
+    expect(buildPortalNav(null).map((i) => i.key)).toEqual(['systems', 'notifications', 'announcements']);
   });
 });
 
@@ -135,22 +119,16 @@ describe('buildModules', () => {
 });
 
 describe('buildPortalModules', () => {
-  it('has Home, Notifications and Announcements, then the shared blocks held in any system', async () => {
+  it('has Home, Notifications and Announcements and no other block', async () => {
     const { buildPortalModules } = await import('./menu');
+    const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
     const caps = {
       blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'],
-      systems: [
-        { id: 'sys-a', blocks: { ...none, work: ['R'] }, own: [] },
-        { id: 'sys-b', blocks: { ...none, reports: ['R'] }, own: [] },
-      ],
+      systems: [{ id: 'sys-a', blocks: { ...none, work: ['R'], reports: ['R'] }, own: [] }],
     } as unknown as Capabilities;
-    expect(buildPortalModules(caps).map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'work', 'reports']);
+    expect(buildPortalModules(caps).map((m) => m.id)).toEqual(['home', 'notifications', 'announcements']);
     expect(buildPortalModules(null).map((m) => m.id)).toEqual(['home', 'notifications', 'announcements']);
-    const work = buildPortalModules(caps).find((m) => m.id === 'work')!;
-    expect(work.places.map((p) => p.to)).toEqual(['/portal/work', '/portal/work/plans']);
-    const reports = buildPortalModules(caps, [{ id: 'sys-b', shortName: 'Beta' }]).find((m) => m.id === 'reports')!;
-    expect(reports.places.map((p) => p.to)).toEqual(['/portal/reports', '/s/sys-b/reports']);
-    expect(reports.places[1]).toMatchObject({ label: 'Beta', external: true });
+    expect(buildPortalModules(caps).map((m) => m.to)).toEqual(['/portal', '/portal/notifications', '/portal/announcements']);
   });
   it('every system has its own Settings, and Central Administration keeps the church-wide ones beside it', async () => {
     const { buildModules } = await import('./menu');

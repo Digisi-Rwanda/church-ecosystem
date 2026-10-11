@@ -80,12 +80,8 @@ const loadActionPlanCreate = () => import('./ActionPlanCreate').then((m) => ({ d
 export const ActionPlanCreate = lazy(loadActionPlanCreate);
 const loadPlansPage = () => import('./PlansPage').then((m) => ({ default: m.PlansPage }));
 export const PlansPage = lazy(loadPlansPage);
-const loadPortalBlockPage = () => import('./PortalBlockPage').then((m) => ({ default: m.PortalBlockPage }));
-export const PortalBlockPage = lazy(loadPortalBlockPage);
 const loadPortalPage = () => import('./PortalPage').then((m) => ({ default: m.PortalPage }));
 export const PortalPage = lazy(loadPortalPage);
-const loadPortalWorkPage = () => import('./PortalWorkPage').then((m) => ({ default: m.PortalWorkPage }));
-export const PortalWorkPage = lazy(loadPortalWorkPage);
 const loadPreferencesPage = () => import('./PreferencesPage').then((m) => ({ default: m.PreferencesPage }));
 export const PreferencesPage = lazy(loadPreferencesPage);
 const loadProtocolMinePage = () => import('./ProtocolMinePage').then((m) => ({ default: m.ProtocolMinePage }));
@@ -175,9 +171,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   ActionPlanCreate: loadActionPlanCreate,
   ActivityNew: loadActivityNew,
   PlansPage: loadPlansPage,
-  PortalBlockPage: loadPortalBlockPage,
   PortalPage: loadPortalPage,
-  PortalWorkPage: loadPortalWorkPage,
   PreferencesPage: loadPreferencesPage,
   ProtocolMinePage: loadProtocolMinePage,
   ProtocolReportsPage: loadProtocolReportsPage,
