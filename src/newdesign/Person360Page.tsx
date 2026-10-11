@@ -99,7 +99,7 @@ function Timeline({ records, gifts }: { records: P360Record[]; gifts: Gift[] }) 
 }
 
 /** Participation updates: the latest gifts as short lines, with the year's totals. For the Church Leader only. */
-function Participation({ load }: { load: { loading: boolean; failed: boolean; data?: P360Participation | null; reload: () => void } }) {
+function Participation({ load, personId, onChanged }: { personId: string; onChanged: () => void; load: { loading: boolean; failed: boolean; data?: P360Participation | null; reload: () => void } }) {
   const t = useT();
   const { locale } = useI18n();
   const [all, setAll] = useState(false);
@@ -127,6 +127,7 @@ function Participation({ load }: { load: { loading: boolean; failed: boolean; da
           </>
         )}
       </LoadState>
+      <GoodDeeds personId={personId} onChanged={onChanged} embedded />
     </section>
   );
 }
@@ -250,8 +251,7 @@ export function Person360Page() {
                 </section>
               </div>
               <aside className="p360-right">
-                {isLeader && <Participation load={part} />}
-                {isLeader && <GoodDeeds personId={personId} onChanged={part.reload} />}
+                {isLeader && <Participation load={part} personId={personId} onChanged={part.reload} />}
                 <Education v={v} personId={personId} reload={load.reload} />
               </aside>
             </div>

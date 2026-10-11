@@ -7953,3 +7953,7 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 .rk-card.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 3px 0 0 var(--accent); }
 .rk-period { display: grid; gap: var(--sp-2); }
 .rk-summary { margin: 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-2); background: var(--surface); border: 1px dashed var(--line-strong); font-size: 0.9rem; }
+
+.p360-deeds.embedded { display: grid; gap: var(--sp-3); margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
+.p360-deed-lead { margin: 0; font-size: 0.85rem; color: var(--ink-muted); }
+.p360-deed-manage summary { cursor: pointer; font-size: 0.85rem; color: var(--ink-muted); }

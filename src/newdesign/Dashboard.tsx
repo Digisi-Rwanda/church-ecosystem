@@ -183,24 +183,6 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
 
 const RANGES = [3, 6, 12] as const;
 
-/** What needs this person first: short links with a count, or a calm "all clear". */
-function Attention({ items }: { items: NonNullable<Dashboard['attention']> }) {
-  const t = useT();
-  if (items.length === 0) return <p className="dx-clear" role="status"><Icon name="check" size={16} /> {t('door.dash.att.clear')}</p>;
-  return (
-    <section className="dx-attention" aria-label={t('door.dash.att.title')}>
-      <strong>{t('door.dash.att.title')}</strong>
-      <ul>
-        {items.map((a) => (
-          <li key={a.key}>
-            <Link to={a.href}><span className="dx-count">{a.count}</span> {t(`door.dash.att.${a.key}` as 'door.dash.att.approvals', { count: String(a.count) })}</Link>
-          </li>
-        ))}
-      </ul>
-    </section>
-  );
-}
-
 /** Contributions per unit, split by church-wide type and the unit's own, with donations beside them. Offerings are never mixed in. */
 function ByUnit({ data }: { data: NonNullable<Dashboard['byUnit']> }) {
   const t = useT();
@@ -280,7 +262,6 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
         </div>
         <Segmented label={t('door.dash.range')} value={String(range) as '3' | '6' | '12'} onChange={(k) => setRange(Number(k) as (typeof RANGES)[number])} items={RANGES.map((n) => ({ key: String(n) as '3' | '6' | '12', label: t('door.dash.months', { n: String(n) }) }))} />
       </div>
-      <Attention items={data.attention ?? []} />
       <ul className="dash-kpis">
         {data.kpis.map((k) => (
           <li key={k.key}>

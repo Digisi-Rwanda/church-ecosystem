@@ -7,7 +7,7 @@ import { p360ErrorKey } from './person360';
 import { useLoad } from './useLoad';
 
 /** Good deeds of a member, recorded by a secretary. Shows only to those who may record or read them. */
-export function GoodDeeds({ personId, onChanged }: { personId: string; onChanged?: () => void }) {
+export function GoodDeeds({ personId, onChanged, embedded = false }: { personId: string; onChanged?: () => void; embedded?: boolean }) {
   const t = useT();
   const { locale } = useI18n();
   const load = useLoad(() => fetchP360Deeds(personId), `p360-deeds|${personId}`);
@@ -48,11 +48,13 @@ export function GoodDeeds({ personId, onChanged }: { personId: string; onChanged
       setError(t('door.people.actionFailed'));
     }
   };
+  const Wrap = embedded ? 'div' : 'section';
+  const removable = d ? d.items.filter((i) => i.mine) : [];
   return (
-    <section className="panel p360-deeds" aria-labelledby="p360-deeds-h">
-      <h3 id="p360-deeds-h">{t('door.p360.deed.title')}</h3>
-      {d && d.items.length === 0 && <p className="muted">{t('door.p360.deed.none')}</p>}
-      {d && d.items.length > 0 && (
+    <Wrap className={embedded ? 'p360-deeds embedded' : 'panel p360-deeds'}>
+      {!embedded && <h3 id="p360-deeds-h">{t('door.p360.deed.title')}</h3>}
+      {!embedded && d && d.items.length === 0 && <p className="muted">{t('door.p360.deed.none')}</p>}
+      {!embedded && d && d.items.length > 0 && (
         <ul className="p360-deed-list">
           {d.items.map((i) => (
             <li key={i.id}>
@@ -69,14 +71,35 @@ export function GoodDeeds({ personId, onChanged }: { personId: string; onChanged
           ))}
         </ul>
       )}
+      {embedded && removable.length > 0 && (
+        <details className="p360-deed-manage">
+          <summary>{t('door.p360.deed.manage', { count: String(removable.length) })}</summary>
+          <ul className="p360-deed-list">
+            {removable.map((i) => (
+              <li key={i.id}>
+                <span className="p360-deed-text"><strong>{i.note}</strong><small>{when(i.day)}</small></span>
+                {confirm === i.id ? (
+                  <>
+                    <button type="button" className="btn sm danger" onClick={() => void remove(i.id)}>{t('door.p360.docs.confirm')}</button>
+                    <button type="button" className="btn ghost sm" onClick={() => setConfirm(null)}>{t('door.settings.cancel')}</button>
+                  </>
+                ) : (
+                  <button type="button" className="btn ghost sm" onClick={() => setConfirm(i.id)}>{t('door.p360.docs.remove')}</button>
+                )}
+              </li>
+            ))}
+          </ul>
+        </details>
+      )}
       {d?.canRecord && (
         <form className="door-form" onSubmit={submit} noValidate>
-          <TextField label={t('door.p360.deed.note')} name="deed-note" value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />
+          {embedded && <p className="p360-deed-lead">{t('door.p360.deed.lead')}</p>}
+          <TextField label={t('door.p360.deed.note')} name="deed-note" placeholder={t('door.p360.deed.example')} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />
           <TextField label={t('door.p360.deed.day')} name="deed-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
           {error && <p className="door-error" role="alert">{error}</p>}
           <div className="door-row"><button type="submit" className="btn" disabled={busy}>{t('door.p360.deed.add')}</button></div>
         </form>
       )}
-    </section>
+    </Wrap>
   );
 }
