@@ -90,6 +90,11 @@ const ERROR_KEYS: Record<string, string> = {
   LINES_NOT_VERIFIED: 'door.plan.err.notChecked',
   NOTE_REQUIRED: 'door.plan.err.noteNeeded',
   USE_ITS_OWN_RECORD: 'door.funds.err.useOwn',
+  CYCLE_REQUIRED: 'door.pm.err.cycle',
+  ONGOING_NEEDS_PROGRAM: 'door.pm.err.ongoing',
+  AMENDMENT_OPEN: 'door.pm.err.amendOpen',
+  NO_CHANGE: 'door.pm.err.noChange',
+  ALREADY_RENEWED: 'door.pm.err.renewed',
   FORBIDDEN: 'door.gov.err.notAllowed',
   NOT_FOUND: 'door.work.err.gone',
 };

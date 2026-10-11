@@ -55,6 +55,11 @@ export async function potsOf(systemId: string, exceptPlanId?: string): Promise<P
   const earmarks: EarmarkLike[] = ((await prisma.planSource.findMany({ where: { systemId } })) as SourceRow[])
     .filter((s) => s.systemId === systemId && s.planId !== exceptPlanId && plans.has(s.planId) && HOLDING(plans.get(s.planId)!))
     .map((s) => ({ kind: s.kind, code: s.code, amount: s.amount }));
+  // An open budget amendment holds its extra amount back from the sources until it is decided.
+  const reserved: EarmarkLike[] = ((await prisma.budgetAmendment.findMany({ where: { systemId } })) as Array<{ planId: string; systemId: string; status: string; reserveJson: string }>)
+    .filter((a) => a.systemId === systemId && a.status === 'PENDING' && a.planId !== exceptPlanId && plans.has(a.planId) && HOLDING(plans.get(a.planId)!))
+    .flatMap((a) => { try { return JSON.parse(a.reserveJson) as EarmarkLike[]; } catch { return []; } });
+  earmarks.push(...reserved);
   return computePots({
     own: own.map((t) => ({ ...t, secured: securedByCode.get(t.code) ?? 0 })),
     donationsSecured: donations.reduce((n, d) => n + d.amount, 0),

@@ -18,6 +18,9 @@ import { canReadReports } from '../reports/access.js';
 import { collectionRights } from './collections.js';
 import { lastMonths, monthOf, percentChange, sumByMonth } from '../glance/rules.js';
 import { counts as listCounts } from '../money/block.js';
+import { canApprove as canApprovePlan, canDecideForChurch, currentLevel } from '../work/plan.js';
+import { churchDay } from '../work/timing.js';
+import { isOngoing } from '../money/cycles.js';
 
 export const dashboardRouter = Router();
 
@@ -28,7 +31,7 @@ interface GroupRow { id: string; systemId: string; status: string }
 interface SessionRow { groupId: string; heldOn: Date | string; presentJson: string }
 interface UnitRow { id: string; systemId?: string | null; kind?: string | null; status?: string | null }
 interface TaskRow extends WorkRow { id: string; title: string; status: string; dueDate?: Date | string | null; updatedAt?: Date | string | null; createdAt?: Date | string | null }
-type PlanFull = PlanRow & { id: string; title: string; planType?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null; status: string };
+type PlanFull = PlanRow & { id: string; title: string; planType?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null; status: string; budgetCycle?: string | null; budgetCycles?: number | null };
 
 const present = (json: string): number => {
   try {
@@ -189,6 +192,18 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     plansDraft: visiblePlans.filter((p) => p.status === 'DRAFT').length,
   };
   if (visiblePlans.some((p) => p.status === 'PENDING_APPROVAL')) attention.push({ key: 'plans', count: visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').length, href: `/s/${systemId}/work/plans` });
+
+  // Money on activities: figures waiting for the Treasurer, months waiting for the Church Leader's release, and transfers waiting for review.
+  const toCheck = visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL' && currentLevel(p as never)?.levelKey === 'TREASURER' && canApprovePlan(p as never, me, data));
+  if (toCheck.length > 0) attention.push({ key: 'moneyCheck', count: toCheck.length, href: `/s/${systemId}/money/funds` });
+  if (canDecideForChurch(me, data)) {
+    const thisM = churchDay(new Date()).slice(0, 7);
+    const renewed = new Set(((await prisma.planRenewal.findMany()) as Array<{ planId: string; month: string }>).filter((r) => r.month === thisM).map((r) => r.planId));
+    const open = visiblePlans.filter((p) => ['SETUP', 'RUNNING', 'PAUSED'].includes(p.status) && isOngoing(p as never) && !renewed.has(p.id));
+    if (open.length > 0) attention.push({ key: 'renewals', count: open.length, href: `/s/${systemId}/work/plans` });
+    const transfers = ((await prisma.budgetAmendment.findMany()) as Array<{ kind: string; status: string; reviewedAt: Date | string | null }>).filter((a) => a.kind === 'TRANSFER' && a.status === 'APPROVED' && !a.reviewedAt).length;
+    if (transfers > 0) attention.push({ key: 'transfers', count: transfers, href: `/s/${systemId}/money/funds` });
+  }
 
   // Schedule: what is coming up in this system.
   if (!central && has('SCHEDULING')) {

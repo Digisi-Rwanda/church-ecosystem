@@ -809,6 +809,9 @@ model WorkPlan {
   reviewDue            Boolean   @default(false)
   /// The Treasurer's check of the spending lines: JSON { result: CHECKED | FLAGGED, note, byId, at }. Empty when there is no spending.
   moneyCheckJson       String?
+  /// How a repeat's allowance is counted: PER_OCCURRENCE | MONTHLY | QUARTERLY, and for how many cycles (empty for an ongoing program)
+  budgetCycle          String?
+  budgetCycles         Int?
   createdById          String
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
@@ -1780,4 +1783,48 @@ model PlanSource {
   @@unique([planId, kind, code])
   @@index([planId])
   @@index([systemId])
+}
+
+/// A request to change an approved activity's money. TRANSFER keeps or lowers the total (the President decides; the Church Leader reviews it monthly);
+/// INCREASE raises it (the Church Leader decides). While PENDING, an increase reserves its extra amount against the sources.
+model BudgetAmendment {
+  id            String    @id @default(cuid())
+  planId        String
+  systemId      String
+  /// TRANSFER | INCREASE
+  kind          String
+  /// PENDING | APPROVED | REJECTED | WITHDRAWN
+  status        String    @default("PENDING")
+  oldTotal      Int
+  newTotal      Int
+  justification String
+  /// The proposed full list of spending lines: [{id?, title, amount}]
+  linesJson     String
+  /// The proposed full list of sources: [{kind, code, amount}]
+  sourcesJson   String
+  /// What the amendment holds back while open: [{kind, code, amount}]
+  reserveJson   String    @default("[]")
+  requestedById String
+  requestedAt   DateTime  @default(now())
+  decidedById   String?
+  decidedAt     DateTime?
+  decisionNote  String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+
+  @@index([planId])
+  @@index([systemId, status])
+}
+
+/// The Church Leader's monthly release of an ongoing program's money. A month with no row here is "Not released".
+model PlanRenewal {
+  id          String   @id @default(cuid())
+  planId      String
+  /// YYYY-MM
+  month       String
+  renewedById String
+  renewedAt   DateTime @default(now())
+
+  @@unique([planId, month])
+  @@index([planId])
 }

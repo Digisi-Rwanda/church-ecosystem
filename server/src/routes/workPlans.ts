@@ -17,6 +17,7 @@ import {
   canWritePlan, canDecideForChurch, currentLevel, treasurerExists, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, parseJson, publishProblem, skipUnitLevel, stateOf, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
 } from '../work/plan.js';
 import { figures, submitProblem } from '../money/planMoney.js';
+import { cycleProblem, multiplierOf } from '../money/cycles.js';
 import { potsOf } from './incomeFunds.js';
 import { earmarkProblem } from '../money/funds.js';
 import { TIMING_KINDS, churchDay, normalizeTiming, postponedOverSixMonths, repeatOf, repeatSchema, timingProblem, timingText, type Timing } from '../work/timing.js';
@@ -481,7 +482,10 @@ workPlansRouter.post('/:id/submit', requireAuth, (req: AuthedRequest, res) =>
     // The Church Leader approves every activity. The President goes first, unless the President wrote it or nobody holds that office.
     const lines = (await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as Array<{ planId: string | null; amount: number; status: string }>;
     const sources = (await prisma.planSource.findMany({ where: { planId: p.id } })) as Array<{ planId: string; kind: string; code: string; amount: number }>;
-    const f = figures(lines.filter((l) => l.planId === p.id) as never, sources.filter((s) => s.planId === p.id));
+    const f = figures(lines.filter((l) => l.planId === p.id) as never, sources.filter((s) => s.planId === p.id), multiplierOf(p as never));
+    // A repeat with spending says how its allowance is counted and for how long.
+    const cp = f.planned > 0 ? cycleProblem(p as never) : null;
+    if (cp) throw new SubmitStop(409, cp, 'Say how the allowance is counted and for how long');
     // Spending needs money set aside to the franc, and the pots must still hold it. No spending, no money step.
     if (submitProblem(f.planned, f.earmarked)) throw new SubmitStop(409, 'FUNDING_GAP', 'The money set aside must match the planned spending');
     const held = earmarkProblem(await potsOf(p.systemId, p.id), sources.filter((s) => s.planId === p.id));
@@ -516,7 +520,7 @@ workPlansRouter.post('/:id/approve', requireAuth, async (req: AuthedRequest, res
   if (levels[idx].levelKey === 'TREASURER') return fail(res, 409, 'USE_MONEY_CHECK', 'The Treasurer answers with the figures check');
   let typed = (note.success && note.data.note) || null;
   // Money must still add up, and an approver who goes over the Treasurer's flag says why in the history.
-  const mf = figures((await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as never, (await prisma.planSource.findMany({ where: { planId: p.id } })) as never);
+  const mf = figures((await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as never, (await prisma.planSource.findMany({ where: { planId: p.id } })) as never, multiplierOf(p as never));
   if (submitProblem(mf.planned, mf.earmarked)) return fail(res, 409, 'FUNDING_GAP', 'The money set aside must match the planned spending');
   try {
     const flagged = (JSON.parse((p as { moneyCheckJson?: string | null }).moneyCheckJson ?? 'null') as { result?: string } | null)?.result === 'FLAGGED';

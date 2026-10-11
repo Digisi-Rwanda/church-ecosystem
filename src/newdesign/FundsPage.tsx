@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { fetchFunds, fetchMoneyQueue, incomeCancel, incomeReceived, recordIncome, type FundsView } from '../api/frontDoorApi';
+import { fetchFunds, fetchMoneyQueue, fetchTransfersReview, markTransferReviewed, incomeCancel, incomeReceived, recordIncome, type FundsView } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
@@ -23,6 +23,7 @@ export function FundsPage() {
   const allowed = lettersFor(capabilities, systemId, 'money').length > 0;
   const funds = useLoad(() => (allowed ? fetchFunds(systemId) : Promise.reject(new Error('no'))), `funds|${systemId}|${allowed}`);
   const queue = useLoad(fetchMoneyQueue, 'money-queue');
+  const review = useLoad(fetchTransfersReview, 'transfers-review');
   const [kind, setKind] = useState<Kind>('OTHER');
   const [code, setCode] = useState('');
   const [label, setLabel] = useState('');
@@ -130,6 +131,20 @@ export function FundsPage() {
             {mineChecks.map((x) => (
               <li key={x.id}>
                 <strong>{x.title}</strong> · {formatRwf(x.planned)} <Link className="btn ghost sm" to={`/s/${x.systemId}/work/plans/${x.id}`}>{t('door.money.queue.open')}</Link>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
+      {(review.data?.items ?? []).length > 0 && (
+        <div className="panel">
+          <h3>{t('door.pm.review.title')}</h3>
+          <ul className="door-list">
+            {(review.data?.items ?? []).map((x) => (
+              <li key={x.id}>
+                <strong>{x.title}</strong> · {formatRwf(x.oldTotal)} → {formatRwf(x.newTotal)} · {x.decidedByName} — {x.justification}{' '}
+                <Link className="btn ghost sm" to={`/s/${x.systemId}/work/plans/${x.planId}`}>{t('door.money.queue.open')}</Link>{' '}
+                <button type="button" className="btn secondary sm" onClick={() => void markTransferReviewed(x.id).then(() => review.reload())}>{t('door.pm.review.done')}</button>
               </li>
             ))}
           </ul>

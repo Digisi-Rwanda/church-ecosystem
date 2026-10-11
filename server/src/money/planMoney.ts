@@ -14,8 +14,8 @@ export interface SourceLike { amount: number }
 /** Lines that count: a dropped one is out. */
 export const liveLines = <T extends { status: string }>(lines: T[]): T[] => lines.filter((l) => l.status !== 'DROPPED');
 
-export function figures(lines: LineLike[], sources: SourceLike[]) {
-  const planned = liveLines(lines).reduce((n, l) => n + l.amount, 0);
+export function figures(lines: LineLike[], sources: SourceLike[], multiplier = 1) {
+  const planned = liveLines(lines).reduce((n, l) => n + l.amount, 0) * multiplier;
   const earmarked = sources.reduce((n, s) => n + s.amount, 0);
   return { planned, earmarked, gap: planned - earmarked };
 }

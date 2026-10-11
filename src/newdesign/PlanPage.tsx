@@ -75,6 +75,7 @@ export function PlanPage() {
               <>
                 <StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${p.waitingLevel === 'Church Leader' ? 'CHURCH' : p.waitingLevel === 'Treasurer' ? 'TREASURER' : 'UNIT'}` as 'door.level.UNIT') }) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>
                 {p.state === 'APPROVED' && <StatusChip>{t(planStatusKey(p.status, p.planType))}</StatusChip>}
+                {m?.pendingAmendment && <StatusChip tone="warn">{t('door.pm.amend.pending')}</StatusChip>}
                 <StatusChip>{t(`door.work.visibility.${p.visibility}` as const)}</StatusChip>
               </>
             }

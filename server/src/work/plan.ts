@@ -122,6 +122,12 @@ export function canApprove(p: PlanRow, me: string, data: AccessData, now = new D
   return p.createdById !== me && has(me, level.systemId, 'MISSION', 'A', data, now);
 }
 
+/** Everyone who holds a letter in a system right now, for telling the right people. */
+export function holdersWith(systemId: string, module: 'MISSION' | 'MONEY', letter: string, data: AccessData, now = new Date()): string[] {
+  const ids = [...new Set((data.positions as Array<{ personId: string }>).map((x) => x.personId))];
+  return ids.filter((id) => has(id, systemId, module, letter, data, now));
+}
+
 /** Whether somebody other than the author holds the Treasurer's office here, so the check can be answered at all. */
 export function treasurerExists(creatorId: string, systemId: string, data: AccessData, now = new Date()): boolean {
   const ids = [...new Set((data.positions as Array<{ personId: string }>).map((x) => x.personId))];

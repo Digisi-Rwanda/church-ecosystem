@@ -2,6 +2,7 @@
  * Money (slice 3.4): accounts per unit, income recorded by the treasurer, spending that waits for
  * the president's approval, and a read-only oversight view. Nothing is ever deleted; no limits.
  */
+import { flagOverspend } from './planMoney.js';
 import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
@@ -179,6 +180,7 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
       });
     }
   }
+  if (spending && b.planId) await flagOverspend(b.planId, me);
   await audit(me, acc.systemId, spending ? 'MONEY_SPENDING_REQUESTED' : 'MONEY_INCOME_RECORDED', `${b.kind} ${b.amount} RWF`, { entryId: row.id, accountId: acc.id });
   res.status(201).json({ id: row.id, status: row.status });
 });

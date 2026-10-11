@@ -8,6 +8,7 @@ import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { formatRwf } from './money';
 import { planErrorKey } from './plans';
+import { AmendForm, CyclePanel, OngoingMonth, PendingAmendment, SpendingVsPlan } from './PlanAmend';
 import { StatusChip } from './kit';
 
 /** "Planned spending X · Money set aside Y · Gap Z": the live line that decides whether Submit is on. */
@@ -34,6 +35,7 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
   const [aside, setAside] = useState<Record<string, string>>({});
   const [flagging, setFlagging] = useState(false);
   const [note, setNote] = useState('');
+  const [amending, setAmending] = useState(false);
 
   const go = async (job: () => Promise<ActivityMoney>, after?: () => void) => {
     setError('');
@@ -54,6 +56,14 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
       {m.gap > 0 && m.canEdit && <p className="muted">{t('door.pm.gapNote')}</p>}
       {m.gap < 0 && m.canEdit && <p className="muted">{t('door.pm.over')}</p>}
       {!m.open && <p className="muted">{t('door.pm.locked')}</p>}
+      <OngoingMonth p={p} m={m} onChange={onChange} />
+      {m.pendingAmendment && <PendingAmendment p={p} a={m.pendingAmendment} m={m} go={go} />}
+      {m.canRequestAmendment && !amending && (
+        <button type="button" className="btn" onClick={() => setAmending(true)}>{t('door.pm.amend.request')}</button>
+      )}
+      {amending && <AmendForm p={p} m={m} go={go} onCancel={() => setAmending(false)} />}
+      <SpendingVsPlan m={m} />
+      <CyclePanel key={`${m.cycle.kind}|${m.cycle.explicit}|${m.status}`} p={p} m={m} onChange={onChange} />
       {!m.canEdit && m.open && <p className="muted">{t('door.pm.readOnly')}</p>}
       {m.check?.result === 'FLAGGED' && <p className="door-error">{t('door.pm.result.FLAGGED', { note: m.check.note ?? '' })}</p>}
       {m.check?.result === 'CHECKED' && <p className="muted">{t('door.pm.result.CHECKED')}</p>}
@@ -65,7 +75,7 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
       ) : (
         <ul className="door-list">
           {m.lines.map((l) => (
-            <li key={l.id}>
+            <li key={l.id} className={m.locked ? 'muted' : undefined}>
               {editing === l.id ? (
                 <div className="door-form">
                   <TextField label={t('door.pm.for')} name={`pm-t-${l.id}`} value={eTitle} onChange={(e) => setETitle(e.target.value)} />

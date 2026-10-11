@@ -1812,6 +1812,17 @@ export type ActivityMoney = {
   canEdit: boolean; canVerify: boolean; canCheck: boolean; allVerified: boolean;
   lines: MoneyLineView[]; sources: Array<{ kind: string; code: string; amount: number; potId: string }>; pots: FundPot[];
   check: { result: 'CHECKED' | 'FLAGGED'; note: string | null; at: string; byName: string } | null;
+  locked: boolean;
+  cycle: { kind: BudgetCycle | null; cycles: number | null; explicit: number | null; allowance: number; multiplier: number; ongoing: boolean; repeat: boolean; problem: string | null };
+  canSetCycle: boolean; actual: number; over: number; perCycle: Array<{ key: string; spent: number; allowance: number; over: number }>;
+  ongoingMonth: { month: string; released: boolean; renewed: string[] } | null; canRenew: boolean;
+  canRequestAmendment: boolean; canWithdrawAmendment: boolean; pendingAmendment: AmendmentView | null; amendments: AmendmentView[];
+};
+export type BudgetCycle = 'PER_OCCURRENCE' | 'MONTHLY' | 'QUARTERLY';
+export type AmendmentView = {
+  id: string; kind: 'TRANSFER' | 'INCREASE'; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'; oldTotal: number; newTotal: number; justification: string;
+  requestedByName: string; requestedAt: string; decidedByName: string | null; decisionNote: string | null; reviewed: boolean;
+  lines: Array<{ id?: string | null; title: string; amount: number }>; sources: Array<{ kind: string; code: string; amount: number }>; canDecide: boolean;
 };
 const PM = (id: string) => `/api/work-plans/${encodeURIComponent(id)}`;
 export const fetchActivityMoney = (id: string) => apiFetch<ActivityMoney>(`${PM(id)}/money`);
@@ -1822,3 +1833,13 @@ export const setMoneySources = (id: string, sources: Array<{ kind: string; code:
 export const verifyMoneyLine = (id: string, lineId: string, verified: boolean) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}/verify`, { method: 'POST', body: { verified } });
 export const answerMoneyCheck = (id: string, result: 'CHECKED' | 'FLAGGED', note?: string) => apiFetch<ActivityMoney>(`${PM(id)}/money-check`, { method: 'POST', body: { result, note } });
 export const fetchMoneyQueue = () => apiFetch<{ items: Array<{ id: string; systemId: string; title: string; planned: number }> }>('/api/work-plans/money-queue');
+
+export const requestAmendment = (id: string, input: { justification: string; lines: Array<{ id?: string | null; title: string; amount: number }>; sources: Array<{ kind: string; code: string; amount: number }> }) =>
+  apiFetch<ActivityMoney>(`${PM(id)}/amendments`, { method: 'POST', body: input });
+export const decideAmendment = (id: string, aid: string, what: 'approve' | 'reject' | 'withdraw', body: object = {}) =>
+  apiFetch<ActivityMoney>(`${PM(id)}/amendments/${encodeURIComponent(aid)}/${what}`, { method: 'POST', body });
+export const setBudgetCycle = (id: string, input: { cycle: BudgetCycle; cycles?: number | null; confirm?: boolean }) => apiFetch<ActivityMoney>(`${PM(id)}/cycle`, { method: 'PUT', body: input });
+export const renewMonth = (id: string, month?: string) => apiFetch<ActivityMoney>(`${PM(id)}/renew-month`, { method: 'POST', body: month ? { month } : {} });
+export type TransferToReview = { id: string; planId: string; systemId: string; title: string; justification: string; oldTotal: number; newTotal: number; decidedByName: string; decidedAt: string | null };
+export const fetchTransfersReview = () => apiFetch<{ items: TransferToReview[] }>('/api/work-plans/transfers-review');
+export const markTransferReviewed = (aid: string) => apiFetch(`/api/work-plans/amendments/${encodeURIComponent(aid)}/reviewed`, { method: 'POST', body: {} });
