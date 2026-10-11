@@ -2,18 +2,17 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
-import { descendantsOf, indicatorPercent, parentProblem, buildLevels, publishProblem, stateProblem, typeProblem } from '../src/work/plan';
+import { descendantsOf, indicatorPercent, parentProblem, buildLevels, publishProblem, stateOf, stateProblem, typeProblem } from '../src/work/plan';
 
 describe('plan rules', () => {
-  it('levels: the unit, plus the church when the work reaches beyond the unit; central work needs only the church', () => {
-    expect(buildLevels('sys-choir', false, 'Choir').map((l) => l.levelKey)).toEqual(['UNIT']);
-    expect(buildLevels('sys-choir', true, 'Choir').map((l) => l.levelKey)).toEqual(['UNIT', 'CHURCH']);
-    expect(buildLevels('sys-main', false, 'Central').map((l) => l.levelKey)).toEqual(['CHURCH']);
+  it('levels: the President, then always the Church Leader; the President is skipped when they wrote it; central work needs only the church', () => {
+    expect(buildLevels('sys-choir').map((l) => l.levelKey)).toEqual(['UNIT', 'CHURCH']);
+    expect(buildLevels('sys-choir', true).map((l) => l.levelKey)).toEqual(['CHURCH']);
+    expect(buildLevels('sys-main').map((l) => l.levelKey)).toEqual(['CHURCH']);
+    expect(buildLevels('sys-choir').map((l) => l.label)).toEqual(['President', 'Church Leader']);
   });
-  it('an event within its unit needs no approval; pause, resume and renew belong to certain types', () => {
-    expect(buildLevels('sys-choir', false, 'Choir', 'EVENT')).toEqual([]);
-    expect(buildLevels('sys-choir', true, 'Choir', 'EVENT').map((l) => l.levelKey)).toEqual(['UNIT', 'CHURCH']);
-    expect(buildLevels('sys-choir', false, 'Choir', 'PROGRAM').map((l) => l.levelKey)).toEqual(['UNIT']);
+  it('the five states people see; pause, resume and renew belong to certain types', () => {
+    expect(['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'PAUSED', 'CLOSING', 'ENDED', 'CANCELLED'].map(stateOf)).toEqual(['DRAFT', 'WAITING', 'APPROVED', 'APPROVED', 'APPROVED', 'DONE', 'DONE', 'CANCELLED']);
     expect(typeProblem('pause', 'EVENT')).toBe('WRONG_STATE');
     expect(typeProblem('pause', 'PROJECT')).toBeNull();
     expect(typeProblem('renew', 'PROJECT')).toBe('WRONG_STATE');
@@ -97,14 +96,11 @@ const approved = async (o: object = {}) => {
   const id = await draft(o);
   await post('p-vp', `${B}/${id}/submit`);
   await post('p-choir-leader', `${B}/${id}/approve`);
-  if ((o as { beyondUnit?: boolean }).beyondUnit) await post('p-pastor', `${B}/${id}/approve`);
+  await post('p-pastor', `${B}/${id}/approve`);
   return id;
 };
-const running = async (o: object = {}) => {
-  const id = await approved(o);
-  await post('p-vp', `${B}/${id}/start`);
-  return id;
-};
+/** Approval leads straight to running now; this is the same plan under its older name. */
+const running = approved;
 const closing = async () => {
   const id = await running();
   await post('p-vp', `${B}/${id}/close`);
@@ -152,31 +148,60 @@ describe('drafting', () => {
 });
 
 describe('approval', () => {
-  it('submitting asks the approvers; nobody approves their own plan; those without A cannot', async () => {
+  it('submitting asks the President; nobody approves their own plan; those without A cannot', async () => {
     const id = await draft();
-    expect((await post('p-vp', `${B}/${id}/submit`)).body.plan).toMatchObject({ status: 'PENDING_APPROVAL', waitingLevel: 'choir' });
+    expect((await post('p-vp', `${B}/${id}/submit`)).body.plan).toMatchObject({ status: 'PENDING_APPROVAL', state: 'WAITING', waitingLevel: 'President' });
     expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-choir-leader' && n.kind === 'WAITING_FOR_ME')).toBe(true);
     expect((await post('p-vp', `${B}/${id}/approve`)).body.code).toBe('OWN_ENTRY');
     expect((await post('p-choir-member', `${B}/${id}/approve`)).status).toBe(403);
     expect((await patch('p-vp', `${B}/${id}`, body())).body.code).toBe('PLAN_LOCKED');
-    expect((await post('p-choir-leader', `${B}/${id}/approve`)).body.plan.status).toBe('SETUP');
+    expect((await post('p-choir-leader', `${B}/${id}/approve`)).body.plan).toMatchObject({ status: 'PENDING_APPROVAL', waitingLevel: 'Church Leader' });
+    expect((await post('p-pastor', `${B}/${id}/approve`)).body.plan).toMatchObject({ status: 'RUNNING', state: 'APPROVED' });
     expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-choir-member' && n.title.startsWith('Approved'))).toBe(true);
   });
-  it('work beyond the unit needs the church too, in order', async () => {
-    const id = await draft({ beyondUnit: true });
-    await post('p-vp', `${B}/${id}/submit`);
-    expect((await post('p-pastor', `${B}/${id}/approve`)).status).toBe(200); // the church leader covers every unit, so he may decide the first level
-    const mid = (await get('p-vp', `${B}/${id}`)).body.plan;
-    expect(mid.status).toBe('PENDING_APPROVAL');
-    expect(mid.levels.map((l: any) => l.status)).toEqual(['APPROVED', 'PENDING']);
-    expect((await post('p-choir-leader', `${B}/${id}/approve`)).status).toBe(403); // a president cannot decide the church level
-    expect((await post('p-pastor', `${B}/${id}/approve`, { note: 'Go ahead' })).body.plan.status).toBe('SETUP');
+  it('the Church Leader approves every kind of work, last: an event within its unit too', async () => {
+    for (const planType of ['EVENT', 'PROJECT', 'PROGRAM']) {
+      const id = await draft({ planType });
+      expect((await post('p-vp', `${B}/${id}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
+      expect((await post('p-pastor', `${B}/${id}/approve`)).status).toBe(200); // he covers every unit, so he may decide the first level
+      const mid = (await get('p-vp', `${B}/${id}`)).body.plan;
+      expect(mid.status).toBe('PENDING_APPROVAL');
+      expect(mid.levels.map((l: any) => l.status)).toEqual(['APPROVED', 'PENDING']);
+      expect((await post('p-choir-leader', `${B}/${id}/approve`)).status).toBe(403); // a president cannot decide the church level
+      expect((await post('p-pastor', `${B}/${id}/approve`, { note: 'Go ahead' })).body.plan.status).toBe('RUNNING');
+    }
   });
-  it('a president who wrote the plan cannot approve it, but the church leader can', async () => {
+  it('a president who wrote the plan skips their own step, goes straight to the Church Leader and cannot approve it', async () => {
+    const id = await draft({}, 'p-choir-leader');
+    const sent = (await post('p-choir-leader', `${B}/${id}/submit`)).body.plan;
+    expect(sent.levels.map((l: any) => l.levelKey)).toEqual(['CHURCH']);
+    expect(sent.waitingLevel).toBe('Church Leader');
+    expect((await post('p-choir-leader', `${B}/${id}/approve`)).body.code).toBe('OWN_ENTRY');
+    expect((await post('p-pastor', `${B}/${id}/approve`)).body.plan.status).toBe('RUNNING');
+  });
+  it('the Church Leader approves their own activity, and the history says so', async () => {
+    const id = await draft({}, 'p-pastor');
+    const sent = (await post('p-pastor', `${B}/${id}/submit`)).body.plan;
+    expect(sent.levels.map((l: any) => l.levelKey)).toEqual(['CHURCH']);
+    const done = (await post('p-pastor', `${B}/${id}/approve`)).body.plan;
+    expect(done.status).toBe('RUNNING');
+    expect(done.levels[0].note).toContain('own activity');
+  });
+  it('with no President in the unit the step is skipped', async () => {
+    fake.__db.position.find((x: any) => x.id === 'pos-choir').status = 'ENDED';
+    const id = await draft();
+    expect((await post('p-vp', `${B}/${id}/submit`)).body.plan.levels.map((l: any) => l.levelKey)).toEqual(['CHURCH']);
+  });
+  it('the Catechist decides for the Church Leader only while the Church Leader has lent the approving letter', async () => {
+    fake.__db.person.push({ id: 'p-cat', fullName: 'The Catechist', status: 'ACTIVE' });
+    fake.__db.position.push({ id: 'pos-cat', personId: 'p-cat', systemId: 'sys-main', title: 'Catechist', office: 'CATECHIST', status: 'ACTIVE', startDate: new Date('2022-01-01') });
     const id = await draft({}, 'p-choir-leader');
     await post('p-choir-leader', `${B}/${id}/submit`);
-    expect((await post('p-choir-leader', `${B}/${id}/approve`)).body.code).toBe('OWN_ENTRY');
-    expect((await post('p-pastor', `${B}/${id}/approve`)).body.plan.status).toBe('SETUP');
+    expect([403, 404]).toContain((await post('p-cat', `${B}/${id}/approve`)).status); // the Catechist cannot even see a unit's plan, let alone decide it
+    fake.__db.delegation.push({ id: 'del-cat', positionId: 'pos-pastor', fromPersonId: 'p-pastor', toPersonId: 'p-cat', lettersJson: JSON.stringify({ MISSION: ['A'] }), status: 'ACTIVE', startDate: new Date('2022-01-01'), endDate: new Date('2099-01-01') });
+    const r = await post('p-cat', `${B}/${id}/approve`);
+    expect(r.body.plan.status).toBe('RUNNING');
+    expect(r.body.plan.levels[0].note).toContain('for the Church Leader');
   });
   it('sending back needs a reason, tells the author and returns it to a draft that can be changed', async () => {
     const id = await draft();
@@ -187,20 +212,24 @@ describe('approval', () => {
     expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-vp' && n.title.startsWith('Sent back'))).toBe(true);
     expect((await patch('p-vp', `${B}/${id}`, body())).status).toBe(200);
   });
-  it('the author may withdraw a submission, and reopen an approved plan for changes', async () => {
+  it('the author may withdraw a submission, and reopen an older approved plan (set up) for changes', async () => {
     const id = await draft();
     await post('p-vp', `${B}/${id}/submit`);
     expect((await post('p-vp', `${B}/${id}/withdraw`)).body.plan.status).toBe('DRAFT');
     await post('p-vp', `${B}/${id}/submit`);
     await post('p-choir-leader', `${B}/${id}/approve`);
+    await post('p-pastor', `${B}/${id}/approve`);
+    expect((await post('p-vp', `${B}/${id}/reopen`)).status).toBe(409); // approved plans now run at once; only an older plan sits in set-up
+    fake.__db.workPlan.find((x: any) => x.id === id).status = 'SETUP';
     const r = await post('p-vp', `${B}/${id}/reopen`);
     expect(r.body.plan).toMatchObject({ status: 'DRAFT', levels: [] });
   });
 });
 
 describe('running the work', () => {
-  it('start, notes by the team, a checklist, and no changes to a plan that is not draft', async () => {
+  it('an older plan waiting in set-up starts; notes by the team, a checklist, and no changes to a plan that is not draft', async () => {
     const id = await approved();
+    fake.__db.workPlan.find((x: any) => x.id === id).status = 'SETUP';
     expect((await post('p-choir-member', `${B}/${id}/start`)).status).toBe(403);
     expect((await post('p-vp', `${B}/${id}/notes`, { text: 'too early' })).status).toBe(403);
     expect((await post('p-vp', `${B}/${id}/start`)).body.plan.status).toBe('RUNNING');
@@ -229,15 +258,11 @@ describe('running the work', () => {
 });
 
 describe('lifecycles by type', () => {
-  it('an event within its unit skips approval; beyond the unit it asks', async () => {
-    const a = await draft({ planType: 'EVENT' });
-    expect((await post('p-vp', `${B}/${a}/submit`)).body.plan.status).toBe('SETUP');
-    const b = await draft({ planType: 'EVENT', beyondUnit: true });
-    expect((await post('p-vp', `${B}/${b}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
-    const c = await draft({ planType: 'PROJECT' });
-    expect((await post('p-vp', `${B}/${c}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
-    const d = await draft({ planType: 'PROGRAM' });
-    expect((await post('p-vp', `${B}/${d}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
+  it('every kind of work, an event within its unit included, waits for approval after it is submitted', async () => {
+    for (const planType of ['EVENT', 'PROJECT', 'PROGRAM']) {
+      const id = await draft({ planType });
+      expect((await post('p-vp', `${B}/${id}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
+    }
   });
   it('projects and programs pause and resume; events cannot; a paused plan can be cancelled', async () => {
     const p = await running({ planType: 'PROJECT' });
@@ -422,5 +447,83 @@ describe('closing and the report', () => {
     const id = await closing();
     expect((await post('p-vp', `${B}/${id}/start`)).body.code).toBe('WRONG_STATE');
     expect((await del('p-vp', `${B}/${id}`)).body.code).toBe('PLAN_LOCKED');
+  });
+});
+
+describe('closing with one line of result', () => {
+  it('a running plan closes with one line and is done; without it the older report route still applies', async () => {
+    const id = await running();
+    expect((await post('p-choir-member', `${B}/${id}/close`, { outcome: 'x' })).status).toBe(403);
+    const r = await post('p-vp', `${B}/${id}/close`, { outcome: 'Two hundred came and the hall was full' });
+    expect(r.body.plan).toMatchObject({ status: 'ENDED', state: 'DONE' });
+    expect(r.body.plan.report.planningSummary).toBe('');
+    expect(fake.__db.workPlan.find((x: any) => x.id === id).outcome).toBe('Two hundred came and the hall was full');
+    const old = await running();
+    expect((await post('p-vp', `${B}/${old}/close`)).body.plan.status).toBe('CLOSING');
+  });
+});
+
+describe('when it happens', () => {
+  const repeat = { timingKind: 'REPEAT', repeat: { kind: 'WEEKLY', days: [2] }, startTime: '18:00', endTime: '19:30', startsOn: '2026-11-01T00:00:00Z', endsOn: null };
+  it('a draft saves a date, a range or a repeat with optional times, and refuses nonsense', async () => {
+    const ok = await post('p-vp', B, body(repeat));
+    expect(ok.status, JSON.stringify(ok.body)).toBe(201);
+    expect(ok.body.plan).toMatchObject({ timingKind: 'REPEAT', startTime: '18:00', endTime: '19:30', repeat: { kind: 'WEEKLY', days: [2] } });
+    expect((await post('p-vp', B, body({ ...repeat, repeat: null }))).body.code).toBe('BAD_REPEAT');
+    expect((await post('p-vp', B, body({ ...repeat, endTime: '17:00' }))).body.code).toBe('BAD_TIME');
+    expect((await post('p-vp', B, body({ timingKind: 'DATE', startsOn: '2026-11-14T00:00:00Z', endsOn: '2026-11-20T00:00:00Z' }))).body.plan).toMatchObject({ timingKind: 'DATE' });
+    const date = await draft({ timingKind: 'DATE', startsOn: '2026-11-14T00:00:00Z', endsOn: null });
+    expect((await get('p-vp', `${B}/${date}`)).body.plan.endsOn).toBe('2026-11-14T00:00:00.000Z'); // a single date has the same last day
+  });
+  it('an approved activity shows on the month view: a repeat on every Tuesday, a date on its day; drafts and waiting ones do not', async () => {
+    const weekly = await approved({ title: 'Prayer meeting', ...repeat });
+    await approved({ title: 'Youth day', timingKind: 'DATE', startsOn: '2026-11-14T00:00:00Z', endsOn: null });
+    await draft({ title: 'Only a draft', timingKind: 'DATE', startsOn: '2026-11-15T00:00:00Z', endsOn: null });
+    const waiting = await draft({ title: 'Waiting one', timingKind: 'DATE', startsOn: '2026-11-16T00:00:00Z', endsOn: null });
+    await post('p-vp', `${B}/${waiting}/submit`);
+    const month = (await get('p-vp', '/api/schedule/month?systemId=sys-choir&month=2026-11')).body.activities;
+    expect(month.filter((a: any) => a.title === 'Prayer meeting').map((a: any) => a.date)).toEqual(['2026-11-03', '2026-11-10', '2026-11-17', '2026-11-24']);
+    expect(month.find((a: any) => a.title === 'Prayer meeting')).toMatchObject({ startTime: '18:00', endTime: '19:30', planId: weekly });
+    expect(month.filter((a: any) => a.title === 'Youth day').map((a: any) => a.date)).toEqual(['2026-11-14']);
+    expect(month.map((a: any) => a.title)).not.toContain('Only a draft');
+    expect(month.map((a: any) => a.title)).not.toContain('Waiting one');
+    expect((await get('p-vp', '/api/schedule/month?systemId=sys-choir&month=2026-12')).body.activities.filter((a: any) => a.title === 'Prayer meeting')).toHaveLength(4 + 1); // Tuesdays 1, 8, 15, 22, 29
+  });
+  it('changing the date moves it on the schedule, writes the old and new date, and tells the Secretary, the Vice President and the Treasurer', async () => {
+    const db = fake.__db;
+    db.person.push({ id: 'p-sec', fullName: 'Choir Secretary', status: 'ACTIVE' }, { id: 'p-tre', fullName: 'Choir Treasurer', status: 'ACTIVE' });
+    db.position.push(
+      { id: 'pos-sec', personId: 'p-sec', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Secretary', office: 'SECRETARY', status: 'ACTIVE', startDate: new Date('2022-01-01') },
+      { id: 'pos-tre', personId: 'p-tre', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Treasurer', office: 'TREASURER', status: 'ACTIVE', startDate: new Date('2022-01-01') },
+    );
+    const id = await approved({ title: 'Youth day', timingKind: 'DATE', startsOn: '2026-11-14T00:00:00Z', endsOn: null });
+    const move = (as: string, b: object) => patch(as, `${B}/${id}/timing`, { timingKind: 'DATE', startsOn: '2026-11-21T00:00:00Z', ...b });
+    expect((await move('p-choir-member', {})).status).toBe(403);
+    const r = await move('p-sec', { location: 'Chapel' });
+    expect(r.status, JSON.stringify(r.body)).toBe(200);
+    expect(r.body.plan.dateChange).toMatchObject({ fromStart: '2026-11-14', toStart: '2026-11-21' });
+    expect(r.body.plan.location).toBe('Chapel');
+    const titles = (to: string) => db.notification.filter((n: any) => n.toPersonId === to && n.title.startsWith('Date changed')).length;
+    expect(titles('p-vp')).toBe(1);
+    expect(titles('p-tre')).toBe(1);
+    expect(titles('p-sec')).toBe(0); // not told of their own change
+    const month = (await get('p-vp', '/api/schedule/month?systemId=sys-choir&month=2026-11')).body.activities;
+    expect(month.filter((a: any) => a.title === 'Youth day').map((a: any) => a.date)).toEqual(['2026-11-21']);
+    expect((await move('p-sec', { startsOn: null })).body.code).toBe('DATE_REQUIRED');
+    expect(db.auditEvent.some((e: any) => e.action === 'WORKPLAN_TIMING')).toBe(true);
+  });
+  it('postponing by more than six months asks the Church Leader to confirm whether the money stays reserved', async () => {
+    const id = await approved({ title: 'Youth day', timingKind: 'DATE', startsOn: '2026-11-14T00:00:00Z', endsOn: null });
+    const near = await patch('p-vp', `${B}/${id}/timing`, { timingKind: 'DATE', startsOn: '2027-03-01T00:00:00Z' });
+    expect(near.body.plan.reviewDue).toBe(false);
+    const far = await patch('p-vp', `${B}/${id}/timing`, { timingKind: 'DATE', startsOn: '2027-10-01T00:00:00Z' });
+    expect(far.body.plan.reviewDue).toBe(true);
+    expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-pastor' && n.kind === 'WAITING_FOR_ME' && n.title.startsWith('Date changed'))).toBe(true);
+    expect((await post('p-vp', `${B}/${id}/review-seen`)).status).toBe(403);
+    const seen = await get('p-pastor', `${B}/${id}`);
+    expect(seen.body.plan.canClearReview).toBe(true);
+    expect((await get('p-choir-leader', `${B}/${id}`)).body.plan.canClearReview).toBe(false);
+    expect((await post('p-pastor', `${B}/${id}/review-seen`)).body.plan.reviewDue).toBe(false);
+    expect((await post('p-pastor', `${B}/${id}/review-seen`)).status).toBe(409);
   });
 });

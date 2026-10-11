@@ -31,7 +31,7 @@ const cases: Case[] = [
   { name: 'call a Deacon meeting', method: 'post', path: '/api/governance/meetings', body: { orgUnitId: 'ou-deacon', typeCode: 'UNIT', title: 'Secret meeting', scheduledAt: '2026-11-01T10:00:00Z' }, tables: ['meeting'] },
   { name: 'draft a letter for Deacon', method: 'post', path: '/api/letters', body: { orgUnitId: 'ou-deacon', typeCode: 'INVITATION', subject: 'Forged letter', body: 'Forged body', recipientName: 'Someone' }, tables: ['letter'] },
   { by: 'p-deacon-treas', name: 'open a Deacon money account', method: 'post', path: '/api/money/accounts', body: { unitId: 'ou-deacon', name: 'Slush fund' }, tables: ['moneyAccount'] },
-  { by: 'p-pastor', name: 'record an offering count for Central', method: 'post', path: '/api/collections', body: { unitId: 'ou-church', kind: 'OFFERING', label: 'Sunday', serviceOn: '2026-09-27', amount: 1000, counterIds: ['p-youth-member', 'p-choir-member'] }, tables: ['offeringCount'] },
+  { by: 'p-ctreas', name: 'record a collection for Central', method: 'post', path: '/api/collections', body: { kind: 'SERVICE', title: 'Sunday service', heldOn: '2026-09-27', tithe: 1000, offering: 500, other: 0 }, tables: ['serviceCollection'] },
   { name: 'create Deacon work', method: 'post', path: '/api/work', body: { unitId: 'ou-deacon', title: 'Fake task', ownerId: 'p-youth-leader', helperIds: [], visibility: 'UNIT' }, tables: ['workTask'] },
   { name: 'confirm a move out of Youth', method: 'post', path: '/api/moves/confirm', body: { personId: 'p-youth-member', fromSystemId: 'sys-youth', toSystemId: 'sys-men' }, tables: ['membership'] },
   { by: 'p-deacon-pres', name: 'change Deacon’s own settings', method: 'put', path: '/api/system-settings/sys-deacon/details', body: { displayName: 'Hacked', meetingDay: 'Never', place: 'Nowhere', contactLine: 'none' }, tables: ['systemSetting'] },
@@ -42,9 +42,9 @@ const snapshot = (tables: string[]) => JSON.stringify(tables.map((t) => fake.__d
 beforeEach(async () => {
   fake.__reset();
   seedWorld(fake.__db);
-  for (const k of ['orgUnit', 'delegation', 'setting', 'announcement', 'meeting', 'letter', 'moneyAccount', 'offeringCount', 'workTask', 'ssoHandoffToken', 'systemSetting', 'assignment', 'auditEvent', 'notification', 'notificationRead']) fake.__db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'setting', 'announcement', 'meeting', 'letter', 'moneyAccount', 'serviceCollection', 'workTask', 'ssoHandoffToken', 'systemSetting', 'assignment', 'auditEvent', 'notification', 'notificationRead']) fake.__db[k] ??= [];
   fake.__db.account ??= [];
-  for (const id of ['p-pastor', 'p-member', 'p-outsider', 'p-youth-leader', 'p-choir-leader']) fake.__db.account.push({ id: `acc-${id}`, personId: id, username: id, person: { id, fullName: id } });
+  for (const id of ['p-pastor', 'p-ctreas', 'p-member', 'p-outsider', 'p-youth-leader', 'p-choir-leader']) fake.__db.account.push({ id: `acc-${id}`, personId: id, username: id, person: { id, fullName: id } });
   fake.__db.orgUnit.push(
     { id: 'ou-church', name: 'ADEPR Kacyiru', code: 'KAC', kind: 'CENTRAL', type: 'ORGANISATION', parentId: null, systemId: 'sys-main' },
     { id: 'ou-deacon', name: 'Deacon', code: 'KAC-DEA', kind: 'MINISTRY', type: 'MINISTRY', parentId: 'ou-church', systemId: 'sys-deacon' },
@@ -52,8 +52,9 @@ beforeEach(async () => {
   );
   for (const s of fake.__db.churchSystem) { s.code = s.id.replace('sys-', '').toUpperCase(); s.name = s.id; s.shortName = s.id; s.kind = s.id === 'sys-main' ? 'MAIN' : 'MINISTRY'; }
   const act = (id: string) => fake.__db.person.push({ id, fullName: id, status: 'ACTIVE' });
-  ['p-adm', 'p-deacon-pres', 'p-deacon-treas'].forEach(act);
+  ['p-adm', 'p-deacon-pres', 'p-deacon-treas', 'p-ctreas'].forEach(act);
   const pos = (id: string, personId: string, extra: object) => fake.__db.position.push({ id, personId, title: id, status: 'ACTIVE', startDate: new Date('2024-01-01'), grantsAllSystems: false, ...extra });
+  pos('pos-ctreas', 'p-ctreas', { systemId: 'sys-main', office: 'CHURCH_TREASURER' });
   pos('pos-adm', 'p-adm', { systemId: 'sys-main', systemAdmin: true });
   pos('pos-dpres', 'p-deacon-pres', { systemId: 'sys-deacon', orgUnitId: 'ou-deacon', ministryOffice: 'PRESIDENT' });
   pos('pos-dtreas', 'p-deacon-treas', { systemId: 'sys-deacon', orgUnitId: 'ou-deacon', ministryOffice: 'TREASURER' });

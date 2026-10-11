@@ -9,6 +9,9 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { notifySafely } from '../lib/notify.js';
+import { asWorkRow, type PlanRow as WorkPlanRow } from '../work/plan.js';
+import { canSee as canSeeWork, visibilityOf } from '../work/rules.js';
+import { occurrencesIn, type Timing } from '../work/timing.js';
 import {
   NOTE_MAX, ROLE_MAX, SLOT_KINDS, TITLE_MAX, canConfirm, canPublish, canRead, canSeePlan, canWrite, isMonthKey,
   isPlanner, monthOf, monthRange, moveProblem, rangeProblem,
@@ -65,6 +68,24 @@ async function shapeSlots(slots: SlotRow[], me: string) {
   }));
 }
 
+type ActivityRow = WorkPlanRow & Timing & { location?: string | null; orgUnitId: string };
+/** Approved activities show on the schedule from their own dates: a repeat is expanded for this month only, nothing is copied into slots. */
+const ON_SCHEDULE = ['SETUP', 'RUNNING', 'PAUSED', 'CLOSING', 'ENDED'];
+async function activitiesFor(month: string, me: string, data: Parameters<typeof canSeeWork>[2], units: UnitRow[], pick: (p: ActivityRow) => boolean) {
+  const rows = (await prisma.workPlan.findMany()) as ActivityRow[];
+  const out: Array<{ planId: string; title: string; planType: string; unitId: string; unitName: string; systemId: string; date: string; startTime: string | null; endTime: string | null; location: string | null; status: string }> = [];
+  for (const p of rows) {
+    if (!ON_SCHEDULE.includes(p.status) || p.deletedAt || !pick(p) || !canSeeWork(asWorkRow(p), me, data)) continue;
+    for (const o of occurrencesIn(p, month)) {
+      out.push({
+        planId: p.id, title: p.title, planType: p.planType ?? 'PROJECT', unitId: p.orgUnitId, unitName: units.find((u) => u.id === p.orgUnitId)?.name ?? '', systemId: p.systemId,
+        date: o.date, startTime: o.startTime, endTime: o.endTime, location: p.location ?? null, status: p.status,
+      });
+    }
+  }
+  return out.sort((a, b) => a.date.localeCompare(b.date) || (a.startTime ?? '').localeCompare(b.startTime ?? '') || a.title.localeCompare(b.title));
+}
+
 scheduleRouter.get('/options', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
   const { data, units } = await loadAccessData(me);
@@ -102,6 +123,7 @@ scheduleRouter.get('/month', requireAuth, async (req: AuthedRequest, res) => {
     month, systemId,
     canWrite: planner, canConfirm: canConfirm(me, systemId, data), canPublish: canPublish(me, systemId, data),
     units: out,
+    activities: await activitiesFor(month, me, data, units as UnitRow[], (p) => p.systemId === systemId),
   });
 });
 
@@ -118,6 +140,7 @@ scheduleRouter.get('/church', requireAuth, async (req: AuthedRequest, res) => {
   const slots = ((await prisma.scheduleSlot.findMany()) as SlotRow[]).filter((s) => s.churchWide && published.has(s.planId)).sort(byStart);
   res.json({
     month,
+    activities: await activitiesFor(month, me, data, units as UnitRow[], (p) => visibilityOf(p.visibility) === 'CHURCH'),
     slots: slots.map((s) => ({
       id: s.id, title: s.title, kind: s.kind, startsAt: iso(s.startsAt), endsAt: iso(s.endsAt), location: s.location ?? null,
       unitName: (units as UnitRow[]).find((u) => u.id === s.orgUnitId)?.name ?? '',

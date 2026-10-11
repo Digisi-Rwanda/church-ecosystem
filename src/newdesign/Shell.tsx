@@ -243,6 +243,26 @@ export function Shell({
             </Link>
           </div>
         </header>
+        {current && current.places.length > 1 && (
+          <nav className="door-subbar no-print" aria-label={t('door.frame.submenu', { module: t(current.labelKey as 'door.block.home') })}>
+            {current.places.map((p) =>
+              p.external ? (
+                <a key={p.key} className="door-menu-link" href={p.to} target="_blank" rel="noopener noreferrer">{p.label ?? t(p.labelKey as 'door.block.home')}</a>
+              ) : (
+                <NavLink
+                  key={p.key}
+                  to={p.to}
+                  onMouseEnter={() => warm(p.to)}
+                  onTouchStart={() => warm(p.to)}
+                  className={() => `door-menu-link${active?.place?.key === p.key ? ' active' : ''}`}
+                  aria-current={active?.place?.key === p.key ? 'page' : undefined}
+                >
+                  {p.label ?? t(p.labelKey as 'door.block.home')}
+                </NavLink>
+              ),
+            )}
+          </nav>
+        )}
         <OfflineBanner />
         <div className="print-head" aria-hidden>ADEPR Kacyiru · {where} · {fmt.date(new Date())}</div>
         <main id="door-main" className="content door-content" tabIndex={-1}>

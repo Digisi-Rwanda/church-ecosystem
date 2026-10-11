@@ -7439,6 +7439,8 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .day-num { font-size: var(--fs-xs); font-weight: 600; justify-self: start; }
 .month-chip { font-size: var(--fs-xs); line-height: 1.25; padding: 1px 4px; border-radius: 4px; background: var(--info-soft); color: var(--accent-on-soft); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .month-chip.clash { background: var(--warn-soft); color: var(--warn); }
+.month-chip.activity { background: var(--success-soft, var(--info-soft)); color: var(--ink); border-left: 3px solid var(--accent); }
+.door-banner { border-left: 4px solid var(--warn); background: var(--warn-soft); }
 .month-more { font-size: var(--fs-xs); color: var(--role-quiet); }
 @media (max-width: 760px) { .month-cell { min-height: 3.5rem; padding: 2px; } .month-chip { display: none; } .month-cell[data-n]:not([data-n="0"])::after { content: attr(data-n); font-size: var(--fs-xs); font-weight: 600; } }
 .bar-row { display: grid; gap: 4px; }
@@ -7509,11 +7511,13 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 .nav-item.open .nav-caret svg { transform: none; }
 .nav .nav-item-row > a.parent-active { color: var(--sidebar-active); font-weight: 650; }
 .nav .nav-item-row > a.parent-active .nav-icon { opacity: 1; color: var(--accent); }
-.nav-tree { list-style: none; margin: 0.1rem 0 0.25rem 1.35rem; padding: 0 0 0 0; border-left: 1px solid color-mix(in srgb, var(--sidebar-text) 22%, transparent); display: grid; gap: 0.05rem; }
-.nav-tree li { position: relative; padding-left: 0.9rem; }
-.nav-tree li::before { content: ''; position: absolute; left: 0; top: 50%; width: 0.7rem; border-top: 1px solid color-mix(in srgb, var(--sidebar-text) 22%, transparent); }
-.nav .nav-tree a { font-size: 0.82rem; font-weight: 500; padding: 0.4rem 0.6rem; }
-.nav .nav-tree a.active { font-weight: 650; }
+.nav-tree { list-style: none; margin: 0.15rem 0 0.35rem 0.75rem; padding: 0.25rem; border-radius: 12px; background: color-mix(in srgb, var(--sidebar-text) 6%, transparent); display: grid; gap: 0.1rem; }
+.nav-tree li { position: relative; }
+.nav .nav-tree a { display: flex; align-items: center; gap: 0.6rem; font-size: 0.84rem; font-weight: 500; padding: 0.45rem 0.7rem; border-radius: 9px; }
+.nav .nav-tree a::before { content: ''; flex: none; width: 0.38rem; height: 0.38rem; border-radius: 50%; background: color-mix(in srgb, var(--sidebar-text) 40%, transparent); }
+.nav .nav-tree a:hover { background: color-mix(in srgb, var(--accent-soft) 60%, transparent); }
+.nav .nav-tree a.active { font-weight: 650; background: var(--accent-soft); color: var(--accent-on-soft, var(--sidebar-active)); }
+.nav .nav-tree a.active::before { background: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 22%, transparent); }
 
 /* Portal home: pins, search, what waits */
 .door-card-wrap { position: relative; }

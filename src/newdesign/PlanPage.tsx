@@ -1,8 +1,8 @@
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
-  addPlanNote, cancelPlan, deletePlan, fetchPlan, fetchPlanOptions, planStep, rejectPlan,
-  type PlanDetail,
+  addPlanNote, cancelPlan, deletePlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, rejectPlan,
+  type ActivityMoney, type PlanDetail,
 } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { TextAreaField } from '../components/ui/Field';
@@ -13,12 +13,15 @@ import { PlanDetailsView } from './PlanScreens';
 import { PlanRunScreen, STAGES, type Stage } from './PlanRun';
 import { PlanForm } from './PlanForm';
 import { PlanLinks } from './PlanLinks';
-import { actionKey, planActions, planErrorKey, planStatusKey } from './plans';
+import { GapLine, PlanMoney } from './PlanMoney';
+import { actionKey, planActions, planErrorKey, planStatusKey, stateTone } from './plans';
+import { DateChangeBanner, ReviewPrompt, TimePanel } from './PlanTime';
+import { whenSummary } from './when';
 import { useLoad } from './useLoad';
 import { PageHeader, StatusChip, Tabs } from './kit';
 
-type Ask = 'reject' | 'cancel' | 'delete' | null;
-type Tab = 'overview' | 'details' | 'history' | Stage;
+type Ask = 'reject' | 'cancel' | 'delete' | 'done' | 'approve' | null;
+type Tab = 'overview' | 'money' | 'details' | 'history' | Stage;
 
 /** One plan: where it stands in the six steps, its planning record, the execution record and the report. */
 export function PlanPage() {
@@ -28,6 +31,9 @@ export function PlanPage() {
   const { systemId = '', planId = '' } = useParams();
   const load = useLoad(() => fetchPlan(planId), `plan|${planId}`);
   const options = useLoad(fetchPlanOptions, 'plan-options');
+  const moneyLoad = useLoad(() => fetchActivityMoney(planId), `plan-money|${planId}`);
+  const [money, setMoney] = useState<ActivityMoney | null>(null);
+  const m = money && money.planId === planId ? money : moneyLoad.data;
   const [plan, setPlan] = useState<PlanDetail | null>(null);
   const [editing, setEditing] = useState(false);
   const [ask, setAsk] = useState<Ask>(null);
@@ -46,6 +52,7 @@ export function PlanPage() {
     try {
       const next = await job();
       if (next) setPlan(next);
+      moneyLoad.reload();
       setAsk(null);
       setReason('');
       after?.();
@@ -63,10 +70,11 @@ export function PlanPage() {
             id="door-plan-title"
             title={p.title}
             back={<Link to={`/s/${systemId}/work`}>← {t('door.block.work')}</Link>}
-            purpose={`${p.unitName} · ${t('door.plan.leader')}: ${p.leaderName}${p.startsOn ? ` · ${day(p.startsOn)}${p.endsOn ? ` – ${day(p.endsOn)}` : ''}` : ''}`}
+            purpose={`${p.unitName} · ${t('door.plan.leader')}: ${p.leaderName}${p.startsOn ? ` · ${whenSummary(p, t, locale)}` : ''}`}
             meta={
               <>
-                <StatusChip tone={p.status === 'PENDING_APPROVAL' || p.status === 'CLOSING' ? 'warn' : p.status === 'RUNNING' ? 'info' : p.status === 'PAUSED' ? 'warn' : p.status === 'ENDED' ? 'success' : p.status === 'CANCELLED' ? 'danger' : 'neutral'}>{t(planStatusKey(p.status, p.planType))}</StatusChip>
+                <StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${p.waitingLevel === 'Church Leader' ? 'CHURCH' : p.waitingLevel === 'Treasurer' ? 'TREASURER' : 'UNIT'}` as 'door.level.UNIT') }) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>
+                {p.state === 'APPROVED' && <StatusChip>{t(planStatusKey(p.status, p.planType))}</StatusChip>}
                 <StatusChip>{t(`door.work.visibility.${p.visibility}` as const)}</StatusChip>
               </>
             }
@@ -77,15 +85,20 @@ export function PlanPage() {
             onChange={setTab}
             items={[
               { key: 'overview', label: t('door.plan.tab.overview') },
+              ...(m ? [{ key: 'money' as const, label: t('door.plan.tab.money') }] : []),
               ...STAGES[p.planType].map((st) => ({ key: st, label: t(`door.run.${p.planType}.${st}.name` as 'door.run.EVENT.s1.name') })),
               { key: 'details', label: t('door.ap.details') },
               { key: 'history', label: t('door.plan.tab.history') },
             ]}
           />
           {tab === 'details' && <PlanDetailsView p={p} />}
+          {tab === 'money' && m && <PlanMoney p={p} m={m} onChange={(next) => { if (next) setMoney(next); moneyLoad.reload(); load.reload(); }} />}
           {tab === 'overview' && (
             <>
+          <DateChangeBanner p={p} />
+          <ReviewPrompt p={p} run={run} />
           <PlanLinks p={p} systemId={systemId} run={run} />
+          {m && (m.planned > 0 || m.earmarked > 0) && <GapLine m={m} />}
 
           {p.rejectedReason && p.status === 'DRAFT' && <p className="door-error">{t('door.plan.sentBack', { reason: p.rejectedReason })}</p>}
           {p.cancelReason && <p className="door-error">{t('door.plan.cancelled', { reason: p.cancelReason })}</p>}
@@ -96,14 +109,14 @@ export function PlanPage() {
           )}
 
           <div className="door-row">
-            {planActions(p).map((a) => (
-              <button key={a} type="button" className={a === 'withdraw' || a === 'reopen' || a === 'pause' ? 'btn ghost' : 'btn'} onClick={() => void run(() => planStep(p.id, a))}>
+            {planActions(p).filter((a) => a !== 'close').map((a) => (
+              <button key={a} type="button" disabled={a === 'submit' && !!m && m.gap !== 0} className={a === 'withdraw' || a === 'reopen' || a === 'pause' ? 'btn ghost' : 'btn'} onClick={() => void run(() => planStep(p.id, a))}>
                 {t(actionKey(a, p.planType, p.beyondUnit) as 'door.plan.action.submit')}
               </button>
             ))}
             {p.canApprove && (
               <>
-                <button type="button" className="btn" onClick={() => void run(() => planStep(p.id, 'approve'))}>
+                <button type="button" className="btn" disabled={!!m && m.gap !== 0} onClick={() => (m?.check?.result === 'FLAGGED' ? setAsk('approve') : void run(() => planStep(p.id, 'approve')))}>
                   {t('door.plan.action.approve')}
                 </button>
                 <button type="button" className="btn secondary" onClick={() => setAsk('reject')}>
@@ -114,6 +127,11 @@ export function PlanPage() {
             {p.canEdit && !editing && options.data && (
               <button type="button" className="btn secondary" onClick={() => setEditing(true)}>
                 {t('door.plan.form.edit')}
+              </button>
+            )}
+            {p.canClose && (
+              <button type="button" className="btn" onClick={() => setAsk('done')}>
+                {t('door.state.markDone')}
               </button>
             )}
             {p.canCancel && (
@@ -127,7 +145,34 @@ export function PlanPage() {
               </button>
             )}
           </div>
-          {ask && ask !== 'delete' && (
+          {ask === 'done' && (
+            <div className="panel door-form">
+              <TextAreaField label={t('door.state.doneAsk')} name="p-outcome" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+              <div className="door-row">
+                <button type="button" className="btn" disabled={!reason.trim()} onClick={() => void run(() => planStep(p.id, 'close', { outcome: reason.trim() }))}>
+                  {t('door.state.markDone')}
+                </button>
+                <button type="button" className="btn ghost" onClick={() => setAsk(null)}>
+                  {t('door.settings.cancel')}
+                </button>
+              </div>
+            </div>
+          )}
+          {ask === 'approve' && (
+            <div className="panel door-form">
+              <p className="door-error">{t('door.pm.flagged.warn')}</p>
+              <TextAreaField label={t('door.pm.approveNote')} name="p-approve-note" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+              <div className="door-row">
+                <button type="button" className="btn" disabled={!reason.trim()} onClick={() => void run(() => planStep(p.id, 'approve', { note: reason.trim() }))}>
+                  {t('door.plan.action.approve')}
+                </button>
+                <button type="button" className="btn ghost" onClick={() => setAsk(null)}>
+                  {t('door.settings.cancel')}
+                </button>
+              </div>
+            </div>
+          )}
+          {ask && ask !== 'delete' && ask !== 'done' && ask !== 'approve' && (
             <div className="panel door-form">
               <TextAreaField label={ask === 'reject' ? t('door.plan.rejectAsk') : t('door.plan.cancelAsk')} name="p-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
               <div className="door-row">
@@ -165,13 +210,9 @@ export function PlanPage() {
                   <strong>{t('door.plan.form.needs')}:</strong> {p.needs}
                 </p>
               )}
-              {p.location && (
-                <p>
-                  <strong>{t('door.plan.place')}:</strong> {p.location}
-                </p>
-              )}
             </div>
           )}
+          {!editing && <TimePanel key={`${p.startsOn}|${p.endsOn}|${p.startTime}|${p.endTime}|${p.location}`} p={p} run={run} />}
             </>
           )}
 

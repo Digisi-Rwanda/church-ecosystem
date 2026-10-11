@@ -22,7 +22,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'workTask', 'workPlan', 'unitGroup', 'groupSession', 'moneyEntry', 'offeringCount', 'report', 'reportSchedule', 'contributionList', 'contributionLine', 'donation', 'systemSetting']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'workTask', 'workPlan', 'unitGroup', 'groupSession', 'moneyEntry', 'serviceCollection', 'report', 'reportSchedule', 'contributionList', 'contributionLine', 'donation', 'systemSetting']) db[k] ??= [];
   db.orgUnit.push(
     { id: 'ou-church', name: 'ADEPR Kacyiru', code: 'KAC', kind: 'CENTRAL', type: 'ORGANISATION', parentId: null, systemId: 'sys-main' },
     { id: 'ou-youth', name: 'Youth', code: 'KAC-YOU', kind: 'MINISTRY', type: 'MINISTRY', parentId: 'ou-church', systemId: 'sys-youth' },
@@ -50,7 +50,7 @@ describe('leader dashboard', () => {
   it('a ministry shows its own money and never collections', async () => {
     const now = new Date();
     fake.__db.moneyEntry.push({ id: 'e1', accountId: 'a', orgUnitId: 'u', systemId: 'sys-youth', kind: 'INCOME', amount: 5000, occurredOn: now, category: 'DONATION', status: 'RECORDED', recordedById: 'x' });
-    fake.__db.offeringCount.push({ id: 'c1', orgUnitId: 'u', systemId: 'sys-youth', serviceOn: now, amount: 99999, status: 'CONFIRMED' });
+    fake.__db.serviceCollection.push({ id: 'c1', systemId: 'sys-main', heldOn: now, tithe: 99999, offering: 0, other: 0, status: 'ACTIVE' });
     const r = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
     expect(keys(r)).not.toContain('giving');
     if (r.body.second) {
@@ -60,10 +60,10 @@ describe('leader dashboard', () => {
   });
   it('Central Administration shows collections across the church, apart from money', async () => {
     const now = new Date();
-    fake.__db.offeringCount.push(
-      { id: 'c1', orgUnitId: 'u', systemId: 'sys-main', serviceOn: now, amount: 40000, status: 'CONFIRMED' },
-      { id: 'c2', orgUnitId: 'u', systemId: 'sys-youth', serviceOn: now, amount: 10000, status: 'RECORDED' },
-      { id: 'c3', orgUnitId: 'u', systemId: 'sys-main', serviceOn: now, amount: 777, status: 'VOIDED' },
+    fake.__db.serviceCollection.push(
+      { id: 'c1', systemId: 'sys-main', heldOn: now, tithe: 30000, offering: 10000, other: 0, status: 'ACTIVE' },
+      { id: 'c2', systemId: 'sys-main', heldOn: now, tithe: 0, offering: 5000, other: 5000, status: 'ACTIVE' },
+      { id: 'c3', systemId: 'sys-main', heldOn: now, tithe: 777, offering: 0, other: 0, status: 'VOIDED' },
     );
     fake.__db.moneyEntry.push({ id: 'e1', accountId: 'a', orgUnitId: 'u', systemId: 'sys-youth', kind: 'INCOME', amount: 5000, occurredOn: now, category: 'DONATION', status: 'RECORDED', recordedById: 'x' });
     const r = await get('p-pastor', '/api/dashboard?systemId=sys-main');

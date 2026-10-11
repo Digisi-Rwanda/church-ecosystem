@@ -18,6 +18,7 @@ export default function NewApp() {
             <Route path="/" element={<Navigate to="/portal" replace />} />
             <Route path="/login" element={<Navigate to="/signin" replace />} />
             {newDesignRoutes()}
+            <Route path="*" element={<Navigate to="/portal" replace />} />
           </Routes>
         </Suspense>
       </ErrorBoundary>

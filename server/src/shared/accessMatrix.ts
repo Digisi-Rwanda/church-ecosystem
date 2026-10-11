@@ -120,7 +120,7 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
   VICE_PRESIDENT: {
     PEOPLE: ['R', 'W'],
     PERSON_360: ['R'],
-    MISSION: ['R'],
+    MISSION: ['R', 'W'],
     SCHEDULING: ['R', 'W', 'C'],
     MONEY: ['R', 'V'],
     GOVERNANCE: ['R', 'W'],

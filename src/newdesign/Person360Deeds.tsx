@@ -93,7 +93,6 @@ export function GoodDeeds({ personId, onChanged, embedded = false }: { personId:
       )}
       {d?.canRecord && (
         <form className="door-form" onSubmit={submit} noValidate>
-          {embedded && <p className="p360-deed-lead">{t('door.p360.deed.lead')}</p>}
           <TextField label={t('door.p360.deed.note')} name="deed-note" placeholder={t('door.p360.deed.example')} value={note} maxLength={300} onChange={(e) => setNote(e.target.value)} />
           <TextField label={t('door.p360.deed.day')} name="deed-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
           {error && <p className="door-error" role="alert">{error}</p>}

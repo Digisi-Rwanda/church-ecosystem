@@ -1,3 +1,4 @@
+import { clearBrowserData } from '../lib/clearBrowserData';
 import {
   createContext,
   useCallback,
@@ -85,8 +86,8 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
     clearLoadCache();
     clearOffline();
     setApiToken(null);
-    // Clear whatever the old app kept for this browser. It is loaded only now, so the new app never carries it.
-    void import('../services').then((m) => m.authService.logout());
+    // Clear whatever an earlier release kept for this browser.
+    clearBrowserData();
     setPortal([]);
     setCapabilities(null);
     setPersonName('');

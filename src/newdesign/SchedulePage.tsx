@@ -2,7 +2,7 @@ import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
-  fetchChurchCalendar,
+  fetchChurchMonth,
   fetchMonth,
   fetchMyDuties,
   fetchScheduleOptions,
@@ -20,6 +20,8 @@ import { buildOwnMenu, lettersFor } from './menu';
 import { CHURCH_SYSTEM } from './portalHome';
 import { addMonths, dayHeading, dayOf, groupByDay, monthGrid, monthLabel, overlapping, personClashes, planActions, planStatusKey, scheduleErrorKey, servingCounts, thisMonth, timeRange } from './schedule';
 import { SlotCard, SlotForm } from './ScheduleParts';
+import { ActivitiesList } from './ScheduleActivities';
+import { activityTime } from './when';
 import { useLoad } from './useLoad';
 import { PageHeader, Segmented, StatusChip } from './kit';
 
@@ -120,15 +122,15 @@ function MyDuties() {
 function ChurchCalendar({ month }: { month: string }) {
   const t = useT();
   const { locale } = useI18n();
-  const cal = useLoad(() => fetchChurchCalendar(month), `sched-church|${month}`);
+  const cal = useLoad(() => fetchChurchMonth(month), `sched-church|${month}`);
   return (
     <div className="panel">
       <h3>{t('door.sched.church')}</h3>
       <LoadState loading={cal.loading} failed={cal.failed} retry={cal.reload}>
-        {!cal.data || cal.data.length === 0 ? (
+        {!cal.data || (cal.data.slots.length === 0 && cal.data.activities.length === 0) ? (
           <p className="muted">{t('door.sched.churchNone')}</p>
         ) : (
-          groupByDay(cal.data).map((g) => (
+          groupByDay(cal.data.slots).map((g) => (
             <div key={g.day}>
               <h4>{dayHeading(g.day, locale)}</h4>
               <ul className="door-list">
@@ -146,6 +148,7 @@ function ChurchCalendar({ month }: { month: string }) {
             </div>
           ))
         )}
+        {cal.data && <ActivitiesList items={cal.data.activities} />}
       </LoadState>
     </div>
   );
@@ -160,6 +163,8 @@ function MonthCalendar({ view, month }: { view: MonthView; month: string }) {
   const dow = Array.from({ length: 7 }, (_, i) => new Intl.DateTimeFormat(locale, { weekday: 'short', timeZone: 'UTC' }).format(new Date(Date.UTC(2024, 0, 1 + i))));
   const byDay = new Map<string, typeof all>();
   for (const s of all) byDay.set(dayOf(s.startsAt), [...(byDay.get(dayOf(s.startsAt)) ?? []), s]);
+  const actsByDay = new Map<string, MonthView['activities']>();
+  for (const a of view.activities) actsByDay.set(a.date, [...(actsByDay.get(a.date) ?? []), a]);
   return (
     <div className="month-grid print-sheet" role="grid" aria-label={monthLabel(month, locale)}>
       {dow.map((d) => (
@@ -169,9 +174,16 @@ function MonthCalendar({ view, month }: { view: MonthView; month: string }) {
       ))}
       {monthGrid(month).map((c) => {
         const slots = (byDay.get(c.day) ?? []).sort((a, b) => a.startsAt.localeCompare(b.startsAt));
+        const acts = actsByDay.get(c.day) ?? [];
         return (
-          <div key={c.day} className={`month-cell${c.off ? ' off' : ''}${c.day === today ? ' today' : ''}`} role="gridcell" data-n={slots.length}>
+          <div key={c.day} className={`month-cell${c.off ? ' off' : ''}${c.day === today ? ' today' : ''}`} role="gridcell" data-n={slots.length + acts.length}>
             <span className="day-num">{Number(c.day.slice(8))}</span>
+            {acts.slice(0, 2).map((a) => (
+              <span key={a.planId} className="month-chip activity" title={`${a.title} · ${activityTime(a) || t('door.sched.allDay')}${a.location ? ` · ${a.location}` : ''}`}>
+                {a.startTime ?? ''} {a.title}
+              </span>
+            ))}
+            {acts.length > 2 && <span className="month-more">{t('door.sched.more', { count: acts.length - 2 })}</span>}
             {slots.slice(0, 3).map((s) => (
               <span key={s.id} className={`month-chip${clash.has(s.id) ? ' clash' : ''}`} title={`${s.title} · ${timeRange(s.startsAt, s.endsAt, locale)}${clash.has(s.id) ? ` · ${t('door.sched.clash')}` : ''}`}>
                 {timeRange(s.startsAt, null, locale)} {s.title}
@@ -190,7 +202,8 @@ function Plans({ view, layout, month, options }: { view: ReturnType<typeof useLo
   return (
     <LoadState loading={view.loading} failed={view.failed} retry={view.reload}>
       {view.data && layout === 'calendar' && <MonthCalendar view={view.data} month={month} />}
-      {view.data && view.data.units.length === 0 ? (
+      {view.data && view.data.activities.length > 0 && <ActivitiesList items={view.data.activities} />}
+      {view.data && view.data.units.length === 0 && view.data.activities.length === 0 ? (
         <EmptyState title={t('door.sched.none')} detail={t('door.sched.noneDetail')} />
       ) : (
         view.data?.units.map((u) => <UnitMonth key={u.unitId} unit={u} view={view.data!} month={month} options={options} reload={view.reload} />)

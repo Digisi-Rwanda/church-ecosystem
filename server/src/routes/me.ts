@@ -112,7 +112,8 @@ function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, ho
   // The Church Leader (and anyone holding a church-wide office) sees the pulpit plan from Central Administration too.
   if (systemId === 'sys-main' && holdings.some((h) => h.scope === 'CHURCH' && h.letters.PEOPLE?.includes('W'))) own.push({ key: 'pulpit', letters: ['R', 'W'] });
   // Collections (offerings counted at services) belong to Central Administration only.
-  if (systemId === 'sys-main' && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'collections', letters: modules.GOVERNANCE });
+  // Collections: the Church Treasurer records them and the Church Leader reads them; nobody else sees the page.
+  if (systemId === 'sys-main' && holdings.some((h) => h.via === 'OFFICE' && h.scope === 'CHURCH' && (h.office === 'CHURCH_TREASURER' || h.office === 'CHURCH_LEADER'))) own.push({ key: 'collections', letters: holdings.some((h) => h.office === 'CHURCH_TREASURER') ? ['R', 'W'] : ['R'] });
   if (systemId === MUSIC && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'monthplan', letters: modules.SCHEDULING });
   if ((systemId === MUSIC || systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'choirs', letters: modules.PEOPLE });
   if ((systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) {

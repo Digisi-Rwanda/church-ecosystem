@@ -1,4 +1,4 @@
-import type { PlanDetail, PlanItem, PlanType, WorkPlanStatus } from '../api/frontDoorApi';
+import type { ActivityState, PlanDetail, PlanItem, PlanType, WorkPlanStatus } from '../api/frontDoorApi';
 
 /** A status in the words of its kind of work: an event is "In progress", a project "Active", a program "Active" or "Suspended". */
 export const planStatusKey = (s: WorkPlanStatus, type?: PlanType) => (type ? (`door.plan.status.${type}.${s}` as const) : (`door.plan.status.${s}` as const));
@@ -29,8 +29,8 @@ export function stagesOf(type: PlanType, status: WorkPlanStatus): StageView[] {
   });
 }
 
-/** Whether a plan of this kind and reach is sent for approval: an event only when it reaches beyond its unit. */
-export const needsApproval = (type: PlanType, beyondUnit: boolean) => type !== 'EVENT' || beyondUnit;
+/** Every activity is approved by the Church Leader before it runs, whatever its kind or size. */
+export const needsApproval = (_type?: PlanType, _beyondUnit?: boolean) => true;
 
 export type PlanAction = 'submit' | 'withdraw' | 'reopen' | 'start' | 'close' | 'pause' | 'resume' | 'renew';
 /** The simple next-step buttons; approving, sending back, cancelling and the report have their own forms. */
@@ -52,8 +52,8 @@ const TYPED_ACTIONS: Record<string, PlanType[]> = {
   pause: ['PROJECT', 'PROGRAM'], resume: ['PROJECT', 'PROGRAM'], renew: ['PROGRAM'],
 };
 /** A button's words in the language of its kind of work ("Launch the program", "Put on hold"), else the plain ones. An event with nothing to approve says "Ready to prepare". */
-export function actionKey(a: PlanAction, type: PlanType, beyondUnit: boolean): string {
-  if (a === 'submit' && type === 'EVENT' && beyondUnit) return 'door.plan.action.submit';
+export function actionKey(a: PlanAction, type: PlanType, _beyondUnit?: boolean): string {
+  if (a === 'submit') return 'door.plan.action.submit';
   return TYPED_ACTIONS[a]?.includes(type) ? `door.plan.action.${a}.${type}` : `door.plan.action.${a}`;
 }
 
@@ -77,8 +77,19 @@ const ERROR_KEYS: Record<string, string> = {
   REGISTRATION_CLOSED: 'door.plan.err.regClosed',
   ALREADY_ATTENDED: 'door.plan.err.attended',
   BAD_DATES: 'door.gov.err.badDates',
+  BAD_TIME: 'door.when.err.time',
+  BAD_REPEAT: 'door.when.err.repeat',
+  DATE_REQUIRED: 'door.when.err.date',
   PERSON_NOT_ACTIVE: 'door.gov.err.personNotActive',
   UNIT_HAS_NO_SYSTEM: 'door.gov.err.noSystem',
+  FUNDING_GAP: 'door.plan.err.fundingGap',
+  INSUFFICIENT_FUNDS: 'door.plan.err.insufficient',
+  USE_MONEY_CHECK: 'door.plan.err.useCheck',
+  FLAG_REASON_REQUIRED: 'door.plan.err.flagReason',
+  MONEY_LOCKED: 'door.plan.err.locked2',
+  LINES_NOT_VERIFIED: 'door.plan.err.notChecked',
+  NOTE_REQUIRED: 'door.plan.err.noteNeeded',
+  USE_ITS_OWN_RECORD: 'door.funds.err.useOwn',
   FORBIDDEN: 'door.gov.err.notAllowed',
   NOT_FOUND: 'door.work.err.gone',
 };
@@ -93,3 +104,10 @@ export function monthKeyOf(iso: string | null): string {
 
 /** The address a guest opens to register for an event. */
 export const publicEventUrl = (token: string): string => `${window.location.origin}/e/${token}`;
+
+/** The four states people see (and Cancelled): the status chip's tone for each. */
+export const stateTone = (s: ActivityState): 'neutral' | 'warn' | 'info' | 'success' | 'danger' =>
+  s === 'WAITING' ? 'warn' : s === 'APPROVED' ? 'info' : s === 'DONE' ? 'success' : s === 'CANCELLED' ? 'danger' : 'neutral';
+
+/** An approved activity runs from its approval; only an older plan can still be waiting to be started. */
+export const isApproved = (p: Pick<PlanItem, 'state'>): boolean => p.state === 'APPROVED';

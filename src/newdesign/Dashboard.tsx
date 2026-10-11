@@ -13,7 +13,7 @@ import { formatRwf } from './money';
 import { SystemLink } from './SystemLink';
 import { useLoad } from './useLoad';
 
-const KPI_ICON: Record<DashKpi['key'], IconName> = { members: 'users', attendance: 'pulse', giving: 'wallet', money: 'wallet', units: 'layers', reports: 'folder', work: 'task', done: 'task' };
+const KPI_ICON: Record<DashKpi['key'], IconName> = { members: 'users', attendance: 'pulse', giving: 'wallet', money: 'wallet', units: 'layers', reports: 'folder', work: 'task', done: 'task', activities: 'task' };
 
 /** "Up 12%" / "Down 3%" / "Same": the words travel with the arrow, so colour is never the only signal. */
 function Trend({ value }: { value: number | null }) {
@@ -239,10 +239,7 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
   const rwf = (n: number) => formatRwf(n);
   const count = (n: number) => n.toLocaleString('en-US');
   const second = data.second;
-  const moneySeries: VizSeries[] = (second?.series ?? [])
-    .filter((s) => s.points.length > 1)
-    .map((s, i) => ({ key: s.key, name: t(`door.dash.legend.${s.key}` as 'door.dash.legend.income'), slot: s.key === 'spent' ? 2 : i === 0 ? 1 : 3, points: s.points }));
-  const hasSecond = moneySeries.some((l) => l.points.some((p) => p.value > 0));
+  const hasSecond = (second?.series ?? []).some((l) => l.points.some((p) => p.value > 0));
   const secondTitle = t(second?.kind === 'giving' ? 'door.dash.giving.title' : 'door.dash.money.title');
   const attTitle = t('door.dash.attendance.title');
   const hasAtt = !!data.attendance && data.attendance.some((p) => p.value > 0);
@@ -269,24 +266,34 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
           </li>
         ))}
       </ul>
-      {(data.attendance || second || hasWork) && (
+      {(data.attendance || second || hasWork || data.joinedSeries) && (
         <div className="dash-charts">
           {data.attendance && (
             <Panel title={attTitle}>
               <span className="dash-range">{rangeLabel}</span>
-              {hasAtt ? <MonthsChart kind="bars" series={[{ key: 'att', name: attTitle, slot: 1, points: data.attendance }]} title={attTitle} format={count} /> : <p className="muted">{t('door.dash.noData')}</p>}
+              <MonthsChart kind="bars" series={[{ key: 'att', name: attTitle, slot: 1, points: data.attendance }]} title={attTitle} format={count} />
+              {!hasAtt && <p className="muted">{t('door.dash.noData')}</p>}
+            </Panel>
+          )}
+          {data.joinedSeries && (
+            <Panel title={t('door.dash.joined.title')} to={`/s/${systemId}/people`}>
+              <span className="dash-range">{rangeLabel}</span>
+              <MonthsChart kind="bars" series={[{ key: 'joined', name: t('door.dash.joined.title'), slot: 1, points: data.joinedSeries }]} title={t('door.dash.joined.title')} format={count} />
+              {!data.joinedSeries.some((p) => p.value > 0) && <p className="muted">{t('door.dash.noData')}</p>}
             </Panel>
           )}
           {second && (
             <Panel title={secondTitle}>
               <span className="dash-range">{rangeLabel}</span>
-              {hasSecond ? <MonthsChart kind="lines" series={moneySeries} title={secondTitle} format={rwf} /> : <p className="muted">{t('door.dash.noData')}</p>}
+              <MonthsChart kind="lines" series={second.series.map((s, i) => ({ key: s.key, name: t(`door.dash.legend.${s.key}` as 'door.dash.legend.income'), slot: s.key === 'spent' ? 2 : i === 0 ? 1 : 3, points: s.points }))} title={secondTitle} format={rwf} />
+              {!hasSecond && <p className="muted">{t('door.dash.noData')}</p>}
             </Panel>
           )}
-          {hasWork && (
+          {workSeries.length > 0 && (
             <Panel title={t('door.dash.work.chart')} to={`/s/${systemId}/work`}>
               <span className="dash-range">{rangeLabel}</span>
               <MonthsChart kind="bars" series={workSeries} title={t('door.dash.work.chart')} format={count} />
+              {!hasWork && <p className="muted">{t('door.dash.noData')}</p>}
             </Panel>
           )}
         </div>

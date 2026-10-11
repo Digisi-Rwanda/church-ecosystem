@@ -15,6 +15,7 @@ import { balances } from '../money/rules.js';
 import { COLLECTIONS_SYSTEM } from './collections.js';
 import { reportsReceived } from './reports.js';
 import { canReadReports } from '../reports/access.js';
+import { collectionRights } from './collections.js';
 import { lastMonths, monthOf, percentChange, sumByMonth } from '../glance/rules.js';
 import { counts as listCounts } from '../money/block.js';
 
@@ -22,7 +23,7 @@ export const dashboardRouter = Router();
 
 interface MemberRow { personId: string; systemId?: string | null; type: string; status: string; startDate: Date | string; endDate?: Date | string | null }
 interface EntryRow { kind: string; amount: number; status: string; occurredOn: Date | string; systemId: string }
-interface CountRow { systemId: string; amount: number; status: string; serviceOn: Date | string }
+interface CountRow { tithe: number; offering: number; other: number; status: string; heldOn: Date | string }
 interface GroupRow { id: string; systemId: string; status: string }
 interface SessionRow { groupId: string; heldOn: Date | string; presentJson: string }
 interface UnitRow { id: string; systemId?: string | null; kind?: string | null; status?: string | null }
@@ -64,6 +65,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const overview: Record<string, unknown> = {};
   let attendance: Array<{ label: string; value: number }> | null = null;
   let workSeries: Array<{ key: string; points: Array<{ label: string; value: number }> }> = [];
+  let joinedSeries: Array<{ label: string; value: number }> | null = null;
   let second: { kind: 'giving' | 'money'; series: Array<{ key: string; points: Array<{ label: string; value: number }> }> } | null = null;
 
   // People: members, recent joiners, attendance at groups.
@@ -94,21 +96,29 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     const nameOf = new Map(people.map((p) => [p.id, p.fullName]));
     lists.members = recent.map((m) => ({ personId: m.personId, name: nameOf.get(m.personId) ?? '', joinedOn: iso(m.startDate)!.slice(0, 10), href: `/s/${systemId}/people/${m.personId}` }));
 
-    const groups = ((await prisma.unitGroup.findMany(central ? undefined : { where: { systemId } })) as GroupRow[]).filter((g) => g.status === 'ACTIVE' && (central || g.systemId === systemId));
-    if (groups.length > 0) {
-      const gid = new Set(groups.map((g) => g.id));
-      const sessions = ((await prisma.groupSession.findMany()) as SessionRow[]).filter((s) => gid.has(s.groupId));
-      attendance = sumByMonth(sessions, months, (s) => s.heldOn, (s) => present(s.presentJson));
-      const last = attendance[attendance.length - 1]!.value;
-      const before = attendance[attendance.length - 2]!.value;
-      kpis.push({ key: 'attendance', value: last, format: 'count', trend: percentChange(last, before), prev: before, spark: attendance.map((p) => p.value), href: `/s/${systemId}/groups` });
+    // New members per month, from the dates people joined.
+    const firstJoin = new Map<string, Date>();
+    for (const m of scoped.filter((x) => x.status === 'ACTIVE')) {
+      const at = new Date(m.startDate);
+      const seenAt = firstJoin.get(m.personId);
+      if (!seenAt || at < seenAt) firstJoin.set(m.personId, at);
     }
+    joinedSeries = sumByMonth([...firstJoin.values()], months, (d) => d, () => 1);
+
+    // Attendance is always shown for people leaders: zeros when no group has met yet, never a missing figure.
+    const groups = ((await prisma.unitGroup.findMany(central ? undefined : { where: { systemId } })) as GroupRow[]).filter((g) => g.status === 'ACTIVE' && (central || g.systemId === systemId));
+    const gid = new Set(groups.map((g) => g.id));
+    const sessions = ((await prisma.groupSession.findMany()) as SessionRow[]).filter((s) => gid.has(s.groupId));
+    attendance = sumByMonth(sessions, months, (s) => s.heldOn, (s) => present(s.presentJson));
+    const last = attendance[attendance.length - 1]!.value;
+    const before = attendance[attendance.length - 2]!.value;
+    kpis.push({ key: 'attendance', value: last, format: 'count', trend: percentChange(last, before), prev: before, spark: attendance.map((p) => p.value), href: `/s/${systemId}/groups` });
   }
 
   // Giving (collections) in Central Administration only; money in the other systems. Never added together.
-  if (central && has('GOVERNANCE')) {
-    const counts = ((await prisma.offeringCount.findMany()) as CountRow[]).filter((c) => c.status !== 'VOIDED');
-    const points = sumByMonth(counts, months, (c) => c.serviceOn, (c) => c.amount);
+  if (central && (await collectionRights(me)).read) {
+    const counts = ((await prisma.serviceCollection.findMany()) as CountRow[]).filter((c) => c.status !== 'VOIDED');
+    const points = sumByMonth(counts, months, (c) => c.heldOn, (c) => c.tithe + c.offering + c.other);
     const cur = points[points.length - 1]!.value;
     kpis.push({ key: 'giving', value: cur, format: 'rwf', trend: percentChange(cur, points[points.length - 2]!.value), prev: points[points.length - 2]!.value, spark: points.map((p) => p.value), href: `/s/${systemId}/collections` });
     second = { kind: 'giving', series: [{ key: 'giving', points }] };
@@ -166,6 +176,9 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     kpis.push({ key: 'work', value: openNow, format: 'count', trend: null, href: `/s/${systemId}/work`, tone: overdue > 0 ? 'late' : 'ok' });
     kpis.push({ key: 'done', value: doneNow, format: 'count', trend: percentChange(doneNow, donePrev), prev: donePrev, spark: workSeries[1]!.points.map((p) => p.value), href: `/s/${systemId}/work` });
   }
+  // Activities that are approved and under way (an activity runs as soon as the Church Leader approves it).
+  const activeActivities = visiblePlans.filter((p) => ['SETUP', 'RUNNING', 'PAUSED'].includes(p.status)).length;
+  kpis.push({ key: 'activities', value: activeActivities, format: 'count', trend: null, href: `/s/${systemId}/money/plan` });
   if (overdue > 0) attention.push({ key: 'overdue', count: overdue, href: `/s/${systemId}/work` });
   overview.work = {
     overdue,
@@ -244,7 +257,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   let byUnit: unknown = null;
   if (central && (has('MONEY') || has('GOVERNANCE'))) byUnit = await contributionsByUnit(now);
 
-  res.json({ systemId, central, range, kpis, attention, attendance, second, workSeries, overview, byUnit, ...lists });
+  res.json({ systemId, central, range, kpis, attention, attendance, joinedSeries, second, workSeries, overview, byUnit, ...lists });
 });
 
 interface ListRow { id: string; systemId: string; level: string; status: string; typeCode: string; typeName: string; month: string }

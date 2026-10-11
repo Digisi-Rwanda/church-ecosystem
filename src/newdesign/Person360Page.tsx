@@ -32,7 +32,7 @@ function Sections({ v, personId, only, reload }: { v: P360View; personId: string
     setAdding(null);
     reload();
   };
-  const shown = SECTION_ORDER.filter((s) => only.includes(s) && v.read.includes(s));
+  const shown = SECTION_ORDER.filter((s) => s !== 'CONTACT' && only.includes(s) && v.read.includes(s));
   if (shown.length === 0) return <EmptyState title={t('door.p360.none')} />;
   return (
     <div className="p360-flat">
@@ -101,10 +101,8 @@ function Timeline({ records, gifts }: { records: P360Record[]; gifts: Gift[] }) 
 /** Participation updates: the latest gifts as short lines, with the year's totals. For the Church Leader only. */
 function Participation({ load, personId, onChanged }: { personId: string; onChanged: () => void; load: { loading: boolean; failed: boolean; data?: P360Participation | null; reload: () => void } }) {
   const t = useT();
-  const { locale } = useI18n();
   const [all, setAll] = useState(false);
   const d = load.data ?? undefined;
-  const day = (iso: string) => new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
   const line = (i: Gift) => i.kind === 'GOOD_DEED'
     ? `${t('door.p360.part.kind.GOOD_DEED')} · ${i.label}${i.system ? ` (${i.system})` : ''}`
     : `${t(`door.p360.part.kind.${i.kind}` as 'door.p360.part.kind.DONATION')} · ${i.label} · ${formatRwf(i.amount)}${i.status === 'PLEDGED' ? ` (${t('door.p360.part.pledgedTag')})` : ''}`;
@@ -119,10 +117,6 @@ function Participation({ load, personId, onChanged }: { personId: string; onChan
           <>
             <div className="p360-notes">
               {d.items.length === 0 ? <p className="muted">{t('door.p360.part.none')}</p> : <ul>{(all ? d.items : d.items.slice(0, 3)).map((i) => (<li key={`${i.kind}${i.id}`}>{line(i)}</li>))}</ul>}
-            </div>
-            <div className="p360-last">
-              <strong>{t('door.p360.part.given', { year: String(d.year) })}: {formatRwf(d.totals.given)}</strong>
-              <div><span>{t('door.p360.part.pledged')}: {formatRwf(d.totals.pledged)}</span>{d.items[0] && <span>{day(d.items[0].day)}</span>}</div>
             </div>
           </>
         )}
@@ -233,7 +227,6 @@ export function Person360Page() {
                     <strong className="p360-name">{p.fullName}</strong>
                     {p.email && <p className="muted">{p.email}</p>}
                     {p.nationalId && <p className="p360-nid">{t('door.p360.f.nationalId')}: {p.nationalId}</p>}
-                    {p.email ? <a className="btn ghost" href={`mailto:${p.email}`}>{t('door.p360.send')}</a> : p.phone ? <a className="btn ghost" href={`sms:${p.phone}`}>{t('door.p360.send')}</a> : null}
                   </section>
                   <dl className="card p360-facts">
                     {facts.map(([k, val]) => (<div key={k}><dt>{k}</dt><dd>{val || '—'}</dd></div>))}

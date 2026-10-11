@@ -164,6 +164,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
         ? [
             place('plan', 'money/plan', 'door.money.plan'),
             place('budget', 'money/budget', 'door.money.budget'),
+            place('funds', 'money/funds', 'door.money.funds'),
             place('accounting', 'money', 'door.money.accounting', true),
             place('contributions', 'money/contributions', 'door.money.contributions'),
             place('moneyreports', 'money/reports', 'door.money.reports'),
@@ -177,7 +178,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
           ...some(['central'].map(ownPlace)),
           place('meetings', 'governance', 'door.gov.tab.meetings'),
           place('decisions', 'governance/decisions', 'door.gov.tab.decisions'),
-          ...(central ? [place('collections', 'governance/collections', 'door.gov.tab.collections')] : []),
+          ...(central && own.has('collections') ? [place('collections', 'governance/collections', 'door.gov.tab.collections')] : []),
         ]
       : [],
     // Every system has its own Settings; Central Administration also keeps the church-wide ones.

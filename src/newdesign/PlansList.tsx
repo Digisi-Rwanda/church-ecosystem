@@ -1,16 +1,15 @@
 import { useState } from 'react';
-import { fetchPlans, type PlanItem, type PlanType, type WorkPlanStatus } from '../api/frontDoorApi';
+import { fetchPlans, type PlanItem, type PlanType } from '../api/frontDoorApi';
 import { SelectField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
-import { PLAN_STEPS, planStatusKey, sortPlans } from './plans';
+import { PLAN_STEPS, planStatusKey, sortPlans, stateTone } from './plans';
 import { useLoad } from './useLoad';
 import { EmptyState, ListRow, RowList, Segmented, StatusChip } from './kit';
 import { Link } from 'react-router-dom';
 import { monthKeyOf } from './plans';
 
 type Layout = 'list' | 'board' | 'calendar';
-const tone = (s: WorkPlanStatus) => (s === 'PENDING_APPROVAL' || s === 'CLOSING' ? 'warn' : s === 'RUNNING' ? 'info' : s === 'ENDED' ? 'success' : s === 'CANCELLED' ? 'danger' : 'neutral');
 
 /** Full work in one system: plans that are approved, run, closed and reported. */
 export function PlansList({ systemId, planType }: { systemId: string; planType?: PlanType }) {
@@ -28,8 +27,8 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
       key={p.id}
       avatarName={p.leaderName}
       title={p.title}
-      detail={`${p.leaderName} · ${p.unitName}${p.waitingLevel ? ` · ${t('door.plan.waiting', { level: p.waitingLevel })}` : ''}`}
-      status={<StatusChip tone={tone(p.status)}>{t(planStatusKey(p.status, p.planType))}</StatusChip>}
+      detail={`${p.leaderName} · ${p.unitName}`}
+      status={<StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${p.waitingLevel === 'Church Leader' ? 'CHURCH' : 'UNIT'}` as 'door.level.UNIT') }) : p.state === 'APPROVED' ? t(planStatusKey(p.status, p.planType)) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>}
       to={to(p)}
     />
   );

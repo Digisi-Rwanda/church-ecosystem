@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { PlanItem } from '../api/frontDoorApi';
-import { actionKey, needsApproval, phaseOf, planActions, planErrorKey, sortPlans, stagesOf, stepIndex } from './plans';
+import { actionKey, needsApproval, phaseOf, planActions, planErrorKey, sortPlans, stagesOf, stateTone, stepIndex } from './plans';
 
 const flags = { canSubmit: false, canWithdraw: false, canReopen: false, canStart: false, canClose: false, canPause: false, canResume: false, canRenew: false };
 
@@ -22,11 +22,19 @@ describe('plan helpers', () => {
     expect(planActions({ ...flags, canResume: true })).toContain('resume');
     expect(planActions({ ...flags, canRenew: true })).toContain('renew');
   });
-  it('needs approval for an event only beyond the unit', () => {
-    expect(needsApproval('EVENT', false)).toBe(false);
+  it('needs the Church Leader for every kind of activity', () => {
+    expect(needsApproval('EVENT', false)).toBe(true);
     expect(needsApproval('EVENT', true)).toBe(true);
     expect(needsApproval('PROJECT', false)).toBe(true);
     expect(needsApproval('PROGRAM', false)).toBe(true);
+  });
+  it('words the states and the new errors', () => {
+    expect(stateTone('WAITING')).toBe('warn');
+    expect(stateTone('DONE')).toBe('success');
+    expect(stateTone('CANCELLED')).toBe('danger');
+    expect(planErrorKey('BAD_REPEAT')).toBe('door.when.err.repeat');
+    expect(planErrorKey('BAD_TIME')).toBe('door.when.err.time');
+    expect(planErrorKey('DATE_REQUIRED')).toBe('door.when.err.date');
   });
   it('has stages per type', () => {
     expect(stagesOf('EVENT', 'DRAFT').length).toBe(6);

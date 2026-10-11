@@ -9,13 +9,17 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
-import { liveHoldings } from '../capabilities/engine.js';
+import { liveHoldings, lettersInSystem } from '../capabilities/engine.js';
 import { notifySafely } from '../lib/notify.js';
 import { NOTE_MAX, TEXT_MAX, TITLE_MAX, VISIBILITIES, canSee } from '../work/rules.js';
 import {
   CHECKS_MAX, ROLE_MAX, TEAM_MAX, approversOf, asWorkRow, buildLevels, canApprove, canComposeReport, canManagePlan, canPublishReport,
-  canWritePlan, currentLevel, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, parseJson, publishProblem, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
+  canWritePlan, canDecideForChurch, currentLevel, treasurerExists, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, parseJson, publishProblem, skipUnitLevel, stateOf, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
 } from '../work/plan.js';
+import { figures, submitProblem } from '../money/planMoney.js';
+import { potsOf } from './incomeFunds.js';
+import { earmarkProblem } from '../money/funds.js';
+import { TIMING_KINDS, churchDay, normalizeTiming, postponedOverSixMonths, repeatOf, repeatSchema, timingProblem, timingText, type Timing } from '../work/timing.js';
 
 export const workPlansRouter = Router();
 
@@ -39,6 +43,7 @@ interface Plan extends PlanRow {
   rejectedReason?: string | null; cancelReason?: string | null; planningSummary?: string | null; executionSummary?: string | null;
   parentId?: string | null; steeringJson?: string | null; detailsJson?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null;
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
+  timingKind?: string | null; startTime?: string | null; endTime?: string | null; repeatJson?: string | null; dateChangeJson?: string | null; reviewDue?: boolean | null;
 }
 interface NoteRow { id: string; planId: string; authorId: string; text: string; createdAt: Date | string }
 interface CheckRow { id: string; planId: string; label: string; done: boolean; doneById?: string | null; doneAt?: Date | string | null }
@@ -106,6 +111,9 @@ export const registrationsOf = async (planId: string) =>
 /** Places left, or null when there is no limit. */
 export const spotsLeft = (capacity: number | null | undefined, taken: number) => (capacity ? Math.max(0, capacity - taken) : null);
 
+/** The Secretary, who holds the write letter for scheduling in the system, may move the time and place of an approved activity. */
+const canScheduleIn = (me: string, systemId: string, data: Ctx['data']) => (lettersInSystem(me, systemId, data, new Date()).SCHEDULING as string[]).includes('W');
+
 function flags(p: Plan, c: Ctx, me: string) {
   const manage = canManagePlan(p, me, c.data);
   const team = isOnTeam(p, me);
@@ -113,9 +121,12 @@ function flags(p: Plan, c: Ctx, me: string) {
   const type = p.planType ?? 'PROJECT';
   return {
     canEdit: manage && p.status === 'DRAFT',
+    canSetTiming: !p.deletedAt && (manage || canScheduleIn(me, p.systemId, c.data)) && ['DRAFT', 'SETUP', 'RUNNING', 'PAUSED'].includes(p.status),
+    canClearReview: !!p.reviewDue && canDecideForChurch(me, c.data),
     canSubmit: manage && p.status === 'DRAFT',
     canWithdraw: manage && p.status === 'PENDING_APPROVAL',
-    canApprove: canApprove(p, me, c.data),
+    canApprove: canApprove(p, me, c.data) && currentLevel(p)?.levelKey !== 'TREASURER',
+    canCheckMoney: p.status === 'PENDING_APPROVAL' && currentLevel(p)?.levelKey === 'TREASURER' && canApprove(p, me, c.data),
     canReopen: manage && p.status === 'SETUP',
     canStart: manage && p.status === 'SETUP',
     canClose: manage && p.status === 'RUNNING',
@@ -138,6 +149,14 @@ function flags(p: Plan, c: Ctx, me: string) {
     canCompose: p.status === 'CLOSING' && canComposeReport(me, p.systemId, c.data),
     canPublish: p.status === 'CLOSING' && canPublishReport(me, p.systemId, c.data),
   };
+}
+
+/** The last change of date after approval, for the banner on the plan: the old date and the new one. */
+function dateChangeOf(p: Plan): { fromStart: string | null; fromEnd: string | null; toStart: string | null; toEnd: string | null; at: string; byName?: string } | null {
+  const v = parseJson<Record<string, unknown> | null>(p.dateChangeJson, null);
+  if (!v || typeof v.at !== 'string') return null;
+  const str = (k: string) => (typeof v[k] === 'string' ? (v[k] as string) : null);
+  return { fromStart: str('fromStart'), fromEnd: str('fromEnd'), toStart: str('toStart'), toEnd: str('toEnd'), at: v.at };
 }
 
 function registrationView(p: Plan, regs: RegRow[], who: Map<string, string>, me: string, fl: ReturnType<typeof flags>) {
@@ -203,6 +222,8 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
     unitName: c.units.find((u) => u.id === p.orgUnitId)?.name ?? '',
     leaderId: p.leaderPersonId, leaderName: who.get(p.leaderPersonId) ?? '',
     startsOn: iso(p.startsOn), endsOn: iso(p.endsOn), visibility: p.visibility, beyondUnit: p.beyondUnit, planType: p.planType ?? 'PROJECT',
+    state: stateOf(p.status),
+    timingKind: p.timingKind ?? 'RANGE', startTime: p.startTime ?? null, endTime: p.endTime ?? null, repeat: repeatOf(p.repeatJson), reviewDue: !!p.reviewDue,
     mine: isOnTeam(p, me), waitingLevel: currentLevel(p)?.label ?? null, ...fl,
   };
   if (!detail) return base;
@@ -212,7 +233,7 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
     team: team.map((t) => ({ personId: t.personId, name: who.get(t.personId) ?? '', role: t.role })),
     createdByName: who.get(p.createdById) ?? '',
     levels: levels.map((l) => ({ levelKey: l.levelKey, label: l.label, status: l.status, byName: l.byId ? who.get(l.byId) ?? '' : null, at: l.at, note: l.note })),
-    rejectedReason: p.rejectedReason ?? null, cancelReason: p.cancelReason ?? null,
+    rejectedReason: p.rejectedReason ?? null, cancelReason: p.cancelReason ?? null, dateChange: dateChangeOf(p),
     notes: notes.map((n) => ({ id: n.id, authorName: who.get(n.authorId) ?? '', text: n.text, at: iso(n.createdAt) })),
     checks: checks.map((k) => ({ id: k.id, label: k.label, done: k.done, doneAt: iso(k.doneAt) })),
     report: {
@@ -238,6 +259,21 @@ const fields = {
   visibility: z.enum(VISIBILITIES).default('SYSTEM'),
   planType: z.enum(PLAN_TYPES).default('PROJECT'),
   parentId: z.string().min(1).nullish(),
+  timingKind: z.enum(TIMING_KINDS).default('RANGE'),
+  startTime: z.string().max(5).nullish(),
+  endTime: z.string().max(5).nullish(),
+  repeat: repeatSchema.nullish(),
+};
+const timingOf = (b: { timingKind: string; startsOn?: string | null; endsOn?: string | null; startTime?: string | null; endTime?: string | null; repeat?: unknown }) =>
+  normalizeTiming({ timingKind: b.timingKind, startsOn: b.startsOn ?? null, endsOn: b.endsOn ?? null, startTime: b.startTime ?? null, endTime: b.endTime ?? null, repeatJson: b.repeat ? JSON.stringify(b.repeat) : null });
+const timingData = (b: Parameters<typeof timingOf>[0]) => {
+  const n = timingOf(b);
+  return { timingKind: n.timingKind, startsOn: n.startsOn, endsOn: n.endsOn, startTime: n.startTime, endTime: n.endTime, repeatJson: n.repeatJson };
+};
+const timingCheck = (b: Parameters<typeof timingOf>[0]): { code: string; msg: string } | null => {
+  const bad = timingProblem(timingOf(b) as Timing);
+  if (!bad) return null;
+  return { code: bad, msg: bad === 'BAD_REPEAT' ? 'Choose the days of the repeat' : bad === 'BAD_TIME' ? 'The end time must not be before the start time' : 'The end must not be before the start' };
 };
 
 async function peopleProblem(ids: string[]): Promise<boolean> {
@@ -341,6 +377,8 @@ workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   if (!unit.systemId) return fail(res, 400, 'UNIT_HAS_NO_SYSTEM', 'This unit has no system yet');
   if (!canWritePlan(me, unit.systemId, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not plan work here');
   if (datesProblem(b.startsOn, b.endsOn)) return fail(res, 400, 'BAD_DATES', 'The end must not be before the start');
+  const tbad = timingCheck(b);
+  if (tbad) return fail(res, 400, tbad.code, tbad.msg);
   if (await peopleProblem([b.leaderId, ...b.team.map((t) => t.personId)])) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose people who are active members');
   if (b.parentId) {
     const bad = await parentCheck(b.planType, b.parentId, unit.systemId, me, c, null);
@@ -349,7 +387,7 @@ workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   const row = (await prisma.workPlan.create({
     data: {
       parentId: b.parentId || null, orgUnitId: unit.id, systemId: unit.systemId, title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null,
-      startsOn: b.startsOn ? new Date(b.startsOn) : null, endsOn: b.endsOn ? new Date(b.endsOn) : null, leaderPersonId: b.leaderId,
+      ...timingData(b), leaderPersonId: b.leaderId,
       teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility, planType: b.planType, status: 'DRAFT', approvalsJson: '[]', createdById: me,
     },
   })) as Plan;
@@ -367,12 +405,13 @@ workPlansRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid plan');
   const b = parsed.data;
   if (datesProblem(b.startsOn, b.endsOn)) return fail(res, 400, 'BAD_DATES', 'The end must not be before the start');
+  const tbad = timingCheck(b);
+  if (tbad) return fail(res, 400, tbad.code, tbad.msg);
   if (await peopleProblem([b.leaderId, ...b.team.map((t) => t.personId)])) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose people who are active members');
   const row = (await prisma.workPlan.update({
     where: { id: p.id },
     data: {
-      title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null, startsOn: b.startsOn ? new Date(b.startsOn) : null,
-      endsOn: b.endsOn ? new Date(b.endsOn) : null, leaderPersonId: b.leaderId, teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility,
+      title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null, ...timingData(b), leaderPersonId: b.leaderId, teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility,
       planType: b.planType ?? p.planType ?? 'PROJECT',
     },
   })) as Plan;
@@ -419,6 +458,8 @@ async function askApprovers(p: Plan, c: Ctx, me: string, why: string) {
 const tellOne = (to: string, p: Plan, title: string, key: string) =>
   notifySafely(prisma as never, { kind: 'FOR_INFORMATION', toPersonId: to, systemId: p.systemId, title, href: `/s/${p.systemId}/work/plans/${p.id}`, sourceKey: key });
 
+class SubmitStop extends Error { constructor(readonly status: number, readonly code: string, msg: string) { super(msg); } }
+
 type Step = { action: Action; allow: (p: Plan, me: string, c: Ctx) => boolean };
 
 /** One handler for the simple moves; the status each one leads to, and what it records. */
@@ -428,7 +469,7 @@ async function move(req: AuthedRequest, res: Res, step: Step, apply: (p: Plan, m
   const { me, c, p } = got;
   if (!step.allow(p, me, c)) return fail(res, 403, 'FORBIDDEN', 'You may not do this');
   if (stateProblem(step.action, p.status) || typeProblem(step.action, p.planType)) return fail(res, 409, 'WRONG_STATE', 'Not possible in the plan’s current state');
-  await apply(p, me, c);
+  try { await apply(p, me, c); } catch (e) { if (e instanceof SubmitStop) return fail(res, e.status, e.code, e.message); throw e; }
   const row = (await prisma.workPlan.findUnique({ where: { id: p.id } })) as Plan;
   await audit(me, p.systemId, `WORKPLAN_${step.action.toUpperCase()}`, `${step.action} “${p.title}”`, { planId: p.id });
   res.json({ plan: await shape(row, c, me, true) });
@@ -437,12 +478,15 @@ const managers: Step['allow'] = (p, me, c) => canManagePlan(p, me, c.data);
 
 workPlansRouter.post('/:id/submit', requireAuth, (req: AuthedRequest, res) =>
   move(req, res, { action: 'submit', allow: managers }, async (p, me, c) => {
-    const levels = buildLevels(p.systemId, p.beyondUnit, await systemName(p.systemId), p.planType ?? 'PROJECT');
-    // Nothing to approve (an event within its unit): the plan goes straight to set-up.
-    if (levels.length === 0) {
-      await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'SETUP', approvalsJson: '[]', rejectedReason: null } });
-      return;
-    }
+    // The Church Leader approves every activity. The President goes first, unless the President wrote it or nobody holds that office.
+    const lines = (await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as Array<{ planId: string | null; amount: number; status: string }>;
+    const sources = (await prisma.planSource.findMany({ where: { planId: p.id } })) as Array<{ planId: string; kind: string; code: string; amount: number }>;
+    const f = figures(lines.filter((l) => l.planId === p.id) as never, sources.filter((s) => s.planId === p.id));
+    // Spending needs money set aside to the franc, and the pots must still hold it. No spending, no money step.
+    if (submitProblem(f.planned, f.earmarked)) throw new SubmitStop(409, 'FUNDING_GAP', 'The money set aside must match the planned spending');
+    const held = earmarkProblem(await potsOf(p.systemId, p.id), sources.filter((s) => s.planId === p.id));
+    if (held) throw new SubmitStop(409, 'INSUFFICIENT_FUNDS', 'The money set aside is no longer available');
+    const levels = buildLevels(p.systemId, skipUnitLevel(p.createdById, p.systemId, c.data), f.planned > 0 && treasurerExists(p.createdById, p.systemId, c.data));
     const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'PENDING_APPROVAL', approvalsJson: JSON.stringify(levels), rejectedReason: null } })) as Plan;
     await askApprovers(row, c, me, 'Plan to approve');
   }),
@@ -465,14 +509,30 @@ workPlansRouter.post('/:id/approve', requireAuth, async (req: AuthedRequest, res
   if (!got) return;
   const { me, c, p } = got;
   if (p.status !== 'PENDING_APPROVAL') return fail(res, 409, 'WRONG_STATE', 'This plan is not waiting for approval');
-  if (p.createdById === me) return fail(res, 403, 'OWN_ENTRY', 'Nobody approves their own plan');
-  if (!canApprove(p, me, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not approve at this level');
+  if (!canApprove(p, me, c.data)) return p.createdById === me ? fail(res, 403, 'OWN_ENTRY', 'Nobody approves their own plan') : fail(res, 403, 'FORBIDDEN', 'You may not approve at this level');
   const note = z.object({ note: z.string().trim().max(NOTE_MAX).nullish() }).safeParse(req.body ?? {});
   const levels = levelsOf(p);
   const idx = levels.findIndex((l) => l.status === 'PENDING');
-  levels[idx] = { ...levels[idx], status: 'APPROVED', byId: me, at: new Date().toISOString(), note: (note.success && note.data.note) || null };
+  if (levels[idx].levelKey === 'TREASURER') return fail(res, 409, 'USE_MONEY_CHECK', 'The Treasurer answers with the figures check');
+  let typed = (note.success && note.data.note) || null;
+  // Money must still add up, and an approver who goes over the Treasurer's flag says why in the history.
+  const mf = figures((await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as never, (await prisma.planSource.findMany({ where: { planId: p.id } })) as never);
+  if (submitProblem(mf.planned, mf.earmarked)) return fail(res, 409, 'FUNDING_GAP', 'The money set aside must match the planned spending');
+  try {
+    const flagged = (JSON.parse((p as { moneyCheckJson?: string | null }).moneyCheckJson ?? 'null') as { result?: string } | null)?.result === 'FLAGGED';
+    if (flagged) {
+      if (!typed) return fail(res, 400, 'FLAG_REASON_REQUIRED', 'The Treasurer flagged a problem; please say why you are going ahead');
+      typed = `Over the Treasurer's flag: ${typed}`;
+    }
+  } catch { /* an unreadable check counts as no flag */ }
+  // The history says when the Church Leader decided their own activity, or a stand-in decided for the Church Leader.
+  const own = levels[idx].levelKey === 'CHURCH' && p.createdById === me ? 'own activity' : null;
+  const standIn = levels[idx].levelKey === 'CHURCH' && !liveHoldings(me, c.data, new Date()).some((h) => h.via === 'OFFICE' && h.office === 'CHURCH_LEADER') ? 'for the Church Leader' : null;
+  const tag = own ?? standIn;
+  levels[idx] = { ...levels[idx], status: 'APPROVED', byId: me, at: new Date().toISOString(), note: tag ? [tag, typed].filter(Boolean).join(': ') : typed };
   const done = levels.every((l) => l.status === 'APPROVED');
-  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { approvalsJson: JSON.stringify(levels), status: done ? 'SETUP' : 'PENDING_APPROVAL' } })) as Plan;
+  // Approval by the last level leads straight to running: the old "ready to launch" pause is gone.
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { approvalsJson: JSON.stringify(levels), status: done ? 'RUNNING' : 'PENDING_APPROVAL' } })) as Plan;
   if (done) {
     for (const to of new Set([p.createdById, p.leaderPersonId, ...teamOf(p).map((t) => t.personId)].filter((x) => x !== me)))
       await tellOne(to, p, `Approved: ${p.title}`, `plan-approved:${p.id}:${to}`);
@@ -486,8 +546,8 @@ workPlansRouter.post('/:id/reject', requireAuth, async (req: AuthedRequest, res)
   if (!got) return;
   const { me, c, p } = got;
   if (p.status !== 'PENDING_APPROVAL') return fail(res, 409, 'WRONG_STATE', 'This plan is not waiting for approval');
-  if (p.createdById === me) return fail(res, 403, 'OWN_ENTRY', 'Nobody decides on their own plan');
-  if (!canApprove(p, me, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not decide at this level');
+  if (currentLevel(p)?.levelKey === 'TREASURER') return fail(res, 409, 'USE_MONEY_CHECK', 'The Treasurer answers with the figures check');
+  if (!canApprove(p, me, c.data)) return p.createdById === me ? fail(res, 403, 'OWN_ENTRY', 'Nobody decides on their own plan') : fail(res, 403, 'FORBIDDEN', 'You may not decide at this level');
   const parsed = z.object({ reason: z.string().trim().min(1).max(NOTE_MAX) }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'REASON_REQUIRED', 'Please give a reason');
   const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'DRAFT', approvalsJson: '[]', rejectedReason: parsed.data.reason } })) as Plan;
@@ -503,9 +563,16 @@ workPlansRouter.post('/:id/start', requireAuth, (req: AuthedRequest, res) =>
   }),
 );
 
+/** Closing takes one line of result and finishes the activity. Without it the older report route still applies (Closing, then the report). */
 workPlansRouter.post('/:id/close', requireAuth, (req: AuthedRequest, res) =>
-  move(req, res, { action: 'close', allow: managers }, async (p) => {
-    await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'CLOSING' } });
+  move(req, res, { action: 'close', allow: managers }, async (p, me) => {
+    const one = z.object({ outcome: z.string().trim().min(1).max(TEXT_MAX) }).safeParse(req.body ?? {});
+    if (!one.success) {
+      await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'CLOSING' } });
+      return;
+    }
+    await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'ENDED', outcome: one.data.outcome, reportPublishedAt: new Date(), reportPublishedById: me } });
+    for (const to of new Set([p.createdById, p.leaderPersonId, ...teamOf(p).map((t) => t.personId)].filter((x) => x !== me))) await tellOne(to, p, `Done: ${p.title}`, `plan-done:${p.id}:${to}`);
   }),
 );
 
@@ -536,6 +603,83 @@ workPlansRouter.post('/:id/cancel', requireAuth, async (req: AuthedRequest, res)
   if (!parsed.success) return fail(res, 400, 'REASON_REQUIRED', 'Please give a reason');
   const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'CANCELLED', cancelReason: parsed.data.reason } })) as Plan;
   await audit(me, p.systemId, 'WORKPLAN_CANCELLED', `Cancelled “${p.title}”`, { planId: p.id, reason: parsed.data.reason });
+  res.json({ plan: await shape(row, c, me, true) });
+});
+
+/* ── When it happens: the date, range or repeat, the times and the place; an approved activity may be moved ── */
+
+/** People who hold one of these offices in the plan's own system, or one of the church-wide offices, by their own office. */
+function holdersOf(data: Ctx['data'], systemId: string, unitOffices: string[], churchOffices: string[]): string[] {
+  const ids = [...new Set((data.positions as Array<{ personId: string }>).map((x) => x.personId))];
+  const now = new Date();
+  return ids.filter((id) => liveHoldings(id, data, now).some((h) => h.via === 'OFFICE' && ((unitOffices.includes(h.office) && h.systemId === systemId) || churchOffices.includes(h.office))));
+}
+
+const timingSig = (t: Timing) =>
+  JSON.stringify([t.timingKind ?? 'RANGE', t.startsOn ? churchDay(t.startsOn) : null, t.endsOn ? churchDay(t.endsOn) : null, t.startTime ?? null, t.endTime ?? null, t.repeatJson ?? null]);
+
+workPlansRouter.patch('/:id/timing', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!flags(p, c, me).canSetTiming) return fail(res, 403, 'FORBIDDEN', 'You may not change the time of this activity');
+  const parsed = z
+    .object({
+      timingKind: z.enum(TIMING_KINDS), startsOn: z.string().datetime().nullish(), endsOn: z.string().datetime().nullish(),
+      startTime: z.string().max(5).nullish(), endTime: z.string().max(5).nullish(), repeat: repeatSchema.nullish(), location: z.string().trim().max(TITLE_MAX).nullish(),
+    })
+    .safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid time');
+  const b = parsed.data;
+  const tbad = timingCheck(b);
+  if (tbad) return fail(res, 400, tbad.code, tbad.msg);
+  if (p.status !== 'DRAFT' && !b.startsOn) return fail(res, 400, 'DATE_REQUIRED', 'An approved activity needs a date');
+  const next = timingData(b);
+  const placeChanged = b.location !== undefined && (b.location || null) !== (p.location ?? null);
+  const moved = timingSig(p as Timing) !== timingSig(next);
+  const data: Record<string, unknown> = { ...next };
+  if (b.location !== undefined) data.location = b.location || null;
+  const approved = p.status !== 'DRAFT';
+  const over = approved && moved && postponedOverSixMonths(p.startsOn, next.startsOn);
+  if (approved && moved) {
+    data.dateChangeJson = JSON.stringify({
+      fromStart: p.startsOn ? churchDay(p.startsOn) : null, fromEnd: p.endsOn ? churchDay(p.endsOn) : null,
+      toStart: next.startsOn ? churchDay(next.startsOn) : null, toEnd: next.endsOn ? churchDay(next.endsOn) : null, at: new Date().toISOString(), byId: me,
+    });
+    if (over) data.reviewDue = true;
+  }
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data })) as Plan;
+  await audit(me, p.systemId, 'WORKPLAN_TIMING', `${moved ? 'Moved' : 'Updated'} “${p.title}”${placeChanged ? ' and changed its place' : ''}`, {
+    planId: p.id, from: timingText(p as Timing), to: timingText(next as Timing), place: placeChanged ? b.location || null : undefined,
+  });
+  if (approved && (moved || placeChanged)) {
+    const to = new Set([
+      ...holdersOf(c.data, p.systemId, ['SECRETARY'], ['CHURCH_SECRETARY']),
+      ...holdersOf(c.data, p.systemId, ['VICE_PRESIDENT'], []),
+      ...holdersOf(c.data, p.systemId, ['TREASURER'], ['CHURCH_TREASURER']),
+      ...(over ? holdersOf(c.data, p.systemId, [], ['CHURCH_LEADER']) : []),
+    ]);
+    const body = moved ? `${timingText(p as Timing)} → ${timingText(next as Timing)}` : `${p.location ?? ''} → ${b.location ?? ''}`;
+    for (const id of to) {
+      if (id === me) continue;
+      await notifySafely(prisma as never, {
+        kind: over && holdersOf(c.data, p.systemId, [], ['CHURCH_LEADER']).includes(id) ? 'WAITING_FOR_ME' : 'FOR_INFORMATION', toPersonId: id, systemId: p.systemId,
+        title: `${moved ? 'Date changed' : 'Place changed'}: ${p.title}`, body, href: `/s/${p.systemId}/work/plans/${p.id}`, sourceKey: `plan-timing:${p.id}:${Date.now()}:${id}`,
+      });
+    }
+  }
+  res.json({ plan: await shape(row, c, me, true) });
+});
+
+/** The Church Leader has looked at an activity postponed by more than six months and decided whether its money stays reserved. */
+workPlansRouter.post('/:id/review-seen', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!canDecideForChurch(me, c.data)) return fail(res, 403, 'FORBIDDEN', 'Only the Church Leader reviews a long postponement');
+  if (!p.reviewDue) return fail(res, 409, 'WRONG_STATE', 'Nothing to review');
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { reviewDue: false } })) as Plan;
+  await audit(me, p.systemId, 'WORKPLAN_REVIEWED', `Reviewed the postponement of “${p.title}”`, { planId: p.id });
   res.json({ plan: await shape(row, c, me, true) });
 });
 

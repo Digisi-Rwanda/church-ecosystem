@@ -40,15 +40,13 @@ const loadGroupPage = () => import('./GroupPage').then((m) => ({ default: m.Grou
 export const GroupPage = lazy(loadGroupPage);
 const loadGroupsPage = () => import('./GroupsPage').then((m) => ({ default: m.GroupsPage }));
 export const GroupsPage = lazy(loadGroupsPage);
-const loadLetterPage = () => import('./LetterPage').then((m) => ({ default: m.LetterPage }));
-export const LetterPage = lazy(loadLetterPage);
-const loadLettersPage = () => import('./LettersPage').then((m) => ({ default: m.LettersPage }));
-export const LettersPage = lazy(loadLettersPage);
 const loadMeetingPage = () => import('./MeetingPage').then((m) => ({ default: m.MeetingPage }));
 export const MeetingPage = lazy(loadMeetingPage);
 const loadMeetingsPage = () => import('./MeetingsPage').then((m) => ({ default: m.MeetingsPage }));
 export const MeetingsPage = lazy(loadMeetingsPage);
 const loadMoneyBudgetPage = () => import('./MoneyBudgetPage').then((m) => ({ default: m.MoneyBudgetPage }));
+const loadFundsPage = () => import('./FundsPage').then((m) => ({ default: m.FundsPage }));
+export const FundsPage = lazy(loadFundsPage);
 export const MoneyBudgetPage = lazy(loadMoneyBudgetPage);
 const loadMoneyPage = () => import('./MoneyPage').then((m) => ({ default: m.MoneyPage }));
 export const MoneyPage = lazy(loadMoneyPage);
@@ -66,8 +64,6 @@ const loadNotificationsPage = () => import('./NotificationsPage').then((m) => ({
 export const NotificationsPage = lazy(loadNotificationsPage);
 const loadOrgTreePage = () => import('./OrgTreePage').then((m) => ({ default: m.OrgTreePage }));
 export const OrgTreePage = lazy(loadOrgTreePage);
-const loadOversightPage = () => import('./OversightPage').then((m) => ({ default: m.OversightPage }));
-export const OversightPage = lazy(loadOversightPage);
 const loadPeopleDirectoryPage = () => import('./PeopleDirectoryPage').then((m) => ({ default: m.PeopleDirectoryPage }));
 export const PeopleDirectoryPage = lazy(loadPeopleDirectoryPage);
 const loadPerson360Page = () => import('./Person360Page').then((m) => ({ default: m.Person360Page }));
@@ -78,6 +74,8 @@ const loadPlanPage = () => import('./PlanPage').then((m) => ({ default: m.PlanPa
 export const PlanPage = lazy(loadPlanPage);
 const loadPublicEventPage = () => import('./PublicEventPage').then((m) => ({ default: m.PublicEventPage }));
 export const PublicEventPage = lazy(loadPublicEventPage);
+const loadActivityNew = () => import('./ActivityNew').then((m) => ({ default: m.ActivityNew }));
+export const ActivityNew = lazy(loadActivityNew);
 const loadActionPlanCreate = () => import('./ActionPlanCreate').then((m) => ({ default: m.ActionPlanCreate }));
 export const ActionPlanCreate = lazy(loadActionPlanCreate);
 const loadPlansPage = () => import('./PlansPage').then((m) => ({ default: m.PlansPage }));
@@ -157,10 +155,9 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   DeletedWorkPage: loadDeletedWorkPage,
   GroupPage: loadGroupPage,
   GroupsPage: loadGroupsPage,
-  LetterPage: loadLetterPage,
-  LettersPage: loadLettersPage,
   MeetingPage: loadMeetingPage,
   MeetingsPage: loadMeetingsPage,
+  FundsPage: loadFundsPage,
   MoneyBudgetPage: loadMoneyBudgetPage,
   MoneyPage: loadMoneyPage,
   MoneyPlanPage: loadMoneyPlanPage,
@@ -170,13 +167,13 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   MyContributionPage: loadMyContributionPage,
   NotificationsPage: loadNotificationsPage,
   OrgTreePage: loadOrgTreePage,
-  OversightPage: loadOversightPage,
   PeopleDirectoryPage: loadPeopleDirectoryPage,
   Person360Page: loadPerson360Page,
   PersonCardPage: loadPersonCardPage,
   PlanPage: loadPlanPage,
   PublicEventPage: loadPublicEventPage,
   ActionPlanCreate: loadActionPlanCreate,
+  ActivityNew: loadActivityNew,
   PlansPage: loadPlansPage,
   PortalBlockPage: loadPortalBlockPage,
   PortalPage: loadPortalPage,

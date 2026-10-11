@@ -286,6 +286,7 @@ async function main() {
         orgUnitId: ouFinance.id,
         title: 'Church Treasurer',
         systemRole: 'CHURCH_TREASURER',
+        office: 'CHURCH_TREASURER',
         status: 'ACTIVE',
       },
     });

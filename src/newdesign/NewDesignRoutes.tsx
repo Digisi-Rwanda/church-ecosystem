@@ -19,6 +19,7 @@ import {
   GroupsPage,
   MeetingPage,
   MeetingsPage,
+  FundsPage,
   MoneyBudgetPage,
   MoneyPage,
   MoneyPlanPage,
@@ -34,6 +35,7 @@ import {
   PlanPage,
   PublicEventPage,
   ActionPlanCreate,
+  ActivityNew,
   PlansPage,
   PortalBlockPage,
   PortalPage,
@@ -124,11 +126,13 @@ export function newDesignRoutes() {
           <Route path="programs" element={<PlansPage planType="PROGRAM" />} />
           <Route path="events" element={<PlansPage planType="EVENT" />} />
           <Route path="projects" element={<PlansPage planType="PROJECT" />} />
+          <Route path="work/plans/new" element={<ActivityNew />} />
           <Route path="work/plans/:planId" element={<PlanPage />} />
           <Route path="money" element={<MoneyPage />} />
           <Route path="money/plan" element={<MoneyPlanPage />} />
           <Route path="money/plan/new/:kind" element={<ActionPlanCreate />} />
           <Route path="money/budget" element={<MoneyBudgetPage />} />
+          <Route path="money/funds" element={<FundsPage />} />
           <Route path="money/contributions" element={<ContributionsPage />} />
           <Route path="money/reports" element={<MoneyReportsPage />} />
           <Route path="money/mine" element={<MyContributionPage />} />

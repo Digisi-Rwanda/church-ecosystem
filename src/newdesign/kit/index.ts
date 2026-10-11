@@ -11,7 +11,6 @@ export { SidePanel } from './SidePanel';
 export { ConfirmDialog } from './ConfirmDialog';
 export { PageSkeleton, CardsSkeleton, ShellSkeleton } from './Skeletons';
 export { EmptyState } from '../../components/ui/EmptyState';
-export { FilterBar } from '../../components/ui/FilterBar';
 export { useToast } from '../../components/ui/Toast';
 export { RouteSuspense } from './RouteSuspense';
 export { Tabs, Segmented, type TabItem } from './Tabs';

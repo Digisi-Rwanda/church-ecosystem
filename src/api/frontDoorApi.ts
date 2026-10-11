@@ -794,14 +794,6 @@ export type OversightRow = {
 
 export type CentralOverview = { urgent: UrgentItem[]; urgentTotal: number; oversight: OversightRow[]; reports: ReceivedReport[]; reportsLate?: LateReport[] };
 
-export type ChurchCollections = {
-  months: Array<{ month: string; total: number; count: number }>;
-  ministries: Array<{ systemId: string; name: string; total: number; count: number; toConfirm: number; toHandOver: number }>;
-  totals: { all: number; toConfirm: number; toHandOver: number };
-  missing: Array<{ date: string; kinds: string[] }>;
-};
-export const fetchChurchCollections = (): Promise<ChurchCollections> => apiFetch('/api/central/collections');
-
 export async function fetchCentralOverview(): Promise<CentralOverview> {
   return apiFetch('/api/central/overview');
 }
@@ -841,7 +833,12 @@ export type UnitPlan = {
   slots: ScheduleSlot[];
 };
 
-export type MonthView = { month: string; systemId: string; canWrite: boolean; canConfirm: boolean; canPublish: boolean; units: UnitPlan[] };
+/** An approved activity on its own day(s); a repeat is expanded for the month asked for. Read-only on the schedule. */
+export type ScheduleActivity = {
+  planId: string; title: string; planType: 'PROGRAM' | 'EVENT' | 'PROJECT'; unitId: string; unitName: string; systemId: string;
+  date: string; startTime: string | null; endTime: string | null; location: string | null; status: string;
+};
+export type MonthView = { month: string; systemId: string; canWrite: boolean; canConfirm: boolean; canPublish: boolean; units: UnitPlan[]; activities: ScheduleActivity[] };
 export type ScheduleOptions = {
   units: Array<{ id: string; name: string; systemId: string }>;
   kinds: SlotKind[];
@@ -876,6 +873,11 @@ export const fetchMonth = (systemId: string, month: string): Promise<MonthView> 
 export async function fetchChurchCalendar(month: string): Promise<ChurchSlot[]> {
   const res = await apiFetch<{ slots: ChurchSlot[] }>(`/api/schedule/church?month=${encodeURIComponent(month)}`);
   return res.slots;
+}
+/** The church calendar of a month: the published slots marked for the whole church, and the approved activities everyone may see. */
+export async function fetchChurchMonth(month: string): Promise<{ slots: ChurchSlot[]; activities: ScheduleActivity[] }> {
+  const res = await apiFetch<{ slots: ChurchSlot[]; activities?: ScheduleActivity[] }>(`/api/schedule/church?month=${encodeURIComponent(month)}`);
+  return { slots: res.slots, activities: res.activities ?? [] };
 }
 export async function fetchMyDuties(): Promise<Duty[]> {
   const res = await apiFetch<{ duties: Duty[] }>('/api/schedule/mine');
@@ -985,9 +987,16 @@ export async function restoreWork(id: string): Promise<void> {
 
 export type WorkPlanStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'SETUP' | 'RUNNING' | 'PAUSED' | 'CLOSING' | 'ENDED' | 'CANCELLED';
 
+/** The five states people see: Draft, Waiting, Approved, Done, Cancelled. */
+export type ActivityState = 'DRAFT' | 'WAITING' | 'APPROVED' | 'DONE' | 'CANCELLED';
+export type TimingKind = 'DATE' | 'RANGE' | 'REPEAT';
+export type RepeatRule = { kind: 'WEEKLY'; days: number[] } | { kind: 'MONTHLY'; nth: number; day: number };
+export type DateChange = { fromStart: string | null; fromEnd: string | null; toStart: string | null; toEnd: string | null; at: string };
+
 export type PlanFlags = {
+  canSetTiming: boolean; canClearReview: boolean;
   canEdit: boolean; canSubmit: boolean; canWithdraw: boolean; canApprove: boolean; canReopen: boolean; canStart: boolean; canClose: boolean;
-  canPause: boolean; canResume: boolean; canRenew: boolean;
+  canPause: boolean; canResume: boolean; canRenew: boolean; canCheckMoney: boolean;
   canCancel: boolean; canDelete: boolean; canNote: boolean; canCheck: boolean; canAddCheck: boolean; canCompose: boolean; canPublish: boolean;
   canManageRegistration: boolean; canMarkAttendance: boolean; canMilestone: boolean; canTickMilestone: boolean;
   canLink: boolean; canGovern: boolean; canReview: boolean; canMeasure: boolean;
@@ -1000,13 +1009,14 @@ export type PlanItem = PlanFlags & {
   planType: PlanType;
   id: string; title: string; status: WorkPlanStatus; systemId: string; orgUnitId: string; unitName: string; leaderId: string; leaderName: string;
   startsOn: string | null; endsOn: string | null; visibility: WorkVisibility; beyondUnit: boolean; mine: boolean; waitingLevel: string | null;
+  state: ActivityState; timingKind: TimingKind; startTime: string | null; endTime: string | null; repeat: RepeatRule | null; reviewDue: boolean;
 };
 
 export type PlanDetail = PlanItem & {
   aim: string; needs: string; location: string; createdByName: string; details: Record<string, string>;
   team: Array<{ personId: string; name: string; role: string }>;
   levels: Array<{ levelKey: 'UNIT' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null; note: string | null }>;
-  rejectedReason: string | null; cancelReason: string | null;
+  rejectedReason: string | null; cancelReason: string | null; dateChange: DateChange | null;
   notes: Array<{ id: string; authorName: string; text: string; at: string | null }>;
   checks: Array<{ id: string; label: string; done: boolean; doneAt: string | null }>;
   report: { planningSummary: string; executionSummary: string; outcome: string; composedAt: string | null; publishedAt: string | null; frozen: boolean };
@@ -1035,7 +1045,9 @@ export type PlanRegistration = {
 export type PlanInput = {
   title: string; aim: string; needs: string | null; location: string | null; startsOn: string | null; endsOn: string | null;
   leaderId?: string; team: Array<{ personId: string; role: string }>; beyondUnit: boolean; visibility: WorkVisibility; planType?: PlanType;
+  timingKind?: TimingKind; startTime?: string | null; endTime?: string | null; repeat?: RepeatRule | null;
 };
+export type PlanTiming = { timingKind: TimingKind; startsOn: string | null; endsOn: string | null; startTime: string | null; endTime: string | null; repeat: RepeatRule | null; location?: string | null };
 export type PlanOptions = {
   units: Array<{ id: string; name: string; systemId: string }>;
   visibilities: WorkVisibility[];
@@ -1060,6 +1072,8 @@ export async function deletePlan(id: string): Promise<void> {
 }
 export const planStep = (id: string, step: 'submit' | 'withdraw' | 'reopen' | 'start' | 'close' | 'pause' | 'resume' | 'renew' | 'publish' | 'approve', body: object = {}) =>
   planBody(apiFetch(`${P}/${encodeURIComponent(id)}/${step}`, { method: 'POST', body }));
+export const setPlanTiming = (id: string, t: PlanTiming) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/timing`, { method: 'PATCH', body: t }));
+export const reviewSeen = (id: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/review-seen`, { method: 'POST', body: {} }));
 export const rejectPlan = (id: string, reason: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } }));
 export const cancelPlan = (id: string, reason: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } }));
 export const addPlanNote = (id: string, text: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/notes`, { method: 'POST', body: { text } }));
@@ -1271,30 +1285,27 @@ export type MoneyReportView = AccountingView & {
 };
 export const fetchMoneyReport = (systemId: string, year: number): Promise<MoneyReportView> => apiFetch(`${M}/report?${qs({ systemId, year })}`);
 
-export type CountKind = 'OFFERING' | 'THANKSGIVING' | 'SPECIAL';
-export type CountStatus = 'RECORDED' | 'CONFIRMED' | 'VOIDED';
-export type CountItem = {
-  id: string; systemId: string; unitName: string; serviceOn: string; label: string; kind: CountKind; amount: number; note: string; status: CountStatus;
-  counters: Array<{ id: string; name: string }>; recordedByName: string; confirmedByName: string | null; handedToName: string | null; handedAt: string | null;
-  voidReason: string | null; canConfirm: boolean; canVoid: boolean; canHandOver: boolean;
+export type CollectionKind = 'SERVICE' | 'EVENT';
+export type CollectionItem = {
+  id: string; kind: CollectionKind; title: string; heldOn: string; startsAt: string | null; tithe: number; offering: number; other: number; total: number;
+  note: string; status: 'ACTIVE' | 'VOIDED'; voidReason: string | null; recordedByName: string;
 };
-export type CountOptions = { units: Array<{ id: string; name: string; systemId: string }>; kinds: CountKind[]; limits: { noteMax: number; amountMax: number } };
-export type CountInput = { unitId: string; serviceOn: string; label: string; kind: CountKind; amount: number; counterIds: string[]; note?: string | null };
+export type CollectionTotals = { tithe: number; offering: number; other: number; all: number; count: number };
+export type CollectionMonth = { month: string; tithe: number; offering: number; other: number; total: number; count: number };
+export type CollectionsView = {
+  year: number; years: number[]; items: CollectionItem[]; totals: CollectionTotals; byMonth: CollectionMonth[]; canWrite: boolean; limits: { noteMax: number; amountMax: number };
+};
+export type CollectionInput = { kind: CollectionKind; title: string; heldOn: string; startsAt?: string | null; tithe: number; offering: number; other: number; note?: string | null };
 const C = '/api/collections';
-export const fetchCountOptions = (): Promise<CountOptions> => apiFetch(`${C}/options`);
-export const fetchCounts = (systemId: string, status?: string): Promise<{ counts: CountItem[]; canWrite: boolean }> =>
-  apiFetch(`${C}?systemId=${encodeURIComponent(systemId)}${status ? `&status=${status}` : ''}`);
-export async function recordCount(input: CountInput): Promise<void> {
+export const fetchCollections = (year: number): Promise<CollectionsView> => apiFetch(`${C}?year=${year}`);
+export async function recordCollection(input: CollectionInput): Promise<void> {
   await apiFetch(C, { method: 'POST', body: input });
 }
-export async function confirmCount(id: string): Promise<void> {
-  await apiFetch(`${C}/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: {} });
+export async function changeCollection(id: string, input: CollectionInput): Promise<void> {
+  await apiFetch(`${C}/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
 }
-export async function voidCount(id: string, reason: string): Promise<void> {
+export async function voidCollection(id: string, reason: string): Promise<void> {
   await apiFetch(`${C}/${encodeURIComponent(id)}/void`, { method: 'POST', body: { reason } });
-}
-export async function handOverCount(id: string, toPersonId: string): Promise<void> {
-  await apiFetch(`${C}/${encodeURIComponent(id)}/handover`, { method: 'POST', body: { toPersonId } });
 }
 
 // ── Reports (slice 3.5) ─────────────────────────────────────────────────────────
@@ -1621,7 +1632,7 @@ export const fetchGlance = (systemId: string): Promise<{ systemId: string; tiles
 
 /* ─── Leader dashboard ─── */
 export type DashPoint = { label: string; value: number };
-export type DashKpi = { key: 'members' | 'attendance' | 'giving' | 'money' | 'units' | 'reports' | 'work' | 'done'; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok'; prev?: number | null; spark?: number[] };
+export type DashKpi = { key: 'members' | 'attendance' | 'giving' | 'money' | 'units' | 'reports' | 'work' | 'done' | 'activities'; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok'; prev?: number | null; spark?: number[] };
 export type DashByUnit = { year: number; types: string[]; units: Array<{ systemId: string; name: string; byType: Record<string, number>; own: number; donations: number; total: number }> };
 export type Dashboard = {
   systemId: string;
@@ -1632,6 +1643,7 @@ export type Dashboard = {
   workSeries?: Array<{ key: 'created' | 'done'; points: DashPoint[] }>;
   byUnit?: DashByUnit | null;
   attendance: DashPoint[] | null;
+  joinedSeries?: DashPoint[] | null;
   second: { kind: 'giving' | 'money'; series: Array<{ key: 'giving' | 'income' | 'spent'; points: DashPoint[] }> } | null;
   /** Each part appears only when this person's access opens it. */
   overview: {
@@ -1778,3 +1790,35 @@ export type PortalSummary = {
 };
 /** What the Portal's People and Reports pages show, across the systems the person may read. */
 export const fetchPortalSummary = (): Promise<PortalSummary> => apiFetch('/api/portal/summary');
+
+
+// ---- Funds and the money on an activity (slices 3 and 4) ----
+export type FundPot = { id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'OTHER'; code: string; name: string; secured: number; pledged: number; earmarked: number; available: number };
+export type IncomeRecordView = { id: string; kind: string; code: string; label: string; amount: number; status: 'PLEDGED' | 'SECURED' | 'FULFILLED' | 'CANCELLED'; note: string | null; expectedOn: string | null; receivedOn: string | null; recordedByName: string };
+export type FundsView = {
+  systemId: string; canRecord: boolean; pots: FundPot[]; pool: { secured: number; available: number } | null;
+  totals: { secured: number; pledged: number; earmarked: number; available: number };
+  ownTypes: Array<{ code: string; name: string }>; records: IncomeRecordView[];
+};
+export type IncomeInput = { systemId: string; kind: 'CONTRIBUTION' | 'DONATION' | 'OTHER'; code?: string; label: string; amount: number; status: 'PLEDGED' | 'SECURED'; expectedOn?: string; receivedOn?: string; note?: string };
+export const fetchFunds = (systemId: string) => apiFetch<FundsView>(`/api/funds?systemId=${encodeURIComponent(systemId)}`);
+export const recordIncome = (input: IncomeInput) => apiFetch('/api/funds/income', { method: 'POST', body: input });
+export const incomeReceived = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });
+export const incomeCancel = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
+
+export type MoneyLineView = { id: string; title: string; amount: number; category: string | null; note: string | null; checkState: 'VERIFIED' | 'MODIFIED' | null };
+export type ActivityMoney = {
+  planId: string; status: string; open: boolean; planned: number; earmarked: number; gap: number;
+  canEdit: boolean; canVerify: boolean; canCheck: boolean; allVerified: boolean;
+  lines: MoneyLineView[]; sources: Array<{ kind: string; code: string; amount: number; potId: string }>; pots: FundPot[];
+  check: { result: 'CHECKED' | 'FLAGGED'; note: string | null; at: string; byName: string } | null;
+};
+const PM = (id: string) => `/api/work-plans/${encodeURIComponent(id)}`;
+export const fetchActivityMoney = (id: string) => apiFetch<ActivityMoney>(`${PM(id)}/money`);
+export const addMoneyLine = (id: string, line: { title: string; amount: number; category?: string }) => apiFetch<ActivityMoney>(`${PM(id)}/lines`, { method: 'POST', body: line });
+export const editMoneyLine = (id: string, lineId: string, line: { title?: string; amount?: number }) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}`, { method: 'PATCH', body: line });
+export const removeMoneyLine = (id: string, lineId: string) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}`, { method: 'DELETE' });
+export const setMoneySources = (id: string, sources: Array<{ kind: string; code: string; amount: number }>) => apiFetch<ActivityMoney>(`${PM(id)}/sources`, { method: 'PUT', body: { sources } });
+export const verifyMoneyLine = (id: string, lineId: string, verified: boolean) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}/verify`, { method: 'POST', body: { verified } });
+export const answerMoneyCheck = (id: string, result: 'CHECKED' | 'FLAGGED', note?: string) => apiFetch<ActivityMoney>(`${PM(id)}/money-check`, { method: 'POST', body: { result, note } });
+export const fetchMoneyQueue = () => apiFetch<{ items: Array<{ id: string; systemId: string; title: string; planned: number }> }>('/api/work-plans/money-queue');

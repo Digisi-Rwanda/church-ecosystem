@@ -1,4 +1,4 @@
-import type { CountStatus, MoneyEntryItem, MoneyStatus } from '../api/frontDoorApi';
+import type { MoneyEntryItem, MoneyStatus } from '../api/frontDoorApi';
 
 const ERROR_KEYS: Record<string, string> = {
   AMOUNT: 'door.money.err.amount',
@@ -9,7 +9,6 @@ const ERROR_KEYS: Record<string, string> = {
   REASON_REQUIRED: 'door.money.err.reason',
   WRONG_STATE: 'door.money.err.wrongState',
   OWN_ENTRY: 'door.money.err.ownEntry',
-  NEEDS_TWO_COUNTERS: 'door.money.err.twoCounters',
   FORBIDDEN: 'door.gov.err.notAllowed',
   NOT_FOUND: 'door.work.err.gone',
   PERSON_NOT_ACTIVE: 'door.gov.err.personNotActive',
@@ -35,7 +34,6 @@ const ERROR_KEYS: Record<string, string> = {
 export const moneyErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
 
 export const moneyStatusKey = (s: MoneyStatus) => `door.money.status.${s}` as const;
-export const countStatusKey = (s: CountStatus) => `door.money.count.status.${s}` as const;
 export const categoryKey = (c: string) => `door.money.cat.${c}` as const;
 
 /** "12,500 RWF": whole francs, grouped by thousands. */
@@ -57,7 +55,7 @@ export function queueFirst(list: MoneyEntryItem[]): MoneyEntryItem[] {
 
 export const currentMonth = (now = new Date()): string => new Date(now.getTime() + 2 * 3600 * 1000).toISOString().slice(0, 7);
 
-const csvCell = (v: string | number | null): string => {
+export const csvCell = (v: string | number | null): string => {
   const s = v === null ? '' : String(v);
   return /[",\n\r]/.test(s) || /^[=+\-@]/.test(s) ? `"${(/^[=+\-@]/.test(s) ? `'${s}` : s).replace(/"/g, '""')}"` : s;
 };

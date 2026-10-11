@@ -68,6 +68,7 @@ export function RecordForm({ personId, section, existing, onDone, onCancel }: { 
             type={f.type === 'date' ? 'date' : 'text'}
             inputMode={f.type === 'number' ? 'numeric' : undefined}
             maxLength={f.max}
+            placeholder={f.key === 'business' ? t('door.p360.f.business.ph') : undefined}
             value={values[f.key] ?? ''}
             onChange={(e) => set(f.key, e.target.value)}
           />

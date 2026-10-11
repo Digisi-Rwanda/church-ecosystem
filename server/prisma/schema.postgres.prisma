@@ -796,6 +796,19 @@ model WorkPlan {
   steeringJson         String    @default("[]")
   /// JSON object of the named screens' answers (Define the event, Plan the event, ...): text values by key
   detailsJson          String    @default("{}")
+  /// DATE | RANGE | REPEAT: the one way "when" is said
+  timingKind           String    @default("RANGE")
+  /// Optional clock times, "HH:MM", church time
+  startTime            String?
+  endTime              String?
+  /// REPEAT: JSON { kind: "WEEKLY", days: [0..6] } or { kind: "MONTHLY", nth: 1..5, day: 0..6 }
+  repeatJson           String?
+  /// The last change of date after approval: JSON { fromStart, fromEnd, toStart, toEnd, at, byId }
+  dateChangeJson       String?
+  /// Postponed by more than six months: the Church Leader is asked whether the money stays reserved
+  reviewDue            Boolean   @default(false)
+  /// The Treasurer's check of the spending lines: JSON { result: CHECKED | FLAGGED, note, byId, at }. Empty when there is no spending.
+  moneyCheckJson       String?
   createdById          String
   createdAt            DateTime  @default(now())
   updatedAt            DateTime  @updatedAt
@@ -1598,6 +1611,10 @@ model MoneyPlanItem {
   /// The contribution type code, when the funding is a contribution
   fundingCode String?
   fundingNote String?
+  /// The Treasurer's check of this line while its activity is being approved: VERIFIED | MODIFIED (changed after it was verified)
+  checkState  String?
+  checkedById String?
+  checkedAt   DateTime?
 
   @@index([systemId, year])
   @@index([planId])
@@ -1695,4 +1712,73 @@ model PersonDeed {
   deletedById  String?
 
   @@index([personId])
+}
+
+/// What was given at one church service or event: recorded by the Church Treasurer, read by the Church Leader.
+/// Kept apart from Money and from activities on purpose.
+model ServiceCollection {
+  id           String    @id @default(cuid())
+  systemId     String    @default("sys-main")
+  /// SERVICE | EVENT
+  kind         String    @default("SERVICE")
+  title        String
+  heldOn       DateTime
+  /// HH:MM, optional
+  startsAt     String?
+  /// Whole Rwandan francs
+  tithe        Int       @default(0)
+  offering     Int       @default(0)
+  /// Thanksgiving and any other giving
+  other        Int       @default(0)
+  note         String?
+  /// ACTIVE | VOIDED
+  status       String    @default("ACTIVE")
+  voidReason   String?
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  updatedById  String?
+  updatedAt    DateTime  @updatedAt
+
+  @@index([systemId, heldOn])
+}
+
+/// Income the treasurer records as promised (PLEDGED) or received (SECURED). Only SECURED income counts toward what can be set aside.
+/// A CONTRIBUTION or DONATION pledge is FULFILLED when the money arrives through a contribution list or a donation; OTHER income is SECURED here.
+model IncomeRecord {
+  id           String    @id @default(cuid())
+  systemId     String
+  /// CONTRIBUTION | DONATION | OTHER
+  kind         String
+  /// CONTRIBUTION: the unit's own contribution type. OTHER: the pot it sits in (POOL is the general pool). DONATION: empty.
+  code         String    @default("")
+  label        String
+  amount       Int
+  /// PLEDGED | SECURED | FULFILLED | CANCELLED
+  status       String
+  expectedOn   DateTime?
+  receivedOn   DateTime?
+  note         String?
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  updatedById  String?
+  updatedAt    DateTime  @default(now())
+
+  @@index([systemId, status])
+}
+
+/// Money set aside for an activity from one pot of its unit. A pot is a kind of source and its code.
+model PlanSource {
+  id          String   @id @default(cuid())
+  planId      String
+  systemId    String
+  /// CONTRIBUTION | DONATION | OTHER
+  kind        String
+  code        String   @default("")
+  amount      Int
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@unique([planId, kind, code])
+  @@index([planId])
+  @@index([systemId])
 }

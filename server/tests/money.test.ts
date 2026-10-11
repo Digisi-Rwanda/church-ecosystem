@@ -137,39 +137,3 @@ describe('money', () => {
     expect((await post('p-ctr', '/api/money/entries', entry(b))).body.code).toBe('ACCOUNT_CLOSED');
   });
 });
-
-describe('collections', () => {
-  it('belong to Central Administration only: no other system records or reads them', async () => {
-    expect((await post('p-vp', '/api/collections', { unitId: 'ou-choir', serviceOn: '2026-10-04', label: 'Sunday service', amount: 85000, counterIds: ['p-vp', 'p-choir-member'] })).status).toBe(403);
-    expect((await get('p-vp', '/api/collections?systemId=sys-choir')).status).toBe(404);
-    const opts = await get('p-vp', '/api/collections/options');
-    expect(opts.body.units.map((u: { systemId: string }) => u.systemId)).toEqual(['sys-main']);
-  });
-  const count = (o: object = {}) => ({ unitId: 'ou-church', serviceOn: '2026-10-04', label: 'Sunday service', amount: 85000, counterIds: ['p-vp', 'p-choir-member'], ...o });
-  it('needs two different counters', async () => {
-    expect((await post('p-vp', '/api/collections', count({ counterIds: ['p-vp'] }))).status).toBe(400);
-    expect((await post('p-vp', '/api/collections', count({ counterIds: ['p-vp', 'p-vp'] }))).body.code).toBe('NEEDS_TWO_COUNTERS');
-  });
-  it('the treasurer (no governance write) cannot record; a vice president can', async () => {
-    expect((await post('p-ctr', '/api/collections', count())).status).toBe(403);
-    expect((await post('p-vp', '/api/collections', count())).status).toBe(201);
-  });
-  it('someone who counted cannot confirm; the president does; then it is handed over and the treasurer is told', async () => {
-    const c = (await post('p-vp', '/api/collections', count())).body.id;
-    expect((await post('p-vp', `/api/collections/${c}/confirm`)).status).toBe(403);
-    expect((await post('p-choir-leader', `/api/collections/${c}/handover`, { toPersonId: 'p-ctr' })).status).toBe(409);
-    expect((await post('p-choir-leader', `/api/collections/${c}/confirm`)).status).toBe(200);
-    expect((await post('p-vp', `/api/collections/${c}/void`, { reason: 'x' })).status).toBe(409);
-    expect((await post('p-vp', `/api/collections/${c}/handover`, { toPersonId: 'p-ctr' })).status).toBe(200);
-    expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-ctr')).toBe(true);
-    expect(fake.__db.moneyEntry.length).toBe(0);
-    expect((await post('p-vp', `/api/collections/${c}/handover`, { toPersonId: 'p-ctr' })).status).toBe(409);
-  });
-  it('a recorded count can be voided with a reason; members cannot see counts', async () => {
-    const c = (await post('p-vp', '/api/collections', count())).body.id;
-    expect((await post('p-vp', `/api/collections/${c}/void`)).body.code).toBe('REASON_REQUIRED');
-    expect((await post('p-vp', `/api/collections/${c}/void`, { reason: 'Wrong day' })).status).toBe(200);
-    expect((await get('p-choir-member', '/api/collections?systemId=sys-main')).status).toBe(404);
-    expect((await get('p-vp', '/api/collections?systemId=sys-main')).body.counts[0].status).toBe('VOIDED');
-  });
-});

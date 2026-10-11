@@ -62,7 +62,7 @@ export function ActivitiesView({ systemId }: { systemId: string }) {
                     <StatusChip tone={p.status === 'RUNNING' ? 'info' : p.status === 'ENDED' ? 'success' : p.status === 'CANCELLED' ? 'danger' : p.status === 'PENDING_APPROVAL' || p.status === 'PAUSED' || p.status === 'CLOSING' ? 'warn' : 'neutral'}>{t(planStatusKey(p.status, p.planType))}</StatusChip>
                   </div>
                   <p className="act-when">{when(p)}</p>
-                  {p.status === 'DRAFT' && <Link className="btn ghost sm" to={`/s/${systemId}/money/plan/new/${p.planType.toLowerCase()}?plan=${p.id}`}>{t('door.ap.continue')}</Link>}
+                  {p.status === 'DRAFT' && <Link className="btn ghost sm" to={`/s/${systemId}/work/plans/${p.id}`}>{t('door.ap.continue')}</Link>}
                   {money && (
                     <div className="act-budget">
                       {lines.length === 0 ? <span className="muted">{t('door.activities.noBudget')}</span> : (

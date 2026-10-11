@@ -167,7 +167,7 @@ describe('buildPortalModules', () => {
     const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
     const mk = (blocks: object) => ({ blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'], systems: [{ id: 'sys-a', blocks: { ...none, ...blocks }, own: [] }] }) as unknown as Capabilities;
     const keys = (caps: Capabilities) => buildModules(caps, 'sys-a').find((m) => m.id === 'money')!.places.map((p) => p.key);
-    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'accounting', 'contributions', 'moneyreports', 'mine']);
+    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'funds', 'accounting', 'contributions', 'moneyreports', 'mine']);
     expect(keys(mk({ people: ['R'] }))).toEqual(['mine']);
     const mods = buildModules(mk({ money: ['R'] }), 'sys-a');
     expect(resolveActive(mods, '/s/sys-a/money')?.place?.key).toBe('accounting');
@@ -176,11 +176,13 @@ describe('buildPortalModules', () => {
     const lead = buildModules(mk({ people: ['R'] }), 'sys-a');
     expect(resolveActive(lead, '/s/sys-a/money/contributions')).toMatchObject({ module: { id: 'money' }, place: null });
   });
-  it('Collections is a Governance sub-block of Central Administration only', async () => {
+  it('Collections is a Governance sub-block of Central Administration, for those who hold it', async () => {
     const { buildModules } = await import('./menu');
     const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
-    const sys = (id: string) => ({ id, blocks: { ...none }, own: [{ key: 'governance', letters: ['R'] }] });
-    const caps = { blockOrder: [], systems: [sys('sys-main'), sys('sys-youth')] } as unknown as Capabilities;
+    const sys = (id: string, extra: string[] = []) => ({ id, blocks: { ...none }, own: [{ key: 'governance', letters: ['R'] }, ...extra.map((key) => ({ key, letters: ['R'] }))] });
+    const caps = { blockOrder: [], systems: [sys('sys-main', ['collections']), sys('sys-youth', ['collections'])] } as unknown as Capabilities;
+    const without = { blockOrder: [], systems: [sys('sys-main')] } as unknown as Capabilities;
+    expect(buildModules(without, 'sys-main').find((m) => m.id === 'governance')!.places.map((p) => p.key)).toEqual(['meetings', 'decisions']);
     const keys = (id: string) => buildModules(caps, id).find((m) => m.id === 'governance')!.places.map((p) => p.key);
     expect(keys('sys-main')).toEqual(['meetings', 'decisions', 'collections']);
     expect(keys('sys-youth')).toEqual(['meetings', 'decisions']);

@@ -94,11 +94,12 @@ describe('creating and assigning', () => {
     expect((await post('p-youth-leader', '/api/work', body())).status).toBe(403);
     expect((await post('p-choir-leader', '/api/work', body({ ownerId: 'p-gone' }))).body.code).toBe('PERSON_NOT_ACTIVE');
   });
-  it('only a President creates work; a Vice President only while the Write letter is lent', async () => {
+  it('a President and a Vice President create work (the Vice President holds the Write letter), a plain member does not', async () => {
     expect((await post('p-vp', '/api/work', body())).status).toBe(201);
-    fake.__db.delegation.length = 0;
-    expect((await post('p-vp', '/api/work', body())).status).toBe(403);
+    fake.__db.delegation.length = 0; // nothing is lent any more: the office carries the letter itself
+    expect((await post('p-vp', '/api/work', body())).status).toBe(201);
     expect((await post('p-choir-leader', '/api/work', body())).status).toBe(201);
+    expect((await post('p-choir-member', '/api/work', body())).status).toBe(403);
   });
   it('creates work, tells the owner and the helpers, audits it', async () => {
     const r = await post('p-vp', '/api/work', body({ helperIds: ['p-youth-member', 'p-choir-member'] }));

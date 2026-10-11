@@ -5,9 +5,10 @@ import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { PersonPicker } from './PersonPicker';
 import { planErrorKey } from './plans';
-import { dueToInput, inputToDue } from './work';
+import { WhenFields } from './WhenFields';
+import { emptyWhen, whenOf, whenProblem, whenToInput } from './when';
 
-/** Write a plan, or (with `existing`) change a draft. The leader and the team are picked by name. */
+/** One page to write an activity (or, with `existing`, to change a draft): what, which unit, when, who leads, where, and who takes part. */
 export function PlanForm({
   options,
   systemId,
@@ -26,23 +27,18 @@ export function PlanForm({
   const t = useT();
   const units = options.units.filter((u) => u.systemId === systemId);
   const [unitId, setUnitId] = useState(existing?.orgUnitId ?? (units.length === 1 ? units[0].id : ''));
-  const [planType, setPlanType] = useState<PlanType>(existing?.planType ?? startType ?? 'PROJECT');
+  const [planType, setPlanType] = useState<PlanType>(existing?.planType ?? startType ?? 'EVENT');
   const [title, setTitle] = useState(existing?.title ?? '');
   const [aim, setAim] = useState(existing?.aim ?? '');
   const [needs, setNeeds] = useState(existing?.needs ?? '');
   const [location, setLocation] = useState(existing?.location ?? '');
-  const [starts, setStarts] = useState(dueToInput(existing?.startsOn ?? null));
-  const [ends, setEnds] = useState(dueToInput(existing?.endsOn ?? null));
+  const [when, setWhen] = useState(existing ? whenOf(existing) : emptyWhen());
   const [leader, setLeader] = useState<{ id: string; name: string } | null>(existing ? { id: existing.leaderId, name: existing.leaderName } : null);
   const [team, setTeam] = useState<Array<{ personId: string; name: string; role: string }>>(existing?.team ?? []);
   const [role, setRole] = useState('');
-  const [beyond, setBeyond] = useState(existing?.beyondUnit ?? false);
   const [visibility, setVisibility] = useState<WorkVisibility>(existing?.visibility ?? 'SYSTEM');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const [step, setStep] = useState(0);
-  const wizard = !existing;
-  const show = (n: number) => !wizard || step === n;
 
   const addMember = (p: DirectoryPerson) => {
     if (!role.trim()) return setError(t('door.plan.form.roleFirst'));
@@ -51,20 +47,15 @@ export function PlanForm({
     setRole('');
   };
 
-  const next = () => {
-    if (step === 0 && (!title.trim() || !unitId)) return setError(t('door.plan.form.incomplete'));
-    setError('');
-    setStep(step + 1);
-  };
-
   const submit = async (e: FormEvent) => {
     e.preventDefault();
-    if (wizard && step < 2) return next();
     if (!title.trim() || !leader || (!existing && !unitId)) return setError(t('door.plan.form.incomplete'));
+    const bad = whenProblem(when);
+    if (bad) return setError(t(planErrorKey(bad) as 'door.people.actionFailed'));
     const input = {
       title: title.trim(), aim: aim.trim(), needs: needs.trim() || null, location: location.trim() || null,
-      startsOn: starts ? inputToDue(starts) : null, endsOn: ends ? inputToDue(ends) : null, leaderId: leader.id,
-      team: team.map((m) => ({ personId: m.personId, role: m.role })), beyondUnit: beyond, visibility, planType,
+      ...whenToInput(when), leaderId: leader.id,
+      team: team.map((m) => ({ personId: m.personId, role: m.role })), beyondUnit: false, visibility, planType,
     };
     setBusy(true);
     setError('');
@@ -79,50 +70,26 @@ export function PlanForm({
   return (
     <form className="panel door-form" onSubmit={submit} noValidate>
       <h3>{existing ? t('door.plan.form.edit') : t('door.plan.form.new')}</h3>
-      {wizard && (
-        <p className="muted" aria-live="polite">
-          {t('door.plan.wizard.step', { n: step + 1, total: 3 })} · {t(`door.plan.wizard.${step}` as 'door.plan.wizard.0')}
-        </p>
-      )}
-      {show(0) && !existing && units.length > 1 && (
-        <SelectField label={t('door.work.form.unit')} name="p-unit" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
-          <option value="">{t('door.gov.meeting.choose')}</option>
-          {units.map((u) => (
-            <option key={u.id} value={u.id}>
-              {u.name}
-            </option>
-          ))}
-        </SelectField>
-      )}
-      {show(0) && (
-        <>
       <TextField label={t('door.plan.form.title')} name="p-title" value={title} maxLength={options.limits.titleMax} onChange={(e) => setTitle(e.target.value)} />
-      <TextAreaField label={t('door.plan.form.aim')} name="p-aim" rows={3} value={aim} maxLength={options.limits.textMax} onChange={(e) => setAim(e.target.value)} />
-        </>
-      )}
-      {show(2) && <TextAreaField label={t('door.plan.form.needs')} name="p-needs" rows={2} value={needs} maxLength={options.limits.textMax} onChange={(e) => setNeeds(e.target.value)} />}
-      {show(1) && <TextField label={t('door.plan.form.location')} name="p-loc" value={location} maxLength={options.limits.titleMax} onChange={(e) => setLocation(e.target.value)} />}
-      {show(0) && (
-      <SelectField label={t('door.plan.type')} name="p-type" value={planType} onChange={(e) => setPlanType(e.target.value as PlanType)}>
-        {PLAN_TYPES.map((k) => (
-          <option key={k} value={k}>
-            {t(`door.plan.type.${k}` as 'door.plan.type.PROGRAM')}
-          </option>
-        ))}
-      </SelectField>
-      )}
-      {show(1) && (
-        <>
-      <TextField label={t('door.plan.form.starts')} name="p-starts" type="date" value={starts} onChange={(e) => setStarts(e.target.value)} />
-      <TextField label={t('door.plan.form.ends')} name="p-ends" type="date" value={ends} onChange={(e) => setEnds(e.target.value)} />
-        </>
-      )}
-      {show(2) && (
-        <>
+      <div className="door-row">
+        <SelectField label={t('door.plan.type')} name="p-type" value={planType} onChange={(e) => setPlanType(e.target.value as PlanType)}>
+          {PLAN_TYPES.map((k) => (<option key={k} value={k}>{t(`door.plan.type.${k}` as 'door.plan.type.PROGRAM')}</option>))}
+        </SelectField>
+        {!existing && units.length > 1 && (
+          <SelectField label={t('door.work.form.unit')} name="p-unit" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+            <option value="">{t('door.gov.meeting.choose')}</option>
+            {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
+          </SelectField>
+        )}
+      </div>
+      <WhenFields value={when} onChange={setWhen} idPrefix="p-when" />
+      <TextField label={t('door.plan.form.location')} name="p-loc" value={location} maxLength={options.limits.titleMax} onChange={(e) => setLocation(e.target.value)} />
       <p>
         <strong>{t('door.plan.leader')}:</strong> {leader ? leader.name : <span className="muted">{t('door.work.form.nobody')}</span>}
       </p>
       <PersonPicker label={t('door.plan.form.pickLeader')} name="p-leader" onPick={(p) => setLeader({ id: p.id, name: p.fullName })} />
+      <TextAreaField label={t('door.plan.form.aim')} name="p-aim" rows={3} value={aim} maxLength={options.limits.textMax} onChange={(e) => setAim(e.target.value)} />
+      <TextAreaField label={t('door.plan.form.needs')} name="p-needs" rows={2} value={needs} maxLength={options.limits.textMax} onChange={(e) => setNeeds(e.target.value)} />
       {team.length > 0 && (
         <ul className="door-chips">
           {team.map((m) => (
@@ -136,41 +103,14 @@ export function PlanForm({
       )}
       <TextField label={t('door.plan.form.role')} name="p-role" value={role} maxLength={options.limits.roleMax} placeholder={t('door.sched.rolePlaceholder')} onChange={(e) => setRole(e.target.value)} />
       <PersonPicker label={t('door.plan.form.pickMember')} name="p-member" onPick={addMember} />
-      <label className="door-check">
-        <input type="checkbox" checked={beyond} onChange={(e) => setBeyond(e.target.checked)} /> {t('door.plan.form.beyond')}
-      </label>
       <SelectField label={t('door.work.form.visibility')} name="p-vis" hint={t(`door.work.visibility.${visibility}.hint` as const)} value={visibility} onChange={(e) => setVisibility(e.target.value as WorkVisibility)}>
-        {options.visibilities.map((v) => (
-          <option key={v} value={v}>
-            {t(`door.work.visibility.${v}` as const)}
-          </option>
-        ))}
+        {options.visibilities.map((v) => (<option key={v} value={v}>{t(`door.work.visibility.${v}` as const)}</option>))}
       </SelectField>
-        </>
-      )}
-      {error && (
-        <p className="door-error" role="alert">
-          {error}
-        </p>
-      )}
+      <p className="muted">{t('door.plan.form.approvalHint')}</p>
+      {error && (<p className="door-error" role="alert">{error}</p>)}
       <div className="door-row">
-        {wizard && step < 2 ? (
-          <button type="button" className="btn" onClick={next}>
-            {t('door.plan.wizard.next')}
-          </button>
-        ) : (
-          <button type="submit" className="btn" disabled={busy}>
-            {existing ? t('door.work.form.save') : t('door.plan.form.create')}
-          </button>
-        )}
-        {wizard && step > 0 && (
-          <button type="button" className="btn secondary" onClick={() => { setError(''); setStep(step - 1); }}>
-            {t('door.plan.wizard.back')}
-          </button>
-        )}
-        <button type="button" className="btn ghost" onClick={onCancel}>
-          {t('door.settings.cancel')}
-        </button>
+        <button type="submit" className="btn" disabled={busy}>{existing ? t('door.work.form.save') : t('door.plan.form.create')}</button>
+        <button type="button" className="btn ghost" onClick={onCancel}>{t('door.settings.cancel')}</button>
       </div>
     </form>
   );
