@@ -7954,3 +7954,28 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 .p360-deeds.embedded { display: grid; gap: var(--sp-3); margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
 .p360-deed-lead { margin: 0; font-size: 0.85rem; color: var(--ink-muted); }
 .p360-deed-manage summary { cursor: pointer; font-size: 0.85rem; color: var(--ink-muted); }
+
+/* Portal: a top bar instead of a sidebar */
+.ptop-shell { min-height: 100vh; background: var(--bg, var(--surface)); }
+.ptop { position: sticky; top: 0; z-index: 20; background: var(--surface-2); border-bottom: 1px solid var(--line); box-shadow: var(--sh-1, 0 1px 2px rgb(16 24 40 / 0.06)); }
+.ptop-inner { display: flex; align-items: center; gap: 1.25rem; max-width: 72rem; margin: 0 auto; padding: 0.6rem 1rem; }
+.ptop-brand { display: flex; align-items: center; gap: 0.6rem; flex: none; }
+.ptop-brand-text { display: grid; line-height: 1.15; }
+.ptop-brand-text small { color: var(--ink-muted, #667); font-size: var(--fs-xs, 0.75rem); }
+.ptop-nav { display: flex; align-items: center; gap: 0.25rem; flex: 1; min-width: 0; overflow-x: auto; scrollbar-width: none; }
+.ptop-nav::-webkit-scrollbar { display: none; }
+.ptop-link { position: relative; display: inline-flex; align-items: center; gap: 0.45rem; padding: 0.5rem 0.8rem; border-radius: 10px; font-size: 0.9rem; font-weight: 500; color: var(--ink, inherit); text-decoration: none; white-space: nowrap; transition: background var(--dur-fast, 0.15s) ease, color var(--dur-fast, 0.15s) ease; }
+.ptop-link:hover, .ptop-link:focus-visible { background: var(--accent-soft); color: var(--accent-on-soft, var(--accent)); }
+.ptop-link.active { background: var(--accent-soft); color: var(--accent-on-soft, var(--accent)); font-weight: 650; }
+.ptop-actions { display: flex; align-items: center; gap: 0.6rem; flex: none; }
+.ptop-user { display: grid; line-height: 1.15; text-align: right; }
+.ptop-user-name { font-size: 0.85rem; font-weight: 600; }
+.ptop-user-role { font-size: var(--fs-xs, 0.75rem); }
+.ptop-content { max-width: 72rem; margin: 0 auto; padding: 1.25rem 1rem 2rem; display: grid; gap: 1rem; align-content: start; }
+@media (max-width: 52rem) {
+  .ptop-inner { flex-wrap: wrap; gap: 0.5rem 0.75rem; }
+  .ptop-nav { order: 3; flex-basis: 100%; }
+  .ptop-actions { margin-left: auto; }
+  .ptop-user { display: none; }
+  .ptop-link span:not(.nav-badge) { font-size: 0.85rem; }
+}
