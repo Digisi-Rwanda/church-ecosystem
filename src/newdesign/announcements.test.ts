@@ -60,3 +60,20 @@ describe('read state and wording', () => {
     expect(dayOf(null)).toBe('');
   });
 });
+
+import { filterAnnouncements, inPeriod } from './announcements';
+describe('announcement filters', () => {
+  const now = new Date('2026-10-12T12:00:00Z');
+  const a = (id: string, o: Record<string, unknown>) => ({ id, title: id, body: '', audience: { kind: 'WHOLE_CHURCH', systemId: null, systemName: null, office: null }, authorId: 'x', authorName: 'x', publishedAt: '2026-10-11T10:00:00Z', expiresAt: null, read: false, mine: false, canWithdraw: false, ...o }) as never;
+  it('filters by status, audience and period', () => {
+    const list = [a('old', { publishedAt: '2026-08-01T10:00:00Z', read: true }), a('mine', { mine: true }), a('sys', { audience: { kind: 'SYSTEM', systemId: 's', systemName: 'S', office: null } })];
+    expect(filterAnnouncements(list, { status: 'unread', audience: '', period: 'any' }, now).map((x: { id: string }) => x.id)).toEqual(['mine', 'sys']);
+    expect(filterAnnouncements(list, { status: 'mine', audience: '', period: 'any' }, now)).toHaveLength(1);
+    expect(filterAnnouncements(list, { status: 'all', audience: 'SYSTEM', period: 'any' }, now)).toHaveLength(1);
+    expect(filterAnnouncements(list, { status: 'all', audience: '', period: 'month' }, now)).toHaveLength(2);
+  });
+  it('counts back from now', () => {
+    expect(inPeriod('2026-10-12T01:00:00Z', 'today', now)).toBe(true);
+    expect(inPeriod('2026-10-01T01:00:00Z', 'week', now)).toBe(false);
+  });
+});

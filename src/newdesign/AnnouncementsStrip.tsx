@@ -15,7 +15,7 @@ export function AnnouncementsStrip({ systemId }: { systemId?: string }) {
   return (
     <section className="panel feed feed-notes" aria-labelledby="door-strip-title">
       <header className="feed-head">
-        <span className="feed-chip" aria-hidden="true"><Icon name="inbox" size={18} /></span>
+        <span className="feed-chip" aria-hidden="true"><Icon name="megaphone" size={20} /></span>
         <h3 id="door-strip-title">{t('door.announce.strip.title')}</h3>
         <Link className="feed-link" to={to}>
           {t('door.announce.strip.seeAll')}
@@ -29,13 +29,13 @@ export function AnnouncementsStrip({ systemId }: { systemId?: string }) {
         <p className="muted">{t('door.announce.strip.none')}</p>
       ) : (
         <ul className="feed-list">
-          {latest.slice(0, 4).map((a) => (
+          {latest.slice(0, 3).map((a) => (
             <li key={a.id}>
               <Link className="feed-row" to={to}>
                 <span className={`feed-dot${a.read ? '' : ' unread'}`} aria-hidden="true" />
                 <span className="feed-main">
-                  <strong>{a.title}</strong>
-                  <small><AudienceLine item={a} /> · {when(a.publishedAt)}</small>
+                  <span><strong>{a.title}</strong><span className="feed-aud"> · <AudienceLine item={a} /></span></span>
+                  <small>{when(a.publishedAt)}</small>
                 </span>
                 <Icon name="chevron-right" size={16} className="feed-go" />
               </Link>

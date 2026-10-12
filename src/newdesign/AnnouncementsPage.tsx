@@ -15,11 +15,11 @@ import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { SearchSelect } from '../components/ui/SearchSelect';
 import { useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
-import { announceErrorKey, audienceKinds, buildAudience, canCompose, dayOf, errorCode, formReady, markedRead, unreadIds } from './announcements';
+import { announceErrorKey, audienceKinds, buildAudience, canCompose, dayOf, errorCode, filterAnnouncements, formReady, markedRead, PERIODS, unreadIds, type PeriodFilter } from './announcements';
 import { dayLabel } from './notices';
 import { useLoad } from './useLoad';
 import { announcementsChanged } from './useAnnouncementSummary';
-import { PageHeader, SearchBox, matchesText } from './kit';
+import { PageHeader, SearchBox, Segmented, matchesText } from './kit';
 
 /** The audience line under a post, in words a member understands. */
 export function AudienceLine({ item }: { item: AnnouncementItem }) {
@@ -40,9 +40,13 @@ export function AnnouncementsPage() {
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
   const [text, setText] = useState('');
+  const [status, setStatus] = useState<'all' | 'unread' | 'mine'>('all');
+  const [audience, setAudience] = useState<'' | AudienceKind>('');
+  const [period, setPeriod] = useState<PeriodFilter>('any');
   const all = markedRead(list.data?.items ?? [], marked);
   const unread = unreadIds(all);
-  const items = all.filter((a) => matchesText(text, a.title, a.body, a.authorName));
+  const items = filterAnnouncements(all, { status, audience, period }).filter((a) => matchesText(text, a.title, a.body, a.authorName));
+  const filtered = !!text || status !== 'all' || !!audience || period !== 'any';
 
   const readOne = async (id: string) => {
     setMarked((m) => [...m, id]);
@@ -107,10 +111,23 @@ export function AnnouncementsPage() {
           }}
         />
       )}
-      {all.length > 0 && <SearchBox value={text} onChange={setText} label={t('door.search.announcements')} clearLabel={t('door.search.clear')} />}
+      {all.length > 0 && (
+        <div className="door-filters">
+          <SearchBox value={text} onChange={setText} label={t('door.search.announcements')} clearLabel={t('door.search.clear')} />
+          <Segmented label={t('door.announce.f.status')} value={status} onChange={setStatus} items={[{ key: 'all', label: t('door.announce.f.all') }, { key: 'unread', label: `${t('door.announce.f.unread')}${unread.length ? ` (${unread.length})` : ''}` }, { key: 'mine', label: t('door.announce.f.mine') }]} />
+          <SelectField label={t('door.announce.f.audience')} value={audience} onChange={(e) => setAudience(e.target.value as '' | AudienceKind)}>
+            <option value="">{t('door.announce.f.anyAudience')}</option>
+            {(['WHOLE_CHURCH', 'SYSTEM', 'OFFICE'] as const).map((k) => (<option key={k} value={k}>{t(`door.announce.f.${k}` as 'door.announce.f.SYSTEM')}</option>))}
+          </SelectField>
+          <SelectField label={t('door.filter.period')} value={period} onChange={(e) => setPeriod(e.target.value as PeriodFilter)}>
+            {PERIODS.map((p) => (<option key={p} value={p}>{t(`door.filter.period.${p}` as 'door.filter.period.any')}</option>))}
+          </SelectField>
+          {filtered && <button type="button" className="btn ghost sm" onClick={() => { setText(''); setStatus('all'); setAudience(''); setPeriod('any'); }}>{t('door.filter.clear')}</button>}
+        </div>
+      )}
       <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
         {items.length === 0 ? (
-          <EmptyState title={t(text && all.length > 0 ? 'door.search.noMatch' : 'door.announce.empty')} detail={text && all.length > 0 ? undefined : t('door.announce.emptyDetail')} />
+          <EmptyState title={t(filtered && all.length > 0 ? 'door.search.noMatch' : 'door.announce.empty')} detail={filtered && all.length > 0 ? undefined : t('door.announce.emptyDetail')} />
         ) : (
           <ul className="door-notices">
             {items.map((a) => (

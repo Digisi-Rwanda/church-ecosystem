@@ -47,7 +47,7 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
   // ── Two full member profiles: facts, records, good deeds and giving ──────────────────────
   const profiles = [
     {
-      id: 'p-member', gender: 'MALE', dob: '1990-04-12', address: 'KG 11 Ave, Kacyiru, Kigali', joined: '2012-03-04', nid: '1199080012345678',
+      id: 'p-member', sys: 'sys-youth', org: 'ou-youth', gender: 'MALE', dob: '1990-04-12', address: 'KG 11 Ave, Kacyiru, Kigali', joined: '2012-03-04', nid: '1199080012345678',
       records: [
         ['EDUCATION', { level: 'BACHELOR', field: 'Computer Science', school: 'University of Rwanda', startYear: 2009, endYear: 2013 }],
         ['EMPLOYMENT', { status: 'EMPLOYED', employer: 'Kigali Software Ltd', role: 'Software engineer', since: '2014-02-01' }],
@@ -64,7 +64,7 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       donations: [['Building fund', 150_000, -70], ['Harvest thanksgiving', 80_000, -20]],
     },
     {
-      id: 'p-youth-leader', gender: 'FEMALE', dob: '1993-09-23', address: 'KK 15 Rd, Gikondo, Kigali', joined: '2010-01-10', nid: '1199370023456789',
+      id: 'p-youth-leader', sys: 'sys-youth', org: 'ou-youth', gender: 'FEMALE', dob: '1993-09-23', address: 'KK 15 Rd, Gikondo, Kigali', joined: '2010-01-10', nid: '1199370023456789',
       records: [
         ['EDUCATION', { level: 'MASTER', field: 'Social Work', school: 'Mount Kenya University', startYear: 2016, endYear: 2018 }],
         ['EMPLOYMENT', { status: 'EMPLOYED', employer: 'Hope Rwanda NGO', role: 'Programme officer', since: '2019-05-01' }],
@@ -78,6 +78,40 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       deeds: [['Organised a free medical camp for 200 neighbours', -160], ['Mentored 12 teenagers through exam season', -90], ['Raised funds for a widow\'s house repair', -30]],
       gifts: [['UNIT', 'sys-youth', 'Umusanzu', 40_000], ['UNIT', 'sys-youth', 'Umusanzu', 40_000]],
       donations: [['Youth conference', 200_000, -50], ['Outreach day', 60_000, -15]],
+    },
+    {
+      id: 'p-music-treas', sys: 'sys-music', org: 'ou-music', gender: 'FEMALE', dob: '1991-11-11', address: 'KN 5 St, Remera, Kigali', joined: '2022-11-11', nid: '1199170034567890',
+      records: [
+        ['EDUCATION', { level: 'BACHELOR', field: 'Accounting and Finance', school: 'University of Kigali', startYear: 2010, endYear: 2014 }],
+        ['EMPLOYMENT', { status: 'EMPLOYED', employer: 'Bank of Kigali', role: 'Accountant', since: '2015-03-02' }],
+        ['SKILL', { name: 'Bookkeeping', level: 'EXPERT' }], ['SKILL', { name: 'Choir singing (alto)', level: 'GOOD' }],
+        ['GIFT', { name: 'Singing', note: 'Leads the alto section' }], ['GIFT', { name: 'Stewardship', note: 'Keeps the ministry accounts clean' }],
+        ['CALLING', { name: 'Treasurer of the Music Ministry', note: 'Keeps the books and reports every month' }], ['CALLING', { name: 'Alto section leader', note: 'Choir of the first service' }],
+        ['BAPTISM', { date: '2022-12-18', place: 'ADEPR Kacyiru', baptisedBy: 'Rev. Jean Bosco Habimana' }],
+        ['MARRIAGE', { date: '2019-07-06', spouseName: 'Jean Claude Mugabo', place: 'ADEPR Remera', blessedBy: 'Rev. Claire Mukamana', certificateRef: 'MC-2019-031' }],
+        ['FAMILY', { relation: 'SPOUSE', name: 'Jean Claude Mugabo' }], ['FAMILY', { relation: 'CHILD', name: 'Grace Mugabo' }], ['FAMILY', { relation: 'PARENT', name: 'Mama Esther Umuhoza' }],
+        ['CONTACT', { label: 'WhatsApp', value: '+250788777111' }],
+      ],
+      deeds: [['Kept the choir accounts open and shared them with the whole team', -180], ['Paid for the transport of the choir to the Huye concert', -100], ['Sang at the funeral of a member and comforted the family', -35]],
+      gifts: [['UNIT', 'sys-music', 'Umusanzu', 30_000], ['UNIT', 'sys-music', 'Umusanzu', 30_000], ['UNIT', 'sys-music', 'Umusanzu', 35_000]],
+      donations: [['Choir instruments fund', 120_000, -80], ['Christmas concert', 90_000, -25]],
+    },
+    {
+      id: 'p-men-vp', sys: 'sys-men', org: 'ou-men', gender: 'MALE', dob: '1985-02-28', address: 'KG 622 St, Kicukiro, Kigali', joined: '2009-05-17', nid: '1198580045678901',
+      records: [
+        ['EDUCATION', { level: 'ASSOCIATE', field: 'Civil Engineering', school: 'IPRC Kigali', startYear: 2005, endYear: 2008 }],
+        ['EMPLOYMENT', { status: 'SELF_EMPLOYED', business: 'Habimana Construction', since: '2012-01-15' }],
+        ['SKILL', { name: 'Building and repairs', level: 'EXPERT' }], ['SKILL', { name: 'Mentoring men', level: 'GOOD' }],
+        ['GIFT', { name: 'Service', note: 'First to volunteer for church works' }], ['GIFT', { name: 'Encouragement', note: '' }],
+        ['CALLING', { name: 'Vice President of the Men Ministry', note: 'Coordinates the men\'s breakfast and works days' }], ['CALLING', { name: 'Church building committee member', note: '' }],
+        ['BAPTISM', { date: '2009-08-09', place: 'ADEPR Kacyiru', baptisedBy: 'Rev. Jean Bosco Habimana' }],
+        ['MARRIAGE', { date: '2013-12-21', spouseName: 'Solange Mukamana', place: 'ADEPR Kacyiru', blessedBy: 'Rev. Jean Bosco Habimana', certificateRef: 'MC-2013-102' }],
+        ['FAMILY', { relation: 'SPOUSE', name: 'Solange Mukamana' }], ['FAMILY', { relation: 'CHILD', name: 'Ethan Habimana' }], ['FAMILY', { relation: 'CHILD', name: 'Ruth Habimana' }],
+        ['CONTACT', { label: 'WhatsApp', value: '+250788999222' }],
+      ],
+      deeds: [['Rebuilt the roof of the Sunday school room at no cost', -210], ['Hosted the men\'s prayer breakfast for 40 men', -75], ['Helped a young family move into their new home', -28]],
+      gifts: [['UNIT', 'sys-men', 'Umusanzu', 50_000], ['UNIT', 'sys-men', 'Umusanzu', 50_000], ['UNIT', 'sys-men', 'Umusanzu', 50_000]],
+      donations: [['Building fund', 300_000, -90], ['Harvest thanksgiving', 150_000, -18]],
     },
   ] as const;
   for (const pr of profiles) {
@@ -106,10 +140,11 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       n++;
     }
     n = 0;
-    const account = (await db.moneyAccount.findUnique({ where: { id: 'demo-acc-youth' } } as never)) ? 'demo-acc-youth' : null;
-    if (account) {
+    const account = `demo-acc-${pr.sys.replace('sys-', '')}`;
+    await ensure(db.moneyAccount as never, account, { orgUnitId: pr.org, systemId: pr.sys, name: 'Main account', status: 'ACTIVE', createdById: pastor });
+    {
       const person = (await db.person.findUnique({ where: { id: pr.id } })) as { fullName: string };
-      for (const [typeName, amount, days] of pr.donations) bump('donations', await ensure(db.donation as never, `demo-don-${pr.id}-${n++}`, { systemId: 'sys-youth', accountId: account, donorName: person.fullName, donorPersonId: pr.id, amount, receivedOn: at(days), note: typeName, status: 'APPROVED', recordedById: pastor, decidedById: pastor, decidedAt: at(days + 1), typeCode: 'GIFT', typeName }));
+      for (const [typeName, amount, days] of pr.donations) bump('donations', await ensure(db.donation as never, `demo-don-${pr.id}-${n++}`, { systemId: pr.sys, accountId: account, donorName: person.fullName, donorPersonId: pr.id, amount, receivedOn: at(days), note: typeName, status: 'APPROVED', recordedById: pastor, decidedById: pastor, decidedAt: at(days + 1), typeCode: 'GIFT', typeName }));
     }
   }
 

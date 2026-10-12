@@ -7,11 +7,13 @@ import {
   type NoticeItem,
 } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
+import { SelectField } from '../components/ui/Field';
 import { SearchSelect } from '../components/ui/SearchSelect';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
-import { dayLabel, safeHref, unreadKeys, withRead } from './notices';
+import { dayLabel, filterNotices, safeHref, unreadKeys, withRead } from './notices';
+import { PERIODS, type PeriodFilter } from './announcements';
 import { useLoad } from './useLoad';
 import { noticesChanged } from './useNoticeSummary';
 import { PageHeader, SearchBox, Tabs, matchesText } from './kit';
@@ -33,6 +35,8 @@ export function NotificationsPage() {
   const [error, setError] = useState('');
   const [showRead, setShowRead] = useState(false);
   const [text, setText] = useState('');
+  const [period, setPeriod] = useState<PeriodFilter>('any');
+  const [important, setImportant] = useState(false);
   const items: NoticeItem[] = (data?.items ?? []).map((i) => (i.key in marked ? { ...i, read: marked[i.key] } : i));
   const countOf = (k: 'waiting' | 'info') => items.filter((i) => i.kind === (k === 'waiting' ? 'WAITING_FOR_ME' : 'FOR_INFORMATION') && !i.read).length;
   const remember = (list: NoticeItem[], keys: string[], read: boolean) => {
@@ -45,7 +49,7 @@ export function NotificationsPage() {
   const kind = tab === 'waiting' ? 'WAITING_FOR_ME' : 'FOR_INFORMATION';
   const ofKind = items.filter((i) => i.kind === kind);
   const unread = ofKind.filter((i) => !i.read).length;
-  const shown = (showRead ? ofKind : ofKind.filter((i) => !i.read)).filter((i) => matchesText(text, i.title, i.body, systemName(i.systemId)));
+  const shown = filterNotices(showRead ? ofKind : ofKind.filter((i) => !i.read), { period, important }).filter((i) => matchesText(text, i.title, i.body, systemName(i.systemId)));
   const readCount = ofKind.length - unread;
 
   const setTab = (next: Tab) => {
@@ -113,6 +117,13 @@ export function NotificationsPage() {
             setParams(p, { replace: true });
           }}
         />
+        <SelectField label={t('door.filter.period')} value={period} onChange={(e) => setPeriod(e.target.value as PeriodFilter)}>
+          {PERIODS.map((p) => (<option key={p} value={p}>{t(`door.filter.period.${p}` as 'door.filter.period.any')}</option>))}
+        </SelectField>
+        <label className="door-check">
+          <input type="checkbox" checked={important} onChange={(e) => setImportant(e.target.checked)} />
+          {t('door.notices.f.important')}
+        </label>
         <label className="door-check">
           <input type="checkbox" checked={showRead} onChange={(e) => setShowRead(e.target.checked)} />
           {t('door.notices.showRead', { count: String(readCount) })}

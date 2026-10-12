@@ -26,3 +26,23 @@ export const needsAttention = (r: OversightRow): boolean => r.overdueMeetings + 
 export function orderOversight(rows: OversightRow[]): OversightRow[] {
   return [...rows].sort((a, b) => Number(needsAttention(b)) - Number(needsAttention(a)));
 }
+
+/** The kinds in the order they are shown, each with its icon and tone. */
+export const URGENT_KINDS: Array<{ kind: UrgentKind; icon: 'board' | 'calendar' | 'inbox' | 'user' | 'clock'; tone: 'red' | 'blue' | 'amber' }> = [
+  { kind: 'DECISION_TO_APPROVE', icon: 'board', tone: 'red' },
+  { kind: 'MEETING_OVERDUE', icon: 'calendar', tone: 'red' },
+  { kind: 'LETTER_TO_PRINT', icon: 'inbox', tone: 'blue' },
+  { kind: 'LETTER_TO_DELIVER', icon: 'inbox', tone: 'blue' },
+  { kind: 'TERM_ENDING', icon: 'clock', tone: 'amber' },
+  { kind: 'VACANCY', icon: 'user', tone: 'amber' },
+];
+
+/** The urgent items grouped by kind, in the fixed order; kinds with nothing in them are left out. */
+export function groupUrgent(items: UrgentItem[]) {
+  return URGENT_KINDS.map((k) => ({ ...k, items: items.filter((i) => i.kind === k.kind) })).filter((g) => g.items.length > 0);
+}
+
+/** The first few of a list, and how many are left out. */
+export function takeFirst<T>(list: T[], n: number): { shown: T[]; more: number } {
+  return { shown: list.slice(0, n), more: Math.max(0, list.length - n) };
+}

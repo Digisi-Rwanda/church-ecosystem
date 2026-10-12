@@ -28,3 +28,9 @@ export function withRead(items: NoticeItem[], keys: string[], read: boolean): No
 
 /** A badge number: nothing at zero, and 99+ beyond. */
 export const badge = (n: number): string => (n <= 0 ? '' : n > 99 ? '99+' : String(n));
+
+/** Notifications from the chosen period, and only the important ones when asked. */
+export function filterNotices(items: NoticeItem[], f: { period: 'any' | 'today' | 'week' | 'month'; important: boolean }, now: Date = new Date()): NoticeItem[] {
+  const days = f.period === 'today' ? 1 : f.period === 'week' ? 7 : f.period === 'month' ? 30 : 0;
+  return items.filter((i) => (!f.important || i.important) && (days === 0 || now.getTime() - new Date(i.createdAt).getTime() <= days * 24 * 3600 * 1000));
+}

@@ -48,3 +48,22 @@ export const unreadIds = (items: AnnouncementItem[]): string[] => items.filter((
 
 /** "2026-10-31" from an ISO timestamp (the day the post stops showing). */
 export const dayOf = (iso: string | null): string => (iso ? iso.slice(0, 10) : '');
+
+export type PeriodFilter = 'any' | 'today' | 'week' | 'month';
+export const PERIODS: PeriodFilter[] = ['any', 'today', 'week', 'month'];
+
+/** Was this moment within the period, counted back from now? Without a date it is kept. */
+export function inPeriod(iso: string | null | undefined, period: PeriodFilter, now: Date = new Date()): boolean {
+  if (period === 'any' || !iso) return true;
+  const at = new Date(iso).getTime();
+  if (Number.isNaN(at)) return true;
+  const days = period === 'today' ? 1 : period === 'week' ? 7 : 30;
+  return now.getTime() - at <= days * 24 * 3600 * 1000;
+}
+
+export type AnnounceFilters = { status: 'all' | 'unread' | 'mine'; audience: '' | AudienceKind; period: PeriodFilter };
+
+/** The announcements that pass the chosen status, audience and period. */
+export function filterAnnouncements(items: AnnouncementItem[], f: AnnounceFilters, now: Date = new Date()): AnnouncementItem[] {
+  return items.filter((a) => (f.status === 'all' || (f.status === 'unread' ? !a.read : a.mine)) && (!f.audience || a.audience.kind === f.audience) && inPeriod(a.publishedAt, f.period, now));
+}

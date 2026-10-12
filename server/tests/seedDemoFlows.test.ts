@@ -42,9 +42,13 @@ describe('demo flows seed', () => {
   });
   it('fills every page with demo content, and a full profile for two members', async () => {
     for (const id of ['ou-church', 'ou-youth', 'ou-children']) db.orgUnit.push({ id, name: id });
-    db.person.push({ id: 'p-member', fullName: 'Patrick Niyonzima', status: 'ACTIVE' }, { id: 'p-pastor', fullName: 'Pastor', status: 'ACTIVE' }, { id: 'p-secretary', fullName: 'Secretary', status: 'ACTIVE' });
+    db.person.push({ id: 'p-member', fullName: 'Patrick Niyonzima', status: 'ACTIVE' }, { id: 'p-pastor', fullName: 'Pastor', status: 'ACTIVE' }, { id: 'p-secretary', fullName: 'Secretary', status: 'ACTIVE' }, { id: 'p-music-treas', fullName: 'Diane Umuhoza', status: 'ACTIVE' }, { id: 'p-men-vp', fullName: 'Alain Habimana', status: 'ACTIVE' });
     const r = await seedDemoFlows(fake as never);
-    expect(r.content['profile records']).toBe(22);
+    for (const id of ['p-music-treas', 'p-men-vp']) {
+      expect(db.personRecord.filter((x: { personId: string }) => x.personId === id).length, id).toBeGreaterThanOrEqual(12);
+      expect(db.personDeed.filter((x: { personId: string }) => x.personId === id), id).toHaveLength(3);
+      expect(db.donation.filter((x: { donorPersonId: string }) => x.donorPersonId === id), id).toHaveLength(2);
+    }
     expect(db.personDeed.filter((d: { personId: string }) => d.personId === 'p-member')).toHaveLength(3);
     expect(db.contributionList.every((l: { status: string }) => l.status === 'APPROVED')).toBe(true);
     expect(db.donation.filter((d: { donorPersonId: string }) => d.donorPersonId === 'p-member')).toHaveLength(2);

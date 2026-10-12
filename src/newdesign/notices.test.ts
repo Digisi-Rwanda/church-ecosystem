@@ -43,3 +43,15 @@ describe('badge', () => {
     expect(badge(250)).toBe('99+');
   });
 });
+
+import { filterNotices } from './notices';
+describe('notice filters', () => {
+  const now = new Date('2026-10-12T12:00:00Z');
+  const n = (key: string, createdAt: string, important: boolean) => ({ key, kind: 'WAITING_FOR_ME', title: key, body: null, href: null, systemId: 's', createdAt, read: false, important }) as never;
+  it('keeps the chosen period and the important ones', () => {
+    const list = [n('a', '2026-10-12T08:00:00Z', true), n('b', '2026-09-20T08:00:00Z', false)];
+    expect(filterNotices(list, { period: 'week', important: false }, now)).toHaveLength(1);
+    expect(filterNotices(list, { period: 'any', important: true }, now)).toHaveLength(1);
+    expect(filterNotices(list, { period: 'any', important: false }, now)).toHaveLength(2);
+  });
+});
