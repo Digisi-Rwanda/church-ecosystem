@@ -1,37 +1,44 @@
 import { Link } from 'react-router-dom';
-import { useT } from '../i18n/I18nContext';
+import { Icon } from '../components/ui/Icon';
+import { useI18n, useT } from '../i18n/I18nContext';
 import { AudienceLine } from './AnnouncementsPage';
 import { useAnnouncementSummary } from './useAnnouncementSummary';
 
-/** The latest few announcements on the Portal home. Says nothing at all if the server cannot be reached. */
-export function AnnouncementsStrip() {
+/** The latest few announcements. Opens the list inside the system it is shown in. Says nothing if the server cannot be reached. */
+export function AnnouncementsStrip({ systemId }: { systemId?: string }) {
   const t = useT();
+  const { locale } = useI18n();
   const { latest, unread, loading, failed } = useAnnouncementSummary();
   if (failed) return null;
+  const to = systemId ? `/s/${systemId}/announcements` : '/portal/announcements';
+  const when = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso)) : '');
   return (
-    <section className="panel door-strip" aria-labelledby="door-strip-title">
-      <div className="door-row">
+    <section className="panel feed feed-notes" aria-labelledby="door-strip-title">
+      <header className="feed-head">
+        <span className="feed-chip" aria-hidden="true"><Icon name="inbox" size={18} /></span>
         <h3 id="door-strip-title">{t('door.announce.strip.title')}</h3>
-        <Link className="btn ghost sm" to="/portal/announcements">
+        <Link className="feed-link" to={to}>
           {t('door.announce.strip.seeAll')}
           {unread > 0 && <span className="door-badge">{unread > 99 ? '99+' : unread}</span>}
+          <Icon name="chevron-right" size={14} />
         </Link>
-      </div>
+      </header>
       {loading ? (
-        <p className="muted" role="status">
-          {t('door.people.loading')}
-        </p>
+        <p className="muted" role="status">{t('door.people.loading')}</p>
       ) : latest.length === 0 ? (
         <p className="muted">{t('door.announce.strip.none')}</p>
       ) : (
-        <ul className="door-list">
-          {latest.map((a) => (
+        <ul className="feed-list">
+          {latest.slice(0, 4).map((a) => (
             <li key={a.id}>
-              <Link to="/portal/announcements">{a.title}</Link>
-              <span className="muted">
-                {' '}
-                · <AudienceLine item={a} />
-              </span>
+              <Link className="feed-row" to={to}>
+                <span className={`feed-dot${a.read ? '' : ' unread'}`} aria-hidden="true" />
+                <span className="feed-main">
+                  <strong>{a.title}</strong>
+                  <small><AudienceLine item={a} /> · {when(a.publishedAt)}</small>
+                </span>
+                <Icon name="chevron-right" size={16} className="feed-go" />
+              </Link>
             </li>
           ))}
         </ul>

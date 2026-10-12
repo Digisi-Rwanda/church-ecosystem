@@ -106,7 +106,6 @@ export const en = {
   'door.units.code': 'Code {code}',
   'door.units.noCode': 'No code yet',
   'door.units.back': 'Back to the organisation',
-  'door.units.path': 'Place in the organisation',
   'door.units.children': 'Units inside',
   'door.units.childrenNone': 'No units inside.',
   'door.units.members': 'Members',

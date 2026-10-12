@@ -16,8 +16,10 @@ export function ChurchHome({ systemId }: { systemId: string }) {
         <PageHeader id="door-church-title" title={t('door.home.title')} />
         <p className="muted">{t('door.home.subtitle')}</p>
       </div>
-      <AnnouncementsStrip />
-      <UrgentTile systemId={systemId} />
+      <div className="feed-pair">
+        <AnnouncementsStrip systemId={systemId} />
+        <UrgentTile systemId={systemId} />
+      </div>
       <LeaderDashboard systemId={systemId} systemName={t('door.central.title')} />
     </section>
   );

@@ -561,7 +561,7 @@ async function main() {
   if (process.env.APP_ENV !== 'production' && process.env.SEED_DEMO_FLOWS !== 'false') {
     try {
       const f = await seedDemoFlows(prisma);
-      console.log(`  demo flows: ${f.scheduling.choirs} choirs, ${f.scheduling.members} choir members, ${f.scheduling.roster} protocol people, ${f.money.ministries} ministries with ${f.money.plans} plans and ${f.money.entries} money entries added`);
+      console.log(`  demo flows: ${f.scheduling.choirs} choirs, ${f.scheduling.members} choir members, ${f.scheduling.roster} protocol people, ${f.money.ministries} ministries with ${f.money.plans} plans and ${f.money.entries} money entries added; more demo content: ${JSON.stringify(f.content)}`);
     } catch (err) {
       console.warn('  demo flows skipped:', err instanceof Error ? err.message : err);
     }

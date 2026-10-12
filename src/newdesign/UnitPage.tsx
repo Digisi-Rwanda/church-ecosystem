@@ -1,18 +1,23 @@
 import { Link, useParams } from 'react-router-dom';
-import { fetchPeople, fetchStructure } from '../api/frontDoorApi';
+import { fetchPeople, fetchPlans, fetchStructure } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
+import { Icon } from '../components/ui/Icon';
 import { useT } from '../i18n/I18nContext';
+import { SUMMARY_STATES, SUMMARY_TYPES, summarizeActivity } from './activitySummary';
+import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { membersOf, officeHoldersOf, unitPath } from './structure';
 import { useLoad } from './useLoad';
-import { PageHeader } from './kit';
+import { PageHeader, initialsOf } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
+const WORK_PAGE = { PROGRAM: 'programs', EVENT: 'events', PROJECT: 'projects' } as const;
 
-/** One unit: its place in the organisation, the units inside it, its members and its office holders. */
+/** One unit: its place in the organisation, a summary of its activities, its office holders, the units inside and its members. */
 export function UnitPage() {
   const t = useT();
   const { systemId = '', unitId = '' } = useParams();
+  const { portal } = useFrontDoor();
   const base = `/s/${systemId}/people`;
   const { loading, failed, data, reload } = useLoad(async () => {
     const structure = await fetchStructure(systemId);
@@ -25,76 +30,99 @@ export function UnitPage() {
   }, `unit|${systemId}|${unitId}`);
 
   const unit = data?.structure.units.find((u) => u.id === unitId);
+  // The unit's own system holds its work; when this person cannot open it, the work is read from the system they are in.
+  const workSystem = unit?.systemId && portal.some((s) => s.id === unit.systemId) ? unit.systemId : systemId;
+  const plans = useLoad(
+    async () => (unit ? (await fetchPlans({ systemId: workSystem, view: 'all', status: 'all' }).catch(() => [])).filter((p) => p.orgUnitId === unit.id || (!!unit.systemId && p.systemId === unit.systemId)) : []),
+    `unitPlans|${workSystem}|${unitId}|${unit?.id ?? ''}`,
+  );
+  const summary = summarizeActivity(plans.data ?? []);
   const nameOf = (id: string) => data?.names.get(id) ?? id;
+  const person = (id: string) => (
+    <Link key={id} className="unit-person" to={`${base}/${id}`}>
+      <span className="unit-avatar" aria-hidden="true">{initialsOf(nameOf(id))}</span>
+      <span>{nameOf(id)}</span>
+    </Link>
+  );
 
   return (
-    <div className="door-block">
-      <Link className="btn ghost sm door-back" to={`${base}/units`}>
-        {t('door.units.back')}
-      </Link>
+    <div className="door-block unit-page">
+      <Link className="btn ghost sm door-back" to={`${base}/units`}>{t('door.units.back')}</Link>
       <LoadState loading={loading} failed={failed} retry={reload}>
         {!data || !unit ? (
           <EmptyState variant="no-results" title={t('door.units.notFound')} />
         ) : (
           <>
-            <header className="door-person-head">
-              <div>
+            <header className="panel unit-hero">
+              <span className="unit-hero-icon" aria-hidden="true"><Icon name="building" size={26} /></span>
+              <div className="unit-hero-text">
                 <PageHeader title={unit.name} />
-                <p className="muted">{unit.code ? t('door.units.code', { code: unit.code }) : t('door.units.noCode')}</p>
+                <p className="unit-path">{unitPath(data.structure.units, unit.id).join(' › ')}</p>
               </div>
-              <span className="door-chip">{t(`door.kind.${unit.kind}` as const)}</span>
+              <div className="unit-hero-chips">
+                <span className="door-chip">{t(`door.kind.${unit.kind}` as const)}</span>
+                <span className="door-chip">{unit.code ? t('door.units.code', { code: unit.code }) : t('door.units.noCode')}</span>
+              </div>
             </header>
-            <div className="panel">
-              <h3>{t('door.units.path')}</h3>
-              <p>{unitPath(data.structure.units, unit.id).join(' › ')}</p>
-            </div>
-            <div className="panel">
-              <h3>{t('door.units.children')}</h3>
-              {(() => {
-                const kids = data.structure.units.filter((u) => u.parentId === unit.id);
-                return kids.length === 0 ? (
-                  <p className="muted">{t('door.units.childrenNone')}</p>
+
+            <section className="panel unit-card" aria-label={t('door.units.activity')}>
+              <header className="unit-card-head">
+                <span className="feed-chip" aria-hidden="true"><Icon name="task" size={18} /></span>
+                <h3>{t('door.units.activity')}</h3>
+                <Link className="feed-link" to={`/s/${workSystem}/work`}>{t('door.units.activity.open')}<Icon name="chevron-right" size={14} /></Link>
+              </header>
+              <div className="org-activity-grid">
+                {SUMMARY_TYPES.map((k) => (
+                  <Link key={k} to={`/s/${workSystem}/${WORK_PAGE[k]}`} className={`org-activity-card org-activity-${k.toLowerCase()}`}>
+                    <strong className="org-activity-total">{summary[k].total}</strong>
+                    <span className="org-activity-kind">{t(`door.plans.${k}` as 'door.plans.PROGRAM')}</span>
+                    <span className="org-activity-states">
+                      {SUMMARY_STATES.filter((st) => summary[k][st] > 0).map((st) => (<span key={st} className="door-chip">{summary[k][st]} {t(`door.state.${st}` as 'door.state.DRAFT')}</span>))}
+                    </span>
+                  </Link>
+                ))}
+              </div>
+            </section>
+
+            <div className="unit-grid">
+              <section className="panel unit-card">
+                <header className="unit-card-head"><span className="feed-chip" aria-hidden="true"><Icon name="user" size={18} /></span><h3>{t('door.units.offices')}</h3></header>
+                {data.holders.length === 0 ? (
+                  <p className="muted">{t('door.units.officesNone')}</p>
                 ) : (
-                  <ul className="door-list">
-                    {kids.map((k) => (
-                      <li key={k.id}>
-                        <Link to={`${base}/units/${k.id}`}>{k.name}</Link>
+                  <ul className="unit-offices">
+                    {data.holders.map((h) => (
+                      <li key={h.id}>
+                        <Link to={`${base}/${h.personId}`}>
+                          <span className="unit-avatar" aria-hidden="true">{initialsOf(nameOf(h.personId))}</span>
+                          <span className="unit-office-text"><strong>{nameOf(h.personId)}</strong><small>{h.office ? t(`door.office.${h.office}` as const) : h.title}</small></span>
+                        </Link>
                       </li>
                     ))}
                   </ul>
-                );
-              })()}
+                )}
+              </section>
+              <section className="panel unit-card">
+                <header className="unit-card-head"><span className="feed-chip" aria-hidden="true"><Icon name="layers" size={18} /></span><h3>{t('door.units.children')}</h3></header>
+                {(() => {
+                  const kids = data.structure.units.filter((u) => u.parentId === unit.id);
+                  return kids.length === 0 ? (
+                    <p className="muted">{t('door.units.childrenNone')}</p>
+                  ) : (
+                    <ul className="unit-kids">{kids.map((k) => (<li key={k.id}><Link to={`${base}/units/${k.id}`}>{k.name}</Link></li>))}</ul>
+                  );
+                })()}
+              </section>
             </div>
-            <div className="panel">
-              <h3>{t('door.units.offices')}</h3>
-              {data.holders.length === 0 ? (
-                <p className="muted">{t('door.units.officesNone')}</p>
-              ) : (
-                <ul className="door-list">
-                  {data.holders.map((h) => (
-                    <li key={h.id}>
-                      <strong>{h.office ? t(`door.office.${h.office}` as const) : h.title}</strong>
-                      {' · '}
-                      <Link to={`${base}/${h.personId}`}>{nameOf(h.personId)}</Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
-            <div className="panel">
-              <h3>{t('door.units.members')}</h3>
-              {data.memberIds.length === 0 ? (
-                <p className="muted">{t('door.units.membersNone')}</p>
-              ) : (
-                <ul className="door-list">
-                  {data.memberIds.map((id) => (
-                    <li key={id}>
-                      <Link to={`${base}/${id}`}>{nameOf(id)}</Link>
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
+
+            <section className="panel unit-card">
+              <header className="unit-card-head">
+                <span className="feed-chip" aria-hidden="true"><Icon name="users" size={18} /></span>
+                <h3>{t('door.units.members')}</h3>
+                <span className="door-chip">{data.memberIds.length}</span>
+              </header>
+              {data.memberIds.length === 0 ? <p className="muted">{t('door.units.membersNone')}</p> : <div className="unit-people">{data.memberIds.map(person)}</div>}
+            </section>
           </>
         )}
       </LoadState>

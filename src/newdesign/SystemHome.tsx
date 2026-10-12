@@ -4,6 +4,7 @@ import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { buildMenu, buildOwnMenu, hasOwnSchedule } from './menu';
 import { LeaderDashboard } from './Dashboard';
+import { AnnouncementsStrip } from './AnnouncementsStrip';
 import { UrgentTile } from './UrgentTile';
 import { PageHeader } from './kit';
 
@@ -34,7 +35,10 @@ export function SystemHome({ systemId, systemName }: { systemId: string; systemN
   ];
   return (
     <section className="door-block" aria-label={systemName}>
-      <UrgentTile systemId={systemId} />
+      <div className="feed-pair">
+        <AnnouncementsStrip systemId={systemId} />
+        <UrgentTile systemId={systemId} />
+      </div>
       <LeaderDashboard
         systemId={systemId}
         systemName={systemName}

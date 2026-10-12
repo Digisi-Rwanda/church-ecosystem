@@ -10,6 +10,7 @@
  *     waiting for approval), report schedules, and group attendance for the dashboard.
  */
 import type { PrismaClient } from '@prisma/client';
+import { seedDemoContent } from './seedDemoContent.js';
 
 const DAY = 24 * 3600 * 1000;
 const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -189,5 +190,6 @@ export async function seedMoneyWorkDemo(db: Db, now = new Date()): Promise<{ min
 export async function seedDemoFlows(db: Db) {
   const scheduling = await seedSchedulingDemo(db);
   const money = await seedMoneyWorkDemo(db);
-  return { scheduling, money };
+  const content = await seedDemoContent(db);
+  return { scheduling, money, content };
 }

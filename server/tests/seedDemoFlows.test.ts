@@ -7,7 +7,7 @@ const db = fake.__db;
 
 beforeEach(() => {
   fake.__reset();
-  for (const k of ['person', 'orgUnit', 'membership', 'position', 'musicChoir', 'musicChoirMember', 'protocolRoster', 'moneyAccount', 'moneyBudget', 'moneyBudgetLine', 'moneyEntry', 'moneyPlanItem', 'workPlan', 'workPlanCheck', 'workPlanNote', 'reportSchedule', 'unitGroup', 'groupSession']) db[k] ??= [];
+  for (const k of ['person', 'orgUnit', 'membership', 'position', 'musicChoir', 'musicChoirMember', 'protocolRoster', 'moneyAccount', 'moneyBudget', 'moneyBudgetLine', 'moneyEntry', 'moneyPlanItem', 'workPlan', 'workPlanCheck', 'workPlanNote', 'reportSchedule', 'unitGroup', 'groupSession', 'personRecord', 'personDeed', 'contributionList', 'contributionLine', 'donation', 'groupMember', 'couplePair', 'visitLog', 'evangelismContact', 'workTask', 'report', 'meeting', 'decision', 'letter', 'serviceCollection', 'monthPlan', 'scheduleSlot']) db[k] ??= [];
   for (const id of ['p-youth-leader', 'p-youth-treas', 'p-youth-sec', 'p-music-leader', 'p-music-treas', 'p-music-sec', 'p-women-leader', 'p-women-treas', 'p-women-sec', 'p-a', 'p-b', 'p-proto-boss']) db.person.push({ id, fullName: id, status: 'ACTIVE' });
   db.orgUnit.push({ id: 'ou-choir-ijwi', name: "Ijwi ry' umwami Yesu" }, { id: 'ou-choir-elim', name: 'Elim' }, { id: 'ou-choir-hope', name: 'Hope' });
   db.membership.push(
@@ -39,5 +39,18 @@ describe('demo flows seed', () => {
     await seedDemoFlows(fake as never);
     expect(Object.fromEntries(Object.keys(db).map((k) => [k, db[k].length]))).toEqual(counts);
     expect(db.musicChoir.filter((c: { name: string }) => c.name === 'Elim')).toHaveLength(1);
+  });
+  it('fills every page with demo content, and a full profile for two members', async () => {
+    for (const id of ['ou-church', 'ou-youth', 'ou-children']) db.orgUnit.push({ id, name: id });
+    db.person.push({ id: 'p-member', fullName: 'Patrick Niyonzima', status: 'ACTIVE' }, { id: 'p-pastor', fullName: 'Pastor', status: 'ACTIVE' }, { id: 'p-secretary', fullName: 'Secretary', status: 'ACTIVE' });
+    const r = await seedDemoFlows(fake as never);
+    expect(r.content['profile records']).toBe(22);
+    expect(db.personDeed.filter((d: { personId: string }) => d.personId === 'p-member')).toHaveLength(3);
+    expect(db.contributionList.every((l: { status: string }) => l.status === 'APPROVED')).toBe(true);
+    expect(db.donation.filter((d: { donorPersonId: string }) => d.donorPersonId === 'p-member')).toHaveLength(2);
+    for (const k of ['workTask', 'report', 'meeting', 'decision', 'letter', 'serviceCollection', 'monthPlan', 'scheduleSlot', 'unitGroup']) expect(db[k].length, k).toBeGreaterThanOrEqual(2);
+    const before = Object.fromEntries(Object.keys(db).map((k) => [k, db[k].length]));
+    await seedDemoFlows(fake as never);
+    expect(Object.fromEntries(Object.keys(db).map((k) => [k, db[k].length]))).toEqual(before);
   });
 });

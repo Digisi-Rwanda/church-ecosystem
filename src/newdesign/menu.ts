@@ -51,7 +51,8 @@ export type OwnMenuItem = { block: OwnBlock; letters: AccessLetter[]; variant?: 
 /** A system's own blocks after the six shared ones (Governance, and Settings in Central Administration), from the server's answer. */
 export function buildOwnMenu(caps: Capabilities | null, systemId: string): OwnMenuItem[] {
   const own = caps?.systems.find((s) => s.id === systemId)?.own ?? [];
-  return own.filter((o) => o.letters.length > 0).map((o) => ({ block: o.key, letters: o.letters, variant: o.variant }));
+  // The Pulpit is not offered for now: it is left out of every menu and tile.
+  return own.filter((o) => o.letters.length > 0 && o.key !== 'pulpit').map((o) => ({ block: o.key, letters: o.letters, variant: o.variant }));
 }
 
 /**
