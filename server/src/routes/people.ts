@@ -63,14 +63,17 @@ peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const status = typeof req.query.status === 'string' ? req.query.status : '';
   // ?ids=a,b,c fetches exactly those people (used by unit pages to name their members).
   const ids = typeof req.query.ids === 'string' ? req.query.ids.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 200) : [];
+  // Postgres compares case-sensitively; ask it to ignore case. (SQLite already does, and rejects `mode`.)
+  const ci = /^postgres/i.test(process.env.DATABASE_URL ?? '') ? { mode: 'insensitive' as const } : {};
+  const like = (v: string) => ({ contains: v, ...ci });
   const text = q
     ? {
         OR: [
-          { fullName: { contains: q } },
-          { preferredName: { contains: q } },
-          { email: { contains: q } },
-          { phone: { contains: q } },
-          { memberCode: { contains: q } },
+          { fullName: like(q) },
+          { preferredName: like(q) },
+          { email: like(q) },
+          { phone: like(q) },
+          { memberCode: like(q) },
         ],
       }
     : {};

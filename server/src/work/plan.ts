@@ -66,9 +66,9 @@ export const levelsOf = (p: Pick<PlanRow, 'approvalsJson'>): Level[] => parseJso
 export function buildLevels(systemId: string, skipUnit = false, withTreasurer = false): Level[] {
   const blank = { status: 'PENDING' as const, byId: null, at: null, note: null };
   const out: Level[] = [];
-  if (systemId !== CHURCH_SYSTEM && !skipUnit) out.push({ levelKey: 'UNIT', label: 'President', systemId, ...blank });
-  // The Treasurer checks the figures when there is spending, after the President and before the Church Leader.
+  // The Treasurer checks the figures first when there is spending, then the President, then the Church Leader.
   if (withTreasurer) out.push({ levelKey: 'TREASURER', label: 'Treasurer', systemId, ...blank });
+  if (systemId !== CHURCH_SYSTEM && !skipUnit) out.push({ levelKey: 'UNIT', label: 'President', systemId, ...blank });
   out.push({ levelKey: 'CHURCH', label: 'Church Leader', systemId: CHURCH_SYSTEM, ...blank });
   return out;
 }

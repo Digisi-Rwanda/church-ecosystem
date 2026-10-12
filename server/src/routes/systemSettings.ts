@@ -23,12 +23,15 @@ async function powers(personId: string, systemId: string) {
   const now = new Date();
   const canEnter = buildEffectiveAccess(personId, ctx, now).some((g) => g.systemId === systemId && g.resource === 'SYSTEM' && g.action === 'ENTER');
   const { data } = await loadAccessData(personId);
-  const offices = liveHoldings(personId, data, now).filter((h) => h.via === 'OFFICE' && h.systemId === systemId).map((h) => h.office);
+  const held = liveHoldings(personId, data, now).filter((h) => h.via === 'OFFICE');
+  const offices = held.filter((h) => h.systemId === systemId).map((h) => h.office);
+  // A church treasurer holds the office church-wide, so it counts in every system's money settings.
+  const moneyOffices = [...offices, ...held.filter((h) => h.scope === 'CHURCH').map((h) => h.office)];
   return {
     system,
     canEnter,
     canEditDetails: offices.some((o) => (DETAILS_EDITORS as readonly string[]).includes(o)),
-    canEditMoney: offices.some((o) => (MONEY_EDITORS as readonly string[]).includes(o)),
+    canEditMoney: moneyOffices.some((o) => (MONEY_EDITORS as readonly string[]).includes(o)),
   };
 }
 

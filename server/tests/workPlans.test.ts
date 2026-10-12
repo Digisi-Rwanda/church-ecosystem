@@ -10,6 +10,8 @@ describe('plan rules', () => {
     expect(buildLevels('sys-choir', true).map((l) => l.levelKey)).toEqual(['CHURCH']);
     expect(buildLevels('sys-main').map((l) => l.levelKey)).toEqual(['CHURCH']);
     expect(buildLevels('sys-choir').map((l) => l.label)).toEqual(['President', 'Church Leader']);
+    expect(buildLevels('sys-choir', false, true).map((l) => l.levelKey)).toEqual(['TREASURER', 'UNIT', 'CHURCH']);
+    expect(buildLevels('sys-choir', true, true).map((l) => l.levelKey)).toEqual(['TREASURER', 'CHURCH']);
   });
   it('the five states people see; pause, resume and renew belong to certain types', () => {
     expect(['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'PAUSED', 'CLOSING', 'ENDED', 'CANCELLED'].map(stateOf)).toEqual(['DRAFT', 'WAITING', 'APPROVED', 'APPROVED', 'APPROVED', 'DONE', 'DONE', 'CANCELLED']);

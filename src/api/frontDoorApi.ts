@@ -32,6 +32,21 @@ export async function fetchCapabilities(): Promise<Capabilities> {
   return apiFetch<Capabilities>('/api/me/capabilities');
 }
 
+/**
+ * A church leader or catechist works in Central Administration only. The server already answers that way;
+ * this keeps the shell right even when an older server is still deployed.
+ */
+export function limitToCentral<T extends { systems: PortalSystem[]; capabilities: Capabilities }>(b: T): T {
+  const codes = b.capabilities.offices.map((o) => o.code).filter((c): c is OfficeCode => c !== null);
+  const only = codes.length > 0 && codes.every((c) => c === 'CHURCH_LEADER' || c === 'CATECHIST');
+  if (!only) return b;
+  return {
+    ...b,
+    systems: b.systems.filter((x) => x.id === 'sys-main'),
+    capabilities: { ...b.capabilities, systems: b.capabilities.systems.filter((x) => x.id === 'sys-main') },
+  };
+}
+
 /** Who is signed in, their systems and what they may do: the three things the shell needs, in one answer. */
 export type Bootstrap = {
   me: ApiMeResponse;
@@ -46,12 +61,12 @@ export type Bootstrap = {
 export async function fetchBootstrap(): Promise<{ me: ApiMeResponse; systems: PortalSystem[]; capabilities: Capabilities }> {
   try {
     const b = await apiFetch<Bootstrap>('/api/me/bootstrap');
-    return { me: b.me, systems: b.portal.systems, capabilities: b.capabilities };
+    return limitToCentral({ me: b.me, systems: b.portal.systems, capabilities: b.capabilities });
   } catch (e) {
     if (!(e instanceof ApiError) || e.status !== 404) throw e;
   }
   const [me, systems, capabilities] = await Promise.all([apiMe(), fetchPortal(), fetchCapabilities()]);
-  return { me, systems, capabilities };
+  return limitToCentral({ me, systems, capabilities });
 }
 
 /* ── People, units and offices (slice 1.2) ── */
@@ -420,7 +435,8 @@ export type GoalPer = 'MEMBER' | 'TEAM';
 export type PaymentMethod = 'CASH' | 'MOMO' | 'BANK';
 export const PAYMENT_METHODS: readonly PaymentMethod[] = ['CASH', 'MOMO', 'BANK'];
 export type MoneyType = { code: string; name: string; goalAmount?: number; goalPer?: GoalPer };
-export type SystemMoneyOptions = { types: MoneyType[]; methods: PaymentMethod[] };
+export type DonationType = { code: string; name: string };
+export type SystemMoneyOptions = { types: MoneyType[]; donationTypes: DonationType[]; methods: PaymentMethod[] };
 export type SystemSettings = {
   systemId: string;
   details: SystemDetails;
@@ -1259,10 +1275,10 @@ export async function combineContributionLists(systemId: string, typeCode: strin
   return (await apiFetch<{ combined: number }>(`${M}/lists/combine`, { method: 'POST', body: { systemId, typeCode, month } })).combined;
 }
 
-export type DonationView = { id: string; donorName: string; amount: number; receivedOn: string; note: string; status: 'PENDING' | 'APPROVED' | 'REJECTED'; recordedByName: string; decisionNote: string | null; canDecide: boolean };
-export type DonationsView = { canRecord: boolean; canApprove: boolean; donations: DonationView[] };
+export type DonationView = { typeCode: string | null; typeName: string | null; id: string; donorName: string; amount: number; receivedOn: string; note: string; status: 'PENDING' | 'APPROVED' | 'REJECTED'; recordedByName: string; decisionNote: string | null; canDecide: boolean };
+export type DonationsView = { canRecord: boolean; canApprove: boolean; donationTypes: DonationType[]; donations: DonationView[] };
 export const fetchDonations = (systemId: string): Promise<DonationsView> => apiFetch(`${M}/donations?${qs({ systemId })}`);
-export async function recordDonation(b: { systemId: string; accountId: string; donorName: string; amount: number; receivedOn: string; note?: string | null; donorPersonId?: string | null }): Promise<void> {
+export async function recordDonation(b: { systemId: string; accountId: string; donorName: string; amount: number; receivedOn: string; note?: string | null; donorPersonId?: string | null; typeCode?: string | null }): Promise<void> {
   await apiFetch(`${M}/donations`, { method: 'POST', body: b });
 }
 export async function decideDonation(id: string, approve: boolean, reason?: string): Promise<void> {

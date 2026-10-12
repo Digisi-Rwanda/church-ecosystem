@@ -22,6 +22,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
   const [amount, setAmount] = useState('');
   const [day, setDay] = useState(new Date().toISOString().slice(0, 10));
   const [accountId, setAccountId] = useState('');
+  const [typeCode, setTypeCode] = useState('');
   const [ask, setAsk] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -41,7 +42,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
     const n = parseAmount(amount);
     const acc = accountId || (open.length === 1 ? open[0].id : '');
     if (!donor.trim() || n === null || !acc) return setError(t('door.money.form.incomplete'));
-    void run(() => recordDonation({ systemId, accountId: acc, donorName: donor.trim(), amount: n, receivedOn: day, donorPersonId }));
+    void run(() => recordDonation({ systemId, accountId: acc, donorName: donor.trim(), amount: n, receivedOn: day, donorPersonId, typeCode: typeCode || null }));
   };
   return (
     <div className="door-form" style={{ maxWidth: 'none' }}>
@@ -62,6 +63,16 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
             <TextField label={t('door.money.donations.donor')} name="d-donor" maxLength={80} value={donor} onChange={(e) => { setDonor(e.target.value); setDonorPersonId(null); }} />
             <TextField label={t('door.money.entry.amount')} name="d-amount" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
             <TextField label={t('door.money.donations.day')} name="d-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+            {(data?.donationTypes ?? []).length > 0 && (
+              <SelectField label={t('door.money.donations.type')} name="d-type" value={typeCode} onChange={(e) => setTypeCode(e.target.value)}>
+                <option value="">{t('door.money.donations.typeNone')}</option>
+                {(data?.donationTypes ?? []).map((x) => (
+                  <option key={x.code} value={x.code}>
+                    {x.name}
+                  </option>
+                ))}
+              </SelectField>
+            )}
             {open.length > 1 && (
               <SelectField label={t('door.money.entry.account')} name="d-acc" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
                 <option value="">{t('door.gov.meeting.choose')}</option>
@@ -98,7 +109,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
                   <span className={`door-chip${d.status === 'PENDING' ? ' warn' : ''}`}>{t(donationStatusKey(d.status))}</span>
                 </div>
                 <p className="muted">
-                  {d.receivedOn} · {t('door.money.entry.by', { name: d.recordedByName })}
+                  {d.receivedOn}{d.typeName ? ` · ${d.typeName}` : ''} · {t('door.money.entry.by', { name: d.recordedByName })}
                 </p>
                 {d.decisionNote && <p className="muted">{d.decisionNote}</p>}
                 {ask === d.id && (

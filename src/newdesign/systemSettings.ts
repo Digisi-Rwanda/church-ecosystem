@@ -42,7 +42,8 @@ export function cleanTypes(drafts: TypeDraft[]): MoneyType[] {
   });
 }
 
-export const cleanMoney = (drafts: TypeDraft[], methods: SystemMoneyOptions['methods']): SystemMoneyOptions => ({
+export const cleanMoney = (drafts: TypeDraft[], methods: SystemMoneyOptions['methods'], donations: TypeDraft[] = []): SystemMoneyOptions => ({
   types: cleanTypes(drafts),
+  donationTypes: cleanTypes(donations).map(({ code, name }) => ({ code, name })),
   methods: methods.length ? methods : ['CASH'],
 });

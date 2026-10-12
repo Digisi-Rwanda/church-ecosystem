@@ -20,7 +20,10 @@ describe('contribution types', () => {
   });
   it('cleans the list for the server and keeps Cash when no method is chosen', () => {
     const out = cleanMoney([d({ goalAmount: '1000', goalPer: 'MEMBER' }), d({ name: 'Building', code: 'BUILD' })], []);
-    expect(out).toEqual({ types: [{ code: 'TITHE', name: 'Tithe', goalAmount: 1000, goalPer: 'MEMBER' }, { code: 'BUILD', name: 'Building' }], methods: ['CASH'] });
+    expect(out).toEqual({ types: [{ code: 'TITHE', name: 'Tithe', goalAmount: 1000, goalPer: 'MEMBER' }, { code: 'BUILD', name: 'Building' }], donationTypes: [], methods: ['CASH'] });
+  });
+  it('cleans donation types down to a code and a name', () => {
+    expect(cleanMoney([], ['CASH'], [d({ name: 'Mission', code: '' })]).donationTypes).toEqual([{ code: 'MISSION', name: 'Mission' }]);
   });
   it('turns a stored type into an editable draft and back', () => {
     const t = { code: 'TITHE', name: 'Tithe', goalAmount: 800, goalPer: 'TEAM' as const };

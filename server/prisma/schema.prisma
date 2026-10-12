@@ -1689,6 +1689,8 @@ model Donation {
 
   @@index([systemId, status])
   @@index([donorPersonId])
+  typeCode    String?
+  typeName    String?
 }
 
 /// A file kept on a person's profile (a certificate, a letter, an ID copy). Stored as base64 text; small files only.

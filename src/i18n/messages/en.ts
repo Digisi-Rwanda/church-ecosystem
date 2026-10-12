@@ -2867,6 +2867,11 @@ export const en = {
   'door.plan.checkEditGo': 'Save',
   'door.plan.checkEditCancel': 'Cancel',
   'door.plan.checkEditOpen': 'Edit',
+  'door.sset.donationTypes': 'Donation types',
+  'door.sset.donationTypesHint': 'Kinds of gifts this unit receives, for example a building fund. They appear when a donation is recorded.',
+  'door.sset.addDonationType': 'Add a donation type',
+  'door.money.donations.type': 'Donation type',
+  'door.money.donations.typeNone': 'No type',
   // Test and demo markers
 } as const;
 

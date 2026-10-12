@@ -18,6 +18,12 @@ describe('the rules', () => {
     expect(moneySchema.safeParse({ types: [t({ code: 'bad code' })] }).success).toBe(false);
     expect(moneySchema.safeParse({ methods: ['CHEQUE'] }).success).toBe(false);
   });
+  it('donation types need their own code', () => {
+    const d = { code: 'BUILDING', name: 'Building fund' };
+    expect(moneySchema.safeParse({ donationTypes: [d] }).success).toBe(true);
+    expect(moneySchema.safeParse({ donationTypes: [d, d] }).success).toBe(false);
+    expect(moneySchema.parse({}).donationTypes).toEqual([]);
+  });
   it('a stored value that is missing or broken falls back to empty', () => {
     expect(parseStored(undefined, moneySchema, EMPTY_MONEY)).toEqual(EMPTY_MONEY);
     expect(parseStored('not json', moneySchema, EMPTY_MONEY)).toEqual(EMPTY_MONEY);
@@ -100,5 +106,20 @@ describe('saving', () => {
   it('rejects values that do not pass', async () => {
     expect((await put('p-choir-leader', 'sys-choir', 'money', { types: [{ code: 'a b', name: 'x' }] })).status).toBe(400);
     expect((await put('p-choir-leader', 'sys-choir', 'details', { place: 'x'.repeat(200) })).status).toBe(400);
+  });
+});
+
+describe('treasurers set the money types', () => {
+  it('the unit treasurer saves contribution and donation types', async () => {
+    const r = await put('p-ctreas', 'sys-choir', 'money', { types: [{ code: 'TITHE', name: 'Tithe' }], donationTypes: [{ code: 'BUILDING', name: 'Building fund' }], methods: ['CASH'] });
+    expect(r.status).toBe(200);
+    const back = await get('p-ctreas', 'sys-choir');
+    expect(JSON.stringify(back.body)).toContain('BUILDING');
+  });
+  it('the church treasurer can do the same in Central Administration', async () => {
+    fake.__db.person.push({ id: 'p-churcht', fullName: 'Church Treasurer', status: 'ACTIVE' });
+    fake.__db.position.push({ id: 'pos-cht', personId: 'p-churcht', systemId: 'sys-main', title: 'Church Treasurer', office: 'CHURCH_TREASURER', status: 'ACTIVE', startDate: new Date('2022-01-01') });
+    const r = await put('p-churcht', 'sys-main', 'money', { donationTypes: [{ code: 'MISSION', name: 'Mission' }] });
+    expect(r.status).toBe(200);
   });
 });

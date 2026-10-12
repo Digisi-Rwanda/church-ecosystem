@@ -35,7 +35,7 @@ interface CList {
   sourceListIds: string; createdById: string; submittedAt?: Date | string | null; decidedById?: string | null; decisionNote?: string | null;
 }
 interface CLine { id: string; listId: string; name: string; personId?: string | null; team?: string | null; amount: number }
-interface Don { id: string; systemId: string; accountId: string; donorName: string; donorPersonId?: string | null; amount: number; receivedOn: Date | string; note?: string | null; status: string; recordedById: string; decidedById?: string | null; decisionNote?: string | null }
+interface Don { typeCode?: string | null; typeName?: string | null; id: string; systemId: string; accountId: string; donorName: string; donorPersonId?: string | null; amount: number; receivedOn: Date | string; note?: string | null; status: string; recordedById: string; decidedById?: string | null; decisionNote?: string | null }
 interface Submission { id: string; systemId: string; year: number; snapshotJson: string; submittedById: string; submittedAt: Date | string; status?: string | null; decidedById?: string | null; decidedAt?: Date | string | null; decisionNote?: string | null }
 interface Entry { kind: string; amount: number; status: string; category: string; occurredOn: Date | string; planId?: string | null }
 interface PlanRow { id: string; title: string; systemId: string; planType?: string | null; status: string }
@@ -68,9 +68,12 @@ async function standingIn(me: string, systemId: string, c: Ctx) {
 }
 type Standing = Awaited<ReturnType<typeof standingIn>>;
 
-async function moneyTypes(systemId: string) {
+async function moneyOptions(systemId: string) {
   const row = (await prisma.systemSetting.findUnique({ where: { systemId } })) as { moneyJson?: string } | null;
-  return parseStored(row?.moneyJson, moneySchema, EMPTY_MONEY).types;
+  return parseStored(row?.moneyJson, moneySchema, EMPTY_MONEY);
+}
+async function moneyTypes(systemId: string) {
+  return (await moneyOptions(systemId)).types;
 }
 
 async function holdersOf(systemId: string, c: Ctx, letter: 'write' | 'approve', notId: string): Promise<string[]> {
@@ -645,6 +648,7 @@ moneyBlockRouter.post('/lists/combine', requireAuth, async (req: AuthedRequest, 
 
 const shapeDon = (d: Don, names: Map<string, string>, me: string, s: Standing) => ({
   id: d.id, donorName: d.donorName, amount: d.amount, receivedOn: day(d.receivedOn), note: d.note ?? '', status: d.status,
+  typeCode: d.typeCode ?? null, typeName: d.typeName ?? null,
   recordedByName: names.get(d.recordedById) ?? '', decisionNote: d.decisionNote ?? null,
   canDecide: d.status === 'PENDING' && s.approve && d.recordedById !== me,
 });
@@ -654,22 +658,24 @@ moneyBlockRouter.get('/donations', requireAuth, async (req: AuthedRequest, res) 
   if (!g) return;
   const rows = ((await prisma.donation.findMany({ where: { systemId: g.systemId } })) as Don[]).sort((a, b) => day(b.receivedOn).localeCompare(day(a.receivedOn))).slice(0, 200);
   const names = await peopleNames(rows.map((d) => d.recordedById));
-  res.json({ canRecord: g.s.write, canApprove: g.s.approve, donations: rows.map((d) => shapeDon(d, names, g.me, g.s)) });
+  res.json({ canRecord: g.s.write, canApprove: g.s.approve, donationTypes: (await moneyOptions(g.systemId)).donationTypes, donations: rows.map((d) => shapeDon(d, names, g.me, g.s)) });
 });
 
 moneyBlockRouter.post('/donations', requireAuth, async (req: AuthedRequest, res) => {
   const g = await gate(req, res, 'write');
   if (!g) return;
-  const p = z.object({ systemId: z.string(), accountId: z.string().min(1), donorName: z.string().trim().min(1).max(80), donorPersonId: z.string().max(80).nullish(), amount: z.number(), receivedOn: z.string(), note: z.string().trim().max(NOTE_MAX).nullish() }).safeParse(req.body);
+  const p = z.object({ systemId: z.string(), accountId: z.string().min(1), donorName: z.string().trim().min(1).max(80), donorPersonId: z.string().max(80).nullish(), amount: z.number(), receivedOn: z.string(), typeCode: z.string().max(24).nullish(), note: z.string().trim().max(NOTE_MAX).nullish() }).safeParse(req.body);
   if (!p.success) return fail(res, 400, 'BAD_INPUT', 'Check the donation');
   if (amountProblem(p.data.amount)) return fail(res, 400, 'AMOUNT', 'Enter a whole amount in francs, above zero');
   if (!isDay(p.data.receivedOn)) return fail(res, 400, 'BAD_DATE', 'Enter the day it was received');
   const acc = (await prisma.moneyAccount.findUnique({ where: { id: p.data.accountId } })) as { systemId: string; status: string } | null;
   if (!acc || acc.systemId !== g.systemId || acc.status !== 'ACTIVE') return fail(res, 400, 'ACCOUNT', 'Choose an open account of this unit');
+  const dType = p.data.typeCode ? (await moneyOptions(g.systemId)).donationTypes.find((t) => t.code === p.data.typeCode) : null;
+  if (p.data.typeCode && !dType) return fail(res, 400, 'DONATION_TYPE', 'Choose one of the donation types of this unit');
   const donor = p.data.donorPersonId ? await prisma.person.findUnique({ where: { id: p.data.donorPersonId } }) : null;
   if (p.data.donorPersonId && !donor) return fail(res, 400, 'BAD_INPUT', 'Choose a member of the church');
   const row = (await prisma.donation.create({
-    data: { systemId: g.systemId, accountId: p.data.accountId, donorName: p.data.donorName, donorPersonId: donor ? p.data.donorPersonId : null, amount: p.data.amount, receivedOn: new Date(`${p.data.receivedOn}T00:00:00Z`), note: p.data.note || null, status: 'PENDING', recordedById: g.me, recordedAt: new Date() },
+    data: { systemId: g.systemId, accountId: p.data.accountId, donorName: p.data.donorName, donorPersonId: donor ? p.data.donorPersonId : null, amount: p.data.amount, receivedOn: new Date(`${p.data.receivedOn}T00:00:00Z`), typeCode: dType?.code ?? null, typeName: dType?.name ?? null, note: p.data.note || null, status: 'PENDING', recordedById: g.me, recordedAt: new Date() },
   })) as Don;
   await tell(await holdersOf(g.systemId, g.c, 'approve', g.me), g.systemId, `Donation to approve: ${row.amount.toLocaleString('en')} RWF`, row.donorName, `money-donation:${row.id}`);
   await audit(g.me, g.systemId, 'MONEY_DONATION_RECORDED', `${row.amount} RWF from ${row.donorName}`, { id: row.id });

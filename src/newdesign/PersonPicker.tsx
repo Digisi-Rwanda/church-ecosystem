@@ -9,10 +9,10 @@ export function PersonPicker({ label, name, onPick }: { label: string; name: str
   const [q, setQ] = useState('');
   const [found, setFound] = useState<DirectoryPerson[] | null>(null);
   const [error, setError] = useState('');
-  /** Searches as the person types (after two letters), so there is no button to find and press. */
+  /** Searches as the person types (from the first letter), so there is no button to find and press. */
   useEffect(() => {
     const word = q.trim();
-    if (word.length < 2) return;
+    if (word.length < 1) return;
     let live = true;
     const timer = setTimeout(() => {
       fetchPeople({ q: word })
@@ -23,13 +23,13 @@ export function PersonPicker({ label, name, onPick }: { label: string; name: str
           }
         })
         .catch(() => live && setError(t('door.people.error')));
-    }, 250);
+    }, 150);
     return () => {
       live = false;
       clearTimeout(timer);
     };
   }, [q, t]);
-  const shown = q.trim().length < 2 ? null : found;
+  const shown = q.trim().length < 1 ? null : found;
   return (
     <div className="door-picker">
       <TextField

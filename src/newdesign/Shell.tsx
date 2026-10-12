@@ -192,7 +192,6 @@ export function Shell({
                               <a href={p.to} target="_blank" rel="noopener noreferrer" onClick={close}>
                                 <Icon name={placeIcon(p.key)} size={16} className="nav-place-icon" />
                                 <span className="nav-label">{p.label ?? t(p.labelKey as 'door.block.home')}</span>
-                                <Icon name="external" size={13} className="nav-go" />
                               </a>
                             ) : (
                               <NavLink
@@ -205,7 +204,6 @@ export function Shell({
                               >
                                 <Icon name={placeIcon(p.key)} size={16} className="nav-place-icon" />
                                 <span className="nav-label">{p.label ?? t(p.labelKey as 'door.block.home')}</span>
-                                <Icon name="chevron-right" size={14} className="nav-go" />
                               </NavLink>
                             )}
                           </li>

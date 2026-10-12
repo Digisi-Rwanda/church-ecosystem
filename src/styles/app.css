@@ -7983,3 +7983,11 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 /* QR codes for an event's registration and attendance */
 .door-qr { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
 .door-qr img { background: #fff; padding: 0.5rem; border-radius: 0.5rem; border: 1px solid var(--line, #d9dde3); }
+
+/* Sub-menu, style 9: a tinted panel behind the items, the icon at the left of each label, no arrows on the right. */
+.nav-tree { background: color-mix(in srgb, var(--accent) 9%, var(--surface-2)); border: 0; box-shadow: none; margin: 0.25rem 0 0.5rem 0.4rem; padding: 0.4rem; border-radius: 16px; gap: 0.1rem; }
+.nav .nav-tree a { padding: 0.5rem 0.7rem; border-radius: 10px; }
+.nav .nav-tree .nav-place-icon { color: var(--accent); opacity: 0.9; }
+.nav .nav-tree a:hover, .nav .nav-tree a:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent); }
+.nav .nav-tree a.active { background: var(--surface, #fff); box-shadow: 0 1px 2px rgb(16 24 40 / 0.08); color: var(--accent-on-soft, var(--accent)); }
+.nav .nav-tree .nav-go { display: none; }

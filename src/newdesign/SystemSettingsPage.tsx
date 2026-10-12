@@ -164,6 +164,7 @@ function DetailsSection({ systemId, initial }: { systemId: string; initial: Syst
 function MoneySection({ systemId, initial }: { systemId: string; initial: SystemMoneyOptions }) {
   const t = useT();
   const [types, setTypes] = useState<TypeDraft[]>(() => initial.types.map(toDraft));
+  const [donations, setDonations] = useState<TypeDraft[]>(() => (initial.donationTypes ?? []).map((d) => toDraft(d)));
   const [methods, setMethods] = useState<PaymentMethod[]>(initial.methods);
   const [problem, setProblem] = useState<string | null>(null);
   const saver = useSaver();
@@ -175,9 +176,9 @@ function MoneySection({ systemId, initial }: { systemId: string; initial: System
       aria-labelledby="door-sset-money"
       onSubmit={(e) => {
         e.preventDefault();
-        const bad = typesProblem(types);
+        const bad = typesProblem(types) ?? typesProblem(donations);
         setProblem(bad);
-        if (!bad) void saver.run(() => saveSystemMoney(systemId, cleanMoney(types, methods)));
+        if (!bad) void saver.run(() => saveSystemMoney(systemId, cleanMoney(types, methods, donations)));
       }}
     >
       <h3 id="door-sset-money">{t('door.sset.money')}</h3>
@@ -211,6 +212,23 @@ function MoneySection({ systemId, initial }: { systemId: string; initial: System
       {types.length < MAX_TYPES && (
         <button type="button" className="btn ghost" onClick={() => setTypes((all) => [...all, { code: '', name: '', goalAmount: '', goalPer: '' }])}>
           {t('door.sset.addType')}
+        </button>
+      )}
+      <h4>{t('door.sset.donationTypes')}</h4>
+      <p className="muted">{t('door.sset.donationTypesHint')}</p>
+      {donations.map((d, i) => (
+        <fieldset key={i} className="door-fieldset">
+          <legend>{t('door.sset.typeN', { n: String(i + 1) })}</legend>
+          <TextField label={t('door.sset.typeName')} name={`sset-don-name-${i}`} maxLength={60} value={d.name} onChange={(e) => setDonations((all) => all.map((x, n) => (n === i ? { ...x, name: e.target.value } : x)))} onBlur={() => !d.code && d.name && setDonations((all) => all.map((x, n) => (n === i ? { ...x, code: suggestTypeCode(d.name) } : x)))} />
+          <TextField label={t('door.sset.typeCode')} name={`sset-don-code-${i}`} maxLength={24} value={d.code} onChange={(e) => setDonations((all) => all.map((x, n) => (n === i ? { ...x, code: e.target.value.toUpperCase() } : x)))} hint={t('door.sset.typeCodeHint')} />
+          <button type="button" className="btn ghost sm" onClick={() => setDonations((all) => all.filter((_, n) => n !== i))}>
+            {t('door.sset.removeType')}
+          </button>
+        </fieldset>
+      ))}
+      {donations.length < MAX_TYPES && (
+        <button type="button" className="btn ghost" onClick={() => setDonations((all) => [...all, { code: '', name: '', goalAmount: '', goalPer: '' }])}>
+          {t('door.sset.addDonationType')}
         </button>
       )}
       {problem && (
