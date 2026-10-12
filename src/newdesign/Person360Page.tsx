@@ -8,13 +8,13 @@ import { formatRwf } from './money';
 import { SECTION_ORDER, SINGLE_SECTIONS, sectionKey, valueKey } from './person360';
 import { RecordCard, RecordForm } from './Person360Parts';
 import { useLoad } from './useLoad';
-import { PageHeader, SidePanel, initialsOf } from './kit';
+import { PageHeader, Segmented, SidePanel, initialsOf } from './kit';
 import { BasicsForm, Documents } from './Person360Edit';
 import { Person360Sheet } from './Person360Sheet';
 import { GoodDeeds } from './Person360Deeds';
 import { useCanWritePeople } from './usePeopleAccess';
 
-type Tab = 'sheet' | 'timeline' | 'files' | 'callings';
+type Tab = 'timeline' | 'files' | 'callings';
 type Gift = P360Participation['items'][number];
 
 /** The one-line summary of a record: its values, without the ids. */
@@ -171,6 +171,14 @@ function Education({ v, personId, reload }: { v: P360View; personId: string; rel
   );
 }
 
+/** Opens the print dialog with the person's name as the file name, so "Save as PDF" gives a named file. */
+function downloadSheet(name: string) {
+  const before = document.title;
+  document.title = name;
+  window.print();
+  window.setTimeout(() => { document.title = before; }, 500);
+}
+
 /** The whole person, in one place, laid out like the church's reference profile. */
 export function Person360Page() {
   const t = useT();
@@ -180,8 +188,9 @@ export function Person360Page() {
   const access = useLoad(fetchP360Access, 'p360-access');
   const isLeader = !!access.data?.leader;
   const part = useLoad(() => (isLeader ? fetchP360Participation(personId) : Promise.resolve(null as P360Participation | null)), `p360-part|${personId}|${isLeader}`);
-  const [tab, setTab] = useState<Tab>('sheet');
+  const [tab, setTab] = useState<Tab>('timeline');
   const [editing, setEditing] = useState(false);
+  const [view, setView] = useState<'cards' | 'bulletin'>('cards');
   const canWritePeople = useCanWritePeople();
   const v = load.data;
   const p = v?.person;
@@ -220,6 +229,13 @@ export function Person360Page() {
         {v && p && (
           <>
             {p.archived && <p className="door-error">{t('door.p360.err.archived')}</p>}
+            <div className="p360-views no-print">
+              <Segmented label={t('door.p360.view')} value={view} onChange={setView} items={[{ key: 'cards', label: t('door.p360.view.cards') }, { key: 'bulletin', label: t('door.p360.view.bulletin') }]} />
+              {view === 'bulletin' && <button type="button" className="btn" onClick={() => downloadSheet(p.fullName)}>{t('door.p360.sheet.download')}</button>}
+            </div>
+            {view === 'bulletin' ? (
+              <Person360Sheet v={v} gifts={part.data?.items ?? []} showGifts={isLeader} />
+            ) : (
             <div className="p360-grid">
               <div className="p360-left">
                 <div className="p360-top">
@@ -235,16 +251,10 @@ export function Person360Page() {
                 </div>
                 <section className="card" aria-label={t('door.p360.title')}>
                   <div className="p360-tabs" role="tablist" aria-label={t('door.p360.title')}>
-                    {([['sheet', t('door.p360.tab.sheet')], ['timeline', t('door.p360.tab.timeline')], ['files', t('door.p360.tab.files')], ['callings', `${t('door.p360.section.CALLING')}${callings ? ` (${callings})` : ''}`]] as Array<[Tab, string]>).map(([k, label]) => (
+                    {([['timeline', t('door.p360.tab.timeline')], ['files', t('door.p360.tab.files')], ['callings', `${t('door.p360.section.CALLING')}${callings ? ` (${callings})` : ''}`]] as Array<[Tab, string]>).map(([k, label]) => (
                       <button key={k} type="button" role="tab" className="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{label}</button>
                     ))}
                   </div>
-                  {tab === 'sheet' && (
-                    <>
-                      <div className="resume-tools no-print"><button type="button" className="btn ghost sm" onClick={() => window.print()}>{t('door.p360.sheet.print')}</button></div>
-                      <Person360Sheet v={v} gifts={part.data?.items ?? []} showGifts={isLeader} />
-                    </>
-                  )}
                   {tab === 'timeline' && <Timeline records={v.records} gifts={part.data?.items ?? []} />}
                   {tab === 'files' && <Documents personId={personId} />}
                   {tab === 'callings' && <Sections v={v} personId={personId} only={['CALLING']} reload={load.reload} />}
@@ -255,6 +265,7 @@ export function Person360Page() {
                 <Education v={v} personId={personId} reload={load.reload} />
               </aside>
             </div>
+            )}
           </>
         )}
       </LoadState>

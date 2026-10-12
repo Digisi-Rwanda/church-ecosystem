@@ -62,7 +62,7 @@ export function Person360Sheet({ v, gifts, showGifts }: { v: P360View; gifts: Gi
   const Part = ({ title, children }: { title: string; children: ReactNode }) => (children ? <section className="resume-part"><h3 className="resume-h">{title}</h3>{children}</section> : null);
   const empty = <p className="muted">{t('door.p360.sheet.empty')}</p>;
   return (
-    <article className="resume" aria-label={t('door.p360.tab.sheet')}>
+    <article className="resume" aria-label={t('door.p360.view.bulletin')}>
       <header className="resume-head">
         <p className="resume-name">{p.fullName}</p>
         <p className="resume-role">{[callings[0]?.title, p.memberCode].filter(Boolean).join(' · ') || t(`door.status.${p.status}` as 'door.status.ACTIVE')}</p>

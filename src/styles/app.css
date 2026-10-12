@@ -8106,3 +8106,5 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 .dash-daybadge { flex: none; display: grid; place-items: center; width: 2.6rem; padding: 0.3rem 0; border-radius: 10px; background: var(--accent-soft); color: var(--accent-on-soft); line-height: 1.1; }
 .dash-daybadge small { font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; }
 @media (min-width: 1200px) { .dash-layout { grid-template-columns: minmax(0, 1fr) 19rem; } }
+.p360-views { display: flex; justify-content: space-between; align-items: center; gap: 0.75rem; flex-wrap: wrap; margin-bottom: 1rem; }
+@media print { @page { margin: 12mm; } }

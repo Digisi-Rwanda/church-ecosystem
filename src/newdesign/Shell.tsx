@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Link, NavLink, useLocation } from 'react-router-dom';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Icon, type IconName } from '../components/ui/Icon';
@@ -23,12 +23,6 @@ const PLACE_ICON: Record<string, IconName> = {
 };
 const placeIcon = (key: string): IconName => PLACE_ICON[key] ?? 'chevron-right';
 
-function weekOfLabel(locale: string, d = new Date()) {
-  const start = new Date(d);
-  start.setDate(d.getDate() - d.getDay());
-  return start.toLocaleDateString(locale, { month: 'long', day: 'numeric', year: 'numeric' });
-}
-
 /** The four places a phone shows in the bottom bar, in order; a person without one of them simply sees fewer. */
 const BOTTOM_PREFERRED = ['home', 'schedule', 'people', 'notifications', 'work'];
 
@@ -49,7 +43,6 @@ const GROUPS: Array<{ key: string; labelKey: string; ids: string[] }> = [
 export function Shell({
   modules,
   where,
-  subtitle,
   brandSub,
   roleLabel,
   backTo,
@@ -60,7 +53,7 @@ export function Shell({
   modules: NavModule[];
   /** Name for the browser tab: the system or the Portal. */
   where: string;
-  subtitle: string;
+  subtitle?: string;
   /** Small line under the church name in the sidebar: the system's short name. */
   brandSub?: string;
   /** The person's role here, shown in the sidebar foot. */
@@ -71,8 +64,7 @@ export function Shell({
   children: ReactNode;
 }) {
   const t = useT();
-  const { locale, fmt } = useI18n();
-  const weekLabel = useMemo(() => weekOfLabel(locale), [locale]);
+  const { fmt } = useI18n();
   const location = useLocation();
   const { capabilities, signOut, personName } = useFrontDoor();
   const announcements = useAnnouncementSummary();
@@ -239,11 +231,7 @@ export function Shell({
             >
               <Icon name="menu" size={20} />
             </button>
-            <div className="topbar-titles">
-              <p className="topbar-week">{t('shell.weekOf', { date: weekLabel })}</p>
-              <h1>{placeTitle}</h1>
-              <p className="topbar-subtitle">{subtitle}</p>
-            </div>
+            <h1 className="sr-only">{placeTitle}</h1>
           </div>
           <div className="topbar-actions">
             <GlobalSearch modules={modules} />

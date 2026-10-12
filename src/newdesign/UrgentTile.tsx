@@ -16,7 +16,7 @@ export function UrgentTile({ systemId }: { systemId: string }) {
     <div className="panel door-urgent" aria-labelledby="door-urgent-title">
       <div className="door-row">
         <h3 id="door-urgent-title">{t('door.urgent.title')}</h3>
-        <Link className="btn ghost sm" to={`/portal/notifications?system=${encodeURIComponent(systemId)}`}>
+        <Link className="btn ghost sm" to={`/s/${systemId}/notifications?system=${encodeURIComponent(systemId)}`}>
           {t('door.urgent.seeAll')}
           {unread > 0 && <span className="door-badge">{unread > 99 ? '99+' : unread}</span>}
         </Link>

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams } from 'react-router-dom';
 import { fetchPreferences, savePreferences, type DigestChannel } from '../api/frontDoorApi';
 import { SelectField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
@@ -12,6 +12,8 @@ import { PageHeader } from './kit';
 /** Preferences: kept on the server, so they follow the person to every device. */
 export function PreferencesPage() {
   const t = useT();
+  const { systemId } = useParams();
+  const base = systemId ? `/s/${systemId}` : '/portal';
   const { setLocale } = useI18n();
   const { portal } = useFrontDoor();
   const { loading, failed, data, reload } = useLoad(fetchPreferences, 'preferences');
@@ -46,7 +48,7 @@ export function PreferencesPage() {
 
   return (
     <section className="door-block" aria-labelledby="door-prefs-title">
-      <Link className="btn ghost sm door-back" to="/portal/notifications">
+      <Link className="btn ghost sm door-back" to={`${base}/notifications`}>
         {t('door.notices.back')}
       </Link>
       <PageHeader id="door-prefs-title" title={t('door.prefs.title')} />

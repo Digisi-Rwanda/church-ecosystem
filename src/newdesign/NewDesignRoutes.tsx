@@ -93,6 +93,7 @@ export function newDesignRoutes() {
           <Route index element={<SystemBlockPage />} />
           <Route path="notifications" element={<NotificationsPage />} />
           <Route path="announcements" element={<AnnouncementsPage />} />
+          <Route path="notifications/preferences" element={<PreferencesPage />} />
           <Route path="people" element={<PeopleLayout />}>
             <Route index element={<PeopleDirectoryPage />} />
             <Route path="new" element={<AddPersonPage />} />

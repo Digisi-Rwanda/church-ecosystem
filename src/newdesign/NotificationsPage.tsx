@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import {
   fetchNotices,
   markNoticesRead,
@@ -22,6 +22,8 @@ type Tab = 'waiting' | 'info';
 export function NotificationsPage() {
   const t = useT();
   const { portal } = useFrontDoor();
+  const { systemId: frameSystem } = useParams();
+  const base = frameSystem ? `/s/${frameSystem}` : '/portal';
   const [params, setParams] = useSearchParams();
   const tab: Tab = params.get('tab') === 'info' ? 'info' : 'waiting';
   const system = params.get('system') ?? '';
@@ -81,7 +83,7 @@ export function NotificationsPage() {
     <section className="door-block" aria-labelledby="door-notices-title">
       <div className="door-row">
         <PageHeader id="door-notices-title" title={t('door.notices.title')} purpose={t('door.purpose.notices')} />
-        <Link className="btn ghost sm" to="/portal/notifications/preferences">
+        <Link className="btn ghost sm" to={`${base}/notifications/preferences`}>
           {t('door.notices.preferences')}
         </Link>
       </div>

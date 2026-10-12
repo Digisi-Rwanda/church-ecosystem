@@ -11,7 +11,6 @@ export const en = {
   'shell.menuOpen': 'Open menu',
   'shell.menuClose': 'Close menu',
   'shell.signOut': 'Sign out',
-  'shell.weekOf': 'Week of {date}',
   'shell.memberFallback': 'Member',
 
   // Menu groups
@@ -2917,8 +2916,6 @@ export const en = {
   'door.search.group.notices': 'Notifications',
   'door.search.group.announcements': 'Announcements',
   'door.search.open': 'Search',
-  'door.p360.tab.sheet': 'Profile sheet',
-  'door.p360.sheet.print': 'Print the sheet',
   'door.p360.sheet.profile': 'Profile',
   'door.p360.sheet.contact': 'Contact',
   'door.p360.sheet.personal': 'Personal',
@@ -2939,6 +2936,10 @@ export const en = {
   'door.dash.glance': 'At a glance',
   'door.dash.activity.title': 'Activity overview',
   'door.dash.tasks.open': 'Open tasks',
+  'door.p360.view': 'View',
+  'door.p360.view.cards': 'Cards',
+  'door.p360.view.bulletin': 'Bulletin',
+  'door.p360.sheet.download': 'Download as PDF',
   // Test and demo markers
 } as const;
 
