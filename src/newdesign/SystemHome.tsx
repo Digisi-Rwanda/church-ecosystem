@@ -34,12 +34,12 @@ export function SystemHome({ systemId, systemName }: { systemId: string; systemN
   ];
   return (
     <section className="door-block" aria-label={systemName}>
+      <UrgentTile systemId={systemId} />
       <LeaderDashboard
         systemId={systemId}
         systemName={systemName}
         fallback={
           <>
-            <UrgentTile systemId={systemId} />
             <div>
               <PageHeader id="door-home-title" title={systemName} />
               <p className="muted">{t('door.tile.intro')}</p>
