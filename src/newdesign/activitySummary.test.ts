@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { groupActivities, groupOf } from './activitySummary';
 
-const p = (id: string, state: string, startsOn: string | null = null, endsOn: string | null = null) => ({ id, state, startsOn, endsOn }) as never;
+const p = (id: string, state: string, startsOn: string | null = null, endsOn: string | null = null) => ({ id, state, startsOn, endsOn }) as unknown as Parameters<typeof groupActivities>[0][number];
 
 describe('groupActivities', () => {
   it('sorts activities into completed, in progress and upcoming', () => {

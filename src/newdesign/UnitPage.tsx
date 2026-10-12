@@ -11,7 +11,6 @@ import { useLoad } from './useLoad';
 import { PageHeader, initialsOf } from './kit';
 
 const today = () => new Date().toISOString().slice(0, 10);
-const WORK_PAGE = { PROGRAM: 'programs', EVENT: 'events', PROJECT: 'projects' } as const;
 
 /** One unit: its place in the organisation, a summary of its activities, its office holders, the units inside and its members. */
 export function UnitPage() {

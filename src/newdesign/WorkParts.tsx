@@ -18,7 +18,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { PersonPicker } from './PersonPicker';
 import { Segmented } from './kit';
-import { dueTimeToInput, dueToInput, hasDueTime, inputToDue, inputToDueTime, workActions, workErrorKey, workStatusKey } from './work';
+import { dueToInput, hasDueTime, inputToDue, inputToDueTime, workActions, workErrorKey, workStatusKey } from './work';
 
 /** Create a piece of work, or (with `existing`) change it. Owner and helpers are picked by name. */
 export function WorkForm({
