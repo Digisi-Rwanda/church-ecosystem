@@ -167,7 +167,12 @@ peopleRouter.get('/:id', requireAuth, async (req: AuthedRequest, res) => {
     res.status(404).json({ error: 'Person not found' });
     return;
   }
-  const tier = await tierOf(req.auth!.personId, id);
+  let tier = await tierOf(req.auth!.personId, id);
+  // Someone who may list a person in their own system (a unit's treasurer, secretary...) may open that person's names-only card.
+  if (tier === 'NONE' && id !== req.auth!.personId) {
+    const scope = await peopleScopeFor(req.auth!.personId, '', false);
+    if (scope !== 'FORBIDDEN' && (scope.ids === null || scope.ids.has(id))) tier = 'DIRECTORY';
+  }
   const visible = filterPerson(person as Record<string, unknown>, tier);
   if (!visible) {
     res.status(403).json({ error: 'You can only open your own profile' });

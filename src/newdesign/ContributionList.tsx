@@ -62,6 +62,7 @@ export function ContributionList({ list, onChange }: { list: ContributionListVie
               <div key={i} className="door-row">
                 <TextField label={t('door.money.lines.name')} name={`cl-name-${list.id}-${i}`} maxLength={80} value={r.name} onChange={(e) => set(i, { name: e.target.value, personId: r.personId && e.target.value === r.name ? r.personId : null })} />
                 <TextField label={t('door.money.lines.amount')} name={`cl-amt-${list.id}-${i}`} inputMode="numeric" value={r.amount} onChange={(e) => set(i, { amount: e.target.value })} />
+                <span className={`door-chip${r.personId ? '' : ' warn'}`}>{t(r.personId ? 'door.money.lines.linked' : 'door.money.lines.notLinked')}</span>
                 {unit && r.team && <span className="muted">{r.team}</span>}
                 <button type="button" className="btn ghost sm" onClick={() => setRows((all) => all.filter((_, n) => n !== i))}>
                   {t('door.money.lines.remove')}

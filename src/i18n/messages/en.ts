@@ -1714,7 +1714,7 @@ export const en = {
   'door.money.lines.edit': 'Write the list',
   'door.money.lines.save': 'Save',
   'door.money.lines.saveSubmit': 'Save and submit to {to}',
-  'door.money.lines.fromDirectory': 'Add someone from the directory',
+  'door.money.lines.fromDirectory': 'Add someone from the directory (links the line to their record)',
   'door.money.lines.err.name': 'Every line needs a name.',
   'door.money.lines.err.amount': 'Each amount is a whole number of francs above zero.',
   'door.money.donations': 'Donations',
@@ -2880,6 +2880,8 @@ export const en = {
   'door.reports.partsHint': 'Untick what the report should leave out. The report shows only what you keep, set out as a report.',
   'door.reports.part.summary': 'Key figures',
   'door.reports.err.noParts': 'Keep at least one part in the report.',
+  'door.money.lines.linked': 'Linked to the directory',
+  'door.money.lines.notLinked': 'Typed name, not linked',
   // Test and demo markers
 } as const;
 

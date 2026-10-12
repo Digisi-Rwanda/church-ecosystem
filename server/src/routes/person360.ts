@@ -186,8 +186,8 @@ person360Router.get('/:personId/participation', requireAuth, async (req: AuthedR
       if (l && counts(l)) items.push({ id: x.id, kind: 'CONTRIBUTION', amount: x.amount, day: l.decidedAt ? day(l.decidedAt) : `${l.month}-01`, system: sysName(l.systemId), label: l.typeName, status: 'COUNTED' });
     }
   }
-  for (const d of (await prisma.donation.findMany({ where: { donorPersonId: p.id } })) as Array<{ id: string; systemId: string; amount: number; receivedOn: Date | string; status: string; note?: string | null }>) {
-    if (d.status === 'APPROVED') items.push({ id: d.id, kind: 'DONATION', amount: d.amount, day: day(d.receivedOn), system: sysName(d.systemId), label: d.note ?? '', status: 'COUNTED' });
+  for (const d of (await prisma.donation.findMany({ where: { donorPersonId: p.id } })) as Array<{ id: string; systemId: string; amount: number; receivedOn: Date | string; status: string; note?: string | null; typeName?: string | null }>) {
+    if (d.status === 'APPROVED') items.push({ id: d.id, kind: 'DONATION', amount: d.amount, day: day(d.receivedOn), system: sysName(d.systemId), label: d.typeName ?? d.note ?? '', status: 'COUNTED' });
   }
   const sponsors = (await prisma.choirSponsor.findMany({ where: { personId: p.id } })) as Array<{ id: string; choirId: string }>;
   if (sponsors.length) {
