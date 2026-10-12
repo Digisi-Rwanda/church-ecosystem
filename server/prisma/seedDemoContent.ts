@@ -6,6 +6,7 @@
  * and anything the church already has is left alone.
  */
 import type { PrismaClient } from '@prisma/client';
+import { buildSnapshot, type ReportKind, type Sources } from '../src/reports/builders.js';
 
 const DAY = 24 * 3600 * 1000;
 type Db = PrismaClient;
@@ -209,6 +210,30 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
     const kinds: Array<[string, string, string, string]> = [['MEETINGS', lastMonth, 'PUBLISHED', 'Meetings'], ['ATTENDANCE', lastMonth, 'PUBLISHED', 'Attendance'], ['WORK_PLANS', prevMonth, 'PUBLISHED', 'Work plans']];
     for (const [kind, periodKey, status, label] of kinds) {
       bump('reports', await ensure(db.report as never, `demo-rep-${u.code}-${kind}`, { systemId: u.systemId, orgUnitId: u.orgUnitId, kind, periodKey, title: `${u.name} · ${label} · ${periodKey}`, status, snapshotJson: '{}', composedById: author, composedAt: at(-20), publishedById: author, publishedAt: at(-19) }));
+    }
+  }
+
+  // A report opens from its snapshot, so each demo report gets real figures built from the demo data above
+  // (older runs stored an empty snapshot, which made the report page fail: those are filled in too).
+  {
+    const all = async <T,>(m: unknown) => (await (m as { findMany: () => Promise<unknown> }).findMany()) as T[];
+    const people = await all<{ id: string; fullName: string; status?: string; archivedAt?: Date | null }>(db.person);
+    const src = {
+      names: new Map(people.map((p) => [p.id, p.fullName])),
+      meetings: await all(db.meeting), decisions: await all(db.decision), accounts: await all(db.moneyAccount), entries: await all(db.moneyEntry),
+      budgetLines: await all(db.moneyBudgetLine), counts: await all(db.offeringCount), memberships: await all(db.membership), positions: await all(db.position),
+      plans: await all(db.workPlan), personRecords: await all(db.personRecord), programs: await all(db.program),
+      activePeople: new Set(people.filter((p) => !p.archivedAt && (!p.status || p.status === 'ACTIVE')).map((p) => p.id)),
+    };
+    for (const u of UNITS) {
+      for (const kind of ['MEETINGS', 'ATTENDANCE', 'WORK_PLANS']) {
+        const id = `demo-rep-${u.code}-${kind}`;
+        const row = (await db.report.findUnique({ where: { id } })) as { snapshotJson: string; periodKey: string } | null;
+        if (!row || row.snapshotJson !== '{}') continue;
+        const snap = buildSnapshot(kind as ReportKind, row.periodKey, u.name, { unitId: u.orgUnitId, systemId: u.systemId, ...src } as unknown as Sources);
+        await db.report.update({ where: { id }, data: { snapshotJson: JSON.stringify(snap) } });
+        bump('report figures', true);
+      }
     }
   }
 

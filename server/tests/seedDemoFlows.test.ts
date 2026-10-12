@@ -53,6 +53,7 @@ describe('demo flows seed', () => {
     expect(db.contributionList.every((l: { status: string }) => l.status === 'APPROVED')).toBe(true);
     expect(db.donation.filter((d: { donorPersonId: string }) => d.donorPersonId === 'p-member')).toHaveLength(2);
     for (const k of ['workTask', 'report', 'meeting', 'decision', 'letter', 'serviceCollection', 'monthPlan', 'scheduleSlot', 'unitGroup']) expect(db[k].length, k).toBeGreaterThanOrEqual(2);
+    expect(db.report.every((x: { snapshotJson: string }) => Array.isArray(JSON.parse(x.snapshotJson).tables))).toBe(true); // every demo report opens
     const before = Object.fromEntries(Object.keys(db).map((k) => [k, db[k].length]));
     await seedDemoFlows(fake as never);
     expect(Object.fromEntries(Object.keys(db).map((k) => [k, db[k].length]))).toEqual(before);

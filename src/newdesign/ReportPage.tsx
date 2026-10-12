@@ -84,7 +84,7 @@ export function ReportPage() {
                 {error}
               </p>
             )}
-            {!r.snapshot ? (
+            {!r.snapshot || !Array.isArray(r.snapshot.summary) || !Array.isArray(r.snapshot.tables) ? (
               <EmptyState variant="error" title={t('door.reports.unreadable')} />
             ) : (
               <>
