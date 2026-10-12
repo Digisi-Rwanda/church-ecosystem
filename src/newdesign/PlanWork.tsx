@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { addPlanCheck, addPlanNote, markAttended, removePlanCheck, saveReport, planStep, tickPlanCheck, type PlanDetail } from '../api/frontDoorApi';
+import { addPlanCheck, addPlanNote, editPlanCheck, markAttended, removePlanCheck, saveReport, planStep, tickPlanCheck, type PlanDetail } from '../api/frontDoorApi';
 import { TextAreaField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { PlanGuests } from './PlanGuests';
@@ -35,6 +35,7 @@ function Schedule({ p }: { p: PlanDetail }) {
 function Checklist({ p, run, title }: { p: PlanDetail; run: Run; title: string }) {
   const t = useT();
   const [item, setItem] = useState('');
+  const [editing, setEditing] = useState<{ id: string; label: string } | null>(null);
   const done = p.checks.filter((k) => k.done).length;
   return (
     <section className="panel">
@@ -44,10 +45,21 @@ function Checklist({ p, run, title }: { p: PlanDetail; run: Run; title: string }
         <ul className="door-list">
           {p.checks.map((k) => (
             <li key={k.id}>
-              <label className="door-check">
-                <input type="checkbox" checked={k.done} disabled={!p.canCheck} onChange={(e) => void run(() => tickPlanCheck(p.id, k.id, e.target.checked))} /> {k.label}
-              </label>
-              {p.canAddCheck && !k.done && <button type="button" className="btn ghost sm" onClick={() => void run(() => removePlanCheck(p.id, k.id))}>{t('door.sched.unassign')}</button>}
+              {editing?.id === k.id ? (
+                <div className="door-row">
+                  <TextField label={t('door.plan.checkEdit', { label: k.label })} name={`run-check-edit-${k.id}`} value={editing.label} onChange={(e) => setEditing({ id: k.id, label: e.target.value })} />
+                  <button type="button" className="btn secondary sm" disabled={!editing.label.trim()} onClick={() => void run(() => editPlanCheck(p.id, k.id, editing.label.trim()), () => setEditing(null))}>{t('door.plan.checkEditGo')}</button>
+                  <button type="button" className="btn ghost sm" onClick={() => setEditing(null)}>{t('door.plan.checkEditCancel')}</button>
+                </div>
+              ) : (
+                <>
+                  <label className="door-check">
+                    <input type="checkbox" checked={k.done} disabled={!p.canCheck} onChange={(e) => void run(() => tickPlanCheck(p.id, k.id, e.target.checked))} /> {k.label}
+                  </label>
+                  {p.canAddCheck && <button type="button" className="btn ghost sm" onClick={() => setEditing({ id: k.id, label: k.label })}>{t('door.plan.checkEditOpen')}</button>}
+                  {p.canAddCheck && !k.done && <button type="button" className="btn ghost sm" onClick={() => void run(() => removePlanCheck(p.id, k.id))}>{t('door.sched.unassign')}</button>}
+                </>
+              )}
             </li>
           ))}
         </ul>

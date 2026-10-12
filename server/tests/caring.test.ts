@@ -113,11 +113,11 @@ describe('prayer watches', () => {
 });
 
 describe('own blocks', () => {
-  it('the Church Leader sees Couples, Visits and Watches in their systems', async () => {
+  it('the Church Leader enters Central only, so these systems do not open for him (his letters still reach their data)', async () => {
     const caps = await get('p-pastor', '/api/me/capabilities');
     const keys = (id: string) => caps.body.systems.find((s: any) => s.id === id)?.own.map((o: any) => o.key) ?? [];
-    expect(keys('sys-couples')).toContain('couples');
-    expect(keys('sys-elderly')).toContain('visits');
-    expect(keys('sys-intercessors')).toContain('watches');
+    expect(keys('sys-couples')).toEqual([]);
+    expect(keys('sys-elderly')).toEqual([]);
+    expect(keys('sys-intercessors')).toEqual([]);
   });
 });

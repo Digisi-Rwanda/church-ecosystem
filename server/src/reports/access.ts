@@ -1,9 +1,10 @@
-import { lettersInSystem, type AccessData } from '../capabilities/engine.js';
+import { isCentralOnly, lettersInSystem, type AccessData } from '../capabilities/engine.js';
 import { CHURCH_WIDE, SOURCE, type ReportKind } from './builders.js';
 import { accessFor } from '../person360/rules.js';
 
 const held = (me: string, systemId: string, data: AccessData, now: Date) => lettersInSystem(me, systemId, data, now).REPORTS as string[];
-export const canReadReports = (me: string, s: string, d: AccessData, now = new Date()) => held(me, s, d, now).includes('R');
+/** Reports are sent to Central: the Church Leader and the Catechist read every unit's published reports there. */
+export const canReadReports = (me: string, s: string, d: AccessData, now = new Date()) => isCentralOnly(me, d, now) || held(me, s, d, now).includes('R');
 export const canCompose = (me: string, s: string, d: AccessData, now = new Date()) => held(me, s, d, now).includes('W');
 export const canPublish = (me: string, s: string, d: AccessData, now = new Date()) => held(me, s, d, now).includes('P');
 /** To compose a report from records, the composer must be allowed to read those records. */

@@ -12,7 +12,7 @@
 import { prisma } from '../lib/prisma.js';
 import { remember } from '../lib/shortCache.js';
 import { buildAttentionFeed } from '../attention/buildFeed.js';
-import { liveHoldings, type AccessData, type DelegationRec, type MembershipRec, type PositionRec } from '../capabilities/engine.js';
+import { isCentralOnly, liveHoldings, type AccessData, type DelegationRec, type MembershipRec, type PositionRec } from '../capabilities/engine.js';
 import type { UnitRec } from '../lib/appointments.js';
 import { INFO_DAYS, MAIN, addressedTo, waitingFromAppointments, type Notice, type StoredRow } from './rules.js';
 
@@ -62,10 +62,13 @@ export async function loadNotices(personId: string, now = new Date()): Promise<N
   const read = new Set(reads.map((r) => r.key));
   const items: Notice[] = [];
 
+  // The Church Leader and the Catechist work in Central only: everything sent to them opens there.
+  const centralOnly = isCentralOnly(personId, data, now, holdings);
+  const inCentral = (href: string | null | undefined) => (centralOnly && href ? href.replace(/^\/s\/[^/]+\//, `/s/${MAIN}/`) : href ?? null);
   for (const n of stored) {
     if (!addressedTo(n, personId, holdings)) continue;
     const kind = n.kind === 'WAITING_FOR_ME' ? 'WAITING_FOR_ME' : 'FOR_INFORMATION';
-    const systemId = n.systemId ?? MAIN;
+    const systemId = centralOnly ? MAIN : n.systemId ?? MAIN;
     if (kind === 'FOR_INFORMATION' && !n.important && muted.includes(systemId)) continue;
     items.push({
       key: n.id,
@@ -73,7 +76,7 @@ export async function loadNotices(personId: string, now = new Date()): Promise<N
       source: 'STORED',
       title: n.title,
       body: n.body ?? null,
-      href: n.href ?? null,
+      href: inCentral(n.href),
       systemId,
       createdAt: new Date(n.createdAt).toISOString(),
       important: !!n.important,

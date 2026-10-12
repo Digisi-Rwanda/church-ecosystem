@@ -11,7 +11,7 @@
  * Approval is by level: the unit's own approver (the President) and then always the Church Leader. Nobody approves their
  * own entry, except that the Church Leader decides their own activity at the church's level. The report is composed in Closing (letter W) and published (letter P), which freezes it.
  */
-import { liveHoldings, lettersInSystem, type AccessData } from '../capabilities/engine.js';
+import { isCentralOnly, liveHoldings, lettersInSystem, type AccessData } from '../capabilities/engine.js';
 import { visibilityOf, type Visibility, type WorkRow } from './rules.js';
 
 export const PLAN_STATUSES = ['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'PAUSED', 'CLOSING', 'ENDED', 'CANCELLED'] as const;
@@ -119,6 +119,8 @@ export function canApprove(p: PlanRow, me: string, data: AccessData, now = new D
   }
   // The Treasurer's step is an answer about the figures (checked or flagged), given by whoever holds the Money write letter.
   if (level.levelKey === 'TREASURER') return p.createdById !== me && has(me, level.systemId, 'MONEY', 'W', data, now);
+  // The unit's own step belongs to the unit's President; the Church Leader and the Catechist decide at the church's level.
+  if (isCentralOnly(me, data, now)) return false;
   return p.createdById !== me && has(me, level.systemId, 'MISSION', 'A', data, now);
 }
 

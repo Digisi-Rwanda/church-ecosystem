@@ -34,6 +34,7 @@ import {
   PersonCardPage,
   PlanPage,
   PublicEventPage,
+  PublicCheckinPage,
   ActionPlanCreate,
   ActivityNew,
   PlansPage,
@@ -80,6 +81,7 @@ export function newDesignRoutes() {
     <Route element={<NewDesignLayout />}>
       <Route path="/signin" element={<NewSignInPage />} />
       <Route path="/e/:token" element={<PublicEventPage />} />
+      <Route path="/e/:token/here" element={<PublicCheckinPage />} />
       <Route element={<RequireSignedIn />}>
         <Route path="/portal" element={<PortalLayout />}>
           <Route index element={<PortalPage />} />

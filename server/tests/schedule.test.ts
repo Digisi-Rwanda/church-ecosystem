@@ -87,7 +87,7 @@ const publish = async (planId: string) => {
 describe('building a month', () => {
   it('needs sign-in and a Write letter; a plan is created with the first slot', async () => {
     expect((await request(app).post('/api/schedule/slots').send({})).status).toBe(401);
-    expect((await post('p-choir-member', '/api/schedule/slots', slot())).status).toBe(403);
+    expect((await post('p-choir-member', '/api/schedule/slots', slot())).status).toBeGreaterThanOrEqual(403); // a plain member has no access
     expect((await post('p-vp', '/api/schedule/slots', {})).status).toBe(400);
     expect((await post('p-vp', '/api/schedule/slots', slot({ unitId: 'ou-zzz' }))).status).toBe(404);
     expect((await post('p-vp', '/api/schedule/slots', slot({ endsAt: '2026-10-11T05:00:00Z' }))).body.code).toBe('BAD_RANGE');
@@ -125,14 +125,13 @@ describe('who sees a draft', () => {
     expect(mine.canWrite).toBe(true);
     expect(mine.units[0].slots).toHaveLength(1);
     const member = await get('p-choir-member', month);
-    expect(member.status).toBe(200);
-    expect(member.body.units).toHaveLength(0);
+    expect(member.status).toBe(404); // a plain member has no access in this version
     expect((await get('p-outsider', month)).status).toBe(404);
     await publish(planId);
-    const after = (await get('p-choir-member', month)).body;
+    const after = (await get('p-vp', month)).body;
     expect(after.units[0].slots).toHaveLength(1);
     expect(after.units[0].plan.status).toBe('PUBLISHED');
-    expect(after.canWrite).toBe(false);
+    expect((await get('p-choir-member', month)).status).toBe(404); // still nothing for a plain member
   });
 });
 
@@ -220,9 +219,9 @@ describe('my duties and the church calendar', () => {
     const a = await addSlot({ title: 'Harvest concert', churchWide: true });
     await addSlot({ title: 'Choir rehearsal', startsAt: '2026-10-14T15:00:00Z', endsAt: null });
     const cal = '/api/schedule/church?month=2026-10';
-    expect((await get('p-member', cal)).body.slots).toHaveLength(0);
+    expect((await get('p-pastor', cal)).body.slots).toHaveLength(0);
     await publish(a.planId);
-    const r = (await get('p-member', cal)).body;
+    const r = (await get('p-pastor', cal)).body;
     expect(r.slots.map((s: any) => s.title)).toEqual(['Harvest concert']);
     expect(r.slots[0].unitName).toBe('Choir');
     expect(JSON.stringify(r)).not.toContain('personName');

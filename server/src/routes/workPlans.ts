@@ -9,7 +9,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
-import { liveHoldings, lettersInSystem } from '../capabilities/engine.js';
+import { isCentralOnly, liveHoldings, lettersInSystem } from '../capabilities/engine.js';
 import { notifySafely } from '../lib/notify.js';
 import { NOTE_MAX, TEXT_MAX, TITLE_MAX, VISIBILITIES, canSee } from '../work/rules.js';
 import {
@@ -44,7 +44,7 @@ interface Plan extends PlanRow {
   planType?: string | null;
   aim?: string | null; needs?: string | null; location?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null;
   rejectedReason?: string | null; cancelReason?: string | null; planningSummary?: string | null; executionSummary?: string | null;
-  parentId?: string | null; steeringJson?: string | null; detailsJson?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null;
+  parentId?: string | null; steeringJson?: string | null; detailsJson?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null; registrationUrl?: string | null;
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
   timingKind?: string | null; startTime?: string | null; endTime?: string | null; repeatJson?: string | null; dateChangeJson?: string | null; reviewDue?: boolean | null;
   fundraising?: boolean | null; fundTarget?: number | null; doneAt?: Date | string | null; settledAt?: Date | string | null;
@@ -108,6 +108,24 @@ const milestonesOf = async (planId: string) =>
     const y = b.dueOn ? new Date(b.dueOn).getTime() : Infinity;
     return x - y;
   });
+/** Only a Google Form is accepted as the outside form: a docs.google.com/forms or forms.gle address, over https. */
+export const FORM_HOSTS = ['docs.google.com', 'forms.gle', 'forms.google.com'];
+export function formUrlProblem(raw: string): boolean {
+  try {
+    const u = new URL(raw);
+    if (u.protocol !== 'https:' || !FORM_HOSTS.includes(u.hostname)) return true;
+    return u.hostname === 'docs.google.com' && !u.pathname.startsWith('/forms');
+  } catch {
+    return true;
+  }
+}
+/** The attendance code works only while the event runs, and on one of its days. */
+export function checkinOpen(p: { status: string; startsOn?: Date | string | null; endsOn?: Date | string | null }, now = new Date()): boolean {
+  if (p.status !== 'RUNNING') return false;
+  if (!p.startsOn) return true;
+  const today = churchDay(now);
+  return today >= churchDay(p.startsOn) && today <= churchDay(p.endsOn ?? p.startsOn);
+}
 export const registrationsOf = async (planId: string) =>
   ((await prisma.workPlanRegistration.findMany()) as RegRow[])
     .filter((r) => r.planId === planId && !r.cancelledAt)
@@ -173,6 +191,8 @@ function registrationView(p: Plan, regs: RegRow[], who: Map<string, string>, me:
     canRegister: open && !mine && left !== 0,
     mine: mine ? { id: mine.id } : null,
     publicToken: fl.canManageRegistration ? p.publicToken ?? null : null,
+    formUrl: fl.canManageRegistration || fl.canMarkAttendance ? p.registrationUrl ?? null : null,
+    checkinOpen: checkinOpen(p),
     items: staff
       ? regs.map((r) => ({ id: r.id, name: r.personId ? who.get(r.personId) ?? r.name : r.name, phone: r.phone ?? '', source: r.source, attended: r.attended }))
       : [],
@@ -346,7 +366,7 @@ workPlansRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const text = q('q').trim().toLowerCase();
   const rows = ((await prisma.workPlan.findMany()) as Plan[])
     .filter((p) => canSee(asWorkRow(p), me, c.data))
-    .filter((p) => !q('systemId') || p.systemId === q('systemId'))
+    .filter((p) => !q('systemId') || p.systemId === q('systemId') || (q('systemId') === 'sys-main' && isCentralOnly(me, c.data))) // Central lists every unit's plans for the Church Leader
     .filter((p) => !q('type') || (p.planType ?? 'PROJECT') === q('type'))
     .filter((p) => view === 'all' || isOnTeam(p, me))
     .filter((p) => (status === 'open' ? !['ENDED', 'CANCELLED'].includes(p.status) : status === 'all' || p.status === status))
@@ -732,12 +752,18 @@ workPlansRouter.patch('/:id/checks/:checkId', requireAuth, async (req: AuthedReq
   const got = await visible(req, res);
   if (!got) return;
   const { me, c, p } = got;
-  if (!flags(p, c, me).canCheck) return fail(res, 403, 'FORBIDDEN', 'Only the team ticks items, while the work is running');
   const k = ((await checksOf(p.id)).find((x) => x.id === String(req.params.checkId))) ?? null;
   if (!k) return fail(res, 404, 'NOT_FOUND', 'Item not found');
-  const parsed = z.object({ done: z.boolean() }).safeParse(req.body);
+  const parsed = z.object({ done: z.boolean().optional(), label: z.string().trim().min(1).max(TITLE_MAX).optional() }).refine((v) => v.done !== undefined || v.label !== undefined).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid item');
-  await prisma.workPlanCheck.update({ where: { id: k.id }, data: { done: parsed.data.done, doneById: parsed.data.done ? me : null, doneAt: parsed.data.done ? new Date() : null } });
+  const f = flags(p, c, me);
+  // The team ticks items; whoever may change the checklist also rewrites an item's words.
+  if (parsed.data.done !== undefined && !f.canCheck) return fail(res, 403, 'FORBIDDEN', 'Only the team ticks items, while the work is running');
+  if (parsed.data.label !== undefined && !f.canAddCheck) return fail(res, 403, 'FORBIDDEN', 'You may not change the checklist now');
+  const change: Record<string, unknown> = {};
+  if (parsed.data.label !== undefined) change.label = parsed.data.label;
+  if (parsed.data.done !== undefined) Object.assign(change, { done: parsed.data.done, doneById: parsed.data.done ? me : null, doneAt: parsed.data.done ? new Date() : null });
+  await prisma.workPlanCheck.update({ where: { id: k.id }, data: change });
   res.json({ plan: await shape(p, c, me, true) });
 });
 
@@ -852,7 +878,7 @@ workPlansRouter.patch('/:id/registration', requireAuth, async (req: AuthedReques
   const { me, c, p } = got;
   if (!flags(p, c, me).canManageRegistration) return fail(res, 403, 'FORBIDDEN', 'You may not change registration now');
   const parsed = z
-    .object({ open: z.boolean().optional(), capacity: z.number().int().min(1).max(100000).nullable().optional(), publicLink: z.boolean().optional() })
+    .object({ open: z.boolean().optional(), capacity: z.number().int().min(1).max(100000).nullable().optional(), publicLink: z.boolean().optional(), formUrl: z.string().trim().max(500).nullable().optional() })
     .safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid registration settings');
   const d = parsed.data;
@@ -861,6 +887,12 @@ workPlansRouter.patch('/:id/registration', requireAuth, async (req: AuthedReques
   if (d.capacity !== undefined) data.capacity = d.capacity;
   if (d.publicLink === true && !p.publicToken) data.publicToken = randomBytes(18).toString('base64url');
   if (d.publicLink === false) data.publicToken = null;
+  if (d.formUrl !== undefined) {
+    if (d.formUrl && formUrlProblem(d.formUrl)) return fail(res, 400, 'BAD_FORM_URL', 'Paste the address of a Google Form');
+    data.registrationUrl = d.formUrl || null;
+    // A form needs a link people can open, so the public link is turned on with it.
+    if (d.formUrl && !p.publicToken && d.publicLink !== false) data.publicToken = randomBytes(18).toString('base64url');
+  }
   const row = (await prisma.workPlan.update({ where: { id: p.id }, data })) as Plan;
   await audit(me, p.systemId, 'WORKPLAN_REGISTRATION_SET', `Changed registration for “${p.title}”`, { planId: p.id, ...d });
   res.json({ plan: await shape(row, c, me, true) });

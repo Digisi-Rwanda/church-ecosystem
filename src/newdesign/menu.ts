@@ -134,12 +134,16 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
             place('funds', 'money/funds', 'door.money.funds'),
             place('accounting', 'money', 'door.money.accounting', true),
             place('contributions', 'money/contributions', 'door.money.contributions'),
-            place('moneyreports', 'money/reports', 'door.money.reports'),
           ]
         : []),
       place('mine', 'money/mine', 'door.money.mine'),
     ],
-    reports: [...(shared.has('reports') ? [place('reports', 'reports', 'door.block.reports')] : []), ...some(['deaconreports'].map(ownPlace))],
+    // The year overview of the money is a report, so it sits in Reports (it still needs the Money letter to open).
+    reports: [
+      ...(shared.has('reports') ? [place('reports', 'reports', 'door.block.reports')] : []),
+      ...(shared.has('money') ? [place('moneyreports', 'money/reports', 'door.money.reports')] : []),
+      ...some(['deaconreports'].map(ownPlace)),
+    ],
     governance: own.has('governance')
       ? [
           ...some(['central'].map(ownPlace)),

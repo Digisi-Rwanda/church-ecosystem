@@ -8,7 +8,7 @@ import { Router } from 'express';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
-import { lettersInSystem, liveHoldings, reachesEverySystem } from '../capabilities/engine.js';
+import { isCentralOnly, lettersInSystem, liveHoldings, reachesEverySystem } from '../capabilities/engine.js';
 import { canSee, type WorkRow } from '../work/rules.js';
 import { asWorkRow, type PlanRow } from '../work/plan.js';
 import { balances } from '../money/rules.js';
@@ -50,10 +50,13 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const now = new Date();
   const { data, units } = await loadAccessData(me);
   // Only a leader of this system (or of the whole church) gets a dashboard; others get a plain "not found".
-  const leader = liveHoldings(me, data, now).some((h) => reachesEverySystem(h) || (h.scope === 'CHURCH' && systemId === 'sys-main') || h.systemId === systemId);
+  const held = liveHoldings(me, data, now);
+  const leader = isCentralOnly(me, data, now, held) ? systemId === 'sys-main' : held.some((h) => (h.scope === 'CHURCH' && systemId === 'sys-main') || h.systemId === systemId);
   if (!leader) return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
 
   const central = systemId === COLLECTIONS_SYSTEM;
+  // Central opens everything inside Central: the Church Leader and the Catechist never enter another system.
+  const hs = (sys: string) => (central ? systemId : sys);
   const letters = lettersInSystem(me, systemId, data, now);
   const has = (m: 'PEOPLE' | 'MONEY' | 'SCHEDULING' | 'MISSION' | 'GOVERNANCE') => (letters[m] as string[]).includes('R');
   const asked = Number(req.query.range);
@@ -157,14 +160,14 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     .filter((p) => p.startsOn && new Date(p.endsOn ?? p.startsOn).getTime() >= today.getTime())
     .sort((a, b) => new Date(a.startsOn!).getTime() - new Date(b.startsOn!).getTime())
     .slice(0, 4);
-  lists.events = plans.map((p) => ({ id: p.id, title: p.title, startsOn: iso(p.startsOn), planType: p.planType, href: `/s/${p.systemId}/work/plans/${p.id}` }));
+  lists.events = plans.map((p) => ({ id: p.id, title: p.title, startsOn: iso(p.startsOn), planType: p.planType, href: `/s/${hs(p.systemId)}/work/plans/${p.id}` }));
 
   const visibleTasks = ((await prisma.workTask.findMany(central ? undefined : { where: { systemId } })) as TaskRow[])
     .filter((w) => (central || w.systemId === systemId) && canSee(w, me, data, now));
   const tasks = [...visibleTasks]
     .sort((a, b) => new Date(b.updatedAt ?? b.createdAt ?? 0).getTime() - new Date(a.updatedAt ?? a.createdAt ?? 0).getTime())
     .slice(0, 4);
-  lists.work = tasks.map((w) => ({ id: w.id, title: w.title, status: w.status, at: iso(w.updatedAt ?? w.createdAt), href: `/s/${w.systemId}/work` }));
+  lists.work = tasks.map((w) => ({ id: w.id, title: w.title, status: w.status, at: iso(w.updatedAt ?? w.createdAt), href: `/s/${hs(w.systemId)}/work` }));
   const isOpen = (w: TaskRow) => w.status !== 'DONE' && w.status !== 'CANCELLED';
   const overdue = visibleTasks.filter((w) => isOpen(w) && w.dueDate && new Date(w.dueDate).getTime() < now.getTime()).length;
   const doneAll = visibleTasks.filter((w) => w.status === 'DONE');
@@ -263,8 +266,8 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     kpis.push({ key: 'reports', value: late.length > 0 ? late.length : thisPeriod, format: 'count', trend: null, href: `/s/${systemId}/reports`, tone: late.length > 0 ? 'late' : 'ok' });
     if (late.length > 0) attention.push({ key: 'reportsLate', count: late.length, href: `/s/${systemId}/reports` });
     lists.reports = [
-      ...late.map((r) => ({ id: `late-${r.scheduleId}`, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: true, href: `/s/${r.systemId}/reports` })),
-      ...published.map((r) => ({ id: r.id, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: false, href: `/s/${r.systemId}/reports/${r.id}` })),
+      ...late.map((r) => ({ id: `late-${r.scheduleId}`, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: true, href: `/s/${hs(r.systemId)}/reports` })),
+      ...published.map((r) => ({ id: r.id, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: false, href: `/s/${hs(r.systemId)}/reports/${r.id}` })),
     ].slice(0, 4);
   }
 

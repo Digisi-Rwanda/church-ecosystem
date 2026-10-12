@@ -145,8 +145,10 @@ describe('buildPortalModules', () => {
     const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
     const mk = (blocks: object) => ({ blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'], systems: [{ id: 'sys-a', blocks: { ...none, ...blocks }, own: [] }] }) as unknown as Capabilities;
     const keys = (caps: Capabilities) => buildModules(caps, 'sys-a').find((m) => m.id === 'money')!.places.map((p) => p.key);
-    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'funds', 'accounting', 'contributions', 'moneyreports', 'mine']);
+    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'funds', 'accounting', 'contributions', 'mine']);
     expect(keys(mk({ people: ['R'] }))).toEqual(['mine']);
+    // the year overview is a report, so it is listed under Reports, not Money
+    expect(buildModules(mk({ money: ['R'], reports: ['R'] }), 'sys-a').find((m) => m.id === 'reports')!.places.map((p) => p.key)).toEqual(['reports', 'moneyreports']);
     const mods = buildModules(mk({ money: ['R'] }), 'sys-a');
     expect(resolveActive(mods, '/s/sys-a/money')?.place?.key).toBe('accounting');
     expect(resolveActive(mods, '/s/sys-a/money/budget')?.place?.key).toBe('budget');

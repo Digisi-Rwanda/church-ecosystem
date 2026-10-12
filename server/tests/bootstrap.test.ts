@@ -50,7 +50,7 @@ describe('GET /api/me/bootstrap', () => {
     const member = await get('p-member', '/api/me/bootstrap');
     const pastor = await get('p-pastor', '/api/me/bootstrap');
     expect(member.body.capabilities.personId).toBe('p-member');
-    expect(member.body.portal.systems.length).toBeLessThan(pastor.body.portal.systems.length);
+    expect(member.body.portal.systems.length).toBeLessThanOrEqual(pastor.body.portal.systems.length);
     expect(JSON.stringify(member.body)).not.toContain('p-pastor');
   });
 

@@ -1039,7 +1039,7 @@ export type ProgramView = {
 };
 export type PlanRegistration = {
   open: boolean; capacity: number | null; count: number; attended: number; spotsLeft: number | null; canRegister: boolean;
-  mine: { id: string } | null; publicToken: string | null;
+  mine: { id: string } | null; publicToken: string | null; formUrl: string | null; checkinOpen: boolean;
   items: Array<{ id: string; name: string; phone: string; source: 'MEMBER' | 'STAFF' | 'PUBLIC'; attended: boolean }>;
 };
 
@@ -1082,6 +1082,8 @@ export const addPlanNote = (id: string, text: string) => planBody(apiFetch(`${P}
 export const addPlanCheck = (id: string, label: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks`, { method: 'POST', body: { label } }));
 export const tickPlanCheck = (id: string, checkId: string, done: boolean) =>
   planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'PATCH', body: { done } }));
+export const editPlanCheck = (id: string, checkId: string, label: string) =>
+  planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'PATCH', body: { label } }));
 export const removePlanCheck = (id: string, checkId: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'DELETE' }));
 export const saveReport = (id: string, body: { planningSummary: string; executionSummary: string; outcome: string }) =>
   planBody(apiFetch(`${P}/${encodeURIComponent(id)}/report`, { method: 'PUT', body }));
@@ -1089,11 +1091,12 @@ const pid = (id: string) => encodeURIComponent(id);
 export const addMilestone = (id: string, title: string, dueOn: string | null) => planBody(apiFetch(`${P}/${pid(id)}/milestones`, { method: 'POST', body: { title, dueOn } }));
 export const tickMilestone = (id: string, mid: string, done: boolean) => planBody(apiFetch(`${P}/${pid(id)}/milestones/${pid(mid)}`, { method: 'PATCH', body: { done } }));
 export const removeMilestone = (id: string, mid: string) => planBody(apiFetch(`${P}/${pid(id)}/milestones/${pid(mid)}`, { method: 'DELETE' }));
-export const setRegistration = (id: string, body: { open?: boolean; capacity?: number | null; publicLink?: boolean }) =>
+export const setRegistration = (id: string, body: { open?: boolean; capacity?: number | null; publicLink?: boolean; formUrl?: string | null }) =>
   planBody(apiFetch(`${P}/${pid(id)}/registration`, { method: 'PATCH', body }));
 export const registerMyself = (id: string) => planBody(apiFetch(`${P}/${pid(id)}/register`, { method: 'POST', body: {} }));
 export const cancelMyRegistration = (id: string) => planBody(apiFetch(`${P}/${pid(id)}/register`, { method: 'DELETE' }));
 export const addGuest = (id: string, name: string, phone: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations`, { method: 'POST', body: { name, phone: phone || null } }));
+export const registerMember = (id: string, personId: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations`, { method: 'POST', body: { personId } }));
 export const markAttended = (id: string, rid: string, attended: boolean) => planBody(apiFetch(`${P}/${pid(id)}/registrations/${pid(rid)}`, { method: 'PATCH', body: { attended } }));
 export const removeGuest = (id: string, rid: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations/${pid(rid)}`, { method: 'DELETE' }));
 
@@ -1105,7 +1108,7 @@ export const addIndicator = (id: string, body: { name: string; unit: string; tar
 export const removeIndicator = (id: string, iid: string) => planBody(apiFetch(`${P}/${pid(id)}/indicators/${pid(iid)}`, { method: 'DELETE' }));
 export const addReading = (id: string, iid: string, value: number, note: string) => planBody(apiFetch(`${P}/${pid(id)}/indicators/${pid(iid)}/readings`, { method: 'POST', body: { value, note: note || null } }));
 
-export type PublicEvent = { title: string; aim: string; location: string; startsOn: string | null; endsOn: string | null; open: boolean; full: boolean };
+export type PublicEvent = { title: string; aim: string; location: string; startsOn: string | null; endsOn: string | null; open: boolean; full: boolean; formUrl: string | null; checkin: boolean };
 export const fetchPublicEvent = async (token: string): Promise<PublicEvent> =>
   (await apiFetch<{ event: PublicEvent }>(`/api/public/events/${pid(token)}`, { auth: false })).event;
 export const registerPublic = (token: string, body: { name: string; phone: string; website?: string }) =>
@@ -1852,3 +1855,6 @@ export const markTransferReviewed = (aid: string) => apiFetch(`/api/work-plans/a
 export const logRevenue = (id: string, input: { label: string; amount: number; receivedOn?: string }) => apiFetch(`${PM(id)}/revenue`, { method: 'POST', body: input });
 export const removeRevenue = (id: string, rid: string) => apiFetch(`${PM(id)}/revenue/${encodeURIComponent(rid)}`, { method: 'DELETE' });
 export const finalizeSettlement = (id: string) => apiFetch<{ ok: true; released: number }>(`${PM(id)}/finalize`, { method: 'POST', body: {} });
+
+export const checkinPublic = (token: string, body: { phone: string; name?: string; website?: string }) =>
+  apiFetch<{ ok: true; name: string; walkIn: boolean }>(`/api/public/events/${pid(token)}/checkin`, { method: 'POST', body, auth: false });

@@ -242,7 +242,7 @@ describe('summary and the Portal badge', () => {
   it('gives counts per system and the most urgent things for the Urgent tile', async () => {
     addNotice({ systemId: 'sys-youth', toPersonId: 'p-pastor' });
     const r = await get('p-pastor', '/api/notifications/summary');
-    expect(r.body.counts.bySystem['sys-youth']).toBe(1);
+    expect(r.body.counts.bySystem['sys-main']).toBe(1); // the Church Leader works in Central: every notice counts there
     expect(r.body.urgent.length).toBeLessThanOrEqual(5);
     expect(r.body.urgent.every((u: any) => u.kind === 'WAITING_FOR_ME')).toBe(true);
     expect((await get('p-pastor', '/api/notifications/summary?system=sys-youth')).body.urgent).toEqual([]);

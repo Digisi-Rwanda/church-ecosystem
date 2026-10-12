@@ -163,13 +163,26 @@ describe('approval', () => {
     for (const planType of ['EVENT', 'PROJECT', 'PROGRAM']) {
       const id = await draft({ planType });
       expect((await post('p-vp', `${B}/${id}/submit`)).body.plan.status).toBe('PENDING_APPROVAL');
-      expect((await post('p-pastor', `${B}/${id}/approve`)).status).toBe(200); // he covers every unit, so he may decide the first level
+      expect((await post('p-pastor', `${B}/${id}/approve`)).status).toBe(403); // the unit's President goes first; the Church Leader does not enter the unit
+      expect((await post('p-choir-leader', `${B}/${id}/approve`)).status).toBe(200);
       const mid = (await get('p-vp', `${B}/${id}`)).body.plan;
       expect(mid.status).toBe('PENDING_APPROVAL');
       expect(mid.levels.map((l: any) => l.status)).toEqual(['APPROVED', 'PENDING']);
       expect((await post('p-choir-leader', `${B}/${id}/approve`)).status).toBe(403); // a president cannot decide the church level
       expect((await post('p-pastor', `${B}/${id}/approve`, { note: 'Go ahead' })).body.plan.status).toBe('RUNNING');
     }
+  });
+  it('the Church Leader does it all from Central: sees the unit plan there, is told there, and the Catechist stands in there', async () => {
+    const id = await draft();
+    await post('p-vp', `${B}/${id}/submit`);
+    await post('p-choir-leader', `${B}/${id}/approve`);
+    const list = (await get('p-pastor', `${B}?systemId=sys-main&view=all`)).body.items;
+    expect(list.map((x: any) => x.id)).toContain(id);
+    const notices = (await get('p-pastor', '/api/notifications?tab=waiting')).body.items;
+    const ask = notices.find((n: any) => n.title.includes('Harvest concert'));
+    expect(ask?.href).toBe(`/s/sys-main/work/plans/${id}`);
+    expect(ask?.systemId).toBe('sys-main');
+    expect((await get('p-pastor', `${B}/${id}`)).status).toBe(200);
   });
   it('a president who wrote the plan skips their own step, goes straight to the Church Leader and cannot approve it', async () => {
     const id = await draft({}, 'p-choir-leader');
@@ -180,7 +193,7 @@ describe('approval', () => {
     expect((await post('p-pastor', `${B}/${id}/approve`)).body.plan.status).toBe('RUNNING');
   });
   it('the Church Leader approves their own activity, and the history says so', async () => {
-    const id = await draft({}, 'p-pastor');
+    const id = await draft({ unitId: 'ou-church' }, 'p-pastor'); // his own activity is planned in Central
     const sent = (await post('p-pastor', `${B}/${id}/submit`)).body.plan;
     expect(sent.levels.map((l: any) => l.levelKey)).toEqual(['CHURCH']);
     const done = (await post('p-pastor', `${B}/${id}/approve`)).body.plan;
@@ -330,7 +343,7 @@ describe('event registration and attendance', () => {
     expect((await get('p-choir-member', `${B}/${id}`)).body.plan.registration.publicToken).toBeNull();
     const view = await request(app).get(`/api/public/events/${token}`);
     expect(view.status).toBe(200);
-    expect(Object.keys(view.body.event).sort()).toEqual(['aim', 'endsOn', 'full', 'location', 'open', 'startsOn', 'title']);
+    expect(Object.keys(view.body.event).sort()).toEqual(['aim', 'checkin', 'endsOn', 'formUrl', 'full', 'location', 'open', 'startsOn', 'title']);
     expect((await request(app).get('/api/public/events/not-a-real-token-abcdef')).status).toBe(404);
     expect((await request(app).post(`/api/public/events/${token}`).send({ name: 'Bot', phone: '0788222222', website: 'x' })).status).toBe(201);
     expect(fake.__db.workPlanRegistration).toHaveLength(0);

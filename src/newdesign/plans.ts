@@ -59,6 +59,9 @@ const ERROR_KEYS: Record<string, string> = {
   EVENT_FULL: 'door.plan.err.full',
   BAD_PARENT: 'door.plan.err.parent',
   ALREADY_REGISTERED: 'door.plan.err.already',
+  BAD_FORM_URL: 'door.plan.err.formUrl',
+  NOT_REGISTERED: 'door.plan.public.notRegistered',
+  CHECKIN_CLOSED: 'door.plan.public.checkinClosed',
   REGISTRATION_CLOSED: 'door.plan.err.regClosed',
   ALREADY_ATTENDED: 'door.plan.err.attended',
   BAD_DATES: 'door.gov.err.badDates',
@@ -94,6 +97,9 @@ export function monthKeyOf(iso: string | null): string {
 
 /** The address a guest opens to register for an event. */
 export const publicEventUrl = (token: string): string => `${window.location.origin}/e/${token}`;
+
+/** The address behind the attendance code at the door. */
+export const publicCheckinUrl = (token: string): string => `${window.location.origin}/e/${token}/here`;
 
 /** The four states people see (and Cancelled): the status chip's tone for each. */
 export const stateTone = (s: ActivityState): 'neutral' | 'warn' | 'info' | 'success' | 'danger' =>

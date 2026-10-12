@@ -6,9 +6,9 @@
  * the audience belongs to. A president or secretary holds those only in their own system, so
  * a team leader can never post to the whole church; the Church Leader and the Church
  * Secretary hold them everywhere. Seeing a post follows the letters too: a system's
- * announcement reaches everyone who holds any Communication letter in that system.
+ * announcement reaches every leader who holds any Communication letter in that system, and the Church Leader in Central.
  */
-import { lettersInSystem, liveHoldings, type AccessData } from '../capabilities/engine.js';
+import { isCentralOnly, lettersInSystem, liveHoldings, type AccessData } from '../capabilities/engine.js';
 import type { OfficeCode } from '../shared/vocabulary.js';
 
 export const MAIN = 'sys-main';
@@ -47,7 +47,8 @@ export const targetSystem = (a: { kind: string; systemId?: string | null }): str
 
 /** Posting needs Send (Governance) and Write (Communication) in the target system. */
 export function canSendIn(personId: string, systemId: string, data: AccessData, now = new Date()): boolean {
-  const l = lettersInSystem(personId, systemId, data, now);
+  // The Church Leader works in Central only, so he posts to any system's audience from there.
+  const l = lettersInSystem(personId, isCentralOnly(personId, data, now) ? MAIN : systemId, data, now);
   return l.GOVERNANCE.includes('S') && l.COMMUNICATION.includes('W');
 }
 
@@ -75,10 +76,11 @@ export function isOpen(a: AnnouncementRow, now = new Date()): boolean {
 /** Does this announcement reach this person? The author always sees their own. */
 export function reaches(a: AnnouncementRow, personId: string, data: AccessData, now = new Date()): boolean {
   if (a.authorId === personId) return true;
-  // The whole church means everyone who has a place in the main church (members and office holders).
-  if (a.audienceKind === 'WHOLE_CHURCH') return lettersInSystem(personId, MAIN, data, now).COMMUNICATION.length > 0;
+  // The whole church means every leader: anyone who holds an office. Plain members have no access in this version.
+  if (a.audienceKind === 'WHOLE_CHURCH') return liveHoldings(personId, data, now).length > 0;
   if (a.audienceKind === 'SYSTEM') {
     if (!a.audienceSystemId) return false;
+    if (isCentralOnly(personId, data, now)) return true; // everything sent to a system is also seen in Central
     return lettersInSystem(personId, a.audienceSystemId, data, now).COMMUNICATION.length > 0;
   }
   if (a.audienceKind === 'OFFICE') {

@@ -66,12 +66,13 @@ describe('who may post', () => {
 describe('who sees a post', () => {
   it('the whole church reaches members and office holders, not outsiders', () => {
     const a = row();
-    for (const who of ['lead', 'mc', 'pres', 'my']) expect(reaches(a, who, data, NOW), who).toBe(true);
+    for (const who of ['lead', 'pres']) expect(reaches(a, who, data, NOW), who).toBe(true);
+    for (const who of ['mc', 'my']) expect(reaches(a, who, data, NOW), `${who} is a plain member, who has no access`).toBe(false);
     expect(reaches(a, 'stranger', data, NOW)).toBe(false);
   });
-  it('a system post reaches its members and office holders, and the Church Leader, not another system', () => {
+  it('a system post reaches its office holders, and the Church Leader, not members or another system', () => {
     const a = row({ audienceKind: 'SYSTEM', audienceSystemId: 'sys-choir', systemId: 'sys-choir', authorId: 'pres' });
-    expect(reaches(a, 'mc', data, NOW)).toBe(true);
+    expect(reaches(a, 'mc', data, NOW)).toBe(false);
     expect(reaches(a, 'vp', data, NOW)).toBe(true);
     expect(reaches(a, 'lead', data, NOW)).toBe(true);
     expect(reaches(a, 'my', data, NOW)).toBe(false);
@@ -130,7 +131,8 @@ beforeEach(async () => {
     s.kind = s.id === 'sys-main' ? 'MAIN' : s.id === 'sys-finance' ? 'SHARED' : 'MINISTRY';
     s.basePath = `/${s.id}`;
   }
-  db.person.push({ id: 'p-secretary', fullName: 'Church Secretary', status: 'ACTIVE' });
+  db.person.push({ id: 'p-secretary', fullName: 'Church Secretary', status: 'ACTIVE' }, { id: 'p-ctr', fullName: 'Choir Vice President', status: 'ACTIVE' });
+  db.position.push({ id: 'pos-ctr', personId: 'p-ctr', systemId: 'sys-choir', title: 'Vice President', office: 'VICE_PRESIDENT', status: 'ACTIVE', startDate: new Date('2022-01-01') });
   db.position.push({ id: 'pos-sec', personId: 'p-secretary', systemId: 'sys-main', title: 'Church Secretary', office: 'CHURCH_SECRETARY', status: 'ACTIVE', startDate: new Date('2022-01-01') });
   const { createApp } = await import('../src/app.js');
   app = createApp();
@@ -194,9 +196,9 @@ describe('reading', () => {
   });
   const titles = (r: any) => r.body.items.map((i: any) => i.title);
   it('each person sees what reaches them, newest first', async () => {
-    expect(titles(await get('p-member', '/api/announcements'))).toEqual(['Sunday service']);
-    expect(titles(await get('p-choir-member', '/api/announcements'))).toEqual(['Rehearsal', 'Sunday service']);
-    expect(titles(await get('p-youth-member', '/api/announcements'))).toEqual(['Sunday service']);
+    expect(titles(await get('p-member', '/api/announcements'))).toEqual([]); // plain members have no access
+    expect(titles(await get('p-ctr', '/api/announcements'))).toEqual(['Rehearsal', 'Sunday service']);
+    expect(titles(await get('p-youth-leader', '/api/announcements'))).toEqual(['Sunday service']);
     expect(titles(await get('p-choir-leader', '/api/announcements'))).toEqual(['Rehearsal', 'Sunday service']);
     expect(titles(await get('p-pastor', '/api/announcements'))).toEqual(['Treasurers meet', 'Rehearsal', 'Sunday service']);
   });
@@ -208,15 +210,15 @@ describe('reading', () => {
     expect(titles(await get('p-treasurer', '/api/announcements'))).toContain('Treasurers meet');
   });
   it('unread counts and the latest show on the summary, and reading clears them', async () => {
-    const s = await get('p-choir-member', '/api/announcements/summary');
+    const s = await get('p-ctr', '/api/announcements/summary');
     expect(s.body.unread).toBe(2);
     expect(s.body.latest.map((i: any) => i.title)).toEqual(['Rehearsal', 'Sunday service']);
     const id = s.body.latest[0].id;
-    expect((await post('p-choir-member', '/api/announcements/read', { ids: [id] })).body.marked).toBe(1);
-    expect((await get('p-choir-member', '/api/announcements/summary')).body.unread).toBe(1);
-    expect((await post('p-choir-member', '/api/announcements/read', { all: true })).body.marked).toBe(1);
-    expect((await get('p-choir-member', '/api/announcements/summary')).body.unread).toBe(0);
-    expect((await post('p-choir-member', '/api/announcements/read', {})).status).toBe(400);
+    expect((await post('p-ctr', '/api/announcements/read', { ids: [id] })).body.marked).toBe(1);
+    expect((await get('p-ctr', '/api/announcements/summary')).body.unread).toBe(1);
+    expect((await post('p-ctr', '/api/announcements/read', { all: true })).body.marked).toBe(1);
+    expect((await get('p-ctr', '/api/announcements/summary')).body.unread).toBe(0);
+    expect((await post('p-ctr', '/api/announcements/read', {})).status).toBe(400);
   });
   it('you cannot mark what you cannot see, and your own posts start read', async () => {
     const hidden = fake.__db.announcement.find((a: any) => a.title === 'Treasurers meet').id;
@@ -240,14 +242,14 @@ describe('taking a post down', () => {
   });
   it('needs the right to; the reason is optional', async () => {
     expect((await post('p-choir-leader', `/api/announcements/${id}/withdraw`, { reason: 'x'.repeat(301) })).status).toBe(400);
-    expect((await post('p-choir-member', `/api/announcements/${id}/withdraw`, { reason: 'mistake' })).body.code).toBe('NOT_ALLOWED');
+    expect((await post('p-ctr', `/api/announcements/${id}/withdraw`, { reason: 'mistake' })).body.code).toBe('NOT_ALLOWED');
     expect((await post('p-choir-leader', '/api/announcements/zzz/withdraw', { reason: 'mistake' })).status).toBe(404);
   });
   it('the author or the Church Leader takes it down, once, and it is audited', async () => {
     const r = await post('p-pastor', `/api/announcements/${id}/withdraw`, { reason: 'Wrong day' });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(fake.__db.announcement[0]).toMatchObject({ status: 'WITHDRAWN', withdrawnById: 'p-pastor', withdrawnReason: 'Wrong day' });
-    expect((await get('p-choir-member', '/api/announcements')).body.items).toEqual([]);
+    expect((await get('p-ctr', '/api/announcements')).body.items).toEqual([]);
     expect((await post('p-choir-leader', `/api/announcements/${id}/withdraw`, { reason: 'again' })).body.code).toBe('ALREADY_WITHDRAWN');
     expect(fake.__db.auditEvent.find((e: any) => e.action === 'ANNOUNCEMENT_WITHDRAWN')).toMatchObject({ actorId: 'p-pastor' });
   });
@@ -257,12 +259,12 @@ describe('taking a post down', () => {
   });
   it('the author or the Church Leader changes the text; others may not; audience stays', async () => {
     const patch = (as: string, body: object) => request(app).patch(`/api/announcements/${id}`).set(bearer(as)).send(body);
-    expect((await patch('p-choir-member', { title: 'Hacked', body: 'x' })).body.code).toBe('NOT_ALLOWED');
+    expect((await patch('p-ctr', { title: 'Hacked', body: 'x' })).body.code).toBe('NOT_ALLOWED');
     expect((await patch('p-choir-leader', { title: 'Hi', body: '' })).status).toBe(400);
     const r = await patch('p-choir-leader', { title: 'Rehearsal moved', body: 'Saturday instead' });
     expect(r.status, JSON.stringify(r.body)).toBe(200);
     expect(fake.__db.announcement[0]).toMatchObject({ title: 'Rehearsal moved', body: 'Saturday instead', audienceKind: 'SYSTEM' });
-    const seen = (await get('p-choir-member', '/api/announcements')).body.items[0];
+    const seen = (await get('p-ctr', '/api/announcements')).body.items[0];
     expect(seen.title).toBe('Rehearsal moved');
     expect(seen.editedAt).toBeTruthy();
     expect(fake.__db.auditEvent.find((e: any) => e.action === 'ANNOUNCEMENT_EDITED')).toMatchObject({ actorId: 'p-choir-leader' });
@@ -272,7 +274,7 @@ describe('taking a post down', () => {
   it('tells each reader whether they may take it down', async () => {
     const lead = (await get('p-choir-leader', '/api/announcements')).body.items[0];
     expect(lead).toMatchObject({ mine: true, canWithdraw: true });
-    const member = (await get('p-choir-member', '/api/announcements')).body.items[0];
+    const member = (await get('p-ctr', '/api/announcements')).body.items[0];
     expect(member).toMatchObject({ mine: false, canWithdraw: false });
   });
 });

@@ -3,7 +3,6 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
 import {
-  MEMBER_LETTERS,
   MIN_ADMINISTRATORS,
   MODULE_KEYS,
   OFFICE_LETTERS,
@@ -13,7 +12,7 @@ import {
   withRead,
 } from '../src/shared/accessMatrix';
 import { MODULE_LETTERS, OFFICE_CODES, type OfficeCode } from '../src/shared/vocabulary';
-import { decide, isLive, lettersInSystem, liveHoldings, type AccessData } from '../src/capabilities/engine';
+import { decide, enterableSystemIds, isLive, lettersInSystem, liveHoldings, type AccessData } from '../src/capabilities/engine';
 import { computeVacancies, findClash } from '../src/lib/appointments';
 
 /* ───────────── the engine alone ───────────── */
@@ -67,12 +66,25 @@ describe('a rule matrix per office', () => {
       }
     });
   }
-  it('a plain member can only read the basics', () => {
+  it('a plain member has nothing: only leaders have access', () => {
     const d = world([], [], [{ personId: 'm', systemId: 'sys-choir', status: 'ACTIVE', startDate: '2020-01-01' }]);
     const l = lettersInSystem('m', 'sys-choir', d, NOW);
-    expect(l.COMMUNICATION).toEqual(['R']);
-    for (const k of MODULE_KEYS) expect(l[k]).toEqual(withRead(MEMBER_LETTERS[k] ?? []));
-    expect(lettersInSystem('m', 'sys-youth', d, NOW).COMMUNICATION).toEqual([]);
+    for (const k of MODULE_KEYS) expect(l[k]).toEqual([]);
+    expect(enterableSystemIds('m', d, NOW)).toEqual(new Set(['sys-main']));
+  });
+  it('a leader who is only a member elsewhere sees only the system they lead; two offices show both', () => {
+    const mem = [{ personId: 'x', systemId: 'sys-protocol', status: 'ACTIVE', startDate: '2020-01-01' }];
+    const one = world([pos('p1', 'x', 'PRESIDENT', 'sys-youth')], [], mem);
+    expect(enterableSystemIds('x', one, NOW)).toEqual(new Set(['sys-youth']));
+    expect(lettersInSystem('x', 'sys-protocol', one, NOW).MISSION).toEqual([]);
+    const two = world([pos('p1', 'x', 'PRESIDENT', 'sys-choir'), pos('p2', 'x', 'VICE_PRESIDENT', 'sys-youth')]);
+    expect(enterableSystemIds('x', two, NOW)).toEqual(new Set(['sys-choir', 'sys-youth']));
+  });
+  it('the Church Leader and the Catechist enter Central only, even with another office', () => {
+    for (const office of ['CHURCH_LEADER', 'CATECHIST'] as const) {
+      const d = world([pos('p1', 'x', office, 'sys-main'), pos('p2', 'x', 'PRESIDENT', 'sys-choir')]);
+      expect(enterableSystemIds('x', d, NOW)).toEqual(new Set(['sys-main']));
+    }
   });
 });
 
@@ -357,7 +369,7 @@ describe('delegation', () => {
     await lend('p-choir-leader', { ...ok, endDate: soon() });
     await request(app).post('/api/access/appointments/pos-choir/end').set(bearer('p-admin1')).send({ reason: 'moved away' });
     const c = await caps('p-vp', 'sys-choir');
-    expect(c.blocks.money).toEqual([]);
+    expect(c?.blocks.money ?? []).toEqual([]);
     expect(fake.__db.delegation[0].status).toBe('REVOKED');
   });
   it('the lender or an Administrator takes letters back; others cannot', async () => {
@@ -467,12 +479,13 @@ describe('the explainer and the audit trail', () => {
 });
 
 describe('capabilities now come from the letters engine', () => {
-  it('the Church Leader holds the matrix letters in every system, a member only the basics', async () => {
-    const lead = await caps('p-pastor', 'sys-youth');
+  it('the Church Leader holds the matrix letters in Central only, a member nothing', async () => {
+    const lead = await caps('p-pastor', 'sys-main');
     expect(lead.blocks.money).toEqual(['R', 'V', 'A']);
     expect(lead.blocks.reports).toEqual(['R', 'W', 'P']);
+    expect(await caps('p-pastor', 'sys-youth'), 'he never enters another system').toBeUndefined();
     const member = await caps('p-member', 'sys-main');
-    expect(member.blocks.work).toEqual(['R']);
+    expect(member.blocks.work).toEqual([]);
     expect(member.blocks.money).toEqual([]);
   });
 });

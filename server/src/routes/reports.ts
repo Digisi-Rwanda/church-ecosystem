@@ -10,6 +10,7 @@ import { loadAccessData } from '../notifications/feed.js';
 import { notifySafely } from '../lib/notify.js';
 import type { AccessData } from '../capabilities/engine.js';
 import { CHURCH_WIDE, KINDS, buildSnapshot, periodOk, scheduleStatus, type ReportKind, type Sources } from '../reports/builders.js';
+import { isCentralOnly } from '../capabilities/engine.js';
 import { canCompose, canPublish, canReadReports, canReadSource } from '../reports/access.js';
 
 export const reportsRouter = Router();
@@ -99,7 +100,7 @@ reportsRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   if (!systemId || !canReadReports(me, systemId, c.data)) return fail(res, 404, 'NOT_FOUND', 'Not found');
   const writer = canCompose(me, systemId, c.data);
   const rows = ((await prisma.report.findMany()) as ReportRow[])
-    .filter((r) => r.systemId === systemId && !r.deletedAt && (r.status === 'PUBLISHED' || writer))
+    .filter((r) => (r.systemId === systemId || (systemId === 'sys-main' && isCentralOnly(me, c.data))) && !r.deletedAt && (r.status === 'PUBLISHED' || writer))
     .filter((r) => (!q('kind') || r.kind === q('kind')) && (!q('period') || r.periodKey === q('period')) && (!q('status') || r.status === q('status')))
     .sort((a, b) => b.periodKey.localeCompare(a.periodKey) || +new Date(b.composedAt) - +new Date(a.composedAt))
     .slice(0, 200);

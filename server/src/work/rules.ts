@@ -5,7 +5,7 @@
  * the whole church. Deleting is a soft delete: the person who deletes it sees it gone for good;
  * only an Administrator can bring it back.
  */
-import { isMemberOf, isLive, lettersInSystem, type AccessData } from '../capabilities/engine.js';
+import { isCentralOnly, isLive, lettersInSystem, type AccessData } from '../capabilities/engine.js';
 
 export const VISIBILITIES = ['PERSONS', 'UNIT', 'SYSTEM', 'CHURCH'] as const;
 export type Visibility = (typeof VISIBILITIES)[number];
@@ -67,6 +67,8 @@ function inUnit(me: string, unitId: string, data: AccessData, now: Date): boolea
 export function canSee(w: WorkRow, me: string, data: AccessData, now = new Date()): boolean {
   if (w.deletedAt) return false;
   if (isNamed(w, me)) return true;
+  // Everything is sent to Central for approval, so the Church Leader and the Catechist open any work from there.
+  if (isCentralOnly(me, data, now)) return true;
   switch (visibilityOf(w.visibility)) {
     case 'PERSONS':
       return false;
@@ -76,7 +78,7 @@ export function canSee(w: WorkRow, me: string, data: AccessData, now = new Date(
       if (w.orgUnitId) return inUnit(me, w.orgUnitId, data, now) || canWriteIn(me, sys(w), data, now);
       return lettersInSystem(me, sys(w), data, now).MISSION.includes('R');
     default:
-      return lettersInSystem(me, sys(w), data, now).MISSION.includes('R') || isMemberOf(me, sys(w), data, now);
+      return lettersInSystem(me, sys(w), data, now).MISSION.includes('R');
   }
 }
 

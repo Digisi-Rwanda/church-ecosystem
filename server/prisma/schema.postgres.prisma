@@ -790,6 +790,8 @@ model WorkPlan {
   capacity             Int?
   /// Events: a secret link anyone can use to register, only when the team turns it on
   publicToken          String?
+  /// An outside form (Google Forms) that guests are sent to instead of the built-in name-and-phone form.
+  registrationUrl      String?
   /// Optional: the program (or project) this belongs to. Items may stand alone.
   parentId             String?
   /// Programs: JSON array of { personId, role } on the steering committee

@@ -12,7 +12,7 @@ import { buildEffectiveAccess } from '../policy/evaluate.js';
 import { loadPolicyContext } from '../policy/loadContext.js';
 import type { Position } from '../policy/types.js';
 import { blocksFromModules } from '../capabilities/letters.js';
-import { liveHoldings, lettersInSystem, type AccessData } from '../capabilities/engine.js';
+import { liveHoldings, lettersInSystem, enterableSystemIds, type AccessData } from '../capabilities/engine.js';
 import { officeOf } from '../lib/offices.js';
 import { loadNotices, mutedSystemsOf } from '../notifications/feed.js';
 import { countNotices } from '../notifications/rules.js';
@@ -45,9 +45,10 @@ async function standing(personId: string) {
   // see it in the portal. A member with no other system keeps it, so the portal is never empty.
   const holdsGrant = (id: string) => grants.some((g) => g.systemId === id && g.resource === 'SYSTEM' && g.action === 'ENTER');
   const open = (s: { id: string; kind?: string | null }) => (s.kind ?? 'MINISTRY') !== 'SHARED' && holdsGrant(s.id);
-  const leader = liveHoldings(personId, access, now).some((h) => h.scope === 'CHURCH' || h.systemId === 'sys-main');
-  const hasOther = systems.some((s) => s.id !== 'sys-main' && open(s));
-  const enterable = systems.filter((s) => open(s) && (s.id !== 'sys-main' || leader || !hasOther));
+  // Leaders only: a person enters Central plus the systems where they hold an office. The Church Leader and
+  // the Catechist enter Central alone. Belonging to a system as a member opens nothing.
+  const mayEnter = enterableSystemIds(personId, access, now);
+  const enterable = systems.filter((s) => open(s) && mayEnter.has(s.id));
   return { grants, positions, memberships, enterable, access };
 }
 

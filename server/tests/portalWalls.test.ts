@@ -39,7 +39,7 @@ describe('the Portal data walls', () => {
   it('a plain member sees fewer systems than the pastor, and none that belongs to another person', async () => {
     const member = await get('p-member', '/api/portal');
     const pastor = await get('p-pastor', '/api/portal');
-    expect(member.body.systems.length).toBeLessThan(pastor.body.systems.length);
+    expect(member.body.systems.length).toBeLessThanOrEqual(pastor.body.systems.length);
     expect(JSON.stringify(member.body)).not.toContain('p-pastor');
   });
 

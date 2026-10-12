@@ -7,11 +7,10 @@
  *  - a church-wide office reaches every system; a unit office reaches its own system;
  *  - a delegation lends some of the delegator's letters for a short time, and stops the
  *    moment the delegator's own office stops;
- *  - a plain member of a system can only read the basics there;
+ *  - belonging to a system gives nothing: only leaders (people holding an office) have letters;
  *  - W, V, A, S, P and C each include R; nobody approves their own entry.
  */
 import {
-  MEMBER_LETTERS,
   MODULE_KEYS,
   OFFICE_LETTERS,
   OFFICE_SCOPE,
@@ -182,23 +181,55 @@ export function liveHoldings(personId: string, data: AccessData, now = new Date(
 /** The Central system, where church-wide offices work. */
 export const CENTRAL = 'sys-main';
 
-/** Only the Church Leader reaches into every system; every other office stays inside its own walls. */
+/**
+ * Offices that work in Central Administration and nowhere else. The Church Leader and the Catechist do all their
+ * work there: approvals and reports are sent to Central, so they never need to enter another system.
+ */
+export const CENTRAL_ONLY_OFFICES: readonly OfficeCode[] = ['CHURCH_LEADER', 'CATECHIST'];
+
+export const isCentralOnlyHolding = (h: Pick<Holding, 'office'>): boolean => CENTRAL_ONLY_OFFICES.includes(h.office);
+
+/** True when this person holds the Church Leader or Catechist office (their own or lent to them). */
+export function isCentralOnly(personId: string, data: AccessData, now = new Date(), holdings: Holding[] = liveHoldings(personId, data, now)): boolean {
+  return holdings.some(isCentralOnlyHolding);
+}
+
+/**
+ * The Church Leader's letters reach every system's data, so Central can show and act on church-wide work (plans to
+ * approve, reports received, the roster). This is about what Central may do, not about which systems the person
+ * may enter: the interface shows him Central alone.
+ */
 export const reachesEverySystem = (h: Pick<Holding, 'office' | 'scope'>): boolean => h.scope === 'CHURCH' && h.office === 'CHURCH_LEADER';
 
 const covers = (h: Holding, systemId: string): boolean =>
   reachesEverySystem(h) || h.systemId === systemId || (h.scope === 'CHURCH' && systemId === CENTRAL);
 
 /**
- * The systems a person may see anything of: Central, the systems they belong to, and the systems
- * where they hold an office. `null` means all of them, which only the Church Leader reaches.
+ * The systems a person may enter. Leaders only: a plain member of a system gets nothing from belonging to it.
+ * The Church Leader and the Catechist enter Central only. Anyone else enters Central plus every system where
+ * they hold an office, so a choir President who is also a ministry Vice President sees both. Central is for
+ * church-level offices; someone with no office at all is shown Central so the portal is never empty.
+ */
+export function enterableSystemIds(personId: string, data: AccessData, now = new Date()): Set<string> {
+  const holdings = liveHoldings(personId, data, now);
+  if (isCentralOnly(personId, data, now, holdings)) return new Set([CENTRAL]);
+  const out = new Set<string>();
+  for (const h of holdings) {
+    if (h.systemId) out.add(h.systemId);
+    if (h.scope === 'CHURCH') out.add(CENTRAL);
+  }
+  if (out.size === 0) out.add(CENTRAL);
+  return out;
+}
+
+/**
+ * The systems a person may see anything of. `null` means church-wide, which only the Church Leader reads
+ * (from inside Central). Belonging to a system as a member adds nothing.
  */
 export function reachableSystems(personId: string, data: AccessData, now = new Date()): Set<string> | null {
   const holdings = liveHoldings(personId, data, now);
   if (holdings.some(reachesEverySystem)) return null;
-  const out = new Set<string>([CENTRAL]);
-  for (const h of holdings) if (h.systemId) out.add(h.systemId);
-  for (const m of data.memberships) if (m.personId === personId && m.systemId && isLive(m, now)) out.add(m.systemId);
-  return out;
+  return new Set([CENTRAL, ...enterableSystemIds(personId, data, now)]);
 }
 
 export function isMemberOf(personId: string, systemId: string, data: AccessData, now = new Date()): boolean {
@@ -215,17 +246,15 @@ export function lettersInSystem(
   now = new Date(),
   holdings: Holding[] = liveHoldings(personId, data, now),
 ): Record<ModuleKey, AccessLetter[]> {
-  const member = isMemberOf(personId, systemId, data, now) ? MEMBER_LETTERS : {};
   const result = {} as Record<ModuleKey, AccessLetter[]>;
+  // Leaders only: belonging to a system gives no letters.
   for (const k of MODULE_KEYS) {
     result[k] = mergeLetters(
-      member[k],
       ...holdings.filter((h) => covers(h, systemId)).map((h) => h.letters[k]),
     );
   }
   return result;
 }
-
 /** The same answer with the reason behind every letter, for the access explainer. */
 export function explainSystem(
   personId: string,
@@ -235,7 +264,6 @@ export function explainSystem(
   now = new Date(),
 ): Record<ModuleKey, LetterSource[]> {
   const holdings = liveHoldings(personId, data, now).filter((h) => covers(h, systemId));
-  const member = isMemberOf(personId, systemId, data, now);
   const out = {} as Record<ModuleKey, LetterSource[]>;
   for (const k of MODULE_KEYS) {
     const seen = new Map<string, LetterSource>();
@@ -245,7 +273,6 @@ export function explainSystem(
         if (!seen.has(key)) seen.set(key, { letter: l, ...src });
       }
     };
-    if (member) add(MEMBER_LETTERS[k], { from: 'Member of this system', via: 'MEMBER' });
     for (const h of holdings) {
       add(h.letters[k], {
         from: h.via === 'DELEGATION' ? `${titleOf(h.office)} (delegated)` : titleOf(h.office),

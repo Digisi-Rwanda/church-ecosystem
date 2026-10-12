@@ -54,12 +54,13 @@ describe('GET /api/portal', () => {
     expect(r.body.systems[0].role).toBe('Church member');
     expect(r.body.systems[0].unreadCount).toBe(0);
   });
-  it('Central Administration is hidden from a member who belongs to another system, but not from leaders', async () => {
+  it('a plain member opens no system but Central; a leader sees the system they lead', async () => {
     const youth = (await request(app).get('/api/portal').set(bearer('p-youth-member'))).body.systems.map((s: any) => s.id);
-    expect(youth).toContain('sys-youth');
-    expect(youth).not.toContain('sys-main');
+    expect(youth).toEqual(['sys-main']);
+    const pres = (await request(app).get('/api/portal').set(bearer('p-youth-leader'))).body.systems.map((s: any) => s.id);
+    expect(pres).toEqual(['sys-youth']);
     const leader = (await request(app).get('/api/portal').set(bearer('p-pastor'))).body.systems.map((s: any) => s.id);
-    expect(leader).toContain('sys-main');
+    expect(leader).toEqual(['sys-main']);
   });
   it('a choir leader sees the choir with their own title', async () => {
     const r = await request(app).get('/api/portal').set(bearer('p-choir-leader'));
@@ -67,12 +68,9 @@ describe('GET /api/portal', () => {
     expect(choir?.role).toBe('Choir Leader');
     expect(r.body.systems.find((s: any) => s.id === 'sys-youth')).toBeUndefined();
   });
-  it('the Church Leader enters every system except the retired shared Finance', async () => {
+  it('the Church Leader enters Central Administration and nothing else', async () => {
     const r = await request(app).get('/api/portal').set(bearer('p-pastor'));
-    const ids = r.body.systems.map((s: any) => s.id);
-    expect(ids).toContain('sys-youth');
-    expect(ids).toContain('sys-deacon');
-    expect(ids).not.toContain('sys-finance');
+    expect(r.body.systems.map((s: any) => s.id)).toEqual(['sys-main']);
   });
   it('a person with no membership still gets the main church and nothing else', async () => {
     const r = await request(app).get('/api/portal').set(bearer('p-outsider'));

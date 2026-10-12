@@ -34,7 +34,8 @@ beforeEach(async () => {
 describe('leader dashboard', () => {
   it('is for leaders of the system or of the church; everyone else gets a plain not found', async () => {
     expect((await get('p-youth-leader', '/api/dashboard?systemId=sys-youth')).status).toBe(200);
-    expect((await get('p-pastor', '/api/dashboard?systemId=sys-youth')).status).toBe(200);
+    expect((await get('p-pastor', '/api/dashboard?systemId=sys-youth')).status).toBe(404); // the Church Leader works in Central only
+    expect((await get('p-pastor', '/api/dashboard?systemId=sys-main')).status).toBe(200);
     expect((await get('p-youth-member', '/api/dashboard?systemId=sys-youth')).status).toBe(404);
     expect((await get('p-choir-leader', '/api/dashboard?systemId=sys-youth')).status).toBe(404);
     expect((await get('p-outsider', '/api/dashboard?systemId=sys-youth')).status).toBe(404);
@@ -93,7 +94,12 @@ describe('leader dashboard', () => {
       { id: 'r1', systemId: 'sys-youth', orgUnitId: 'ou-youth', kind: 'MEETINGS', periodKey: period, title: 'x', status: 'PUBLISHED', snapshotJson: '{}', composedById: 'a', composedAt: now, publishedAt: now },
       { id: 'r2', systemId: 'sys-music', orgUnitId: 'ou-youth', kind: 'MEETINGS', periodKey: period, title: 'y', status: 'PUBLISHED', snapshotJson: '{}', composedById: 'a', composedAt: now, publishedAt: now },
     );
-    const r = await get('p-pastor', '/api/dashboard?systemId=sys-youth');
+    // Reports are sent to Central: the Church Leader reads them there, from every unit.
+    const central = await get('p-pastor', '/api/dashboard?systemId=sys-main');
+    expect(keys(central)).toContain('reports');
+    expect(central.body.reports.map((x: { id: string }) => x.id).sort()).toEqual(['r1', 'r2']);
+    expect((await get('p-pastor', '/api/dashboard?systemId=sys-youth')).status).toBe(404); // he never enters a unit
+    const r = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
     expect(keys(r)).toContain('reports');
     expect(r.body.reports.map((x: { id: string }) => x.id)).toEqual(['r1']);
     // A leader whose letters do not include People gets no members list and no members figure.

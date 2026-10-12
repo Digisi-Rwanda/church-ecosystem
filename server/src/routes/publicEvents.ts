@@ -7,13 +7,13 @@ import { Router } from 'express';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { rateLimit } from '../middleware/hardening.js';
-import { registrationsOf, spotsLeft } from './workPlans.js';
+import { checkinOpen, registrationsOf, spotsLeft } from './workPlans.js';
 
 export const publicEventsRouter = Router();
 
 interface P {
   id: string; title: string; aim?: string | null; location?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null;
-  status: string; planType?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null; deletedAt?: Date | null; orgUnitId: string;
+  status: string; planType?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null; registrationUrl?: string | null; deletedAt?: Date | null; orgUnitId: string;
 }
 const iso = (v: Date | string | null | undefined) => (v ? new Date(v).toISOString() : null);
 
@@ -31,7 +31,7 @@ publicEventsRouter.get('/:token', async (req, res) => {
   const p = await byToken(String(req.params.token));
   if (!p) return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
   const left = spotsLeft(p.capacity, (await registrationsOf(p.id)).length);
-  res.json({ event: { title: p.title, aim: p.aim ?? '', location: p.location ?? '', startsOn: iso(p.startsOn), endsOn: iso(p.endsOn), open: isOpen(p) && left !== 0, full: left === 0 } });
+  res.json({ event: { title: p.title, aim: p.aim ?? '', location: p.location ?? '', startsOn: iso(p.startsOn), endsOn: iso(p.endsOn), open: isOpen(p) && left !== 0, full: left === 0, formUrl: isOpen(p) && left !== 0 ? p.registrationUrl ?? null : null, checkin: checkinOpen(p) } });
 });
 
 publicEventsRouter.post('/:token', async (req, res) => {
@@ -50,4 +50,29 @@ publicEventsRouter.post('/:token', async (req, res) => {
   if (regs.some((r) => (r.phone ?? '').replace(/\s+/g, '') === phone)) return res.status(409).json({ error: 'Already registered', code: 'ALREADY_REGISTERED' });
   await prisma.workPlanRegistration.create({ data: { planId: p.id, personId: null, name: parsed.data.name, phone: parsed.data.phone, source: 'PUBLIC' } });
   res.status(201).json({ ok: true });
+});
+
+/**
+ * Attendance by code. The QR code at the door opens a page that asks for the phone number given at registration;
+ * a match marks that person here. Someone who never registered may give a name and is added as a walk-in.
+ * It works only while the event runs, on one of its days.
+ */
+publicEventsRouter.post('/:token/checkin', async (req, res) => {
+  const p = await byToken(String(req.params.token));
+  if (!p) return res.status(404).json({ error: 'Not found', code: 'NOT_FOUND' });
+  const parsed = z.object({ phone: z.string().trim().min(6).max(30), name: z.string().trim().min(2).max(120).optional(), website: z.string().optional() }).safeParse(req.body);
+  if (!parsed.success) return res.status(400).json({ error: 'Invalid check-in', code: 'BAD_INPUT' });
+  if (parsed.data.website) return res.status(200).json({ ok: true });
+  if (!checkinOpen(p)) return res.status(409).json({ error: 'Check-in is not open', code: 'CHECKIN_CLOSED' });
+  const phone = parsed.data.phone.replace(/\s+/g, '');
+  const regs = await registrationsOf(p.id);
+  const mine = regs.find((r) => (r.phone ?? '').replace(/\s+/g, '') === phone);
+  if (mine) {
+    if (!mine.attended) await prisma.workPlanRegistration.update({ where: { id: mine.id }, data: { attended: true, attendedAt: new Date() } });
+    return res.json({ ok: true, name: mine.name, walkIn: false });
+  }
+  if (!parsed.data.name) return res.status(404).json({ error: 'Not registered', code: 'NOT_REGISTERED' });
+  if (spotsLeft(p.capacity, regs.length) === 0) return res.status(409).json({ error: 'Full', code: 'EVENT_FULL' });
+  await prisma.workPlanRegistration.create({ data: { planId: p.id, personId: null, name: parsed.data.name, phone: parsed.data.phone, source: 'PUBLIC', attended: true, attendedAt: new Date() } });
+  res.status(201).json({ ok: true, name: parsed.data.name, walkIn: true });
 });

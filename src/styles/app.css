@@ -7979,3 +7979,7 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
   .ptop-user { display: none; }
   .ptop-link span:not(.nav-badge) { font-size: 0.85rem; }
 }
+
+/* QR codes for an event's registration and attendance */
+.door-qr { display: flex; flex-direction: column; align-items: flex-start; gap: 0.5rem; }
+.door-qr img { background: #fff; padding: 0.5rem; border-radius: 0.5rem; border: 1px solid var(--line, #d9dde3); }

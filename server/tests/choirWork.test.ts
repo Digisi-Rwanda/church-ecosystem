@@ -59,24 +59,22 @@ describe('rehearsals', () => {
 });
 
 describe('choir list', () => {
-  it('leaders see their choirs; singers only for the repertoire', async () => {
+  it('leaders see their choirs; a singer, being only a member, sees none', async () => {
     expect((await get(LEADER, '/api/choir/choirs')).body.choirs.map((c: any) => c.name)).toEqual(['Elim']);
     expect((await get('p-choir-member', '/api/choir/choirs')).body.choirs).toHaveLength(0);
-    expect((await get('p-choir-member', '/api/choir/choirs?for=repertoire')).body.choirs.map((c: any) => c.name)).toEqual(['Elim']);
+    expect((await get('p-choir-member', '/api/choir/choirs?for=repertoire')).body.choirs).toHaveLength(0);
   });
 });
 
 describe('repertoire', () => {
-  it('leaders add songs; singers can read the list; last sung and retire work', async () => {
+  it('leaders add songs; plain members cannot read the list; last sung and retire work', async () => {
     const id = (await post(LEADER, '/api/choir/songs', { choirId: 'ch-elim', title: 'Amazing Grace', composer: 'Newton', songKey: 'G' })).body.id;
     expect(id).toBeTruthy();
     expect((await post(LEADER, '/api/choir/songs', { choirId: 'ch-elim', title: 'amazing grace' })).body.code).toBe('ALREADY_EXISTS');
     expect((await post(LEADER, `/api/choir/songs/${id}/sung`, { day: '2026-10-04' })).status).toBe(200);
     expect((await post(LEADER, `/api/choir/songs/${id}/sung`, { day: '2026-12-04' })).body.code).toBe('FUTURE_DATE');
     const asSinger = await get('p-choir-member', '/api/choir/songs?choirId=ch-elim');
-    expect(asSinger.status).toBe(200);
-    expect(asSinger.body.canWrite).toBe(false);
-    expect(asSinger.body.songs[0]).toMatchObject({ title: 'Amazing Grace', lastSungOn: '2026-10-04', songKey: 'G' });
+    expect(asSinger.status).toBeGreaterThanOrEqual(403); // leaders only in this version
     expect((await post('p-choir-member', '/api/choir/songs', { choirId: 'ch-elim', title: 'X' })).status).toBeGreaterThanOrEqual(403);
     expect((await post(LEADER, `/api/choir/songs/${id}/retire`)).status).toBe(200);
     expect((await get(LEADER, '/api/choir/songs?choirId=ch-elim')).body.songs).toHaveLength(0);
@@ -110,9 +108,9 @@ describe('sponsorship', () => {
 });
 
 describe('own blocks', () => {
-  it('leaders see rehearsals, repertoire and sponsorship; singers only the repertoire', async () => {
-    const keys = async (who: string) => (await get(who, '/api/me/capabilities')).body.systems.find((s: any) => s.id === 'sys-choir').own.map((o: any) => o.key);
+  it('leaders see rehearsals, repertoire and sponsorship; a plain member sees nothing', async () => {
+    const keys = async (who: string) => ((await get(who, '/api/me/capabilities')).body.systems.find((s: any) => s.id === 'sys-choir')?.own ?? []).map((o: any) => o.key);
     expect(await keys(LEADER)).toEqual(expect.arrayContaining(['rehearsals', 'repertoire', 'sponsorship']));
-    expect(await keys('p-choir-member')).toEqual(['repertoire']);
+    expect(await keys('p-choir-member')).toEqual([]);
   });
 });
