@@ -84,6 +84,7 @@ workRouter.get('/options', requireAuth, async (req: AuthedRequest, res) => {
   const c = await ctx(me);
   res.json({
     units: c.units.filter((u) => u.systemId && canWriteIn(me, u.systemId, c.data)).map((u) => ({ id: u.id, name: u.name, systemId: u.systemId! })),
+    systems: [...new Set(['sys-main', ...c.units.map((u) => u.systemId).filter((x): x is string => !!x)])].filter((id) => canWriteIn(me, id, c.data)),
     visibilities: VISIBILITIES,
     limits: { titleMax: TITLE_MAX, textMax: TEXT_MAX, noteMax: NOTE_MAX, helpersMax: HELPERS_MAX },
   });
@@ -187,28 +188,50 @@ async function tell(taskId: string, title: string, systemId: string, ids: string
   }
 }
 
+const createBody = z.object({
+  ...fields,
+  ownerId: z.string().min(1).nullish(),
+  mode: z.enum(['SELF', 'OTHER']).nullish(),
+  unitId: z.string().min(1).nullish(),
+  systemId: z.string().min(1).nullish(),
+});
+
+/**
+ * Two kinds of task. SELF is a to-do for the person who writes it: private, no deadline needed.
+ * OTHER is given to someone else: it needs an owner and a due time, and the creator needs W in the system.
+ */
 workRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const parsed = z.object({ ...fields, unitId: z.string().min(1) }).safeParse(req.body);
+  const parsed = createBody.safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid work');
   const b = parsed.data;
   const c = await ctx(me);
-  const unit = c.units.find((u) => u.id === b.unitId);
-  if (!unit) return fail(res, 404, 'NOT_FOUND', 'Unit not found');
-  if (!unit.systemId) return fail(res, 400, 'UNIT_HAS_NO_SYSTEM', 'This unit has no system yet');
-  if (!canWriteIn(me, unit.systemId, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not create work here');
-  const bad = await peopleProblem([b.ownerId, ...b.helperIds]);
+  const unit = b.unitId ? c.units.find((u) => u.id === b.unitId) : undefined;
+  if (b.unitId && !unit) return fail(res, 404, 'NOT_FOUND', 'Unit not found');
+  if (unit && !unit.systemId) return fail(res, 400, 'UNIT_HAS_NO_SYSTEM', 'This unit has no system yet');
+  const systemId = unit?.systemId ?? b.systemId ?? 'sys-main';
+  const self = b.mode === 'SELF';
+  if (!b.mode && !b.unitId) return fail(res, 400, 'BAD_INPUT', 'Invalid work');
+  if (!self) {
+    if (!canWriteIn(me, systemId, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not create work here');
+    if (!b.ownerId) return fail(res, 400, 'BAD_INPUT', 'Choose an owner');
+    // Only the "someone else" form is strict; older callers that name a unit keep the old rules.
+    if (b.mode === 'OTHER' && b.ownerId === me) return fail(res, 400, 'BAD_INPUT', 'Choose someone else');
+    if (b.mode === 'OTHER' && !b.dueDate) return fail(res, 400, 'DUE_REQUIRED', 'A task for someone else needs a due time');
+  }
+  const ownerId = self ? me : b.ownerId!;
+  const helpers = self ? [] : [...new Set(b.helperIds)].filter((id) => id !== ownerId);
+  const bad = await peopleProblem([ownerId, ...helpers]);
   if (bad) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose people who are active members');
-  const helpers = [...new Set(b.helperIds)].filter((id) => id !== b.ownerId);
   const row = (await prisma.workTask.create({
     data: {
-      title: b.title, description: b.description || null, ownerPersonId: b.ownerId, helperPersonIds: JSON.stringify(helpers),
-      createdByPersonId: me, contextType: 'LIGHT', systemId: unit.systemId, orgUnitId: unit.id, status: 'TODO',
-      dueDate: b.dueDate ? new Date(b.dueDate) : null, startDate: new Date(), visibility: b.visibility,
+      title: b.title, description: b.description || null, ownerPersonId: ownerId, helperPersonIds: JSON.stringify(helpers),
+      createdByPersonId: me, contextType: 'LIGHT', systemId, orgUnitId: unit?.id ?? null, status: 'TODO',
+      dueDate: b.dueDate ? new Date(b.dueDate) : null, startDate: new Date(), visibility: self ? 'PERSONS' : b.visibility,
     },
   })) as Row;
-  await tell(row.id, row.title, unit.systemId, [b.ownerId, ...helpers], me, 'New work for you');
-  await audit(me, unit.systemId, 'WORK_CREATED', `Created “${row.title}”`, { workId: row.id });
+  if (!self) await tell(row.id, row.title, systemId, [ownerId, ...helpers], me, 'New task for you');
+  await audit(me, systemId, 'WORK_CREATED', `Created “${row.title}”`, { workId: row.id, mode: b.mode ?? 'UNIT' });
   res.status(201).json({ work: (await shapeAll([row], c, me))[0] });
 });
 

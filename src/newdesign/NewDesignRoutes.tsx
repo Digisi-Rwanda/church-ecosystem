@@ -1,11 +1,10 @@
-import { Route } from 'react-router-dom';
+import { Navigate, Route } from 'react-router-dom';
 import {
   AccessPage,
   AddPersonPage,
   AnnouncementsPage,
   AppointmentsPage,
   BaptismCohortPage,
-  CentralHomePage,
   ChoirPage,
   ChoirsPage,
   CollectionsPage,
@@ -114,7 +113,7 @@ export function newDesignRoutes() {
             <Route path="decisions" element={<DecisionsPage />} />
             <Route path="collections" element={<CollectionsPage />} />
           </Route>
-          <Route path="central" element={<CentralHomePage />} />
+          <Route path="central" element={<Navigate to=".." relative="path" replace />} />
           <Route path="settings" element={<SettingsPage />} />
           <Route path="preferences" element={<SystemSettingsPage />} />
           <Route path="schedule" element={<SchedulePage />} />

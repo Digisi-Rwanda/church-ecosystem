@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { WorkItem } from '../api/frontDoorApi';
-import { dueToInput, inputToDue, sortWork, workActions, workErrorKey } from './work';
+import { dueTimeToInput, dueToInput, hasDueTime, inputToDue, inputToDueTime, sortWork, workActions, workErrorKey } from './work';
 
 const w = (o: Partial<WorkItem>): WorkItem => ({ id: 'a', title: 'A', status: 'TODO', dueDate: null, canMove: true, canManage: false, ...o }) as WorkItem;
 
@@ -29,5 +29,18 @@ describe('work helpers', () => {
   it('maps error codes to messages', () => {
     expect(workErrorKey('DONE_LOCKED')).toBe('door.work.err.doneLocked');
     expect(workErrorKey('??')).toBe('door.people.actionFailed');
+  });
+});
+
+describe('due time', () => {
+  it('round-trips a church-time datetime', () => {
+    const iso = inputToDueTime('2026-10-20T14:30');
+    expect(iso).toBe('2026-10-20T12:30:00.000Z');
+    expect(dueTimeToInput(iso)).toBe('2026-10-20T14:30');
+    expect(inputToDueTime('')).toBeNull();
+  });
+  it('treats the old end-of-day value as a day only', () => {
+    expect(hasDueTime('2026-10-20T21:59:00.000Z')).toBe(false);
+    expect(hasDueTime('2026-10-20T12:30:00.000Z')).toBe(true);
   });
 });

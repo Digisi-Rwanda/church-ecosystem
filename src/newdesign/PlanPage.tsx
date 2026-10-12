@@ -1,3 +1,4 @@
+import { levelKeyOf } from './planLevels';
 import { useState } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -74,7 +75,7 @@ export function PlanPage() {
             purpose={`${p.unitName} · ${t('door.plan.leader')}: ${p.leaderName}${p.startsOn ? ` · ${whenSummary(p, t, locale)}` : ''}`}
             meta={
               <>
-                <StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${p.waitingLevel === 'Church Leader' ? 'CHURCH' : p.waitingLevel === 'Treasurer' ? 'TREASURER' : 'UNIT'}` as 'door.level.UNIT') }) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>
+                <StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${levelKeyOf(p.waitingLevel)}` as 'door.level.UNIT') }) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>
                 {p.state === 'APPROVED' && <StatusChip>{t(planStatusKey(p.status, p.planType))}</StatusChip>}
                 {m?.pendingAmendment && <StatusChip tone="warn">{t('door.pm.amend.pending')}</StatusChip>}
                 <StatusChip>{t(`door.work.visibility.${p.visibility}` as const)}</StatusChip>
@@ -124,7 +125,7 @@ export function PlanPage() {
             {p.canApprove && (
               <>
                 <button type="button" className="btn" disabled={!!m && m.gap !== 0} onClick={() => (m?.check?.result === 'FLAGGED' ? setAsk('approve') : void run(() => planStep(p.id, 'approve')))}>
-                  {t('door.plan.action.approve')}
+                  {t(p.waitingLevel === 'Catechist' ? 'door.plan.action.verify' : 'door.plan.action.approve')}
                 </button>
                 <button type="button" className="btn secondary" onClick={() => setAsk('reject')}>
                   {t('door.plan.action.reject')}

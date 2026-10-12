@@ -7,7 +7,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
-import { SUMMARY_STATES, SUMMARY_TYPES, summarizeActivity } from './activitySummary';
+import { ActivityByStatus } from './ActivityByStatus';
 
 const KINDS: UnitRecord['kind'][] = ['CENTRAL', 'MINISTRY', 'ORGANISATION', 'TEAM'];
 
@@ -18,7 +18,6 @@ export function OrgTreePage() {
   const { portal } = useFrontDoor();
   const { loading, failed, data, reload } = useLoad(() => fetchStructure(systemId), `units|${systemId}`);
   const plans = useLoad(() => fetchPlans({ systemId, view: 'all', status: 'all' }), `unitsPlans|${systemId}`);
-  const summary = summarizeActivity(plans.data ?? []);
   const units = (data?.units ?? []).filter((u) => !isRetiredUnit(u.id));
   const inside = new Map<string, number>();
   for (const u of units) if (u.parentId) inside.set(u.parentId, (inside.get(u.parentId) ?? 0) + 1);
@@ -32,19 +31,7 @@ export function OrgTreePage() {
             <h3 className="door-kind-title">{t('door.units.activity')}</h3>
             <Link className="btn ghost sm" to={`/s/${systemId}/work`}>{t('door.units.activity.open')}</Link>
           </div>
-          <div className="org-activity-grid">
-            {SUMMARY_TYPES.map((k) => (
-              <div key={k} className={`org-activity-card org-activity-${k.toLowerCase()}`}>
-                <strong className="org-activity-total">{summary[k].total}</strong>
-                <span className="org-activity-kind">{t(`door.plans.${k}` as 'door.plans.PROGRAM')}</span>
-                <span className="org-activity-states">
-                  {SUMMARY_STATES.filter((st) => summary[k][st] > 0).map((st) => (
-                    <span key={st} className="door-chip">{summary[k][st]} {t(`door.state.${st}` as 'door.state.DRAFT')}</span>
-                  ))}
-                </span>
-              </div>
-            ))}
-          </div>
+          <ActivityByStatus plans={plans.data ?? []} systemId={systemId} />
         </section>
       )}
       <LoadState loading={loading} failed={failed} retry={reload}>

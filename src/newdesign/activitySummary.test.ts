@@ -1,16 +1,21 @@
 import { describe, expect, it } from 'vitest';
-import { summarizeActivity } from './activitySummary';
+import { groupActivities, groupOf } from './activitySummary';
 
-describe('summarizeActivity', () => {
-  it('counts each kind by state', () => {
-    const s = summarizeActivity([
-      { planType: 'EVENT', state: 'DRAFT' },
-      { planType: 'EVENT', state: 'APPROVED' },
-      { planType: 'PROJECT', state: 'WAITING' },
-    ]);
-    expect(s.EVENT.total).toBe(2);
-    expect(s.EVENT.APPROVED).toBe(1);
-    expect(s.PROJECT.WAITING).toBe(1);
-    expect(s.PROGRAM.total).toBe(0);
+const p = (id: string, state: string, startsOn: string | null = null, endsOn: string | null = null) => ({ id, state, startsOn, endsOn }) as never;
+
+describe('groupActivities', () => {
+  it('sorts activities into completed, in progress and upcoming', () => {
+    expect(groupOf({ state: 'DONE', startsOn: null }, '2026-10-12')).toBe('DONE');
+    expect(groupOf({ state: 'APPROVED', startsOn: '2026-10-01' }, '2026-10-12')).toBe('INPROGRESS');
+    expect(groupOf({ state: 'APPROVED', startsOn: '2026-11-01' }, '2026-10-12')).toBe('UPCOMING');
+    expect(groupOf({ state: 'WAITING', startsOn: null }, '2026-10-12')).toBe('UPCOMING');
+    expect(groupOf({ state: 'DRAFT', startsOn: null }, '2026-10-12')).toBeNull();
+    expect(groupOf({ state: 'CANCELLED', startsOn: null }, '2026-10-12')).toBeNull();
+  });
+  it('puts the most relevant first', () => {
+    const g = groupActivities([p('a', 'DONE', null, '2026-01-01'), p('b', 'DONE', null, '2026-03-01'), p('c', 'APPROVED', '2026-09-01', '2026-12-01'), p('d', 'APPROVED', '2026-09-01', '2026-10-30'), p('e', 'WAITING', '2026-12-05'), p('f', 'APPROVED', '2026-11-01')], '2026-10-12');
+    expect(g.DONE.map((x) => x.id)).toEqual(['b', 'a']);
+    expect(g.INPROGRESS.map((x) => x.id)).toEqual(['d', 'c']);
+    expect(g.UPCOMING.map((x) => x.id)).toEqual(['f', 'e']);
   });
 });

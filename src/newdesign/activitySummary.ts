@@ -1,19 +1,27 @@
-import type { ActivityState, PlanItem, PlanType } from '../api/frontDoorApi';
+import type { PlanItem } from '../api/frontDoorApi';
 
-export const SUMMARY_TYPES: PlanType[] = ['PROGRAM', 'EVENT', 'PROJECT'];
-export const SUMMARY_STATES: ActivityState[] = ['DRAFT', 'WAITING', 'APPROVED', 'DONE'];
+export type ActivityGroup = 'DONE' | 'INPROGRESS' | 'UPCOMING';
+export const ACTIVITY_GROUPS: ActivityGroup[] = ['DONE', 'INPROGRESS', 'UPCOMING'];
+type Row = Pick<PlanItem, 'id' | 'state' | 'startsOn' | 'endsOn'>;
 
-export type ActivitySummary = Record<PlanType, Record<ActivityState, number> & { total: number }>;
+/** Which of the three lists an activity belongs in; drafts and cancelled ones are in none. */
+export function groupOf(p: Pick<PlanItem, 'state' | 'startsOn'>, today: string): ActivityGroup | null {
+  if (p.state === 'DONE') return 'DONE';
+  if (p.state === 'WAITING') return 'UPCOMING';
+  if (p.state === 'APPROVED') return p.startsOn && p.startsOn.slice(0, 10) > today ? 'UPCOMING' : 'INPROGRESS';
+  return null;
+}
 
-/** How many programs, events and projects sit in each state. Cancelled ones are counted but not shown as a column. */
-export function summarizeActivity(plans: Array<Pick<PlanItem, 'planType' | 'state'>>): ActivitySummary {
-  const zero = () => ({ DRAFT: 0, WAITING: 0, APPROVED: 0, DONE: 0, CANCELLED: 0, total: 0 });
-  const out = { PROGRAM: zero(), EVENT: zero(), PROJECT: zero() } as ActivitySummary;
+/** Completed, in progress and upcoming activities: the most relevant first (latest finished, soonest to end, soonest to start). */
+export function groupActivities<T extends Row>(plans: T[], today: string): Record<ActivityGroup, T[]> {
+  const out: Record<ActivityGroup, T[]> = { DONE: [], INPROGRESS: [], UPCOMING: [] };
   for (const p of plans) {
-    const row = out[p.planType];
-    if (!row) continue;
-    row[p.state] += 1;
-    row.total += 1;
+    const g = groupOf(p, today);
+    if (g) out[g].push(p);
   }
+  const day = (v: string | null, fallback: string) => (v ? v.slice(0, 10) : fallback);
+  out.DONE.sort((a, b) => day(b.endsOn, '').localeCompare(day(a.endsOn, '')));
+  out.INPROGRESS.sort((a, b) => day(a.endsOn, '9999').localeCompare(day(b.endsOn, '9999')));
+  out.UPCOMING.sort((a, b) => day(a.startsOn, '9999').localeCompare(day(b.startsOn, '9999')));
   return out;
 }

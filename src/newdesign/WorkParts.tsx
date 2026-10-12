@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import {
+  createTask,
   createWork,
   deleteWork,
   editWork,
@@ -16,7 +17,8 @@ import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { PersonPicker } from './PersonPicker';
-import { dueToInput, inputToDue, workActions, workErrorKey, workStatusKey } from './work';
+import { Segmented } from './kit';
+import { dueTimeToInput, dueToInput, hasDueTime, inputToDue, inputToDueTime, workActions, workErrorKey, workStatusKey } from './work';
 
 /** Create a piece of work, or (with `existing`) change it. Owner and helpers are picked by name. */
 export function WorkForm({
@@ -128,6 +130,82 @@ export function WorkForm({
   );
 }
 
+/** Create a task: a to-do for myself, or a specific task for someone else with a due time. */
+export function TaskForm({ systemId, onDone, onCancel }: { systemId: string; onDone: () => void; onCancel: () => void }) {
+  const t = useT();
+  const [mode, setMode] = useState<'SELF' | 'OTHER'>('SELF');
+  const [title, setTitle] = useState('');
+  const [description, setDescription] = useState('');
+  const [who, setWho] = useState<{ id: string; name: string } | null>(null);
+  const [due, setDue] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const dueIso = due ? inputToDueTime(due) : null;
+    if (!title.trim() || (mode === 'OTHER' && (!who || !dueIso))) return setError(t(mode === 'OTHER' ? 'door.work.task.incompleteOther' : 'door.work.form.incomplete'));
+    setBusy(true);
+    setError('');
+    try {
+      await createTask(mode, systemId, {
+        title: title.trim(),
+        description: description.trim() || null,
+        ownerId: mode === 'OTHER' ? who!.id : null,
+        helperIds: [],
+        dueDate: dueIso,
+        visibility: mode === 'SELF' ? 'PERSONS' : 'UNIT',
+      });
+      onDone();
+    } catch (err) {
+      setError(t(workErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="panel door-form" onSubmit={submit} noValidate>
+      <Segmented
+        label={t('door.work.task.kind')}
+        value={mode}
+        onChange={setMode}
+        items={[{ key: 'SELF', label: t('door.work.task.self') }, { key: 'OTHER', label: t('door.work.task.other') }]}
+      />
+      <p className="muted">{t(mode === 'SELF' ? 'door.work.task.selfHint' : 'door.work.task.otherHint')}</p>
+      <TextField label={t('door.work.form.title')} name="t-title" value={title} maxLength={160} onChange={(e) => setTitle(e.target.value)} />
+      <TextAreaField label={t('door.work.form.description')} name="t-desc" rows={3} value={description} maxLength={4000} onChange={(e) => setDescription(e.target.value)} />
+      {mode === 'OTHER' && (
+        <>
+          <p>
+            <strong>{t('door.work.task.assignee')}:</strong> {who ? who.name : <span className="muted">{t('door.work.form.nobody')}</span>}
+          </p>
+          <PersonPicker label={t('door.work.task.pickAssignee')} name="t-who" onPick={(p) => setWho({ id: p.id, name: p.fullName })} />
+        </>
+      )}
+      <TextField
+        label={t(mode === 'OTHER' ? 'door.work.task.dueRequired' : 'door.work.task.dueOptional')}
+        name="t-due"
+        type="datetime-local"
+        value={due}
+        onChange={(e) => setDue(e.target.value)}
+      />
+      {error && (
+        <p className="door-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="door-row">
+        <button type="submit" className="btn" disabled={busy}>
+          {t('door.work.form.create')}
+        </button>
+        <button type="button" className="btn ghost" onClick={onCancel}>
+          {t('door.settings.cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
 /** One piece of work with its next steps. Delete asks first and is worded as final. */
 export function WorkCard({ item, options, systemId, onChange }: { item: WorkItem; options: WorkOptions | undefined; systemId: string; onChange: () => void }) {
   const t = useT();
@@ -162,7 +240,7 @@ export function WorkCard({ item, options, systemId, onChange }: { item: WorkItem
       </li>
     );
   }
-  const due = item.dueDate ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(item.dueDate)) : null;
+  const due = item.dueDate ? new Intl.DateTimeFormat(locale, hasDueTime(item.dueDate) ? { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Kigali' } : { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(item.dueDate)) : null;
 
   return (
     <li className="panel door-notice">

@@ -42,8 +42,8 @@ export function adjustLevels(levels: Level[], planned: number, changed: boolean,
   const idx = levels.findIndex((l) => l.levelKey === 'TREASURER');
   const out = levels.map((l) => ({ ...l }));
   if (planned > 0 && idx < 0) {
-    const at = out.findIndex((l) => l.levelKey === 'CHURCH');
-    out.splice(at < 0 ? out.length : at, 0, { levelKey: 'TREASURER', label: 'Treasurer', systemId, status: 'PENDING', byId: null, at: null, note: null });
+    // The Treasurer checks the figures first, before anyone above decides.
+    out.splice(0, 0, { levelKey: 'TREASURER', label: 'Treasurer', systemId, status: 'PENDING', byId: null, at: null, note: null });
     return { levels: out, pulledBack: false, added: true };
   }
   if (planned === 0 && idx >= 0) return { levels: out.filter((l) => l.levelKey !== 'TREASURER'), pulledBack: false, added: false };

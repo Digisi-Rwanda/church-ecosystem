@@ -1,3 +1,4 @@
+import { levelKeyOf } from './planLevels';
 import { useState } from 'react';
 import { fetchPlans, type PlanItem, type PlanType } from '../api/frontDoorApi';
 import { SelectField } from '../components/ui/Field';
@@ -29,7 +30,7 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
       avatarName={p.leaderName}
       title={p.title}
       detail={`${p.leaderName} · ${p.unitName}`}
-      status={<StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${p.waitingLevel === 'Church Leader' ? 'CHURCH' : 'UNIT'}` as 'door.level.UNIT') }) : p.state === 'APPROVED' ? t(planStatusKey(p.status, p.planType)) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>}
+      status={<StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${levelKeyOf(p.waitingLevel)}` as 'door.level.UNIT') }) : p.state === 'APPROVED' ? t(planStatusKey(p.status, p.planType)) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>}
       to={to(p)}
     />
   );

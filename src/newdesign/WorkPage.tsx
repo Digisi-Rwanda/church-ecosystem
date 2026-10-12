@@ -8,7 +8,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { sortWork } from './work';
-import { WorkCard, WorkForm } from './WorkParts';
+import { TaskForm, WorkCard } from './WorkParts';
 import { useLoad } from './useLoad';
 import { PageHeader, Segmented, SidePanel, StatusChip } from './kit';
 
@@ -30,7 +30,7 @@ export function WorkPage() {
   const list = useLoad(() => fetchWork({ systemId, view, status: show, q: q.trim() || undefined }), `work|${systemId}|${view}|${show}|${q.trim()}`);
   const options = useLoad(fetchWorkOptions, 'work-options');
   if (!allowed) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
-  const canCreate = !!options.data && options.data.units.some((u) => u.systemId === systemId);
+  const canCreate = true;
   const items = sortWork(list.data ?? []);
 
   return (
@@ -62,12 +62,10 @@ export function WorkPage() {
         items={[{ key: 'list', label: t('door.work.layout.list') }, { key: 'board', label: t('door.work.layout.board') }]}
       />
       </div>
-      <SidePanel open={creating && !!options.data} title={t('door.work.form.new')} purpose={t('door.work.form.purpose')} onClose={() => setCreating(false)}>
-        {options.data && (
-          <div className="side-form">
-            <WorkForm options={options.data} systemId={systemId} onDone={() => { setCreating(false); list.reload(); }} onCancel={() => setCreating(false)} />
+      <SidePanel open={creating} title={t('door.work.form.new')} purpose={t('door.work.form.purpose')} onClose={() => setCreating(false)}>
+        <div className="side-form">
+            <TaskForm systemId={systemId} onDone={() => { setCreating(false); list.reload(); }} onCancel={() => setCreating(false)} />
           </div>
-        )}
       </SidePanel>
       <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
         {items.length === 0 ? (

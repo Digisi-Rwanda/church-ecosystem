@@ -8038,13 +8038,20 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 .org-activity { padding: 1rem 1.1rem; margin-bottom: 1.25rem; }
 .org-activity-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.7rem; }
 .org-activity-head .door-kind-title { margin: 0; }
-.org-activity-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
-.org-activity-card { --tone: var(--cat-1, var(--accent)); display: flex; flex-direction: column; gap: 0.2rem; padding: 0.75rem 0.9rem; border-radius: 12px; border-left: 4px solid var(--tone); background: color-mix(in srgb, var(--tone) 9%, var(--surface-2)); }
-.org-activity-event { --tone: var(--cat-3, #199e70); }
-.org-activity-project { --tone: var(--cat-7, #9085e9); }
-.org-activity-total { font-family: var(--font-display); font-size: 1.7rem; line-height: 1.1; color: var(--ink); }
-.org-activity-kind { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted); }
-.org-activity-states { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }
+.act-groups { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+.act-group { --tone: var(--accent); display: flex; flex-direction: column; gap: 0.35rem; padding: 0.75rem 0.9rem; border-radius: 12px; border-left: 4px solid var(--tone); background: color-mix(in srgb, var(--tone) 9%, var(--surface-2)); }
+.act-done { --tone: var(--cat-3, #199e70); }
+.act-inprogress { --tone: var(--cat-1, var(--accent)); }
+.act-upcoming { --tone: var(--cat-7, #9085e9); }
+.act-title { display: flex; align-items: center; justify-content: space-between; margin: 0; font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted); }
+.act-count { font-family: var(--font-display); font-size: 1.1rem; letter-spacing: 0; color: var(--ink); }
+.act-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.15rem; }
+.act-list a { display: flex; flex-direction: column; padding: 0.35rem 0.45rem; margin: 0 -0.45rem; border-radius: 8px; color: inherit; text-decoration: none; }
+.act-list a:hover { background: color-mix(in srgb, var(--tone) 14%, transparent); }
+.act-name { font-weight: 600; color: var(--ink); }
+.act-meta { font-size: 0.78rem; color: var(--ink-muted); }
+.act-none { margin: 0; font-size: 0.85rem; }
+.act-more { font-size: 0.82rem; font-weight: 600; color: var(--tone); text-decoration: none; }
 
 /* ---- Dashboard hero and soft cards (inspired by the church mockup) ---- */
 .dash-hero { display: flex; justify-content: space-between; align-items: flex-end; flex-wrap: wrap; gap: 1rem; padding: 1.6rem 1.8rem; border-radius: 18px; color: #fff; background: radial-gradient(120% 140% at 85% 0%, color-mix(in srgb, var(--cat-3, var(--accent)) 35%, transparent), transparent 55%), linear-gradient(120deg, #14294a, color-mix(in srgb, var(--accent-2) 80%, #14294a)); box-shadow: 0 8px 24px color-mix(in srgb, var(--accent) 22%, transparent); }
@@ -8210,5 +8217,3 @@ a.feed-row:hover { background: var(--f-hover); }
 .unit-people { display: grid; gap: 0.35rem; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); }
 .unit-person { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.5rem; border-radius: 12px; color: inherit; text-decoration: none; font-size: 0.88rem; }
 .unit-kids a { color: var(--accent); text-decoration: none; font-weight: 600; }
-a.org-activity-card { color: inherit; text-decoration: none; transition: transform 0.15s ease, box-shadow 0.15s ease; }
-a.org-activity-card:hover { transform: translateY(-2px); box-shadow: 0 10px 24px -14px color-mix(in srgb, var(--tone) 60%, transparent); }

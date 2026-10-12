@@ -27,6 +27,13 @@ const ERROR_KEYS: Record<string, string> = {
   PERSON_NOT_ACTIVE: 'door.gov.err.personNotActive',
   UNIT_HAS_NO_SYSTEM: 'door.gov.err.noSystem',
   FORBIDDEN: 'door.gov.err.notAllowed',
+  DUE_REQUIRED: 'door.work.task.incompleteOther',
   NOT_FOUND: 'door.work.err.gone',
 };
 export const workErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
+
+/** A due time in church time (UTC+2) as a `datetime-local` value, and back. */
+export const dueTimeToInput = (iso: string | null): string => (iso ? new Date(new Date(iso).getTime() + 2 * 3600 * 1000).toISOString().slice(0, 16) : '');
+export const inputToDueTime = (v: string): string | null => (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(v) ? new Date(`${v}:00+02:00`).toISOString() : null);
+/** Old work only had a day (stored as 23:59 church time); show the time only when one was chosen. */
+export const hasDueTime = (iso: string): boolean => new Date(new Date(iso).getTime() + 2 * 3600 * 1000).toISOString().slice(11, 16) !== '23:59';

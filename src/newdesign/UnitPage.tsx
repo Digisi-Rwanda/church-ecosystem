@@ -3,7 +3,7 @@ import { fetchPeople, fetchPlans, fetchStructure } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { Icon } from '../components/ui/Icon';
 import { useT } from '../i18n/I18nContext';
-import { SUMMARY_STATES, SUMMARY_TYPES, summarizeActivity } from './activitySummary';
+import { ActivityByStatus } from './ActivityByStatus';
 import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { membersOf, officeHoldersOf, unitPath } from './structure';
@@ -36,7 +36,6 @@ export function UnitPage() {
     async () => (unit ? (await fetchPlans({ systemId: workSystem, view: 'all', status: 'all' }).catch(() => [])).filter((p) => p.orgUnitId === unit.id || (!!unit.systemId && p.systemId === unit.systemId)) : []),
     `unitPlans|${workSystem}|${unitId}|${unit?.id ?? ''}`,
   );
-  const summary = summarizeActivity(plans.data ?? []);
   const nameOf = (id: string) => data?.names.get(id) ?? id;
   const person = (id: string) => (
     <Link key={id} className="unit-person" to={`${base}/${id}`}>
@@ -71,17 +70,7 @@ export function UnitPage() {
                 <h3>{t('door.units.activity')}</h3>
                 <Link className="feed-link" to={`/s/${workSystem}/work`}>{t('door.units.activity.open')}<Icon name="chevron-right" size={14} /></Link>
               </header>
-              <div className="org-activity-grid">
-                {SUMMARY_TYPES.map((k) => (
-                  <Link key={k} to={`/s/${workSystem}/${WORK_PAGE[k]}`} className={`org-activity-card org-activity-${k.toLowerCase()}`}>
-                    <strong className="org-activity-total">{summary[k].total}</strong>
-                    <span className="org-activity-kind">{t(`door.plans.${k}` as 'door.plans.PROGRAM')}</span>
-                    <span className="org-activity-states">
-                      {SUMMARY_STATES.filter((st) => summary[k][st] > 0).map((st) => (<span key={st} className="door-chip">{summary[k][st]} {t(`door.state.${st}` as 'door.state.DRAFT')}</span>))}
-                    </span>
-                  </Link>
-                ))}
-              </div>
+              <ActivityByStatus plans={plans.data ?? []} systemId={workSystem} />
             </section>
 
             <div className="unit-grid">

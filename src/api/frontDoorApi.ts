@@ -955,6 +955,7 @@ export type WorkItem = {
 
 export type WorkOptions = {
   units: Array<{ id: string; name: string; systemId: string }>;
+  systems?: string[];
   visibilities: WorkVisibility[];
   limits: { titleMax: number; textMax: number; noteMax: number; helpersMax: number };
 };
@@ -979,6 +980,11 @@ export async function fetchWork(opts: { systemId?: string; view?: 'mine' | 'all'
 }
 export async function createWork(unitId: string, input: WorkInput): Promise<WorkItem> {
   const res = await apiFetch<{ work: WorkItem }>('/api/work', { method: 'POST', body: { unitId, ...input } });
+  return res.work;
+}
+/** A to-do for me (`SELF`), or a task with a due time for someone else (`OTHER`). */
+export async function createTask(mode: 'SELF' | 'OTHER', systemId: string, input: Omit<WorkInput, 'ownerId'> & { ownerId: string | null }): Promise<WorkItem> {
+  const res = await apiFetch<{ work: WorkItem }>('/api/work', { method: 'POST', body: { mode, systemId, ...input } });
   return res.work;
 }
 export async function editWork(id: string, input: WorkInput): Promise<void> {
@@ -1032,7 +1038,7 @@ export type PlanDetail = PlanItem & {
   fundraising: boolean; fundTarget: number | null; doneAt: string | null; settledAt: string | null;
   aim: string; needs: string; location: string; createdByName: string; details: Record<string, string>;
   team: Array<{ personId: string; name: string; role: string }>;
-  levels: Array<{ levelKey: 'UNIT' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null; note: string | null }>;
+  levels: Array<{ levelKey: 'UNIT' | 'TREASURER' | 'CATECHIST' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null; note: string | null }>;
   rejectedReason: string | null; cancelReason: string | null; dateChange: DateChange | null;
   notes: Array<{ id: string; authorName: string; text: string; at: string | null }>;
   checks: Array<{ id: string; label: string; done: boolean; doneAt: string | null }>;

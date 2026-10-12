@@ -13,7 +13,7 @@ import { isCentralOnly, liveHoldings, lettersInSystem } from '../capabilities/en
 import { notifySafely } from '../lib/notify.js';
 import { NOTE_MAX, TEXT_MAX, TITLE_MAX, VISIBILITIES, canSee } from '../work/rules.js';
 import {
-  CHECKS_MAX, ROLE_MAX, TEAM_MAX, approversOf, asWorkRow, buildLevels, canApprove, canComposeReport, canManagePlan, canPublishReport,
+  CHECKS_MAX, ROLE_MAX, TEAM_MAX, approversOf, asWorkRow, buildLevels, catechistStepApplies, canApprove, canComposeReport, canManagePlan, canPublishReport,
   canWritePlan, canDecideForChurch, currentLevel, treasurerExists, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, parseJson, publishProblem, skipUnitLevel, stateOf, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
 } from '../work/plan.js';
 import { figures, submitProblem } from '../money/planMoney.js';
@@ -525,7 +525,7 @@ workPlansRouter.post('/:id/submit', requireAuth, (req: AuthedRequest, res) =>
     if (submitProblem(f.planned, f.earmarked)) throw new SubmitStop(409, 'FUNDING_GAP', 'The money set aside must match the planned spending');
     const held = earmarkProblem(await potsOf(p.systemId, p.id), sources.filter((s) => s.planId === p.id));
     if (held) throw new SubmitStop(409, 'INSUFFICIENT_FUNDS', 'The money set aside is no longer available');
-    const levels = buildLevels(p.systemId, skipUnitLevel(p.createdById, p.systemId, c.data), f.planned > 0 && treasurerExists(p.createdById, p.systemId, c.data));
+    const levels = buildLevels(p.systemId, skipUnitLevel(p.createdById, p.systemId, c.data), f.planned > 0 && treasurerExists(p.createdById, p.systemId, c.data), catechistStepApplies(p.createdById, p.systemId, c.data));
     const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'PENDING_APPROVAL', approvalsJson: JSON.stringify(levels), rejectedReason: null } })) as Plan;
     await askApprovers(row, c, me, 'Plan to approve');
   }),

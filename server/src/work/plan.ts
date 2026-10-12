@@ -22,7 +22,7 @@ export const ROLE_MAX = 80;
 export const CHECKS_MAX = 40;
 
 export interface Level {
-  levelKey: 'UNIT' | 'TREASURER' | 'CHURCH';
+  levelKey: 'UNIT' | 'TREASURER' | 'CATECHIST' | 'CHURCH';
   label: string;
   systemId: string;
   status: 'PENDING' | 'APPROVED';
@@ -62,13 +62,15 @@ export const levelsOf = (p: Pick<PlanRow, 'approvalsJson'>): Level[] => parseJso
 /**
  * The levels a submission needs. The Church Leader approves every activity, last. The President (the unit's own
  * approver) goes first, unless the President wrote it, nobody holds that office, or the work is in Central itself.
+ * Between them the Catechist verifies every unit activity, unless the Catechist wrote it or nobody holds that office.
  */
-export function buildLevels(systemId: string, skipUnit = false, withTreasurer = false): Level[] {
+export function buildLevels(systemId: string, skipUnit = false, withTreasurer = false, withCatechist = false): Level[] {
   const blank = { status: 'PENDING' as const, byId: null, at: null, note: null };
   const out: Level[] = [];
   // The Treasurer checks the figures first when there is spending, then the President, then the Church Leader.
   if (withTreasurer) out.push({ levelKey: 'TREASURER', label: 'Treasurer', systemId, ...blank });
   if (systemId !== CHURCH_SYSTEM && !skipUnit) out.push({ levelKey: 'UNIT', label: 'President', systemId, ...blank });
+  if (systemId !== CHURCH_SYSTEM && withCatechist) out.push({ levelKey: 'CATECHIST', label: 'Catechist', systemId: CHURCH_SYSTEM, ...blank });
   out.push({ levelKey: 'CHURCH', label: 'Church Leader', systemId: CHURCH_SYSTEM, ...blank });
   return out;
 }
@@ -83,6 +85,18 @@ export function unitApproverIds(systemId: string, data: AccessData, now = new Da
   return ids.filter((id) =>
     liveHoldings(id, data, now).some((h) => h.via === 'OFFICE' && h.scope === 'UNIT' && h.systemId === systemId && ((h.letters.MISSION ?? []) as string[]).includes('A')),
   );
+}
+
+/** People who hold the Catechist's office right now. */
+export function catechistIds(data: AccessData, now = new Date()): string[] {
+  const ids = [...new Set((data.positions as Array<{ personId: string }>).map((x) => x.personId))];
+  return ids.filter((id) => liveHoldings(id, data, now).some((h) => h.via === 'OFFICE' && h.office === 'CATECHIST'));
+}
+
+/** The Catechist verifies every unit activity; the step is left out when the author is the Catechist or nobody else holds that office. */
+export function catechistStepApplies(creatorId: string, systemId: string, data: AccessData, now = new Date()): boolean {
+  if (systemId === CHURCH_SYSTEM) return false;
+  return catechistIds(data, now).some((id) => id !== creatorId);
 }
 
 /** The President's step is skipped when the creator can approve in the unit already, or when nobody else holds that office. */
@@ -117,6 +131,8 @@ export function canApprove(p: PlanRow, me: string, data: AccessData, now = new D
     if (!canDecideForChurch(me, data, now)) return false;
     return p.createdById !== me || isChurchLeader(me, data, now);
   }
+  // The Catechist verifies before the Church Leader decides; nobody verifies their own work.
+  if (level.levelKey === 'CATECHIST') return p.createdById !== me && catechistIds(data, now).includes(me);
   // The Treasurer's step is an answer about the figures (checked or flagged), given by whoever holds the Money write letter.
   if (level.levelKey === 'TREASURER') return p.createdById !== me && has(me, level.systemId, 'MONEY', 'W', data, now);
   // The unit's own step belongs to the unit's President; the Church Leader and the Catechist decide at the church's level.

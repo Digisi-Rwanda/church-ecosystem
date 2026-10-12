@@ -52,7 +52,7 @@ export type OwnMenuItem = { block: OwnBlock; letters: AccessLetter[]; variant?: 
 export function buildOwnMenu(caps: Capabilities | null, systemId: string): OwnMenuItem[] {
   const own = caps?.systems.find((s) => s.id === systemId)?.own ?? [];
   // The Pulpit is not offered for now: it is left out of every menu and tile.
-  return own.filter((o) => o.letters.length > 0 && o.key !== 'pulpit').map((o) => ({ block: o.key, letters: o.letters, variant: o.variant }));
+  return own.filter((o) => o.letters.length > 0 && o.key !== 'pulpit' && o.key !== 'central').map((o) => ({ block: o.key, letters: o.letters, variant: o.variant }));
 }
 
 /**
@@ -147,7 +147,6 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
     ],
     governance: own.has('governance')
       ? [
-          ...some(['central'].map(ownPlace)),
           place('meetings', 'governance', 'door.gov.tab.meetings'),
           place('decisions', 'governance/decisions', 'door.gov.tab.decisions'),
           ...(central && own.has('collections') ? [place('collections', 'governance/collections', 'door.gov.tab.collections')] : []),

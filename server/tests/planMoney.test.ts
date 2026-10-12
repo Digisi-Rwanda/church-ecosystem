@@ -83,7 +83,7 @@ describe('money rules', () => {
   it('treasurer step is added when spending appears, removed when it goes, and reset by a change', () => {
     const base = [{ levelKey: 'UNIT' as const, label: 'President', systemId: 's', status: 'APPROVED' as const, byId: 'x', at: 'y', note: null }, { levelKey: 'CHURCH' as const, label: 'Church Leader', systemId: 's', status: 'PENDING' as const, byId: null, at: null, note: null }];
     const added = adjustLevels(base, 100, true, 's');
-    expect(added.levels.map((l) => l.levelKey)).toEqual(['UNIT', 'TREASURER', 'CHURCH']);
+    expect(added.levels.map((l) => l.levelKey)).toEqual(['TREASURER', 'UNIT', 'CHURCH']);
     const checked = added.levels.map((l) => (l.levelKey === 'TREASURER' ? { ...l, status: 'APPROVED' as const, byId: 't' } : l));
     expect(adjustLevels(checked, 100, true, 's').pulledBack).toBe(true);
     expect(adjustLevels(checked, 0, true, 's').levels.map((l) => l.levelKey)).toEqual(['UNIT', 'CHURCH']);
@@ -131,7 +131,7 @@ describe('money on the page (slice 4 gates)', () => {
     expect(gap.body.code).toBe('FUNDING_GAP');
     await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 100000 }]);
     expect((await post('p-vp', `${B}/${id}/submit`)).status).toBe(200);
-    expect((await levels(id)).map((l) => l.levelKey)).toEqual(['UNIT', 'TREASURER', 'CHURCH']);
+    expect((await levels(id)).map((l) => l.levelKey)).toEqual(['TREASURER', 'UNIT', 'CHURCH']);
   });
   it('a plan with no spending skips the check', async () => {
     const id = await plan();
@@ -141,13 +141,13 @@ describe('money on the page (slice 4 gates)', () => {
   it('an edited line loses its tick and the activity goes back to the Treasurer', async () => {
     const id = await funded();
     await post('p-vp', `${B}/${id}/submit`);
-    await post('p-choir-leader', `${B}/${id}/approve`);
     const m = (await get('p-ctr', `${B}/${id}/money`)).body;
     expect(m.canCheck).toBe(true);
     // the Treasurer cannot approve generically
     expect((await post('p-ctr', `${B}/${id}/approve`)).body.code).toBe('USE_MONEY_CHECK');
     // cannot answer until every line is ticked
     expect((await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' })).body.code).toBe('LINES_NOT_VERIFIED');
+    await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
     expect((await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' })).status).toBe(200);
     expect((await levels(id)).find((l) => l.levelKey === 'TREASURER')?.status).toBe('APPROVED');
@@ -162,22 +162,23 @@ describe('money on the page (slice 4 gates)', () => {
   it('a flag does not stop approval, but going over it needs a reason in the history', async () => {
     const id = await funded();
     await post('p-vp', `${B}/${id}/submit`);
-    await post('p-choir-leader', `${B}/${id}/approve`);
     expect((await post('p-ctr', `${B}/${id}/money-check`, { result: 'FLAGGED' })).body.code).toBe('NOTE_REQUIRED');
     expect((await post('p-ctr', `${B}/${id}/money-check`, { result: 'FLAGGED', note: 'Quote looks high' })).status).toBe(200);
-    const bare = await post('p-pastor', `${B}/${id}/approve`);
+    const bare = await post('p-choir-leader', `${B}/${id}/approve`);
     expect(bare.body.code).toBe('FLAG_REASON_REQUIRED');
-    expect((await post('p-pastor', `${B}/${id}/approve`, { note: 'Agreed with the supplier' })).status).toBe(200);
-    expect((await levels(id)).find((l) => l.levelKey === 'CHURCH')?.note).toContain("Over the Treasurer's flag");
+    expect((await post('p-choir-leader', `${B}/${id}/approve`, { note: 'Agreed with the supplier' })).status).toBe(200);
+    expect((await levels(id)).find((l) => l.levelKey === 'UNIT')?.note).toContain("Over the Treasurer's flag");
+    const last = await post('p-pastor', `${B}/${id}/approve`, { note: 'Agreed with the supplier' });
+    expect(last.status, JSON.stringify(last.body)).toBe(200);
     expect(await status('p-vp', id)).toBe('RUNNING');
   });
   it('money is locked once approved', async () => {
     const id = await funded();
     await post('p-vp', `${B}/${id}/submit`);
-    await post('p-choir-leader', `${B}/${id}/approve`);
     const m = (await get('p-ctr', `${B}/${id}/money`)).body;
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
     await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+    await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-pastor', `${B}/${id}/approve`);
     const locked = await line(id, 1000);
     expect(locked.status).toBe(409);
@@ -186,7 +187,6 @@ describe('money on the page (slice 4 gates)', () => {
   it('the Treasurer queue lists what waits for a check', async () => {
     const id = await funded();
     await post('p-vp', `${B}/${id}/submit`);
-    await post('p-choir-leader', `${B}/${id}/approve`);
     const q = (await get('p-ctr', `${B}/money-queue`)).body.items;
     expect(q.map((x: { id: string }) => x.id)).toEqual([id]);
     expect((await get('p-vp', `${B}/money-queue`)).body.items).toEqual([]);
@@ -202,10 +202,10 @@ const approvedPlan = async (o: object = {}, amount = 100000) => {
   const m0 = (await get('p-vp', `${B}/${id}/money`)).body;
   await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: m0.planned }]);
   await post('p-vp', `${B}/${id}/submit`);
-  await post('p-choir-leader', `${B}/${id}/approve`);
   const m = (await get('p-ctr', `${B}/${id}/money`)).body;
   for (const l of m.lines) await post('p-ctr', `${B}/${id}/lines/${l.id}/verify`, { verified: true });
   await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+  await post('p-choir-leader', `${B}/${id}/approve`);
   await post('p-pastor', `${B}/${id}/approve`);
   return id;
 };
@@ -372,10 +372,10 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     await line(id, 10000);
     await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 40000 }]);
     await post('p-vp', `${B}/${id}/submit`);
-    await post('p-choir-leader', `${B}/${id}/approve`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
     await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+    await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-pastor', `${B}/${id}/approve`);
     (fake.__db.moneyAccount as any[]).push({ id: 'acc-choir', orgUnitId: 'ou-choir', systemId: 'sys-choir', name: 'Cash', status: 'ACTIVE' });
     const spend = (amount: number, day: string) => post('p-ctr', ENTRIES, { accountId: 'acc-choir', kind: 'SPENDING', amount, occurredOn: day, category: 'EVENT', planId: id });
@@ -393,10 +393,10 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     await line(id, 10000);
     await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 40000 }]);
     await post('p-vp', `${B}/${id}/submit`);
-    await post('p-choir-leader', `${B}/${id}/approve`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
     await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+    await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-pastor', `${B}/${id}/approve`);
     const before = (await pool()).available;
     expect((await put('p-vp', `${B}/${id}/cycle`, { cycle: 'PER_OCCURRENCE', cycles: 5 })).body.code).toBe('MONEY_LOCKED');
@@ -417,10 +417,10 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     expect((await moneyOf(id)).cycle.ongoing).toBe(true);
     expect((await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
     await post('p-vp', `${B}/${id}/submit`);
-    await post('p-choir-leader', `${B}/${id}/approve`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
     await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+    await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-pastor', `${B}/${id}/approve`);
     const now = await moneyOf(id);
     expect(now.ongoingMonth.released).toBe(false);

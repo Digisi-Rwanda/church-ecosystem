@@ -119,6 +119,30 @@ describe('creating and assigning', () => {
   });
 });
 
+describe('tasks for myself and for someone else', () => {
+  it('a to-do for myself needs no unit, no deadline and no Write letter, and only I see it', async () => {
+    const r = await post('p-choir-member', '/api/work', { mode: 'SELF', systemId: 'sys-choir', title: 'Buy candles', helperIds: [] });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.work).toMatchObject({ ownerId: 'p-choir-member', status: 'TODO', visibility: 'PERSONS' });
+    expect(fake.__db.notification.length).toBe(0);
+    expect((await get('p-youth-member', `/api/work/${r.body.work.id}`)).status).toBe(404);
+    const mine = await post('p-choir-member', `/api/work/${r.body.work.id}/status`, { status: 'IN_PROGRESS' });
+    expect(mine.status).toBe(200);
+  });
+  it('a task for someone else needs a person who is not me, a due time and the Write letter, and tells them', async () => {
+    const t = (o: object = {}) => ({ mode: 'OTHER', systemId: 'sys-choir', title: 'Call the venue', ownerId: 'p-choir-member', helperIds: [], dueDate: '2026-10-20T12:30:00.000Z', ...o });
+    expect((await post('p-choir-leader', '/api/work', t({ dueDate: null }))).body.code).toBe('DUE_REQUIRED');
+    expect((await post('p-choir-leader', '/api/work', t({ ownerId: 'p-choir-leader' }))).status).toBe(400);
+    expect((await post('p-choir-member', '/api/work', t())).status).toBe(403);
+    const r = await post('p-choir-leader', '/api/work', t());
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.work.dueDate).toBe('2026-10-20T12:30:00.000Z');
+    expect(fake.__db.notification.map((n: any) => n.toPersonId)).toEqual(['p-choir-member']);
+    const done = await post('p-choir-member', `/api/work/${r.body.work.id}/status`, { status: 'DONE', note: 'Booked' });
+    expect(done.status).toBe(200);
+  });
+});
+
 describe('who sees what', () => {
   it('enforces the four levels on every read', async () => {
     const named = await create({ visibility: 'PERSONS', title: 'Named' });

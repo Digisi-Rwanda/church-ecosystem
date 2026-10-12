@@ -2,7 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
-import { descendantsOf, indicatorPercent, parentProblem, buildLevels, publishProblem, stateOf, stateProblem, typeProblem } from '../src/work/plan';
+import { descendantsOf, indicatorPercent, parentProblem, buildLevels, catechistStepApplies, publishProblem, stateOf, stateProblem, typeProblem } from '../src/work/plan';
 
 describe('plan rules', () => {
   it('levels: the President, then always the Church Leader; the President is skipped when they wrote it; central work needs only the church', () => {
@@ -12,6 +12,9 @@ describe('plan rules', () => {
     expect(buildLevels('sys-choir').map((l) => l.label)).toEqual(['President', 'Church Leader']);
     expect(buildLevels('sys-choir', false, true).map((l) => l.levelKey)).toEqual(['TREASURER', 'UNIT', 'CHURCH']);
     expect(buildLevels('sys-choir', true, true).map((l) => l.levelKey)).toEqual(['TREASURER', 'CHURCH']);
+    expect(buildLevels('sys-choir', false, false, true).map((l) => l.levelKey)).toEqual(['UNIT', 'CATECHIST', 'CHURCH']);
+    expect(buildLevels('sys-choir', false, true, true).map((l) => l.levelKey)).toEqual(['TREASURER', 'UNIT', 'CATECHIST', 'CHURCH']);
+    expect(buildLevels('sys-main', false, false, true).map((l) => l.levelKey)).toEqual(['CHURCH']);
   });
   it('the five states people see; pause, resume and renew belong to certain types', () => {
     expect(['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'PAUSED', 'CLOSING', 'ENDED', 'CANCELLED'].map(stateOf)).toEqual(['DRAFT', 'WAITING', 'APPROVED', 'APPROVED', 'APPROVED', 'DONE', 'DONE', 'CANCELLED']);
@@ -207,16 +210,27 @@ describe('approval', () => {
     const id = await draft();
     expect((await post('p-vp', `${B}/${id}/submit`)).body.plan.levels.map((l: any) => l.levelKey)).toEqual(['CHURCH']);
   });
-  it('the Catechist decides for the Church Leader only while the Church Leader has lent the approving letter', async () => {
+  it('a unit activity goes to the Catechist to be verified, and only then to the Church Leader to approve', async () => {
     fake.__db.person.push({ id: 'p-cat', fullName: 'The Catechist', status: 'ACTIVE' });
     fake.__db.position.push({ id: 'pos-cat', personId: 'p-cat', systemId: 'sys-main', title: 'Catechist', office: 'CATECHIST', status: 'ACTIVE', startDate: new Date('2022-01-01') });
-    const id = await draft({}, 'p-choir-leader');
-    await post('p-choir-leader', `${B}/${id}/submit`);
-    expect([403, 404]).toContain((await post('p-cat', `${B}/${id}/approve`)).status); // the Catechist cannot even see a unit's plan, let alone decide it
-    fake.__db.delegation.push({ id: 'del-cat', positionId: 'pos-pastor', fromPersonId: 'p-pastor', toPersonId: 'p-cat', lettersJson: JSON.stringify({ MISSION: ['A'] }), status: 'ACTIVE', startDate: new Date('2022-01-01'), endDate: new Date('2099-01-01') });
-    const r = await post('p-cat', `${B}/${id}/approve`);
-    expect(r.body.plan.status).toBe('RUNNING');
-    expect(r.body.plan.levels[0].note).toContain('for the Church Leader');
+    const id = await draft();
+    const sub = await post('p-vp', `${B}/${id}/submit`);
+    expect(sub.body.plan.levels.map((l: any) => l.levelKey)).toEqual(['UNIT', 'CATECHIST', 'CHURCH']);
+    await post('p-choir-leader', `${B}/${id}/approve`); // the President
+    expect((await post('p-pastor', `${B}/${id}/approve`)).status).toBe(403); // the Church Leader must wait for the Catechist
+    expect((await post('p-choir-leader', `${B}/${id}/approve`)).status).not.toBe(200); // nobody else can verify
+    const verified = await post('p-cat', `${B}/${id}/approve`);
+    expect(verified.status, JSON.stringify(verified.body)).toBe(200);
+    expect(verified.body.plan.status).not.toBe('RUNNING');
+    expect((await post('p-cat', `${B}/${id}/approve`)).status).not.toBe(200); // the Catechist cannot approve in the Church Leader's place
+    expect((await post('p-pastor', `${B}/${id}/approve`)).body.plan.status).toBe('RUNNING');
+  });
+  it('the step is skipped when the Catechist wrote the activity themselves', async () => {
+    fake.__db.person.push({ id: 'p-cat', fullName: 'The Catechist', status: 'ACTIVE' });
+    fake.__db.position.push({ id: 'pos-cat', personId: 'p-cat', systemId: 'sys-main', title: 'Catechist', office: 'CATECHIST', status: 'ACTIVE', startDate: new Date('2022-01-01') });
+    expect(catechistStepApplies('p-vp', 'sys-choir', { positions: fake.__db.position, memberships: [], delegations: [] } as never)).toBe(true);
+    expect(catechistStepApplies('p-cat', 'sys-choir', { positions: fake.__db.position, memberships: [], delegations: [] } as never)).toBe(false);
+    expect(catechistStepApplies('p-vp', 'sys-main', { positions: fake.__db.position, memberships: [], delegations: [] } as never)).toBe(false);
   });
   it('sending back needs a reason, tells the author and returns it to a draft that can be changed', async () => {
     const id = await draft();
