@@ -1,5 +1,5 @@
 import { isCentralOnly, lettersInSystem, type AccessData } from '../capabilities/engine.js';
-import { CHURCH_WIDE, SOURCE, type ReportKind } from './builders.js';
+import { CENTRAL_ONLY_KINDS, CHURCH_WIDE, SOURCE, type ReportKind } from './builders.js';
 import { accessFor } from '../person360/rules.js';
 
 const held = (me: string, systemId: string, data: AccessData, now: Date) => lettersInSystem(me, systemId, data, now).REPORTS as string[];
@@ -13,5 +13,7 @@ export function canReadSource(me: string, s: string, kind: ReportKind, d: Access
     if (s !== 'sys-main') return false;
     return accessFor(me, d, now).read.includes(kind === 'MARRIAGES' ? 'MARRIAGE' : 'BAPTISM');
   }
+  // Offerings are counted and handed over church-wide, so their summary is a Central Administration report only.
+  if (CENTRAL_ONLY_KINDS.includes(kind) && s !== 'sys-main') return false;
   return (lettersInSystem(me, s, d, now)[SOURCE[kind]] as string[]).includes('R');
 }

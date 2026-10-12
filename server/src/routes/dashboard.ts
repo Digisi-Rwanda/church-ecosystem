@@ -56,7 +56,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
 
   const central = systemId === COLLECTIONS_SYSTEM;
   // Central opens everything inside Central: the Church Leader and the Catechist never enter another system.
-  const hs = (sys: string) => (central ? systemId : sys);
+  const hs = (sys: string | null | undefined) => (central ? systemId : (sys ?? systemId));
   const letters = lettersInSystem(me, systemId, data, now);
   const has = (m: 'PEOPLE' | 'MONEY' | 'SCHEDULING' | 'MISSION' | 'GOVERNANCE') => (letters[m] as string[]).includes('R');
   const asked = Number(req.query.range);

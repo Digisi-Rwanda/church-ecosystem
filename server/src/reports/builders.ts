@@ -34,6 +34,9 @@ export const SECTIONS: Record<ReportKind, readonly string[]> = {
 };
 
 /** Church-wide reports made from Person 360: composed only in the main church's own system. */
+/** Reports that are composed in Central Administration only (their records are kept there). */
+export const CENTRAL_ONLY_KINDS: ReportKind[] = ['COLLECTIONS'];
+
 export const CHURCH_WIDE: ReportKind[] = ['BAPTISMS', 'MARRIAGES'];
 
 export type CellType = 'text' | 'date' | 'money' | 'number' | 'code' | 'percent';
