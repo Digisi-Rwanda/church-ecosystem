@@ -19,7 +19,7 @@ import { announceErrorKey, audienceKinds, buildAudience, canCompose, dayOf, erro
 import { dayLabel } from './notices';
 import { useLoad } from './useLoad';
 import { announcementsChanged } from './useAnnouncementSummary';
-import { PageHeader } from './kit';
+import { PageHeader, SearchBox, matchesText } from './kit';
 
 /** The audience line under a post, in words a member understands. */
 export function AudienceLine({ item }: { item: AnnouncementItem }) {
@@ -39,8 +39,10 @@ export function AnnouncementsPage() {
   const [composing, setComposing] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
-  const items = markedRead(list.data?.items ?? [], marked);
-  const unread = unreadIds(items);
+  const [text, setText] = useState('');
+  const all = markedRead(list.data?.items ?? [], marked);
+  const unread = unreadIds(all);
+  const items = all.filter((a) => matchesText(text, a.title, a.body, a.authorName));
 
   const readOne = async (id: string) => {
     setMarked((m) => [...m, id]);
@@ -105,9 +107,10 @@ export function AnnouncementsPage() {
           }}
         />
       )}
+      {all.length > 0 && <SearchBox value={text} onChange={setText} label={t('door.search.announcements')} clearLabel={t('door.search.clear')} />}
       <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
         {items.length === 0 ? (
-          <EmptyState title={t('door.announce.empty')} detail={t('door.announce.emptyDetail')} />
+          <EmptyState title={t(text && all.length > 0 ? 'door.search.noMatch' : 'door.announce.empty')} detail={text && all.length > 0 ? undefined : t('door.announce.emptyDetail')} />
         ) : (
           <ul className="door-notices">
             {items.map((a) => (

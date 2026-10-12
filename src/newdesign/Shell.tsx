@@ -8,6 +8,7 @@ import { useFrontDoor } from './FrontDoorContext';
 import { resolveActive, type NavModule } from './menu';
 import { badge } from './notices';
 import { useAnnouncementSummary } from './useAnnouncementSummary';
+import { GlobalSearch } from './GlobalSearch';
 import { LanguageSwitch } from './LanguageSwitch';
 import { OfflineBanner } from './OfflineBanner';
 import { warm } from './warm';
@@ -245,6 +246,7 @@ export function Shell({
             </div>
           </div>
           <div className="topbar-actions">
+            <GlobalSearch modules={modules} />
             <LanguageSwitch />
             <ThemeToggle />
             <Link to={notificationsTo} className="topbar-inbox" aria-label={t('door.portal.nav.notifications')}>

@@ -7991,3 +7991,59 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 .nav .nav-tree a:hover, .nav .nav-tree a:focus-visible { background: color-mix(in srgb, var(--accent) 14%, transparent); }
 .nav .nav-tree a.active { background: var(--surface, #fff); box-shadow: 0 1px 2px rgb(16 24 40 / 0.08); color: var(--accent-on-soft, var(--accent)); }
 .nav .nav-tree .nav-go { display: none; }
+
+/* ---- Colour and engagement (elegant: tints, not fills) ---- */
+.searchbox { position: relative; display: flex; align-items: center; min-width: 12rem; flex: 1 1 14rem; max-width: 22rem; }
+.searchbox-input, .gsearch-input { width: 100%; min-height: var(--control-h-sm, 2.25rem); padding: 0 2rem 0 2.1rem; border: 1px solid var(--line); border-radius: 999px; background: var(--surface-2); color: var(--ink); font: inherit; font-size: 0.85rem; }
+.searchbox-input:focus, .gsearch-input:focus { outline: none; border-color: var(--accent); box-shadow: var(--focus-ring); }
+.searchbox-icon, .gsearch-icon { position: absolute; left: 0.7rem; color: var(--accent); pointer-events: none; }
+.searchbox-clear { position: absolute; right: 0.4rem; border: 0; background: transparent; color: var(--ink-muted); cursor: pointer; display: grid; place-items: center; width: 1.5rem; height: 1.5rem; border-radius: 50%; }
+.searchbox-clear:hover { background: var(--accent-soft); }
+
+.gsearch { position: relative; display: flex; align-items: center; width: 15rem; }
+.gsearch-panel { position: absolute; top: calc(100% + 0.4rem); right: 0; width: min(26rem, 92vw); max-height: 70vh; overflow: auto; background: var(--surface-2); border: 1px solid var(--line); border-radius: 14px; box-shadow: 0 12px 32px rgb(16 24 40 / 0.16); padding: 0.4rem; z-index: 60; }
+.gsearch-hint { margin: 0; padding: 0.7rem; color: var(--ink-muted); font-size: 0.82rem; }
+.gsearch-title { margin: 0; padding: 0.4rem 0.6rem 0.2rem; font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--accent); }
+.gsearch-item { display: flex; justify-content: space-between; gap: 0.6rem; width: 100%; text-align: left; border: 0; background: transparent; color: var(--ink); font: inherit; font-size: 0.88rem; padding: 0.5rem 0.6rem; border-radius: 10px; cursor: pointer; }
+.gsearch-item small { color: var(--ink-muted); }
+.gsearch-item:hover, .gsearch-item:focus-visible { background: var(--accent-soft); outline: none; }
+@media (max-width: 900px) { .gsearch { width: 2.4rem; } .gsearch-input { padding: 0; color: transparent; cursor: pointer; } .gsearch-input:focus { position: fixed; top: 0.6rem; left: 0.6rem; right: 0.6rem; width: auto; z-index: 70; padding: 0 2rem 0 2.1rem; color: var(--ink); } .gsearch-input::placeholder { color: transparent; } .gsearch-panel { position: fixed; top: 3.6rem; left: 0.6rem; right: 0.6rem; width: auto; } }
+
+/* Top bar: a soft accent wash and a coloured edge */
+.topbar { background: linear-gradient(90deg, color-mix(in srgb, var(--accent) 12%, var(--surface-2)), color-mix(in srgb, var(--cat-3, var(--accent)) 7%, var(--surface-2))); border-bottom: 2px solid color-mix(in srgb, var(--accent) 55%, var(--line)); }
+.topbar h1, .page-head h2 { color: var(--accent-on-soft); }
+.topbar-week { color: var(--accent); font-weight: 600; }
+.page-head h2 { position: relative; padding-left: 0.7rem; }
+.page-head h2::before { content: ''; position: absolute; left: 0; top: 0.15em; bottom: 0.15em; width: 4px; border-radius: 4px; background: linear-gradient(var(--accent), var(--cat-3, var(--accent))); }
+.door-kind-title { color: var(--accent); }
+
+/* Tabs: the chosen one is filled, the others are plainly buttons */
+.tabs { background: color-mix(in srgb, var(--accent) 8%, var(--surface)); border-color: color-mix(in srgb, var(--accent) 25%, var(--line)); }
+.tab { color: var(--accent-on-soft); border: 1px solid transparent; min-height: 2.25rem; padding: 0 0.95rem; }
+.tab:hover { background: color-mix(in srgb, var(--accent) 14%, transparent); color: var(--accent-on-soft); }
+.tab[aria-selected='true'], .tab[aria-pressed='true'], .tab.active { background: var(--accent); color: var(--accent-ink); box-shadow: 0 2px 6px color-mix(in srgb, var(--accent) 35%, transparent); }
+.tab .filter-count, .tab .tab-count { margin-left: 0.4rem; padding: 0 0.45rem; border-radius: 999px; background: color-mix(in srgb, var(--accent) 18%, transparent); font-size: 0.72rem; }
+.tab[aria-selected='true'] .filter-count, .tab[aria-selected='true'] .tab-count { background: color-mix(in srgb, #fff 28%, transparent); color: var(--accent-ink); }
+.door-subbar .door-menu-link:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+
+/* KPIs: each tile carries its own tone */
+.dash-kpi { border-top: 3px solid var(--kpi-tone, var(--accent)); background: linear-gradient(180deg, color-mix(in srgb, var(--kpi-tone, var(--accent)) 8%, var(--surface-2)), var(--surface-2) 70%); }
+.dash-kpi-row > .dash-kpi:nth-child(4n+1), .dash-kpi:nth-of-type(4n+1) { --kpi-tone: var(--cat-1, #3987e5); }
+.dash-kpi-row > .dash-kpi:nth-child(4n+2) { --kpi-tone: var(--cat-3, #199e70); }
+.dash-kpi-row > .dash-kpi:nth-child(4n+3) { --kpi-tone: var(--cat-4, #c98500); }
+.dash-kpi-row > .dash-kpi:nth-child(4n+4) { --kpi-tone: var(--cat-7, #9085e9); }
+.dash-kpi .dash-kpi-icon { background: color-mix(in srgb, var(--kpi-tone, var(--accent)) 18%, transparent); color: var(--kpi-tone, var(--accent)); }
+.dash-kpi .dash-kpi-value { color: var(--ink); }
+.overview-tile { border-top: 3px solid color-mix(in srgb, var(--accent) 60%, transparent); }
+
+/* Organisation: summary of activities */
+.org-activity { padding: 1rem 1.1rem; margin-bottom: 1.25rem; }
+.org-activity-head { display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.7rem; }
+.org-activity-head .door-kind-title { margin: 0; }
+.org-activity-grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr)); }
+.org-activity-card { --tone: var(--cat-1, var(--accent)); display: flex; flex-direction: column; gap: 0.2rem; padding: 0.75rem 0.9rem; border-radius: 12px; border-left: 4px solid var(--tone); background: color-mix(in srgb, var(--tone) 9%, var(--surface-2)); }
+.org-activity-event { --tone: var(--cat-3, #199e70); }
+.org-activity-project { --tone: var(--cat-7, #9085e9); }
+.org-activity-total { font-family: var(--font-display); font-size: 1.7rem; line-height: 1.1; color: var(--ink); }
+.org-activity-kind { font-size: 0.75rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; color: var(--ink-muted); }
+.org-activity-states { display: flex; flex-wrap: wrap; gap: 0.3rem; margin-top: 0.3rem; }

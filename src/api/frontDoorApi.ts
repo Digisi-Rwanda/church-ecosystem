@@ -1253,12 +1253,13 @@ export const fetchAccounting = (systemId: string, year: number): Promise<Account
 
 export type ListLevel = 'TEAM' | 'UNIT';
 export type ListStatus = 'DRAFT' | 'SUBMITTED' | 'COMBINED' | 'APPROVED' | 'RETURNED';
-export type ContributionLineView = { id: string; name: string; personId: string | null; team: string | null; amount: number };
+export type ContributionLineView = { id: string; name: string; personId: string | null; memberCode?: string | null; team: string | null; amount: number };
 export type ContributionListView = {
   id: string; level: ListLevel; typeCode: string; typeName: string; month: string; teamName: string | null; status: ListStatus; fromTeams: number;
   createdByName: string; decisionNote: string | null; total: number; lines: ContributionLineView[];
   goals: Array<{ label: string; total: number; goal: number; met: boolean }>; goal: { amount: number; per?: 'MEMBER' | 'TEAM' } | null;
   canEdit: boolean; canSubmit: boolean; canReturn: boolean; canApprove: boolean;
+  decidedOn?: string | null; canAddMore?: boolean; canRecall?: boolean;
 };
 export type ContributionLists = { canWrite: boolean; canApprove: boolean; types: Array<{ code: string; name: string }>; teams: Array<{ id: string; name: string }>; lists: ContributionListView[] };
 export const fetchContributionLists = (systemId: string, month = ''): Promise<ContributionLists> => apiFetch(`${M}/lists?${qs({ systemId, ...(month ? { month } : {}) })}`);
@@ -1268,8 +1269,12 @@ export async function startContributionList(b: { systemId: string; level: ListLe
 export async function saveContributionLines(id: string, lines: Array<{ name: string; personId?: string | null; team?: string | null; amount: number }>): Promise<void> {
   await apiFetch(`${M}/lists/${encodeURIComponent(id)}`, { method: 'PUT', body: { lines } });
 }
-export async function moveContributionList(id: string, step: 'submit' | 'approve' | 'return', reason?: string): Promise<void> {
+export async function moveContributionList(id: string, step: 'submit' | 'approve' | 'return' | 'recall', reason?: string): Promise<void> {
   await apiFetch(`${M}/lists/${encodeURIComponent(id)}/${step}`, { method: 'POST', body: { reason } });
+}
+/** Add people to a list; a list already with the President or approved goes back to the President. */
+export async function addContributionLines(id: string, lines: Array<{ name: string; personId?: string | null; team?: string | null; amount: number }>): Promise<{ sentAgain: boolean }> {
+  return apiFetch(`${M}/lists/${encodeURIComponent(id)}/lines`, { method: 'POST', body: { lines } });
 }
 export async function combineContributionLists(systemId: string, typeCode: string, month: string): Promise<number> {
   return (await apiFetch<{ combined: number }>(`${M}/lists/combine`, { method: 'POST', body: { systemId, typeCode, month } })).combined;

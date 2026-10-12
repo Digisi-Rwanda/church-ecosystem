@@ -13,6 +13,7 @@ import { useLoad } from './useLoad';
 import { DonationsPage } from './DonationsPage';
 import { PageHeader, Tabs } from './kit';
 import { TypeQuickAdd } from './TypeQuickAdd';
+import { ContributionsTable } from './ContributionsTable';
 
 /**
  * Contribution lists: a team leader records the team's list and submits it to the treasurer; the treasurer
@@ -112,6 +113,8 @@ export function ContributionsPage() {
             )}
           </div>
         )}
+        {data && data.canWrite && <p className="muted">{t('door.money.combine.help')}</p>}
+        {data && data.types.length > 0 && <ContributionsTable lists={data.lists} />}
         {data && data.lists.length === 0 && data.types.length > 0 && <EmptyState title={t('door.money.contributions.none')} />}
         <ul className="door-notices">
           {listsInOrder(data?.lists ?? []).map((l) => (

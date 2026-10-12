@@ -13,7 +13,7 @@ import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { boardCounts, kindKey, lastMonth, periodLabel, reportErrorKey, sortReports, stateKey } from './reports';
 import { useLoad } from './useLoad';
-import { ListRow, PageHeader, RowList, Segmented, SidePanel, StatusChip, Tabs } from './kit';
+import { ListRow, PageHeader, RowList, SearchBox, Segmented, SidePanel, StatusChip, Tabs, matchesText } from './kit';
 
 function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportOptions; systemId: string; onDone: (id: string) => void; onCancel: () => void }) {
   const t = useT();
@@ -210,6 +210,7 @@ export function ReportsPage() {
   const { capabilities } = useFrontDoor();
   const [tab, setTab] = useState<'library' | 'schedules'>('library');
   const [kind, setKind] = useState('');
+  const [text, setText] = useState('');
   const [form, setForm] = useState<'compose' | 'schedule' | null>(null);
   const allowed = lettersFor(capabilities, systemId, 'reports').length > 0;
   const list = useLoad(() => fetchReports({ systemId, kind }), `reports|${systemId}|${kind}`);
@@ -218,7 +219,7 @@ export function ReportsPage() {
   if (!allowed) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
   const canCompose = !!list.data?.canCompose && !!options.data && options.data.units.some((u) => u.systemId === systemId && u.kinds.length > 0);
   const canSchedule = !!schedules.data?.canSchedule && !!options.data;
-  const items = sortReports(list.data?.reports ?? []);
+  const items = sortReports(list.data?.reports ?? []).filter((r) => matchesText(text, t(kindKey(r.kind)), r.unitName, periodLabel(r.periodKey, locale), r.status));
   return (
     <section className="door-block" aria-labelledby="door-reports-title">
       <PageHeader
@@ -263,6 +264,7 @@ export function ReportsPage() {
       {tab === 'library' && (
         <>
           <div className="door-filters">
+            <SearchBox value={text} onChange={setText} label={t('door.search.reports')} clearLabel={t('door.search.clear')} />
             <SelectField label={t('door.reports.kind')} name="r-filter" value={kind} onChange={(e) => setKind(e.target.value)}>
               <option value="">{t('door.reports.allKinds')}</option>
               {(options.data?.kinds ?? []).map((k) => (

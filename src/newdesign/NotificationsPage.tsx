@@ -11,10 +11,10 @@ import { SearchSelect } from '../components/ui/SearchSelect';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
-import { badge, dayLabel, safeHref, unreadKeys, withRead } from './notices';
+import { dayLabel, safeHref, unreadKeys, withRead } from './notices';
 import { useLoad } from './useLoad';
 import { noticesChanged } from './useNoticeSummary';
-import { PageHeader } from './kit';
+import { PageHeader, SearchBox, Tabs, matchesText } from './kit';
 
 type Tab = 'waiting' | 'info';
 
@@ -30,6 +30,7 @@ export function NotificationsPage() {
   const [marked, setMarked] = useState<Record<string, boolean>>({});
   const [error, setError] = useState('');
   const [showRead, setShowRead] = useState(false);
+  const [text, setText] = useState('');
   const items: NoticeItem[] = (data?.items ?? []).map((i) => (i.key in marked ? { ...i, read: marked[i.key] } : i));
   const countOf = (k: 'waiting' | 'info') => items.filter((i) => i.kind === (k === 'waiting' ? 'WAITING_FOR_ME' : 'FOR_INFORMATION') && !i.read).length;
   const remember = (list: NoticeItem[], keys: string[], read: boolean) => {
@@ -38,12 +39,12 @@ export function NotificationsPage() {
   };
   const forget = (keys: string[]) => setMarked((m) => Object.fromEntries(Object.entries(m).filter(([k]) => !keys.includes(k))));
 
+  const systemName = (id: string) => portal.find((s) => s.id === id)?.shortName ?? id;
   const kind = tab === 'waiting' ? 'WAITING_FOR_ME' : 'FOR_INFORMATION';
   const ofKind = items.filter((i) => i.kind === kind);
   const unread = ofKind.filter((i) => !i.read).length;
-  const shown = showRead ? ofKind : ofKind.filter((i) => !i.read);
+  const shown = (showRead ? ofKind : ofKind.filter((i) => !i.read)).filter((i) => matchesText(text, i.title, i.body, systemName(i.systemId)));
   const readCount = ofKind.length - unread;
-  const systemName = (id: string) => portal.find((s) => s.id === id)?.shortName ?? id;
 
   const setTab = (next: Tab) => {
     const p = new URLSearchParams(params);
@@ -84,18 +85,17 @@ export function NotificationsPage() {
           {t('door.notices.preferences')}
         </Link>
       </div>
-      <nav className="door-menu" aria-label={t('door.notices.tabs')}>
-        {(['waiting', 'info'] as const).map((k) => {
-          const unreadCount = countOf(k);
-          return (
-            <button key={k} type="button" className={`door-menu-link${tab === k ? ' active' : ''}`} aria-current={tab === k ? 'page' : undefined} onClick={() => setTab(k)}>
-              {t(k === 'waiting' ? 'door.notices.tab.waiting' : 'door.notices.tab.info')}
-              {unreadCount > 0 && <span className="door-badge">{badge(unreadCount)}</span>}
-            </button>
-          );
-        })}
-      </nav>
+      <Tabs
+        label={t('door.notices.tabs')}
+        value={tab}
+        onChange={setTab}
+        items={[
+          { key: 'waiting', label: t('door.notices.tab.waiting'), count: countOf('waiting') },
+          { key: 'info', label: t('door.notices.tab.info'), count: countOf('info') },
+        ]}
+      />
       <div className="door-filters">
+        <SearchBox value={text} onChange={setText} label={t('door.search.notices')} clearLabel={t('door.search.clear')} />
         <SearchSelect
           label={t('door.notices.system')}
           name="system"

@@ -5,7 +5,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { PLAN_STEPS, planStatusKey, sortPlans, stateTone } from './plans';
 import { useLoad } from './useLoad';
-import { EmptyState, ListRow, RowList, Segmented, StatusChip } from './kit';
+import { EmptyState, ListRow, RowList, SearchBox, Segmented, StatusChip, matchesText } from './kit';
 import { Link } from 'react-router-dom';
 import { monthKeyOf } from './plans';
 
@@ -18,8 +18,9 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
   const view = 'all' as const;
   const [show, setShow] = useState<'open' | 'all'>('open');
   const [layout, setLayout] = useState<Layout>('list');
+  const [text, setText] = useState('');
   const list = useLoad(() => fetchPlans({ systemId, view, status: show, type: planType }), `plans|${systemId}|${view}|${show}|${planType ?? ''}`);
-  const items = sortPlans(list.data ?? []);
+  const items = sortPlans(list.data ?? []).filter((p) => matchesText(text, p.title, p.leaderName, p.unitName, p.state));
   const waiting = items.filter((p) => p.canApprove);
   const to = (p: PlanItem) => `/s/${systemId}/work/plans/${p.id}`;
   const row = (p: PlanItem) => (
@@ -42,6 +43,7 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
     <>
       <div className="view-bar">
         <div className="door-filters">
+          <SearchBox value={text} onChange={setText} label={t('door.search.plans')} clearLabel={t('door.search.clear')} />
           <SelectField label={t('door.work.show')} name="pl-show" value={show} onChange={(e) => setShow(e.target.value as 'open' | 'all')}>
             <option value="open">{t('door.work.show.open')}</option>
             <option value="all">{t('door.work.show.all')}</option>

@@ -14,3 +14,4 @@ export { EmptyState } from '../../components/ui/EmptyState';
 export { useToast } from '../../components/ui/Toast';
 export { RouteSuspense } from './RouteSuspense';
 export { Tabs, Segmented, type TabItem } from './Tabs';
+export { SearchBox, matchesText } from './SearchBox';

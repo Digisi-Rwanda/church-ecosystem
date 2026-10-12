@@ -377,10 +377,55 @@ describe('contribution lists', () => {
   });
 });
 
+describe('adding people to a unit list, and who may be on it', () => {
+  const unitList = async () => (await post('p-ctr', '/api/money/lists', { systemId: 'sys-choir', level: 'UNIT', typeCode: 'BUILDING', month: '2026-10' })).body.id as string;
+  const lists = async () => (await get('p-ctr', `/api/money/lists?${S}&month=2026-10`)).body.lists as any[];
+  it('only members of the unit can be linked to a contribution', async () => {
+    const id = await unitList();
+    const r = await put('p-ctr', `/api/money/lists/${id}`, { lines: [{ name: 'Rev', personId: 'p-pastor', amount: 500 }] });
+    expect(r.status).toBe(400);
+    expect(r.body.code).toBe('NOT_IN_UNIT');
+    expect((await put('p-ctr', `/api/money/lists/${id}`, { lines: [{ name: 'Ann', personId: 'p-choir-member', amount: 500 }] })).status).toBe(200);
+  });
+  it('a locked list takes more people, goes back to the president, and shows the member code', async () => {
+    const id = await unitList();
+    await put('p-ctr', `/api/money/lists/${id}`, { lines: [{ name: 'Ann', personId: 'p-choir-member', amount: 500 }] });
+    await post('p-ctr', `/api/money/lists/${id}/submit`);
+    expect((await post('p-ctr', `/api/money/lists/${id}/approve`)).status).toBe(403);
+    expect((await post('p-choir-leader', `/api/money/lists/${id}/approve`)).status).toBe(200);
+    expect((await lists()).find((l) => l.id === id)).toMatchObject({ status: 'APPROVED', canAddMore: true });
+    const add = await post('p-ctr', `/api/money/lists/${id}/lines`, { lines: [{ name: 'Late Bob', amount: 700 }] });
+    expect(add.status).toBe(200);
+    expect(add.body.sentAgain).toBe(true);
+    const l = (await lists()).find((x) => x.id === id);
+    expect(l.status).toBe('SUBMITTED');
+    expect(l.lines).toHaveLength(2);
+    expect(l.total).toBe(1200);
+    expect((await post('p-choir-member', `/api/money/lists/${id}/lines`, { lines: [{ name: 'x', amount: 1 }] })).status).toBeGreaterThanOrEqual(403);
+  });
+  it('the treasurer takes a submitted list back to correct it', async () => {
+    const id = await unitList();
+    await put('p-ctr', `/api/money/lists/${id}`, { lines: [{ name: 'Ann', amount: 500 }] });
+    await post('p-ctr', `/api/money/lists/${id}/submit`);
+    expect((await post('p-ctr', `/api/money/lists/${id}/recall`)).status).toBe(200);
+    expect((await lists()).find((x) => x.id === id)).toMatchObject({ status: 'DRAFT', canEdit: true });
+    expect((await post('p-ctr', `/api/money/lists/${id}/recall`)).status).toBe(403);
+  });
+  it('a member of the unit gives a contribution, not a donation', async () => {
+    const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Fund' })).body.id;
+    const body = { systemId: 'sys-choir', accountId: acc, amount: 1000, receivedOn: '2026-10-03' };
+    const inside = await post('p-ctr', '/api/money/donations', { ...body, donorName: 'Ann', donorPersonId: 'p-choir-member' });
+    expect(inside.status).toBe(400);
+    expect(inside.body.code).toBe('IN_UNIT');
+    expect((await post('p-ctr', '/api/money/donations', { ...body, donorName: 'Rev', donorPersonId: 'p-pastor' })).status).toBe(201);
+    expect((await post('p-ctr', '/api/money/donations', { ...body, donorName: 'A visitor' })).status).toBe(201);
+  });
+});
+
 describe('my contribution', () => {
   it('a member sees only their own lines, counted once, against their goal; others see nothing of them', async () => {
     const a = (await post('p-tl1', '/api/money/lists', { systemId: 'sys-choir', level: 'TEAM', typeCode: 'BUILDING', month: '2026-10', teamUnitId: 'ou-sop' })).body.id;
-    await put('p-tl1', `/api/money/lists/${a}`, { lines: [{ name: 'Choir member', personId: 'p-choir-member', amount: 800 }, { name: 'Other', personId: 'p-pastor', amount: 9999 }] });
+    await put('p-tl1', `/api/money/lists/${a}`, { lines: [{ name: 'Choir member', personId: 'p-choir-member', amount: 800 }, { name: 'Other', amount: 9999 }] });
     let r = (await get('p-choir-member', `/api/money/mine?${S}&year=2026`)).body;
     expect(r.grandTotal).toBe(0); // still a draft with the team leader
     await post('p-tl1', `/api/money/lists/${a}/submit`);

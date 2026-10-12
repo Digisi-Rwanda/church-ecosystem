@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { moveContributionList, saveContributionLines, type ContributionListView } from '../api/frontDoorApi';
+import { addContributionLines, moveContributionList, saveContributionLines, type ContributionListView } from '../api/frontDoorApi';
 import { TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
@@ -11,6 +11,9 @@ import { PersonPicker } from './PersonPicker';
 export function ContributionList({ list, onChange }: { list: ContributionListView; onChange: () => void }) {
   const t = useT();
   const [editing, setEditing] = useState(false);
+  /** Adding to a list that is already with the President or approved: only the new people are sent. */
+  const [adding, setAdding] = useState(false);
+  const [note, setNote] = useState('');
   const [rows, setRows] = useState<LineDraft[]>([]);
   const [ask, setAsk] = useState(false);
   const [reason, setReason] = useState('');
@@ -21,6 +24,7 @@ export function ContributionList({ list, onChange }: { list: ContributionListVie
     try {
       await job();
       setEditing(false);
+      setAdding(false);
       setAsk(false);
       onChange();
     } catch (e) {
@@ -31,9 +35,22 @@ export function ContributionList({ list, onChange }: { list: ContributionListVie
     setRows(list.lines.length ? list.lines.map(toLineDraft) : [blankLine()]);
     setEditing(true);
   };
+  const startAdding = () => {
+    setRows([blankLine()]);
+    setNote('');
+    setAdding(true);
+    setEditing(true);
+  };
   const save = async (andSubmit: boolean) => {
     const c = cleanLines(rows);
     if (!c.ok) return setError(t(c.error as 'door.money.lines.err.name'));
+    if (adding) {
+      if (c.lines.length === 0) return setError(t('door.money.lines.err.none'));
+      return run(async () => {
+        const r = await addContributionLines(list.id, c.lines);
+        setNote(r.sentAgain ? t('door.money.lines.sentAgain') : '');
+      });
+    }
     await run(async () => {
       await saveContributionLines(list.id, c.lines);
       if (andSubmit) await moveContributionList(list.id, 'submit');
@@ -82,10 +99,12 @@ export function ContributionList({ list, onChange }: { list: ContributionListVie
               <button type="button" className="btn" onClick={() => void save(false)}>
                 {t('door.money.lines.save')}
               </button>
+              {!adding && (
               <button type="button" className="btn secondary" onClick={() => void save(true)}>
                 {t('door.money.lines.saveSubmit', { to: unit ? t('door.money.list.toPresident') : t('door.money.list.toTreasurer') })}
               </button>
-              <button type="button" className="btn ghost" onClick={() => setEditing(false)}>
+              )}
+              <button type="button" className="btn ghost" onClick={() => { setEditing(false); setAdding(false); }}>
                 {t('door.settings.cancel')}
               </button>
             </div>
@@ -97,6 +116,7 @@ export function ContributionList({ list, onChange }: { list: ContributionListVie
                 <thead>
                   <tr>
                     <th>{t('door.money.lines.name')}</th>
+                    <th>{t('door.money.lines.code')}</th>
                     {unit && <th>{t('door.money.lines.team')}</th>}
                     <th>{t('door.money.lines.amount')}</th>
                   </tr>
@@ -105,6 +125,7 @@ export function ContributionList({ list, onChange }: { list: ContributionListVie
                   {list.lines.map((l) => (
                     <tr key={l.id}>
                       <th scope="row">{l.name}</th>
+                      <td data-label={t('door.money.lines.code')}>{l.memberCode ?? '—'}</td>
                       {unit && <td data-label={t('door.money.lines.team')}>{l.team ?? '—'}</td>}
                       <td data-label={t('door.money.lines.amount')}>{formatRwf(l.amount)}</td>
                     </tr>
@@ -130,6 +151,11 @@ export function ContributionList({ list, onChange }: { list: ContributionListVie
             </div>
           </div>
         )}
+        {note && (
+          <p className="door-ok" role="status">
+            {note}
+          </p>
+        )}
         {error && (
           <p className="door-error" role="alert">
             {error}
@@ -137,6 +163,16 @@ export function ContributionList({ list, onChange }: { list: ContributionListVie
         )}
         {!editing && !ask && (
           <div className="door-row">
+            {list.canAddMore && (
+              <button type="button" className="btn sm" onClick={startAdding}>
+                {t('door.money.lines.addPeople')}
+              </button>
+            )}
+            {list.canRecall && (
+              <button type="button" className="btn ghost sm" onClick={() => void run(() => moveContributionList(list.id, 'recall'))}>
+                {t('door.money.list.recall')}
+              </button>
+            )}
             {list.canEdit && (
               <button type="button" className="btn sm" onClick={start}>
                 {t('door.money.lines.edit')}

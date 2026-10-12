@@ -18,6 +18,7 @@ import {
   FUNDING_KINDS, PLAN_STATUS, accounting, budgetSnapshot, budgetUsage, combine, combineBudgets, moneyByPlan, counts, editable, goalGroups, isMonth, isYear, linesProblem, monthOf, total, yearOf, type Goal, type LineLike,
 } from '../money/block.js';
 import { moneySchema, parseStored, EMPTY_MONEY } from '../systemSettings/rules.js';
+import { peopleOfSystem } from '../lib/peopleScope.js';
 
 export const moneyBlockRouter = Router();
 
@@ -32,7 +33,7 @@ interface BLine { id: string; systemId: string; year: number; kind: string; cate
 interface PlanItem { id: string; systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; status: string; note?: string | null; createdById: string; fundingKind?: string | null; fundingCode?: string | null; fundingNote?: string | null; planId?: string | null }
 interface CList {
   id: string; systemId: string; level: string; typeCode: string; typeName: string; month: string; teamUnitId?: string | null; teamName?: string | null; status: string;
-  sourceListIds: string; createdById: string; submittedAt?: Date | string | null; decidedById?: string | null; decisionNote?: string | null;
+  sourceListIds: string; createdById: string; submittedAt?: Date | string | null; decidedAt?: Date | string | null; decidedById?: string | null; decisionNote?: string | null;
 }
 interface CLine { id: string; listId: string; name: string; personId?: string | null; team?: string | null; amount: number }
 interface Don { typeCode?: string | null; typeName?: string | null; id: string; systemId: string; accountId: string; donorName: string; donorPersonId?: string | null; amount: number; receivedOn: Date | string; note?: string | null; status: string; recordedById: string; decidedById?: string | null; decisionNote?: string | null }
@@ -457,14 +458,17 @@ moneyBlockRouter.get('/accounting', requireAuth, async (req: AuthedRequest, res)
 
 /* ───────────── contribution lists ───────────── */
 
-const shapeList = (l: CList, lines: CLine[], types: Array<{ code: string } & Goal>, me: string, s: Standing, names: Map<string, string>) => {
+const shapeList = (l: CList, lines: CLine[], types: Array<{ code: string } & Goal>, me: string, s: Standing, names: Map<string, string>, codes: Map<string, string> = new Map()) => {
   const mine = l.level === 'TEAM' && s.teams.some((t) => t.id === l.teamUnitId);
   const goal: Goal = types.find((t) => t.code === l.typeCode) ?? {};
   return {
     id: l.id, level: l.level, typeCode: l.typeCode, typeName: l.typeName, month: l.month, teamName: l.teamName ?? null, status: l.status,
     fromTeams: (JSON.parse(l.sourceListIds || '[]') as string[]).length, createdByName: names.get(l.createdById) ?? '',
     decisionNote: l.decisionNote ?? null, total: total(lines),
-    lines: lines.map((x) => ({ id: x.id, name: x.name, personId: x.personId ?? null, team: x.team ?? null, amount: x.amount })),
+    lines: lines.map((x) => ({ id: x.id, name: x.name, personId: x.personId ?? null, memberCode: x.personId ? codes.get(x.personId) ?? null : null, team: x.team ?? null, amount: x.amount })),
+    decidedOn: l.decidedAt ? new Date(l.decidedAt).toISOString().slice(0, 10) : null,
+    canAddMore: l.level === 'UNIT' ? s.write && ['SUBMITTED', 'APPROVED'].includes(l.status) : false,
+    canRecall: l.level === 'UNIT' && l.status === 'SUBMITTED' && s.write,
     goals: goalGroups(goal, lines), goal: goal.goalAmount ? { amount: goal.goalAmount, per: goal.goalPer } : null,
     canEdit: editable(l.status) && (l.level === 'UNIT' ? s.write : mine || s.write),
     canSubmit: editable(l.status) && (l.level === 'UNIT' ? s.write : mine || s.write) && lines.length > 0,
@@ -499,10 +503,13 @@ moneyBlockRouter.get('/lists', requireAuth, async (req: AuthedRequest, res) => {
   const all = ((await prisma.contributionLine.findMany({ where: { listId: { in: lists.map((l) => l.id) } } })) as CLine[]);
   const types = await moneyTypes(systemId);
   const names = await peopleNames(lists.map((l) => l.createdById));
+  const linked = [...new Set(all.map((x) => x.personId).filter((x): x is string => !!x))];
+  const codes = new Map<string, string>();
+  if (linked.length) for (const p of (await prisma.person.findMany({ where: { id: { in: linked } } })) as Array<{ id: string; memberCode?: string | null }>) if (p.memberCode) codes.set(p.id, p.memberCode);
   res.json({
     canWrite: s.write, canApprove: s.approve, types: types.map((t) => ({ code: t.code, name: t.name })),
     teams: (s.write ? c.units.filter((u) => (u.kind === 'TEAM' || u.type === 'TEAM') && u.systemId === systemId) : s.teams).map((u) => ({ id: u.id, name: u.name })),
-    lists: lists.map((l) => shapeList(l, all.filter((x) => x.listId === l.id), types, me, s, names)),
+    lists: lists.map((l) => shapeList(l, all.filter((x) => x.listId === l.id), types, me, s, names, codes)),
   });
 });
 
@@ -552,6 +559,14 @@ async function listFor(req: AuthedRequest, res: Res) {
 }
 const linesOf = async (listId: string) => (await prisma.contributionLine.findMany({ where: { listId } })) as CLine[];
 
+/** A contribution comes from a member of the unit; people from outside give donations instead. */
+function notInUnit(c: Ctx, systemId: string, personIds: Array<string | null | undefined>): boolean {
+  const ids = personIds.filter((x): x is string => !!x);
+  if (ids.length === 0) return false;
+  const inside = peopleOfSystem(systemId, c.data.memberships as never, c.data.positions as never, c.units as never, c.now);
+  return ids.some((id) => !inside.has(id));
+}
+
 const putSchema = z.object({
   lines: z.array(z.object({ name: z.string(), personId: z.string().nullish(), team: z.string().nullish(), amount: z.number() })).max(500),
 });
@@ -567,11 +582,50 @@ moneyBlockRouter.put('/lists/:id', requireAuth, async (req: AuthedRequest, res) 
   if (!p.success) return fail(res, 400, 'BAD_INPUT', 'Check the lines');
   const bad = linesProblem(p.data.lines);
   if (bad) return fail(res, 400, bad, bad === 'AMOUNT' ? 'Each amount is a whole number of francs above zero' : 'Check the lines');
+  if (notInUnit(got.c, l.systemId, p.data.lines.map((x) => x.personId))) return fail(res, 400, 'NOT_IN_UNIT', 'A contribution comes from a member of this unit. Record gifts from other people as donations');
   await prisma.contributionLine.deleteMany({ where: { listId: l.id } });
   for (const x of p.data.lines) {
     await prisma.contributionLine.create({ data: { listId: l.id, name: x.name.trim(), personId: x.personId || null, team: l.level === 'TEAM' ? l.teamName ?? null : x.team || null, amount: x.amount } });
   }
   await audit(me, l.systemId, 'MONEY_LIST_SAVED', `${l.typeName} ${l.month}: ${p.data.lines.length} lines`, { id: l.id });
+  res.json({ ok: true });
+});
+
+/** Add people to a list. A list already with the President or approved goes back to the President for approval. */
+moneyBlockRouter.post('/lists/:id/lines', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await listFor(req, res);
+  if (!got) return;
+  const { me, l, c, s } = got;
+  const mine = l.level === 'TEAM' && s.teams.some((t) => t.id === l.teamUnitId);
+  const open = editable(l.status) && (l.level === 'UNIT' ? s.write : mine || s.write);
+  const late = l.level === 'UNIT' && s.write && ['SUBMITTED', 'APPROVED'].includes(l.status);
+  if (!open && !late) return fail(res, 403, 'LIST_LOCKED', 'This list cannot be changed now');
+  const p = putSchema.safeParse(req.body);
+  if (!p.success || p.data.lines.length === 0) return fail(res, 400, 'BAD_INPUT', 'Check the lines');
+  const bad = linesProblem(p.data.lines);
+  if (bad) return fail(res, 400, bad, bad === 'AMOUNT' ? 'Each amount is a whole number of francs above zero' : 'Check the lines');
+  if (notInUnit(c, l.systemId, p.data.lines.map((x) => x.personId))) return fail(res, 400, 'NOT_IN_UNIT', 'A contribution comes from a member of this unit. Record gifts from other people as donations');
+  const before = (await linesOf(l.id)).length;
+  if (before + p.data.lines.length > 500) return fail(res, 400, 'LINES', 'A list holds at most 500 lines');
+  for (const x of p.data.lines) {
+    await prisma.contributionLine.create({ data: { listId: l.id, name: x.name.trim(), personId: x.personId || null, team: l.level === 'TEAM' ? l.teamName ?? null : x.team || null, amount: x.amount } });
+  }
+  if (late) {
+    await prisma.contributionList.update({ where: { id: l.id }, data: { status: 'SUBMITTED', submittedAt: new Date(), decidedById: null, decidedAt: null, decisionNote: null } });
+    await tell(await holdersOf(l.systemId, c, 'approve', me), l.systemId, `Contribution list to approve again: ${l.typeName} ${l.month}`, `${p.data.lines.length} added`, `money-list:${l.id}:${Date.now()}`);
+  }
+  await audit(me, l.systemId, 'MONEY_LIST_ADDED', `${l.typeName} ${l.month}: ${p.data.lines.length} added${late ? ', sent again for approval' : ''}`, { id: l.id });
+  res.json({ ok: true, sentAgain: late });
+});
+
+/** The treasurer takes a list back from the President (before it is approved) to correct it. */
+moneyBlockRouter.post('/lists/:id/recall', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await listFor(req, res);
+  if (!got) return;
+  const { me, l, s } = got;
+  if (l.level !== 'UNIT' || l.status !== 'SUBMITTED' || !s.write) return fail(res, 403, 'FORBIDDEN', 'You may not take this list back');
+  await prisma.contributionList.update({ where: { id: l.id }, data: { status: 'DRAFT', submittedAt: null, decisionNote: null } });
+  await audit(me, l.systemId, 'MONEY_LIST_RECALLED', `${l.typeName} ${l.month}`, { id: l.id });
   res.json({ ok: true });
 });
 
@@ -670,6 +724,7 @@ moneyBlockRouter.post('/donations', requireAuth, async (req: AuthedRequest, res)
   if (!isDay(p.data.receivedOn)) return fail(res, 400, 'BAD_DATE', 'Enter the day it was received');
   const acc = (await prisma.moneyAccount.findUnique({ where: { id: p.data.accountId } })) as { systemId: string; status: string } | null;
   if (!acc || acc.systemId !== g.systemId || acc.status !== 'ACTIVE') return fail(res, 400, 'ACCOUNT', 'Choose an open account of this unit');
+  if (p.data.donorPersonId && !notInUnit(g.c, g.systemId, [p.data.donorPersonId])) return fail(res, 400, 'IN_UNIT', 'A member of this unit gives a contribution. Donations come from people outside the unit');
   const dType = p.data.typeCode ? (await moneyOptions(g.systemId)).donationTypes.find((t) => t.code === p.data.typeCode) : null;
   if (p.data.typeCode && !dType) return fail(res, 400, 'DONATION_TYPE', 'Choose one of the donation types of this unit');
   const donor = p.data.donorPersonId ? await prisma.person.findUnique({ where: { id: p.data.donorPersonId } }) : null;

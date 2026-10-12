@@ -1,6 +1,9 @@
 import type { MoneyEntryItem, MoneyStatus } from '../api/frontDoorApi';
 
 const ERROR_KEYS: Record<string, string> = {
+  NOT_IN_UNIT: 'door.money.err.notInUnit',
+  IN_UNIT: 'door.money.err.inUnit',
+  LIST_LOCKED: 'door.money.err.locked',
   AMOUNT: 'door.money.err.amount',
   BAD_PLAN: 'door.money.err.plan',
   BAD_DATE: 'door.money.err.date',
