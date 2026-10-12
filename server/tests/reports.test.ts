@@ -210,3 +210,21 @@ describe('reports routes', () => {
     expect((await get('p-vp', '/api/reports/schedules?systemId=sys-choir')).body.schedules.length).toBe(0);
   });
 });
+
+describe('choosing the parts of a report', () => {
+  it('keeps only the chosen parts and remembers the choice', async () => {
+    const { buildSnapshot, SECTIONS } = await import('../src/reports/builders');
+    const empty = { ...src({}) };
+    const all = buildSnapshot('MEETINGS', '2026-10', 'Choir', empty);
+    expect(all.tables.map((t) => t.key)).toEqual(['meetings', 'decisions']);
+    const some = buildSnapshot('MEETINGS', '2026-10', 'Choir', empty, ['decisions']);
+    expect(some.tables.map((t) => t.key)).toEqual(['decisions']);
+    expect(some.summary).toEqual([]);
+    expect(some.sections).toEqual(['decisions']);
+    const figures = buildSnapshot('MEETINGS', '2026-10', 'Choir', empty, ['summary']);
+    expect(figures.tables).toEqual([]);
+    expect(figures.summary.length).toBeGreaterThan(0);
+    expect(buildSnapshot('MEETINGS', '2026-10', 'Choir', empty, ['nonsense']).tables.length).toBe(2);
+    expect(SECTIONS.MONEY).toContain('entries');
+  });
+});

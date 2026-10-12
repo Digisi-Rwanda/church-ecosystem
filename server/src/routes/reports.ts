@@ -9,7 +9,7 @@ import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { notifySafely } from '../lib/notify.js';
 import type { AccessData } from '../capabilities/engine.js';
-import { CHURCH_WIDE, KINDS, buildSnapshot, periodOk, scheduleStatus, type ReportKind, type Sources } from '../reports/builders.js';
+import { CHURCH_WIDE, KINDS, SECTIONS, buildSnapshot, periodOk, scheduleStatus, type ReportKind, type Sources } from '../reports/builders.js';
 import { isCentralOnly } from '../capabilities/engine.js';
 import { canCompose, canPublish, canReadReports, canReadSource } from '../reports/access.js';
 
@@ -69,6 +69,16 @@ async function sourcesFor(unit: UnitRow): Promise<Sources> {
   };
 }
 
+/** The parts chosen when the report was composed, so a refresh keeps the same shape. */
+function keptSections(json: string): string[] | undefined {
+  try {
+    const v = (JSON.parse(json) as { sections?: unknown }).sections;
+    return Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 const titleOf = (kind: ReportKind, unit: string, period: string) => `${kind}|${unit}|${period}`;
 
 function shape(r: ReportRow, c: Ctx, me: string, who: Map<string, string>) {
@@ -88,6 +98,7 @@ reportsRouter.get('/options', requireAuth, async (req: AuthedRequest, res) => {
   res.json({
     units: units.map((u) => ({ id: u.id, name: u.name, systemId: u.systemId!, kinds: KINDS.filter((k) => canReadSource(me, u.systemId!, k, c.data)) })),
     kinds: KINDS,
+    sections: SECTIONS,
     schedulerUnits: c.units.filter((u) => u.systemId && canPublish(me, u.systemId, c.data)).map((u) => ({ id: u.id, name: u.name, systemId: u.systemId! })),
   });
 });
@@ -171,9 +182,10 @@ reportsRouter.get('/:id', requireAuth, async (req: AuthedRequest, res) => {
 
 reportsRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const parsed = z.object({ unitId: z.string().min(1), kind: z.enum(KINDS), periodKey: z.string() }).safeParse(req.body);
+  const parsed = z.object({ unitId: z.string().min(1), kind: z.enum(KINDS), periodKey: z.string(), sections: z.array(z.string()).max(10).optional() }).safeParse(req.body);
   if (!parsed.success || !periodOk(parsed.data.periodKey)) return fail(res, 400, 'BAD_INPUT', 'Choose a unit, a report and a month or year');
-  const { unitId, kind, periodKey } = parsed.data;
+  const { unitId, kind, periodKey, sections } = parsed.data;
+  if (sections && sections.length === 0) return fail(res, 400, 'BAD_INPUT', 'Choose at least one part of the report');
   const c = await ctx(me);
   const unit = c.units.find((u) => u.id === unitId);
   if (!unit) return fail(res, 404, 'NOT_FOUND', 'Unit not found');
@@ -182,7 +194,7 @@ reportsRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   if (!canReadSource(me, unit.systemId, kind, c.data)) return fail(res, 403, 'SOURCE_FORBIDDEN', 'You may not read the records this report is made from');
   const exists = ((await prisma.report.findMany()) as ReportRow[]).some((r) => !r.deletedAt && r.orgUnitId === unitId && r.kind === kind && r.periodKey === periodKey);
   if (exists) return fail(res, 409, 'ALREADY_EXISTS', 'This report already exists for that period');
-  const snap = buildSnapshot(kind, periodKey, unit.name, await sourcesFor(unit));
+  const snap = buildSnapshot(kind, periodKey, unit.name, await sourcesFor(unit), sections);
   const row = (await prisma.report.create({
     data: { systemId: unit.systemId, orgUnitId: unitId, kind, periodKey, title: titleOf(kind, unit.name, periodKey), status: 'DRAFT', snapshotJson: JSON.stringify(snap), composedById: me },
   })) as ReportRow;
@@ -198,7 +210,7 @@ reportsRouter.post('/:id/refresh', requireAuth, async (req: AuthedRequest, res) 
   if (!canCompose(me, r.systemId, c.data) || !canReadSource(me, r.systemId, r.kind, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not change this report');
   const unit = c.units.find((u) => u.id === r.orgUnitId);
   if (!unit) return fail(res, 404, 'NOT_FOUND', 'Unit not found');
-  await prisma.report.update({ where: { id: r.id }, data: { snapshotJson: JSON.stringify(buildSnapshot(r.kind, r.periodKey, unit.name, await sourcesFor(unit))), composedById: me, composedAt: new Date() } });
+  await prisma.report.update({ where: { id: r.id }, data: { snapshotJson: JSON.stringify(buildSnapshot(r.kind, r.periodKey, unit.name, await sourcesFor(unit), keptSections(r.snapshotJson))), composedById: me, composedAt: new Date() } });
   res.json({ ok: true });
 });
 

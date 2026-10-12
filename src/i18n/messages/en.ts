@@ -2872,6 +2872,14 @@ export const en = {
   'door.sset.addDonationType': 'Add a donation type',
   'door.money.donations.type': 'Donation type',
   'door.money.donations.typeNone': 'No type',
+  'door.money.quick.contribution': 'Add a contribution type',
+  'door.money.quick.donation': 'Add a donation type',
+  'door.money.quick.hint': 'For example Tithe, Thanksgiving or Building fund. It is available straight away.',
+  'door.money.quick.add': 'Add',
+  'door.reports.parts': 'What to include',
+  'door.reports.partsHint': 'Untick what the report should leave out. The report shows only what you keep, set out as a report.',
+  'door.reports.part.summary': 'Key figures',
+  'door.reports.err.noParts': 'Keep at least one part in the report.',
   // Test and demo markers
 } as const;
 

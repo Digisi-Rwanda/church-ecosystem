@@ -26,16 +26,20 @@ function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportO
   const [year, setYear] = useState(String(new Date().getUTCFullYear()));
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  /** The parts the person left out; everything is in unless unticked. */
+  const [left, setLeft] = useState<string[]>([]);
   const kinds = units.find((u) => u.id === unitId)?.kinds ?? [];
+  const parts = kind ? options.sections?.[kind] ?? [] : [];
   const period = mode === 'month' ? month : year;
   const thisYear = new Date().getUTCFullYear();
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     if (!unitId || !kind || !/^\d{4}(-\d{2})?$/.test(period)) return setError(t('door.reports.err.input'));
+    if (parts.length > 0 && parts.every((p) => left.includes(p))) return setError(t('door.reports.err.noParts'));
     setBusy(true);
     setError('');
     try {
-      onDone((await composeReport({ unitId, kind, periodKey: period })).id);
+      onDone((await composeReport({ unitId, kind, periodKey: period, ...(left.length > 0 ? { sections: parts.filter((p) => !left.includes(p)) } : {}) })).id);
     } catch (err) {
       setError(t(reportErrorKey(errorCode(err)) as 'door.people.actionFailed'));
       setBusy(false);
@@ -59,13 +63,25 @@ function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportO
         <div className="rk-grid">
           {kinds.length === 0 && <p className="muted">{t('door.gov.meeting.choose')}</p>}
           {kinds.map((k) => (
-            <button key={k} type="button" role="radio" aria-checked={kind === k} className={`rk-card${kind === k ? ' on' : ''}`} onClick={() => setKind(k)}>
+            <button key={k} type="button" role="radio" aria-checked={kind === k} className={`rk-card${kind === k ? ' on' : ''}`} onClick={() => { setKind(k); setLeft([]); }}>
               <strong>{t(kindKey(k))}</strong>
               <span>{t(`door.reports.help.${k}` as 'door.reports.help.MONEY')}</span>
             </button>
           ))}
         </div>
       </div>
+      {kind && parts.length > 1 && (
+        <fieldset className="door-fieldset">
+          <legend>{t('door.reports.parts')}</legend>
+          <p className="muted">{t('door.reports.partsHint')}</p>
+          {parts.map((p) => (
+            <label key={p} className="door-check">
+              <input type="checkbox" checked={!left.includes(p)} onChange={(e) => setLeft((all) => (e.target.checked ? all.filter((x) => x !== p) : [...all, p]))} />
+              {p === 'summary' ? t('door.reports.part.summary') : t(`door.reports.tbl.${kind}.${p}` as 'door.reports.tbl.MONEY.accounts')}
+            </label>
+          ))}
+        </fieldset>
+      )}
       <Segmented
         label={t('door.reports.period')}
         value={mode}

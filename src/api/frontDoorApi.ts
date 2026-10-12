@@ -1341,6 +1341,8 @@ export type ReportDetail = ReportItem & { snapshot: ReportSnapshot | null };
 export type ReportOptions = {
   units: Array<{ id: string; name: string; systemId: string; kinds: ReportKind[] }>;
   kinds: ReportKind[];
+  /** The parts of each report that can be left in or out. */
+  sections?: Partial<Record<ReportKind, string[]>>;
   schedulerUnits: Array<{ id: string; name: string; systemId: string }>;
 };
 export type ReportScheduleItem = { id: string; systemId: string; orgUnitId: string; unitName: string; kind: ReportKind; dueDay: number; periodKey: string; dueOn: string; state: 'RECEIVED' | 'DUE' | 'LATE' };
@@ -1356,7 +1358,7 @@ export async function fetchReports(opts: { systemId: string; kind?: string; peri
 export async function fetchReport(id: string): Promise<ReportDetail> {
   return (await apiFetch<{ report: ReportDetail }>(`${R}/${encodeURIComponent(id)}`)).report;
 }
-export const composeReport = (input: { unitId: string; kind: ReportKind; periodKey: string }): Promise<{ id: string }> => apiFetch(R, { method: 'POST', body: input });
+export const composeReport = (input: { unitId: string; kind: ReportKind; periodKey: string; sections?: string[] }): Promise<{ id: string }> => apiFetch(R, { method: 'POST', body: input });
 export async function reportStep(id: string, step: 'refresh' | 'publish'): Promise<void> {
   await apiFetch(`${R}/${encodeURIComponent(id)}/${step}`, { method: 'POST', body: {} });
 }

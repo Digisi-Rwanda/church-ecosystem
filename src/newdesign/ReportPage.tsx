@@ -88,6 +88,7 @@ export function ReportPage() {
               <EmptyState variant="error" title={t('door.reports.unreadable')} />
             ) : (
               <>
+                {r.snapshot.summary.length > 0 && (
                 <div className="panel print-sheet">
                   <dl className="door-facts">
                     {r.snapshot.summary.map((s) => (
@@ -103,6 +104,7 @@ export function ReportPage() {
                     ))}
                   </dl>
                 </div>
+                )}
                 {r.snapshot.tables.map((tbl) => (
                   <div key={tbl.key} className="panel">
                     <h3>{t(`door.reports.tbl.${r.kind}.${tbl.key}` as 'door.reports.tbl.MONEY.accounts')}</h3>

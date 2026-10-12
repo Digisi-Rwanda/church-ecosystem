@@ -8,6 +8,7 @@ import { LoadState } from './LoadState';
 import { formatRwf, moneyErrorKey, parseAmount } from './money';
 import { donationStatusKey } from './moneyBlock';
 import { PersonPicker } from './PersonPicker';
+import { TypeQuickAdd } from './TypeQuickAdd';
 import { useLoad } from './useLoad';
 
 /** Donations: the treasurer or vice president records, the president approves, and only then it counts as income. */
@@ -49,6 +50,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
       <h3>{t('door.money.donations')}</h3>
       <p className="muted">{t('door.money.donations.intro')}</p>
       <LoadState loading={loading} failed={failed} retry={reload}>
+        {data && <TypeQuickAdd systemId={systemId} kind="donation" onAdded={reload} />}
         {data?.canRecord && !form && (
           <div className="door-row">
             <button type="button" className="btn" onClick={() => setForm(true)}>

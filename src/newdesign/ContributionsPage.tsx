@@ -12,6 +12,7 @@ import { listsInOrder } from './moneyBlock';
 import { useLoad } from './useLoad';
 import { DonationsPage } from './DonationsPage';
 import { PageHeader, Tabs } from './kit';
+import { TypeQuickAdd } from './TypeQuickAdd';
 
 /**
  * Contribution lists: a team leader records the team's list and submits it to the treasurer; the treasurer
@@ -62,6 +63,7 @@ export function ContributionsPage() {
       {!donations && (
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && data.types.length === 0 && <EmptyState title={t('door.money.contributions.noTypes')} detail={t('door.money.contributions.noTypesDetail')} />}
+        {data && <TypeQuickAdd systemId={systemId} kind="contribution" onAdded={reload} />}
         {data && data.types.length > 0 && (
           <div className="panel door-form" style={{ maxWidth: 'none' }}>
             <SelectField label={t('door.money.contributions.type')} name="cl-type" value={code} onChange={(e) => setTypeCode(e.target.value)}>

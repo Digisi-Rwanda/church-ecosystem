@@ -11,11 +11,26 @@ export const SOURCE: Record<ReportKind, 'GOVERNANCE' | 'MONEY' | 'PEOPLE' | 'MIS
   MEETINGS: 'GOVERNANCE',
   ATTENDANCE: 'GOVERNANCE',
   MONEY: 'MONEY',
-  COLLECTIONS: 'GOVERNANCE',
+  COLLECTIONS: 'MONEY',
   PEOPLE_LIST: 'PEOPLE',
   WORK_PLANS: 'MISSION',
   BAPTISMS: 'PERSON_360',
   MARRIAGES: 'PERSON_360',
+};
+
+/**
+ * The parts of each report a composer can choose between. 'summary' is the block of key figures; the rest are its tables.
+ * Choosing fewer parts gives a shorter report; the records behind the left-out parts are not copied into it.
+ */
+export const SECTIONS: Record<ReportKind, readonly string[]> = {
+  MEETINGS: ['summary', 'meetings', 'decisions'],
+  ATTENDANCE: ['summary', 'perMeeting', 'perPerson'],
+  MONEY: ['summary', 'accounts', 'budget', 'entries'],
+  COLLECTIONS: ['summary', 'counts'],
+  PEOPLE_LIST: ['summary', 'members'],
+  WORK_PLANS: ['summary', 'ended'],
+  BAPTISMS: ['summary', 'baptisms'],
+  MARRIAGES: ['summary', 'marriages'],
 };
 
 /** Church-wide reports made from Person 360: composed only in the main church's own system. */
@@ -30,6 +45,8 @@ export interface Snapshot {
   unitName: string;
   summary: Array<{ key: string; value: Cell; type: CellType }>;
   tables: Array<{ key: string; columns: Array<{ key: string; type: CellType }>; rows: Cell[][] }>;
+  /** The parts the composer chose; absent means all of them. */
+  sections?: string[];
 }
 
 type D = Date | string;
@@ -266,9 +283,16 @@ function marriages(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'
   };
 }
 
-export function buildSnapshot(kind: ReportKind, periodKey: string, unitName: string, s: Sources): Snapshot {
+/** Keep only the chosen parts, in the report's own order. A choice that names nothing valid keeps everything. */
+export function chooseSections(snap: Snapshot, chosen: readonly string[] | undefined): Snapshot {
+  const valid = (chosen ?? []).filter((k) => SECTIONS[snap.kind].includes(k));
+  if (valid.length === 0 || valid.length === SECTIONS[snap.kind].length) return snap;
+  return { ...snap, summary: valid.includes('summary') ? snap.summary : [], tables: snap.tables.filter((t) => valid.includes(t.key)), sections: valid };
+}
+
+export function buildSnapshot(kind: ReportKind, periodKey: string, unitName: string, s: Sources, chosen?: readonly string[]): Snapshot {
   const make = { MEETINGS: meetings, ATTENDANCE: attendance, MONEY: money, COLLECTIONS: collections, PEOPLE_LIST: peopleList, WORK_PLANS: workPlans, BAPTISMS: baptisms, MARRIAGES: marriages }[kind];
-  return { version: 1, kind, periodKey, unitName, ...make(s, periodKey) };
+  return chooseSections({ version: 1, kind, periodKey, unitName, ...make(s, periodKey) }, chosen);
 }
 
 /** Monthly schedules: the report for last month is due on `dueDay` of this month. */
