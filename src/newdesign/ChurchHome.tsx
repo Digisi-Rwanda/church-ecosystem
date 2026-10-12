@@ -1,5 +1,4 @@
 import { useT } from '../i18n/I18nContext';
-import { AnnouncementsStrip } from './AnnouncementsStrip';
 import { LeaderDashboard } from './Dashboard';
 import { UrgentTile } from './UrgentTile';
 import { PageHeader } from './kit';
@@ -16,9 +15,7 @@ export function ChurchHome({ systemId }: { systemId: string }) {
         <PageHeader id="door-church-title" title={t('door.home.title')} />
         <p className="muted">{t('door.home.subtitle')}</p>
       </div>
-      <AnnouncementsStrip />
-      <UrgentTile systemId={systemId} />
-      <LeaderDashboard systemId={systemId} systemName={t('door.central.title')} />
+      <LeaderDashboard systemId={systemId} systemName={t('door.central.title')} fallback={<UrgentTile systemId={systemId} />} />
     </section>
   );
 }

@@ -8084,3 +8084,25 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 .resume .muted { color: #777; }
 @media (max-width: 700px) { .resume { padding: 1.2rem; } .resume-cols { grid-template-columns: 1fr; } .resume-side { border-right: 0; padding-right: 0; margin-bottom: 1.2rem; } .resume-main { padding-left: 0; } .resume-name { font-size: 1.3rem; letter-spacing: 0.18em; } }
 @media print { body:has(.resume) * { visibility: hidden; } body:has(.resume) .resume, body:has(.resume) .resume * { visibility: visible; } body:has(.resume) .resume { position: absolute; left: 0; top: 0; width: 100%; box-shadow: none; border: 0; } }
+
+/* ---- Dashboard layout from the mockup: main column, right rail, paired panels ---- */
+.dash-layout { grid-template-columns: minmax(0, 1fr); align-items: start; }
+.dash-main { display: grid; gap: 16px; min-width: 0; }
+.dash-pair { display: grid; gap: 16px; grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); align-items: stretch; }
+.dash-pair > .panel { height: 100%; margin: 0; }
+.dash-glance .dash-panel-head { align-items: center; }
+.dash-glance .dash-kpis { grid-template-columns: repeat(auto-fit, minmax(10.5rem, 1fr)); margin-top: 0.6rem; }
+.dash-glance .panel.dash-kpi { box-shadow: none; }
+.dash-dot { flex: none; width: 9px; height: 9px; border-radius: 50%; background: var(--line-strong); }
+.dash-dot.unread { background: var(--accent); }
+.dash-bars { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.7rem; }
+.dash-bars li { display: grid; grid-template-columns: minmax(8rem, 14rem) 1fr 2.5rem; gap: 0.8rem; align-items: center; font-size: 0.85rem; }
+.dash-bars .dx-seg { height: 0.6rem; width: 100%; }
+.dash-bars strong { text-align: right; }
+.dash-rail { display: grid; gap: 16px; align-content: start; min-width: 0; }
+.dash-next-body { display: flex; gap: 0.7rem; align-items: center; text-decoration: none; color: inherit; margin: 0.4rem 0; }
+.dash-next-when { margin: 0.4rem 0 0.9rem; display: flex; align-items: center; gap: 0.4rem; color: var(--ink-muted); font-size: 0.85rem; }
+.dash-next-cta { width: 100%; text-align: center; justify-content: center; border-radius: 999px; }
+.dash-daybadge { flex: none; display: grid; place-items: center; width: 2.6rem; padding: 0.3rem 0; border-radius: 10px; background: var(--accent-soft); color: var(--accent-on-soft); line-height: 1.1; }
+.dash-daybadge small { font-size: 0.6rem; letter-spacing: 0.08em; text-transform: uppercase; }
+@media (min-width: 1200px) { .dash-layout { grid-template-columns: minmax(0, 1fr) 19rem; } }

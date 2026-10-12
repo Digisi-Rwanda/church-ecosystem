@@ -2934,6 +2934,11 @@ export const en = {
   'door.p360.sheet.introBaptised': 'Baptised on {date}.',
   'door.p360.sheet.introMarried': 'Married on {date}.',
   'door.p360.sheet.introCallings': 'Serves in {count} calling(s).',
+  'door.dash.next': 'Next event',
+  'door.dash.next.all': 'View all events',
+  'door.dash.glance': 'At a glance',
+  'door.dash.activity.title': 'Activity overview',
+  'door.dash.tasks.open': 'Open tasks',
   // Test and demo markers
 } as const;
 

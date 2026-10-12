@@ -1,5 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useRef, useState } from 'react';
+import { useAnnouncementSummary } from './useAnnouncementSummary';
+import { UrgentTile } from './UrgentTile';
 import { fetchDashboard, type DashKpi, type Dashboard } from '../api/frontDoorApi';
 import { Icon, type IconName } from '../components/ui/Icon';
 import { useI18n, useT } from '../i18n/I18nContext';
@@ -182,6 +184,111 @@ function Lists({ data, systemId }: { data: Dashboard; systemId: string }) {
   );
 }
 
+/** The latest few announcements, each a line that opens the full list. */
+function LatestAnnouncements({ systemId }: { systemId: string }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const { latest } = useAnnouncementSummary();
+  const when = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(iso)) : '');
+  return (
+    <Panel title={t('door.announce.title')} to={`/s/${systemId}/announcements`}>
+      {latest.length === 0 ? (
+        <p className="muted">{t('door.announce.empty')}</p>
+      ) : (
+        <ul className="dash-list">
+          {latest.slice(0, 3).map((a) => (
+            <li key={a.id}>
+              <Link className="dash-row" to={`/s/${systemId}/announcements`}>
+                <span className={`dash-dot${a.read ? '' : ' unread'}`} aria-hidden="true" />
+                <span className="dash-row-main">
+                  <strong>{a.title}</strong>
+                  <span className="muted">{a.authorName} · {when(a.publishedAt)}</span>
+                </span>
+              </Link>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Panel>
+  );
+}
+
+/** The right-hand rail: the next event as a card, then what else is coming up. */
+function EventsRail({ data, systemId }: { data: Dashboard; systemId: string }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const [first, ...rest] = data.events;
+  if (!first) return null;
+  const parts = (iso: string | null) => {
+    if (!iso) return { d: '', m: '', full: '' };
+    const dt = new Date(`${iso.slice(0, 10)}T12:00:00Z`);
+    return {
+      d: new Intl.DateTimeFormat(locale, { day: '2-digit', timeZone: 'UTC' }).format(dt),
+      m: new Intl.DateTimeFormat(locale, { month: 'short', timeZone: 'UTC' }).format(dt),
+      full: new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(dt),
+    };
+  };
+  const f = parts(first.startsOn);
+  return (
+    <aside className="dash-rail" aria-label={t('door.dash.events.title')}>
+      <section className="panel dash-panel dash-next">
+        <header className="dash-panel-head"><h3>{t('door.dash.next')}</h3></header>
+        <SystemLink from={systemId} to={first.href} className="dash-next-body">
+          <span className="dash-icon" aria-hidden="true"><Icon name="event" size={18} /></span>
+          <span className="dash-row-main">
+            <strong>{first.title}</strong>
+            <span className="muted">{t(`door.plans.${first.planType}` as 'door.plans.EVENT')}</span>
+          </span>
+        </SystemLink>
+        <p className="dash-next-when"><Icon name="calendar" size={14} /> {f.full}</p>
+        <Link className="btn dash-next-cta" to={`/s/${systemId}/events`}>{t('door.dash.next.all')}</Link>
+      </section>
+      {rest.length > 0 && (
+        <Panel title={t('door.dash.events.title')} to={`/s/${systemId}/events`}>
+          <ul className="dash-list">
+            {rest.slice(0, 5).map((e) => {
+              const x = parts(e.startsOn);
+              return (
+                <li key={e.id}>
+                  <SystemLink from={systemId} to={e.href} className="dash-row">
+                    <span className="dash-daybadge"><strong>{x.d}</strong><small>{x.m}</small></span>
+                    <span className="dash-row-main"><strong>{e.title}</strong></span>
+                  </SystemLink>
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
+      )}
+    </aside>
+  );
+}
+
+/** Where activity stands, one bar per measure, so the busy and the quiet parts show at a glance. */
+function ActivityBars({ w, systemId }: { w: NonNullable<Dashboard['overview']['work']>; systemId: string }) {
+  const t = useT();
+  const rows = [
+    { key: 'running', label: t('door.dash.work.running'), n: w.plansRunning, slot: 1 },
+    { key: 'waiting', label: t('door.dash.work.waiting'), n: w.plansWaiting, slot: 2 },
+    { key: 'drafts', label: t('door.dash.work.drafts'), n: w.plansDraft, slot: 3 },
+    { key: 'open', label: t('door.dash.tasks.open'), n: w.openTasks, slot: 4 },
+  ];
+  const top = Math.max(...rows.map((r) => r.n), 1);
+  return (
+    <Panel title={t('door.dash.activity.title')} to={`/s/${systemId}/work`}>
+      <ul className="dash-bars">
+        {rows.map((r) => (
+          <li key={r.key}>
+            <span className="dash-bars-label">{r.label}</span>
+            <SegBar label={`${r.label}: ${r.n}`} total={top} parts={[{ slot: r.slot, value: r.n, name: r.label }]} />
+            <strong>{r.n}</strong>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
 const RANGES = [3, 6, 12] as const;
 
 /** Contributions per unit, split by church-wide type and the unit's own, with donations beside them. Offerings are never mixed in. */
@@ -252,7 +359,8 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
   const rangeLabel = t('door.dash.lastN', { n: String(data.range ?? range) });
 
   return (
-    <div className="dash">
+    <div className="dash dash-layout">
+      <div className="dash-main">
       <section className="dash-hero" aria-label={t('door.dash.sub', { system: systemName })}>
         <div className="dash-hero-text">
           <p className="dash-hero-kicker">{t('door.dash.kicker')}</p>
@@ -261,16 +369,26 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
         </div>
         <div className="dash-hero-side">
           <p className="dash-hero-date">{date}</p>
-          <Segmented label={t('door.dash.range')} value={String(range) as '3' | '6' | '12'} onChange={(k) => setRange(Number(k) as (typeof RANGES)[number])} items={RANGES.map((n) => ({ key: String(n) as '3' | '6' | '12', label: t('door.dash.months', { n: String(n) }) }))} />
         </div>
       </section>
-      <ul className="dash-kpis">
-        {data.kpis.map((k) => (
-          <li key={k.key}>
-            <KpiCard kpi={k} note={k.key === 'work' && w?.overdue ? t('door.dash.work.overdueN', { count: String(w.overdue) }) : undefined} />
-          </li>
-        ))}
-      </ul>
+      <div className="dash-pair">
+        <LatestAnnouncements systemId={systemId} />
+        <UrgentTile systemId={systemId} />
+      </div>
+      <section className="panel dash-panel dash-glance" aria-label={t('door.dash.glance')}>
+        <header className="dash-panel-head">
+          <h3>{t('door.dash.glance')}</h3>
+          <Segmented label={t('door.dash.range')} value={String(range) as '3' | '6' | '12'} onChange={(k) => setRange(Number(k) as (typeof RANGES)[number])} items={RANGES.map((n) => ({ key: String(n) as '3' | '6' | '12', label: t('door.dash.months', { n: String(n) }) }))} />
+        </header>
+        <ul className="dash-kpis">
+          {data.kpis.map((k) => (
+            <li key={k.key}>
+              <KpiCard kpi={k} note={k.key === 'work' && w?.overdue ? t('door.dash.work.overdueN', { count: String(w.overdue) }) : undefined} />
+            </li>
+          ))}
+        </ul>
+      </section>
+      {w && <ActivityBars w={w} systemId={systemId} />}
       {(data.attendance || second || hasWork || data.joinedSeries) && (
         <div className="dash-charts">
           {data.attendance && (
@@ -342,6 +460,8 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
         <DashboardOverview data={data} systemId={systemId} />
         <Lists data={data} systemId={systemId} />
       </div>
+      </div>
+      <EventsRail data={data} systemId={systemId} />
     </div>
   );
 }
