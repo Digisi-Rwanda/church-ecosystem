@@ -1813,7 +1813,7 @@ export const en = {
   'door.money.hint.notTreasurer': 'Only the treasurer opens accounts and records money. You can read everything here.',
 
   'door.block.dashboard': 'Dashboard',
-  'door.dash.welcome': 'Welcome back, {name}',
+  'door.dash.kicker': 'Welcome back',
   'door.dash.sub': 'Here is what is happening in {system} today.',
   'door.dash.kpi.members': 'Members',
   'door.dash.kpi.attendance': 'Group attendance this month',
@@ -2917,6 +2917,23 @@ export const en = {
   'door.search.group.notices': 'Notifications',
   'door.search.group.announcements': 'Announcements',
   'door.search.open': 'Search',
+  'door.p360.tab.sheet': 'Profile sheet',
+  'door.p360.sheet.print': 'Print the sheet',
+  'door.p360.sheet.profile': 'Profile',
+  'door.p360.sheet.contact': 'Contact',
+  'door.p360.sheet.personal': 'Personal',
+  'door.p360.sheet.education': 'Education',
+  'door.p360.sheet.skills': 'Skills and gifts',
+  'door.p360.sheet.journey': 'Journey of faith',
+  'door.p360.sheet.service': 'Service and callings',
+  'door.p360.sheet.work': 'Work',
+  'door.p360.sheet.email': 'Email',
+  'door.p360.sheet.empty': 'Nothing recorded yet.',
+  'door.p360.sheet.introName': '{name} is a member of the church.',
+  'door.p360.sheet.introJoined': '{name} has been a member since {date}.',
+  'door.p360.sheet.introBaptised': 'Baptised on {date}.',
+  'door.p360.sheet.introMarried': 'Married on {date}.',
+  'door.p360.sheet.introCallings': 'Serves in {count} calling(s).',
   // Test and demo markers
 } as const;
 

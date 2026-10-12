@@ -10,10 +10,11 @@ import { RecordCard, RecordForm } from './Person360Parts';
 import { useLoad } from './useLoad';
 import { PageHeader, SidePanel, initialsOf } from './kit';
 import { BasicsForm, Documents } from './Person360Edit';
+import { Person360Sheet } from './Person360Sheet';
 import { GoodDeeds } from './Person360Deeds';
 import { useCanWritePeople } from './usePeopleAccess';
 
-type Tab = 'timeline' | 'files' | 'callings';
+type Tab = 'sheet' | 'timeline' | 'files' | 'callings';
 type Gift = P360Participation['items'][number];
 
 /** The one-line summary of a record: its values, without the ids. */
@@ -179,7 +180,7 @@ export function Person360Page() {
   const access = useLoad(fetchP360Access, 'p360-access');
   const isLeader = !!access.data?.leader;
   const part = useLoad(() => (isLeader ? fetchP360Participation(personId) : Promise.resolve(null as P360Participation | null)), `p360-part|${personId}|${isLeader}`);
-  const [tab, setTab] = useState<Tab>('timeline');
+  const [tab, setTab] = useState<Tab>('sheet');
   const [editing, setEditing] = useState(false);
   const canWritePeople = useCanWritePeople();
   const v = load.data;
@@ -234,10 +235,16 @@ export function Person360Page() {
                 </div>
                 <section className="card" aria-label={t('door.p360.title')}>
                   <div className="p360-tabs" role="tablist" aria-label={t('door.p360.title')}>
-                    {([['timeline', t('door.p360.tab.timeline')], ['files', t('door.p360.tab.files')], ['callings', `${t('door.p360.section.CALLING')}${callings ? ` (${callings})` : ''}`]] as Array<[Tab, string]>).map(([k, label]) => (
+                    {([['sheet', t('door.p360.tab.sheet')], ['timeline', t('door.p360.tab.timeline')], ['files', t('door.p360.tab.files')], ['callings', `${t('door.p360.section.CALLING')}${callings ? ` (${callings})` : ''}`]] as Array<[Tab, string]>).map(([k, label]) => (
                       <button key={k} type="button" role="tab" className="tab" aria-selected={tab === k} onClick={() => setTab(k)}>{label}</button>
                     ))}
                   </div>
+                  {tab === 'sheet' && (
+                    <>
+                      <div className="resume-tools no-print"><button type="button" className="btn ghost sm" onClick={() => window.print()}>{t('door.p360.sheet.print')}</button></div>
+                      <Person360Sheet v={v} gifts={part.data?.items ?? []} showGifts={isLeader} />
+                    </>
+                  )}
                   {tab === 'timeline' && <Timeline records={v.records} gifts={part.data?.items ?? []} />}
                   {tab === 'files' && <Documents personId={personId} />}
                   {tab === 'callings' && <Sections v={v} personId={personId} only={['CALLING']} reload={load.reload} />}

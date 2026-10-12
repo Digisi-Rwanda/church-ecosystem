@@ -253,13 +253,17 @@ export function LeaderDashboard({ systemId, systemName, fallback }: { systemId: 
 
   return (
     <div className="dash">
-      <div className="dash-greet">
-        <div>
-          <h2>{t('door.dash.welcome', { name: personName || systemName })}</h2>
-          <p className="muted">{t('door.dash.sub', { system: systemName })} · {date}</p>
+      <section className="dash-hero" aria-label={t('door.dash.sub', { system: systemName })}>
+        <div className="dash-hero-text">
+          <p className="dash-hero-kicker">{t('door.dash.kicker')}</p>
+          <h2>{personName || systemName}</h2>
+          <p className="dash-hero-line">{t('door.dash.sub', { system: systemName })}</p>
         </div>
-        <Segmented label={t('door.dash.range')} value={String(range) as '3' | '6' | '12'} onChange={(k) => setRange(Number(k) as (typeof RANGES)[number])} items={RANGES.map((n) => ({ key: String(n) as '3' | '6' | '12', label: t('door.dash.months', { n: String(n) }) }))} />
-      </div>
+        <div className="dash-hero-side">
+          <p className="dash-hero-date">{date}</p>
+          <Segmented label={t('door.dash.range')} value={String(range) as '3' | '6' | '12'} onChange={(k) => setRange(Number(k) as (typeof RANGES)[number])} items={RANGES.map((n) => ({ key: String(n) as '3' | '6' | '12', label: t('door.dash.months', { n: String(n) }) }))} />
+        </div>
+      </section>
       <ul className="dash-kpis">
         {data.kpis.map((k) => (
           <li key={k.key}>
