@@ -17,8 +17,8 @@ import { MODULE_ICON } from './moduleIcons';
 /** The icon beside each place in an opened module: one glance tells a directory from an organisation or a list of leaders. */
 const PLACE_ICON: Record<string, IconName> = {
   directory: 'user', organisation: 'building', units: 'building', appointments: 'users', access: 'lock', admin: 'settings', preferences: 'settings',
-  home: 'home', mine: 'user', tasks: 'task', plans: 'task', programs: 'program', projects: 'layers', events: 'event', meetings: 'users', schedule: 'calendar',
-  funds: 'wallet', budget: 'wallet', plan: 'wallet', accounting: 'wallet', contributions: 'hand', collections: 'hand', moneyreports: 'chart', reports: 'folder',
+  home: 'home', mine: 'user', tasks: 'task', board: 'layers', plans: 'task', programs: 'program', projects: 'layers', events: 'event', meetings: 'users', schedule: 'calendar',
+  funds: 'wallet', budget: 'wallet', plan: 'wallet', accounting: 'wallet', contributions: 'hand', collections: 'hand', reports: 'folder',
   decisions: 'board', notifications: 'inbox', announcements: 'inbox',
 };
 const placeIcon = (key: string): IconName => PLACE_ICON[key] ?? 'chevron-right';

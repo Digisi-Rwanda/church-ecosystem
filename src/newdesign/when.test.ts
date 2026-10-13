@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { activitiesByDay, activityTime, emptyWhen, whenChanged, whenOf, whenProblem, whenSummary, whenToInput } from './when';
+import { splitActivities, activitiesByDay, activityTime, emptyWhen, whenChanged, whenOf, whenProblem, whenSummary, whenToInput } from './when';
 import { en } from '../i18n/messages/en';
 import { fill } from '../i18n/translate';
 
@@ -45,5 +45,14 @@ describe('when block', () => {
     expect(days[0].items).toHaveLength(2);
     expect(activityTime({ startTime: '09:00', endTime: '11:00' })).toBe('09:00–11:00');
     expect(activityTime({ startTime: null, endTime: null })).toBe('');
+  });
+});
+
+describe('splitActivities', () => {
+  const mk = (planId: string, date: string, startTime: string | null = null) => ({ planId, date, startTime, endTime: null, title: planId }) as never;
+  it('lists a run of all-day entries once, and keeps timed or single days on their own', () => {
+    const r = splitActivities([mk('a', '2026-10-01'), mk('a', '2026-10-02'), mk('a', '2026-10-03'), mk('b', '2026-10-05', '09:00'), mk('b', '2026-10-06', '09:00'), mk('c', '2026-10-24'), mk('d', '2026-10-01'), mk('d', '2026-10-08')]);
+    expect(r.ongoing.map((o) => [o.activity.planId, o.from, o.to])).toEqual([['a', '2026-10-01', '2026-10-03']]);
+    expect(r.days.map((x) => `${x.planId}${x.date}`).sort()).toEqual(['b2026-10-05', 'b2026-10-06', 'c2026-10-24', 'd2026-10-01', 'd2026-10-08']);
   });
 });

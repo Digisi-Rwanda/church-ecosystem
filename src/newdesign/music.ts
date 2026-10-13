@@ -3,6 +3,7 @@ import type { ChoirRole, MusicServiceKind, ScheduleService } from '../api/frontD
 
 const ERROR_KEYS: Record<string, string> = {
   ALREADY_EXISTS: 'door.music.err.exists',
+  HAS_PLEDGES: 'door.music.err.hasPledges',
   CHOIR_NOT_ALLOWED: 'door.music.err.notAllowed',
   OUTSIDE_MONTH: 'door.music.err.outsideMonth',
   EMPTY_PLAN: 'door.music.err.empty',

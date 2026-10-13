@@ -20,7 +20,7 @@ import { buildOwnMenu, lettersFor } from './menu';
 import { CHURCH_SYSTEM } from './portalHome';
 import { addMonths, dayHeading, dayOf, groupByDay, monthGrid, monthLabel, overlapping, personClashes, planActions, planStatusKey, scheduleErrorKey, servingCounts, thisMonth, timeRange } from './schedule';
 import { SlotCard, SlotForm } from './ScheduleParts';
-import { ActivitiesList } from './ScheduleActivities';
+import { ActivitiesList, AgendaDate } from './ScheduleActivities';
 import { activityTime } from './when';
 import { useLoad } from './useLoad';
 import { PageHeader, Segmented, StatusChip } from './kit';
@@ -124,22 +124,21 @@ function ChurchCalendar({ month }: { month: string }) {
   const { locale } = useI18n();
   const cal = useLoad(() => fetchChurchMonth(month), `sched-church|${month}`);
   return (
-    <div className="panel">
+    <div className="panel agenda">
       <h3>{t('door.sched.church')}</h3>
       <LoadState loading={cal.loading} failed={cal.failed} retry={cal.reload}>
         {!cal.data || (cal.data.slots.length === 0 && cal.data.activities.length === 0) ? (
           <p className="muted">{t('door.sched.churchNone')}</p>
         ) : (
           groupByDay(cal.data.slots).map((g) => (
-            <div key={g.day}>
-              <h4>{dayHeading(g.day, locale)}</h4>
-              <ul className="door-list">
+            <div key={g.day} className="agenda-day">
+              <AgendaDate day={g.day} locale={locale} />
+              <ul className="agenda-items" aria-label={dayHeading(g.day, locale)}>
                 {g.slots.map((s) => (
-                  <li key={s.id}>
+                  <li key={s.id} className="agenda-item agenda-service">
                     <strong>{s.title}</strong>
                     <span className="muted">
-                      {' '}
-                      — {timeRange(s.startsAt, s.endsAt, locale)}
+                      {timeRange(s.startsAt, s.endsAt, locale)}
                       {s.location ? ` · ${s.location}` : ''} · {s.unitName}
                     </span>
                   </li>

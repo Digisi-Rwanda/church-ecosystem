@@ -26,7 +26,7 @@ const UNITS = [
   { code: 'children', systemId: 'sys-children', orgUnitId: 'ou-children', name: 'Children' },
   { code: 'men', systemId: 'sys-men', orgUnitId: 'ou-men', name: 'Men' },
   { code: 'women', systemId: 'sys-women', orgUnitId: 'ou-women', name: 'Women' },
-  { code: 'couples', systemId: 'sys-couples', orgUnitId: 'ou-couples', name: 'Couples' },
+  { code: 'couples', systemId: 'sys-couples', orgUnitId: 'ou-couples', name: 'Family' },
   { code: 'elderly', systemId: 'sys-elderly', orgUnitId: 'ou-elderly', name: 'Elderly' },
 ] as const;
 

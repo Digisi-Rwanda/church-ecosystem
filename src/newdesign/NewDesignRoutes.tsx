@@ -22,7 +22,6 @@ import {
   MoneyBudgetPage,
   MoneyPage,
   MoneyPlanPage,
-  MoneyReportsPage,
   MonthPlanPage,
   MovesPage,
   MyContributionPage,
@@ -32,6 +31,7 @@ import {
   Person360Page,
   PersonCardPage,
   PlanPage,
+  ActivitiesBoard,
   PublicEventPage,
   PublicCheckinPage,
   ActionPlanCreate,
@@ -120,6 +120,7 @@ export function newDesignRoutes() {
           <Route path="schedule/mine" element={<MyAssignmentsPage />} />
           <Route path="import/:target" element={<ImportPage />} />
           <Route path="work" element={<WorkPage />} />
+          <Route path="work/board" element={<ActivitiesBoard />} />
           <Route path="programs" element={<PlansPage planType="PROGRAM" />} />
           <Route path="events" element={<PlansPage planType="EVENT" />} />
           <Route path="projects" element={<PlansPage planType="PROJECT" />} />
@@ -131,7 +132,7 @@ export function newDesignRoutes() {
           <Route path="money/budget" element={<MoneyBudgetPage />} />
           <Route path="money/funds" element={<FundsPage />} />
           <Route path="money/contributions" element={<ContributionsPage />} />
-          <Route path="money/reports" element={<MoneyReportsPage />} />
+          <Route path="money/reports" element={<Navigate to="../../reports" relative="path" replace />} />
           <Route path="money/mine" element={<MyContributionPage />} />
           <Route path="reports" element={<ReportsPage />} />
           <Route path="reports/:reportId" element={<ReportPage />} />

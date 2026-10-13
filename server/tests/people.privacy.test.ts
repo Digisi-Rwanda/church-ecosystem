@@ -63,8 +63,11 @@ describe('GET /api/people/:id', () => {
     expect(r.body.person.fullName).toBe('p-member');
     for (const k of Object.keys(SECRET)) expect(r.body.person, k).not.toHaveProperty(k);
   });
-  it('Pastor cannot open another person, but can open own profile', async () => {
-    expect((await request(app).get('/api/people/p-member').set(bearer('p-realpastor'))).status).toBe(403);
+  it('Pastor opens another person as a names-only card, and own profile in full', async () => {
+    const other = await request(app).get('/api/people/p-member').set(bearer('p-realpastor'));
+    expect(other.status).toBe(200);
+    expect(other.body.tier).toBe('DIRECTORY');
+    expect(other.body.person).not.toHaveProperty('nationalId');
     const own = await request(app).get('/api/people/p-realpastor').set(bearer('p-realpastor'));
     expect(own.status).toBe(200);
     expect(own.body.tier).toBe('SELF');

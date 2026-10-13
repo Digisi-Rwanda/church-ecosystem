@@ -49,7 +49,7 @@ musicRouter.get('/choirs', requireAuth, async (req: AuthedRequest, res) => {
   const all = (await choirs()).filter((c) => canReadChoir(me, c.systemId, data) && (!only || c.systemId === only));
   const members = await membersOf();
   res.json({
-    canManage: canManageChoirs(me, data) && !only,
+    canManage: canManageChoirs(me, data) ? !only : !!only && canWriteChoir(me, only, data),
     choirs: all
       .map((c) => ({ id: c.id, name: c.name, role: c.role, active: c.active, members: members.filter((m) => m.choirId === c.id).length, canWrite: canWriteChoir(me, c.systemId, data) }))
       .sort((a, b) => Number(b.active) - Number(a.active) || a.name.localeCompare(b.name)),
@@ -61,7 +61,9 @@ musicRouter.post('/choirs', requireAuth, async (req: AuthedRequest, res) => {
   const parsed = z.object({ name: z.string().trim().min(1).max(NAME_MAX), role: z.enum(ROLES), systemId: z.enum(['sys-choir', 'sys-worship']).nullish() }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the choir');
   const b = parsed.data;
-  if (!canManageChoirs(me, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
+  const data = await accessOf(me);
+  const target = b.systemId ?? (b.role === 'WORSHIP' ? 'sys-worship' : 'sys-choir');
+  if (!canManageChoirs(me, data) && !canWriteChoir(me, target, data)) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
   if ((await choirs()).some((c) => c.active && c.name.toLowerCase() === b.name.toLowerCase())) return fail(res, 409, 'ALREADY_EXISTS', 'A choir with this name exists');
   const row = (await prisma.musicChoir.create({
     data: { name: b.name, role: b.role, systemId: b.systemId ?? (b.role === 'WORSHIP' ? 'sys-worship' : 'sys-choir'), active: true, createdById: me },
@@ -74,11 +76,46 @@ musicRouter.post('/choirs/:id/active', requireAuth, async (req: AuthedRequest, r
   const me = req.auth!.personId;
   const parsed = z.object({ active: z.boolean() }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the request');
-  if (!canManageChoirs(me, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
   const c = (await prisma.musicChoir.findUnique({ where: { id: String(req.params.id) } })) as ChoirRow | null;
   if (!c) return fail(res, 404, 'NOT_FOUND', 'Choir not found');
+  if (!canWriteChoir(me, c.systemId, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
   await prisma.musicChoir.update({ where: { id: c.id }, data: { active: parsed.data.active } });
   await audit(me, 'PEOPLE', parsed.data.active ? 'CHOIR_RESTORED' : 'CHOIR_RETIRED', `${parsed.data.active ? 'Restored' : 'Retired'} choir “${c.name}”`, { choirId: c.id });
+  res.json({ ok: true });
+});
+
+/** Change a choir's name or kind. */
+musicRouter.patch('/choirs/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const parsed = z.object({ name: z.string().trim().min(1).max(NAME_MAX), role: z.enum(ROLES) }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the choir');
+  const c = (await prisma.musicChoir.findUnique({ where: { id: String(req.params.id) } })) as ChoirRow | null;
+  if (!c) return fail(res, 404, 'NOT_FOUND', 'Choir not found');
+  if (!canWriteChoir(me, c.systemId, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
+  if ((await choirs()).some((x) => x.id !== c.id && x.active && x.name.toLowerCase() === parsed.data.name.toLowerCase())) return fail(res, 409, 'ALREADY_EXISTS', 'A choir with this name exists');
+  await prisma.musicChoir.update({ where: { id: c.id }, data: { name: parsed.data.name, role: parsed.data.role } });
+  await audit(me, 'PEOPLE', 'CHOIR_EDITED', `Changed choir “${c.name}”${c.name !== parsed.data.name ? ` to “${parsed.data.name}”` : ''}`, { choirId: c.id });
+  res.json({ ok: true });
+});
+
+/**
+ * Delete a choir for good, with its singers, rehearsals, songs, sponsors and services. A choir whose sponsors have
+ * pledged money cannot be deleted (the pledges are a record): retire it instead.
+ */
+musicRouter.delete('/choirs/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const c = (await prisma.musicChoir.findUnique({ where: { id: String(req.params.id) } })) as ChoirRow | null;
+  if (!c) return fail(res, 404, 'NOT_FOUND', 'Choir not found');
+  if (!canWriteChoir(me, c.systemId, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
+  const sponsors = ((await prisma.choirSponsor.findMany()) as Array<{ id: string; choirId: string }>).filter((x) => x.choirId === c.id);
+  const pledges = ((await prisma.sponsorPledge.findMany()) as Array<{ sponsorId: string; status: string }>).filter((p) => sponsors.some((x) => x.id === p.sponsorId) && p.status !== 'CANCELLED');
+  if (pledges.length > 0) return fail(res, 409, 'HAS_PLEDGES', 'This choir has sponsor pledges on record. Retire it instead.');
+  await prisma.sponsorPledge.deleteMany({ where: { sponsorId: { in: sponsors.map((x) => x.id) } } });
+  for (const model of ['choirSponsor', 'choirSong', 'choirRehearsal', 'musicAssignment', 'musicChoirMember'] as const) {
+    await (prisma[model] as unknown as { deleteMany: (a: object) => Promise<unknown> }).deleteMany({ where: { choirId: c.id } });
+  }
+  await prisma.musicChoir.delete({ where: { id: c.id } });
+  await audit(me, 'PEOPLE', 'CHOIR_DELETED', `Deleted choir “${c.name}”`, { choirId: c.id });
   res.json({ ok: true });
 });
 

@@ -148,7 +148,7 @@ describe('buildPortalModules', () => {
     expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'funds', 'accounting', 'contributions', 'mine']);
     expect(keys(mk({ people: ['R'] }))).toEqual(['mine']);
     // the year overview is a report, so it is listed under Reports, not Money
-    expect(buildModules(mk({ money: ['R'], reports: ['R'] }), 'sys-a').find((m) => m.id === 'reports')!.places.map((p) => p.key)).toEqual(['reports', 'moneyreports']);
+    expect(buildModules(mk({ money: ['R'], reports: ['R'] }), 'sys-a').find((m) => m.id === 'reports')!.places.map((p) => p.key)).toEqual(['reports']);
     const mods = buildModules(mk({ money: ['R'] }), 'sys-a');
     expect(resolveActive(mods, '/s/sys-a/money')?.place?.key).toBe('accounting');
     expect(resolveActive(mods, '/s/sys-a/money/budget')?.place?.key).toBe('budget');

@@ -166,6 +166,8 @@ export type NewPerson = {
   dateOfBirth?: string;
   nationalId?: string;
   confirmDuplicate?: boolean;
+  /** The unit's system the person is added from: they also become a member of that unit. */
+  systemId?: string;
 };
 
 export async function createPerson(body: NewPerson): Promise<DirectoryPerson> {
@@ -1082,6 +1084,15 @@ const P = '/api/work-plans';
 const planBody = async (p: Promise<{ plan: PlanDetail }>): Promise<PlanDetail> => (await p).plan;
 export const savePlanDetails = (id: string, details: Record<string, string>) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/details`, { method: 'PUT', body: { details } }));
 export const fetchPlanOptions = (): Promise<PlanOptions> => apiFetch(`${P}/options`);
+/** A plan on the Activities board: the list item plus its approval steps and its money. */
+export type BoardItem = PlanItem & {
+  amount: number; perMonth: boolean;
+  levels: Array<{ levelKey: 'UNIT' | 'TREASURER' | 'CATECHIST' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null }>;
+};
+export async function fetchBoard(systemId: string): Promise<BoardItem[]> {
+  const res = await apiFetch<{ items: BoardItem[] }>(`${P}?${new URLSearchParams({ systemId, view: 'all', status: 'all', board: '1' })}`);
+  return res.items;
+}
 export async function fetchPlans(opts: { systemId?: string; view?: 'mine' | 'all'; status?: string; q?: string; type?: PlanType } = {}): Promise<PlanItem[]> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
@@ -1555,6 +1566,12 @@ export const fetchChoirs = (systemId?: string): Promise<{ canManage: boolean; ch
 export const fetchChoir = (id: string): Promise<ChoirDetail> => apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`);
 export async function createChoir(input: { name: string; role: ChoirRole }): Promise<void> {
   await apiFetch(`${MU}/choirs`, { method: 'POST', body: input });
+}
+export async function editChoir(id: string, input: { name: string; role: ChoirRole }): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function deleteChoir(id: string): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`, { method: 'DELETE' });
 }
 export async function setChoirActive(id: string, active: boolean): Promise<void> {
   await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/active`, { method: 'POST', body: { active } });

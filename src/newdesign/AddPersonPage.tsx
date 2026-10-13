@@ -30,7 +30,7 @@ export function AddPersonPage() {
     }
     setBusy(true);
     setError('');
-    const body: NewPerson = { fullName: form.fullName.trim(), confirmDuplicate };
+    const body: NewPerson = { fullName: form.fullName.trim(), confirmDuplicate, ...(systemId && systemId !== 'sys-main' ? { systemId } : {}) };
     for (const k of ['phone', 'email', 'dateOfBirth', 'nationalId'] as const) {
       if (form[k].trim()) body[k] = form[k].trim();
     }

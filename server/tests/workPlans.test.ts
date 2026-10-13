@@ -225,6 +225,20 @@ describe('approval', () => {
     expect((await post('p-cat', `${B}/${id}/approve`)).status).not.toBe(200); // the Catechist cannot approve in the Church Leader's place
     expect((await post('p-pastor', `${B}/${id}/approve`)).body.plan.status).toBe('RUNNING');
   });
+  it('the Catechist creates an activity in Central Administration and submits it straight to the Church Leader', async () => {
+    fake.__db.person.push({ id: 'p-cat', fullName: 'The Catechist', status: 'ACTIVE' });
+    fake.__db.position.push({ id: 'pos-cat', personId: 'p-cat', systemId: 'sys-main', title: 'Catechist', office: 'CATECHIST', status: 'ACTIVE', startDate: new Date('2022-01-01') });
+    const opts = await get('p-cat', `${B}/options`);
+    expect(opts.body.units.some((u: any) => u.id === 'ou-church'), JSON.stringify(opts.body)).toBe(true);
+    const made = await post('p-cat', B, body({ unitId: 'ou-church', leaderId: 'p-cat', team: [], visibility: 'SYSTEM' }));
+    expect(made.status, JSON.stringify(made.body)).toBe(201);
+    const id = made.body.plan.id;
+    const sub = await post('p-cat', `${B}/${id}/submit`);
+    expect(sub.status, JSON.stringify(sub.body)).toBe(200);
+    expect(sub.body.plan.levels.map((l: any) => l.levelKey)).toEqual(['CHURCH']);
+    expect((await post('p-cat', `${B}/${id}/approve`)).status).not.toBe(200); // not his own
+    expect((await post('p-pastor', `${B}/${id}/approve`)).body.plan.status).toBe('RUNNING');
+  });
   it('the step is skipped when the Catechist wrote the activity themselves', async () => {
     fake.__db.person.push({ id: 'p-cat', fullName: 'The Catechist', status: 'ACTIVE' });
     fake.__db.position.push({ id: 'pos-cat', personId: 'p-cat', systemId: 'sys-main', title: 'Catechist', office: 'CATECHIST', status: 'ACTIVE', startDate: new Date('2022-01-01') });
@@ -252,6 +266,21 @@ describe('approval', () => {
     fake.__db.workPlan.find((x: any) => x.id === id).status = 'SETUP';
     const r = await post('p-vp', `${B}/${id}/reopen`);
     expect(r.body.plan).toMatchObject({ status: 'DRAFT', levels: [] });
+  });
+});
+
+describe('the Activities board', () => {
+  it('lists each activity with its approval steps, who decided them, and its money; the plain list stays plain', async () => {
+    const id = await draft({ planType: 'EVENT' });
+    await post('p-vp', `${B}/${id}/submit`);
+    await post('p-choir-leader', `${B}/${id}/approve`);
+    const plain = (await get('p-pastor', `${B}?systemId=sys-main&view=all`)).body.items.find((x: any) => x.id === id);
+    expect(plain.levels).toBeUndefined();
+    const row = (await get('p-pastor', `${B}?systemId=sys-main&view=all&status=all&board=1`)).body.items.find((x: any) => x.id === id);
+    expect(row).toMatchObject({ planType: 'EVENT', state: 'WAITING', perMonth: false, amount: 0 });
+    expect(row.levels.map((l: any) => [l.levelKey, l.status])).toEqual([['UNIT', 'APPROVED'], ['CHURCH', 'PENDING']]);
+    expect(row.levels[0].byName).toBeTruthy();
+    expect(row.levels[1].byName).toBeNull();
   });
 });
 

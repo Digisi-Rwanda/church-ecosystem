@@ -8217,3 +8217,40 @@ a.feed-row:hover { background: var(--f-hover); }
 .unit-people { display: grid; gap: 0.35rem; grid-template-columns: repeat(auto-fill, minmax(14rem, 1fr)); }
 .unit-person { display: flex; align-items: center; gap: 0.6rem; padding: 0.4rem 0.5rem; border-radius: 12px; color: inherit; text-decoration: none; font-size: 0.88rem; }
 .unit-kids a { color: var(--accent); text-decoration: none; font-weight: 600; }
+
+/* Agenda: the church calendar and the month's activities */
+.agenda h3 { margin-bottom: 0.6rem; }
+.agenda-label { margin: 0 0 0.4rem; font-size: 0.72rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-muted); }
+.agenda-ongoing { margin-bottom: 1rem; }
+.agenda-chips { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.5rem; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+.agenda-chip { --tone: var(--accent); display: flex; flex-direction: column; gap: 0.1rem; padding: 0.6rem 0.8rem; border-radius: 12px; border-left: 4px solid var(--tone); background: color-mix(in srgb, var(--tone) 10%, var(--surface-2)); color: var(--ink); text-decoration: none; }
+.agenda-chip:hover { background: color-mix(in srgb, var(--tone) 18%, var(--surface-2)); }
+.agenda-chip span { font-size: 0.78rem; color: var(--ink-muted); }
+.agenda-program { --tone: var(--cat-1, var(--accent)); }
+.agenda-event { --tone: var(--cat-3, #199e70); }
+.agenda-project { --tone: var(--cat-7, #9085e9); }
+.agenda-service { --tone: var(--cat-5, #d98a1f); }
+.agenda-day { display: grid; grid-template-columns: 3.6rem 1fr; gap: 0.9rem; padding: 0.7rem 0; border-top: 1px solid var(--line); }
+.agenda-day:first-of-type { border-top: 0; }
+.agenda-date { display: flex; flex-direction: column; align-items: center; justify-content: center; line-height: 1.1; padding: 0.35rem 0; border-radius: 12px; background: var(--accent-soft); color: var(--accent-on-soft); }
+.agenda-date span { font-size: 0.68rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase; }
+.agenda-date strong { font-family: var(--font-display); font-size: 1.5rem; }
+.agenda-items { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.4rem; }
+.agenda-item { --tone: var(--accent); display: flex; flex-direction: column; padding: 0.4rem 0.7rem; border-left: 3px solid var(--tone); border-radius: 8px; background: color-mix(in srgb, var(--tone) 8%, transparent); }
+.agenda-item a { color: var(--ink); text-decoration: none; }
+.agenda-item a:hover { text-decoration: underline; }
+.agenda-item .muted { font-size: 0.82rem; }
+
+/* Activities board: one row per activity, its approval steps underneath */
+.board-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
+.board-row { display: grid; gap: 0.6rem; padding: 0.8rem 1rem; border: 1px solid var(--line, #e5e7eb); border-radius: 12px; background: var(--surface, #fff); }
+.board-main { display: flex; flex-direction: column; gap: 0.1rem; }
+.board-title { font-weight: 600; color: var(--ink); text-decoration: none; }
+.board-title:hover { text-decoration: underline; }
+.board-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem 1rem; margin: 0; }
+.board-facts dt { font-size: 0.75rem; color: var(--muted, #6b7280); }
+.board-facts dd { margin: 0; }
+.board-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.4rem; }
+.board-step { display: flex; flex-direction: column; padding: 0.35rem 0.6rem; border-radius: 8px; background: color-mix(in srgb, var(--muted, #6b7280) 10%, transparent); font-size: 0.85rem; }
+.board-step.done { background: color-mix(in srgb, #16a34a 14%, transparent); }
+.board-step.now { background: color-mix(in srgb, #d97706 16%, transparent); }

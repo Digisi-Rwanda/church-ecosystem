@@ -112,3 +112,27 @@ describe('oversight and menu', () => {
     expect(choirKeys).toContain('choirs');
   });
 });
+
+describe('editing and deleting a choir', () => {
+  it('a choir can be renamed and deleted for good, with its singers; sponsor pledges block the delete', async () => {
+    const db = fake.__db;
+    for (const k of ['choirSponsor', 'sponsorPledge', 'choirSong', 'choirRehearsal']) db[k] ??= [];
+    const id = await choir('Elim', 'PRIMARY');
+    await choir('Zion', 'PRIMARY');
+    expect((await request(app).patch(`/api/music/choirs/${id}`).set(bearer(MUSIC_LEADER)).send({ name: 'Zion', role: 'PRIMARY' })).body.code).toBe('ALREADY_EXISTS');
+    const edit = await request(app).patch(`/api/music/choirs/${id}`).set(bearer(MUSIC_LEADER)).send({ name: 'Elim Choir', role: 'SECONDARY' });
+    expect(edit.status).toBe(200);
+    expect(db.musicChoir.find((c: any) => c.id === id)).toMatchObject({ name: 'Elim Choir', role: 'SECONDARY' });
+    expect((await request(app).patch(`/api/music/choirs/${id}`).set(bearer('p-member')).send({ name: 'X', role: 'PRIMARY' })).status).toBe(403);
+    db.musicChoirMember.push({ id: 'm1', choirId: id, personId: 'p-member', status: 'ACTIVE' });
+    db.choirSponsor.push({ id: 'sp1', choirId: id, name: 'A' });
+    db.sponsorPledge.push({ id: 'pl1', sponsorId: 'sp1', amount: 1000, status: 'PLEDGED' });
+    expect((await del(MUSIC_LEADER, `/api/music/choirs/${id}`)).body.code).toBe('HAS_PLEDGES');
+    db.sponsorPledge[0].status = 'CANCELLED';
+    expect((await del('p-member', `/api/music/choirs/${id}`)).status).toBe(403);
+    expect((await del(MUSIC_LEADER, `/api/music/choirs/${id}`)).status).toBe(200);
+    expect(db.musicChoir.some((c: any) => c.id === id)).toBe(false);
+    expect(db.musicChoirMember.length + db.choirSponsor.length + db.sponsorPledge.length).toBe(0);
+    expect(db.musicChoir).toHaveLength(1);
+  });
+});

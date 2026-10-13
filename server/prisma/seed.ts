@@ -49,7 +49,7 @@ const SYSTEMS = [
   {
     id: 'sys-deacon',
     code: 'DEACON',
-    name: 'Deacon System',
+    name: 'Deacon Ministry',
     shortName: 'Deacon',
     kind: 'MINISTRY',
     basePath: '/systems/deacon',
@@ -58,7 +58,7 @@ const SYSTEMS = [
   {
     id: 'sys-protocol',
     code: 'PROTOCOL',
-    name: 'Protocol System',
+    name: 'Protocol Team',
     shortName: 'Protocol',
     kind: 'MINISTRY',
     basePath: '/systems/protocol',
@@ -76,7 +76,7 @@ const SYSTEMS = [
   {
     id: 'sys-media',
     code: 'MEDIA',
-    name: 'Media System',
+    name: 'Media Team',
     shortName: 'Media',
     kind: 'MINISTRY',
     basePath: '/systems/media',
@@ -103,11 +103,11 @@ const SYSTEMS = [
   {
     id: 'sys-couples',
     code: 'COUPLES',
-    name: 'Couples System',
-    shortName: 'Couples',
+    name: 'Family Ministry',
+    shortName: 'Family',
     kind: 'MINISTRY',
     basePath: '/systems/couples',
-    description: 'Couples peer kit',
+    description: 'Family ministry peer kit',
   },
   {
     id: 'sys-children',
@@ -339,22 +339,22 @@ async function main() {
   }
 
   for (const kit of SPECIAL_MINISTRY_ORGS) {
+    const place = { name: kit.orgName, type: kit.kind, kind: kit.kind, parentId: kit.parentId === 'ou-church' ? ouChurch.id : kit.parentId, systemId: kit.systemId };
     const ou = await prisma.orgUnit.upsert({
       where: { id: kit.orgId },
-      create: {
-        id: kit.orgId,
-        name: kit.orgName,
-        type: 'MINISTRY',
-        parentId: ouChurch.id,
-        systemId: kit.systemId,
-      },
-      update: { name: kit.orgName },
+      create: { id: kit.orgId, ...place },
+      // Reseeding also corrects older shapes: the Media team and the Protocol team are teams, and both Deacons and Protocol sit under the Deacon Ministry.
+      update: place,
     });
-    await prisma.churchSystem.update({
-      where: { id: kit.systemId },
-      data: { orgUnitId: ou.id },
-    });
+    if (kit.link) {
+      await prisma.churchSystem.update({
+        where: { id: kit.systemId },
+        data: { orgUnitId: ou.id },
+      });
+    }
   }
+  // Media is a team now, not a ministry: if an older seed left it in the ministry list, it no longer reads as one.
+  await prisma.orgUnit.updateMany({ where: { id: 'ou-media' }, data: { name: 'Media Team', type: 'TEAM', kind: 'TEAM' } });
 
   const ouChoirParent = await prisma.orgUnit.upsert({
     where: { id: CHOIR_PARENT_ORG.id },

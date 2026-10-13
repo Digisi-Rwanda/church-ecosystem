@@ -92,7 +92,7 @@
   },
   {
    "id": "ou-deacon-team",
-   "name": "Deacon Team",
+   "name": "Deacons",
    "type": "TEAM",
    "parentId": "ou-deacon",
    "description": "Care, visits, benevolence — independent peer system",
@@ -134,7 +134,7 @@
   },
   {
    "id": "ou-couples",
-   "name": "Couples Ministry",
+   "name": "Family Ministry",
    "type": "MINISTRY",
    "description": "Couples fellowship",
    "systemId": "sys-couples",
@@ -4082,7 +4082,7 @@
   {
    "id": "pos-couples-pres",
    "personId": "p-couples-leader",
-   "title": "Couples Ministry President",
+   "title": "Family Ministry President",
    "orgUnitId": "ou-couples",
    "ministryOffice": "PRESIDENT",
    "systemId": "sys-couples",

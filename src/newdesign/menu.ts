@@ -116,6 +116,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
     work: shared.has('work')
       ? [
           place('tasks', 'work', 'door.work.tasks'),
+          ...(central ? [place('board', 'work/board', 'door.board.title')] : []),
           place('programs', 'programs', 'door.plans.PROGRAM'),
           place('events', 'events', 'door.plans.EVENT'),
           place('projects', 'projects', 'door.plans.PROJECT'),
@@ -142,7 +143,6 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
     // The year overview of the money is a report, so it sits in Reports (it still needs the Money letter to open).
     reports: [
       ...(shared.has('reports') ? [place('reports', 'reports', 'door.block.reports')] : []),
-      ...(shared.has('money') ? [place('moneyreports', 'money/reports', 'door.money.reports')] : []),
       ...some(['deaconreports'].map(ownPlace)),
     ],
     governance: own.has('governance')

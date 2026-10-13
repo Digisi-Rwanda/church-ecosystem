@@ -16,11 +16,12 @@ export function ActivityNew() {
   const { systemId = '' } = useParams();
   const [query] = useSearchParams();
   const planType = KINDS[(query.get('kind') ?? '').toLowerCase()] ?? 'EVENT';
+  const home = `/s/${systemId}/work/${planType === 'PROGRAM' ? 'programs' : planType === 'PROJECT' ? 'projects' : 'events'}`;
   const options = useLoad(fetchPlanOptions, 'plan-options');
   if (options.failed) return <EmptyState variant="error" title={t('door.work.err.gone')} />;
   return (
     <section className="door-block" aria-labelledby="door-actnew-title">
-      <PageHeader id="door-actnew-title" title={t('door.act.new')} back={<Link to={`/s/${systemId}/money/plan`}>← {t('door.money.plan')}</Link>} purpose={t('door.act.new.purpose')} />
+      <PageHeader id="door-actnew-title" title={t('door.act.new')} back={<Link to={home}>← {t(`door.plans.${planType}` as 'door.plans.PROGRAM')}</Link>} purpose={t('door.act.new.purpose')} />
       <LoadState loading={options.loading || !options.data} failed={false} retry={options.reload}>
         {options.data && (
           <PlanForm
@@ -28,7 +29,7 @@ export function ActivityNew() {
             systemId={systemId}
             planType={planType}
             onDone={(plan) => navigate(`/s/${systemId}/work/plans/${plan.id}`)}
-            onCancel={() => navigate(`/s/${systemId}/money/plan`)}
+            onCancel={() => navigate(home)}
           />
         )}
       </LoadState>

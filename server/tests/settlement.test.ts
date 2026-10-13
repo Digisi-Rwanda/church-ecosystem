@@ -73,10 +73,10 @@ const approvedPlan = async (o: object = {}, amount = 100000) => {
   const m0 = (await get('p-vp', `${B}/${id}/money`)).body;
   await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: m0.planned }]);
   await post('p-vp', `${B}/${id}/submit`);
-  await post('p-choir-leader', `${B}/${id}/approve`);
   const m = (await get('p-ctr', `${B}/${id}/money`)).body;
   for (const l of m.lines) await post('p-ctr', `${B}/${id}/lines/${l.id}/verify`, { verified: true });
   await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+  await post('p-choir-leader', `${B}/${id}/approve`);
   await post('p-pastor', `${B}/${id}/approve`);
   return id;
 };

@@ -118,7 +118,8 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
     REPORTS: ['R', 'W', 'P'],
   },
   VICE_PRESIDENT: {
-    PEOPLE: ['R', 'W'],
+    // Only the President and the Secretary add and change people in a unit.
+    PEOPLE: ['R'],
     PERSON_360: ['R'],
     MISSION: ['R', 'W'],
     SCHEDULING: ['R', 'W', 'C'],

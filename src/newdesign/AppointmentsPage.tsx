@@ -1,3 +1,4 @@
+import { isHiddenOfficeCard } from './retiredUnits';
 import { useMemo, useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
@@ -48,7 +49,7 @@ export function AppointmentsPage() {
     for (const v of empty) {
       if (!out.some((g) => g.key === v.unitId)) out.push({ key: v.unitId, unitName: v.unitName, unitCode: null, rows: [], vacant: empty.filter((x) => x.unitId === v.unitId) });
     }
-    return out.filter((g, i) => out.findIndex((x) => x.key === g.key) === i);
+    return out.filter((g, i) => out.findIndex((x) => x.key === g.key) === i && !isHiddenOfficeCard(g.key));
   }, [data, units]);
   const canAct = !!data && (data.list.canAppoint || data.list.canAppointLeader);
   const live = data ? data.list.appointments.filter((r) => r.live).length : 0;

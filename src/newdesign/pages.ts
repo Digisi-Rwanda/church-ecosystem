@@ -52,8 +52,6 @@ const loadMoneyPage = () => import('./MoneyPage').then((m) => ({ default: m.Mone
 export const MoneyPage = lazy(loadMoneyPage);
 const loadMoneyPlanPage = () => import('./MoneyPlanPage').then((m) => ({ default: m.MoneyPlanPage }));
 export const MoneyPlanPage = lazy(loadMoneyPlanPage);
-const loadMoneyReportsPage = () => import('./MoneyReportsPage').then((m) => ({ default: m.MoneyReportsPage }));
-export const MoneyReportsPage = lazy(loadMoneyReportsPage);
 const loadMonthPlanPage = () => import('./MonthPlanPage').then((m) => ({ default: m.MonthPlanPage }));
 export const MonthPlanPage = lazy(loadMonthPlanPage);
 const loadMovesPage = () => import('./MovesPage').then((m) => ({ default: m.MovesPage }));
@@ -80,6 +78,8 @@ const loadActivityNew = () => import('./ActivityNew').then((m) => ({ default: m.
 export const ActivityNew = lazy(loadActivityNew);
 const loadActionPlanCreate = () => import('./ActionPlanCreate').then((m) => ({ default: m.ActionPlanCreate }));
 export const ActionPlanCreate = lazy(loadActionPlanCreate);
+const loadActivitiesBoard = () => import('./ActivitiesBoard').then((m) => ({ default: m.ActivitiesBoard }));
+export const ActivitiesBoard = lazy(loadActivitiesBoard);
 const loadPlansPage = () => import('./PlansPage').then((m) => ({ default: m.PlansPage }));
 export const PlansPage = lazy(loadPlansPage);
 const loadPortalPage = () => import('./PortalPage').then((m) => ({ default: m.PortalPage }));
@@ -159,7 +159,6 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   MoneyBudgetPage: loadMoneyBudgetPage,
   MoneyPage: loadMoneyPage,
   MoneyPlanPage: loadMoneyPlanPage,
-  MoneyReportsPage: loadMoneyReportsPage,
   MonthPlanPage: loadMonthPlanPage,
   MovesPage: loadMovesPage,
   MyContributionPage: loadMyContributionPage,
@@ -174,6 +173,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   ActionPlanCreate: loadActionPlanCreate,
   ActivityNew: loadActivityNew,
   PlansPage: loadPlansPage,
+  ActivitiesBoard: loadActivitiesBoard,
   PortalPage: loadPortalPage,
   PreferencesPage: loadPreferencesPage,
   ProtocolMinePage: loadProtocolMinePage,

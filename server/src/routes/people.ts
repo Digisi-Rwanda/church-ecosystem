@@ -6,7 +6,7 @@ import { prisma } from '../lib/prisma.js';
 import { nextMemberCode, personWithNationalId, possibleDuplicates } from '../lib/codes.js';
 import { authorizePerson } from '../policy/index.js';
 import { loadAccessData } from '../notifications/feed.js';
-import { reachableSystems } from '../capabilities/engine.js';
+import { lettersInSystem, reachableSystems } from '../capabilities/engine.js';
 import { CENTRAL, isAdministrator, mayReadPeople, peopleOfSystem, subtreeUnitIds } from '../lib/peopleScope.js';
 import {
   pathParam,
@@ -338,6 +338,8 @@ const createSchema = z.object({
   photoUrl: z.string().max(40_000).optional(),
   /** Set to true after the warning about a possible duplicate has been read. */
   confirmDuplicate: z.boolean().optional(),
+  /** Added from a unit's system: the person also becomes a member of that unit, so Central sees them at once. */
+  systemId: z.string().min(1).optional(),
 });
 
 peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
@@ -346,16 +348,18 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
     res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
     return;
   }
-  const gate = await authorizePerson({
-    personId: req.auth!.personId,
-    systemId: 'sys-main',
-    resource: 'PERSON',
-    action: 'MANAGE',
-  });
-  if (!gate.allowed) {
+  // The Church Leader may always register people. So may anyone whose office carries the People Write letter
+  // in the system they add from (the Church Secretary in Central Administration, a President in their unit).
+  const me = req.auth!.personId;
+  const from = parsed.data.systemId ?? CENTRAL;
+  const gate = await authorizePerson({ personId: me, systemId: 'sys-main', resource: 'PERSON', action: 'MANAGE' });
+  const { data: access } = await loadAccessData(me);
+  const byOffice = lettersInSystem(me, from, access).PEOPLE.includes('W');
+  if (!gate.allowed && !byOffice) {
     res.status(403).json({ error: gate.reason });
     return;
   }
+  const home = from === CENTRAL ? null : ((await prisma.churchSystem.findUnique({ where: { id: from } })) as { orgUnitId?: string | null } | null)?.orgUnitId ?? null;
   const id = parsed.data.id ?? `p-${crypto.randomUUID().slice(0, 8)}`;
   if (await prisma.person.findUnique({ where: { id } })) {
     res.status(409).json({ error: 'A person with this id already exists' });
@@ -395,6 +399,9 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
       photoUrl: parsed.data.photoUrl,
     },
   });
+  if (home) {
+    await prisma.membership.create({ data: { id: `mem-${crypto.randomUUID().slice(0, 8)}`, personId: person.id, type: 'MEMBER', label: 'Member', orgUnitId: home, systemId: from, status: 'ACTIVE', startDate: new Date() } });
+  }
   await prisma.auditEvent.create({
     data: {
       actorId: req.auth!.personId,

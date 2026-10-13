@@ -174,3 +174,21 @@ describe('units and memberships', () => {
     expect(r.body.membership.status).toBe('ACTIVE');
   });
 });
+
+describe('who may register a person', () => {
+  it('a Church Secretary registers in Central; a unit President registers and the person joins the unit', async () => {
+    db().person.push({ id: 'p-chsec', fullName: 'Church Secretary', status: 'ACTIVE' });
+    db().position.push({ id: 'pos-chsec', personId: 'p-chsec', systemId: 'sys-main', title: 'Church Secretary', office: 'CHURCH_SECRETARY', status: 'ACTIVE', startDate: new Date('2022-01-01') });
+    db().orgUnit.push({ id: 'ou-choir', name: 'Choir', code: 'KAC-MUS-CHO', kind: 'MINISTRY', type: 'MINISTRY', systemId: 'sys-choir' });
+    for (const x of db().churchSystem) if (x.id === 'sys-choir') x.orgUnitId = 'ou-choir';
+    const sec = await as('p-chsec').post('/api/people', { fullName: 'Nadine Uwera' });
+    expect(sec.status, JSON.stringify(sec.body)).toBe(201);
+    expect((await as('p-member').post('/api/people', { fullName: 'Not Allowed' })).status).toBe(403);
+    const pres = await as('p-choir-leader').post('/api/people', { fullName: 'Jean Claude Habimana', systemId: 'sys-choir' });
+    expect(pres.status, JSON.stringify(pres.body)).toBe(201);
+    expect(db().membership.some((m) => m.personId === pres.body.person.id && m.orgUnitId === 'ou-choir' && m.status === 'ACTIVE')).toBe(true);
+    expect((await as('p-choir-leader').post('/api/people', { fullName: 'Wrong Place', systemId: 'sys-youth' })).status).toBe(403);
+    const central = await as('p-pastor').get(`/api/people?systemId=sys-main&q=Habimana`);
+    expect(central.body.people.map((p: any) => p.fullName)).toContain('Jean Claude Habimana');
+  });
+});

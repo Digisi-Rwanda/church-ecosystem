@@ -1,7 +1,7 @@
 import { ImportLink } from './imports/ImportLink';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { createChoir, fetchChoirs, setChoirActive, type ChoirRole } from '../api/frontDoorApi';
+import { createChoir, deleteChoir, editChoir, fetchChoirs, setChoirActive, type ChoirRole } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
@@ -22,6 +22,8 @@ export function ChoirsPage() {
   const [name, setName] = useState('');
   const [role, setRole] = useState<ChoirRole>('PRIMARY');
   const [error, setError] = useState('');
+  const [editing, setEditing] = useState<string | null>(null);
+  const [deleting, setDeleting] = useState<string | null>(null);
   const run = async (job: () => Promise<void>, after?: () => void) => {
     setError('');
     try {
@@ -79,10 +81,35 @@ export function ChoirsPage() {
                     {!c.active && <span className="door-chip">{t('door.music.retired')}</span>}
                   </div>
                   <p className="muted">{t(`door.music.role.${c.role}` as 'door.music.role.PRIMARY')} · {t('door.music.members', { count: String(c.members) })}</p>
-                  {list.data?.canManage && (
-                    <button type="button" className="btn ghost" onClick={() => void run(() => setChoirActive(c.id, !c.active))}>
-                      {c.active ? t('door.music.retire') : t('door.music.restore')}
-                    </button>
+                  {list.data?.canManage && editing === c.id && (
+                    <form className="door-form" noValidate onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return setError(t('door.caring.err.input')); void run(() => editChoir(c.id, { name: name.trim(), role }), () => setEditing(null)); }}>
+                      <TextField label={t('door.music.choirs.name')} name={`ce-${c.id}`} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
+                      <SelectField label={t('door.music.choirs.role')} name={`cr-${c.id}`} value={role} onChange={(e) => setRole(e.target.value as ChoirRole)}>
+                        {ROLES.map((r) => <option key={r} value={r}>{t(`door.music.role.${r}` as 'door.music.role.PRIMARY')}</option>)}
+                      </SelectField>
+                      <div className="door-row">
+                        <button type="submit" className="btn sm">{t('door.work.form.save')}</button>
+                        <button type="button" className="btn ghost sm" onClick={() => setEditing(null)}>{t('door.settings.cancel')}</button>
+                      </div>
+                    </form>
+                  )}
+                  {list.data?.canManage && editing !== c.id && deleting !== c.id && (
+                    <div className="door-row">
+                      <button type="button" className="btn ghost sm" onClick={() => { setName(c.name); setRole(c.role); setEditing(c.id); }}>{t('door.music.choirs.edit')}</button>
+                      <button type="button" className="btn ghost sm" onClick={() => void run(() => setChoirActive(c.id, !c.active))}>
+                        {c.active ? t('door.music.retire') : t('door.music.restore')}
+                      </button>
+                      <button type="button" className="btn ghost sm" onClick={() => setDeleting(c.id)}>{t('door.music.choirs.delete')}</button>
+                    </div>
+                  )}
+                  {list.data?.canManage && deleting === c.id && (
+                    <div className="door-form" role="alert">
+                      <p>{t('door.music.choirs.deleteAsk', { name: c.name })}</p>
+                      <div className="door-row">
+                        <button type="button" className="btn sm" onClick={() => void run(() => deleteChoir(c.id), () => setDeleting(null))}>{t('door.music.choirs.deleteYes')}</button>
+                        <button type="button" className="btn ghost sm" onClick={() => setDeleting(null)}>{t('door.settings.cancel')}</button>
+                      </div>
+                    </div>
                   )}
                 </div>
               </li>

@@ -86,3 +86,24 @@ export function activitiesByDay(items: ScheduleActivity[]): Array<{ day: string;
   return [...days.entries()].sort(([x], [y]) => x.localeCompare(y)).map(([day, list]) => ({ day, items: list }));
 }
 
+
+const nextDay = (d: string): string => new Date(new Date(`${d}T12:00:00Z`).getTime() + 86400000).toISOString().slice(0, 10);
+
+/**
+ * A long activity is listed once, not once for every day it runs: all-day entries that follow each other become
+ * one "ongoing" span (first day to last day); anything with a time, or that skips a day, stays on its own days.
+ */
+export function splitActivities(items: ScheduleActivity[]): { ongoing: Array<{ activity: ScheduleActivity; from: string; to: string }>; days: ScheduleActivity[] } {
+  const byPlan = new Map<string, ScheduleActivity[]>();
+  for (const a of items) byPlan.set(a.planId, [...(byPlan.get(a.planId) ?? []), a]);
+  const ongoing: Array<{ activity: ScheduleActivity; from: string; to: string }> = [];
+  const days: ScheduleActivity[] = [];
+  for (const list of byPlan.values()) {
+    const sorted = [...list].sort((x, y) => x.date.localeCompare(y.date));
+    const run = sorted.length > 1 && sorted.every((a) => !a.startTime) && sorted.every((a, i) => i === 0 || a.date === nextDay(sorted[i - 1]!.date));
+    if (run) ongoing.push({ activity: sorted[0]!, from: sorted[0]!.date, to: sorted[sorted.length - 1]!.date });
+    else days.push(...sorted);
+  }
+  ongoing.sort((x, y) => x.from.localeCompare(y.from) || x.activity.title.localeCompare(y.activity.title));
+  return { ongoing, days };
+}
