@@ -10,6 +10,7 @@ import {
   rolesFromPositions,
 } from './participation.js';
 import { grantMatches, isTaskActive } from './permissions.js';
+import { isChoirSystem } from '../lib/ministryOrgs.js';
 import type {
   Assignment,
   AuthzDecision,
@@ -294,10 +295,10 @@ export function buildEffectiveAccess(
     }
     if (m.systemId) {
       grantMemberBaseline(grants, m.systemId, m.label);
-      if (m.systemId === 'sys-choir') {
+      if (isChoirSystem(m.systemId)) {
         for (const spec of CHOIR_MEMBERSHIP_GRANTS) {
           pushGrant(grants, {
-            systemId: 'sys-choir',
+            systemId: m.systemId,
             resource: spec.resource,
             action: spec.action,
             source: 'MEMBERSHIP',
@@ -457,7 +458,7 @@ export function buildEffectiveAccess(
         });
       }
 
-      const choirScoped = p.systemId === 'sys-choir' && p.choirOffice;
+      const choirScoped = isChoirSystem(p.systemId) && p.choirOffice;
       const office =
         p.ministryOffice ??
         p.choirOffice ??
@@ -573,7 +574,7 @@ export function buildEffectiveAccess(
     // Choir leadership is granted only via choirOffice matrix (choirAccess.ts).
     // Ministry heads are identified by their office in that system, never by a main-church role.
 
-    if (p.systemId === 'sys-choir' && p.choirOffice) {
+    if (isChoirSystem(p.systemId) && p.choirOffice) {
       const office = p.choirOffice as ChoirOffice;
       const reason =
         office === 'ADVISOR' && p.choirAdvisorRole
@@ -584,7 +585,7 @@ export function buildEffectiveAccess(
       if (officeGrants) {
         for (const spec of officeGrants) {
           pushGrant(grants, {
-            systemId: 'sys-choir',
+            systemId: p.systemId as string,
             resource: spec.resource,
             action: spec.action,
             source: 'POSITION',
@@ -979,9 +980,9 @@ export function buildEffectiveAccess(
       source: 'ASSIGNMENT',
       reason: `${a.title} · ${a.contextLabel}`,
     });
-    if (a.systemId === 'sys-choir') {
+    if (isChoirSystem(a.systemId)) {
       pushGrant(grants, {
-        systemId: 'sys-choir',
+        systemId: a.systemId,
         resource: 'CHOIR_ROSTER',
         action: 'UPDATE',
         source: 'ASSIGNMENT',

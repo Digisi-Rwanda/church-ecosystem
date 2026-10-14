@@ -11,6 +11,7 @@
  */
 import type { PrismaClient } from '@prisma/client';
 import { seedDemoContent } from './seedDemoContent.js';
+import { choirSystemId } from '../src/lib/ministryOrgs.js';
 
 const DAY = 24 * 3600 * 1000;
 const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
@@ -50,10 +51,12 @@ export async function seedSchedulingDemo(db: Db): Promise<{ choirs: number; memb
     const have = existing.find((e) => e.name.toLowerCase() === name.toLowerCase());
     if (have) {
       choirIdOf.set(c.orgId, have.id);
+      // A choir filed under the old single Choir system moves into its own.
+      await db.musicChoir.update({ where: { id: have.id }, data: { systemId: choirSystemId(c.orgId) } } as never);
       continue;
     }
     const id = `demo-choir-${c.orgId}`;
-    if (await ensure(db.musicChoir as never, id, { name, role: c.role, systemId: 'sys-choir', orgUnitId: nameOf.has(c.orgId) ? c.orgId : null, active: true, createdById: 'p-music-leader' })) out.choirs++;
+    if (await ensure(db.musicChoir as never, id, { name, role: c.role, systemId: choirSystemId(c.orgId), orgUnitId: nameOf.has(c.orgId) ? c.orgId : null, active: true, createdById: 'p-music-leader' })) out.choirs++;
     choirIdOf.set(c.orgId, id);
   }
   const memberships = (await db.membership.findMany()) as Array<{ id: string; personId: string; type: string; orgUnitId?: string | null; status: string }>;

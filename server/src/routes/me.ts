@@ -1,6 +1,7 @@
 import { canConfirmMove, isMoveSystem } from '../moves/rules.js';
 import { COUPLES, ELDERLY, INTERCESSORS } from '../caring/rules.js';
 import { MUSIC } from '../music/rules.js';
+import { isChoirSystem } from '../lib/ministryOrgs.js';
 import { EVANGELISM } from '../evangelism/rules.js';
 import { KIND_BY_SYSTEM } from '../groups/rules.js';
 import { Router } from 'express';
@@ -116,12 +117,12 @@ function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, ho
   // Collections: the Church Treasurer records them and the Church Leader reads them; nobody else sees the page.
   if (systemId === 'sys-main' && holdings.some((h) => h.via === 'OFFICE' && h.scope === 'CHURCH' && (h.office === 'CHURCH_TREASURER' || h.office === 'CHURCH_LEADER'))) own.push({ key: 'collections', letters: holdings.some((h) => h.office === 'CHURCH_TREASURER') ? ['R', 'W'] : ['R'] });
   if (systemId === MUSIC && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'monthplan', letters: modules.SCHEDULING });
-  if ((systemId === MUSIC || systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'choirs', letters: modules.PEOPLE });
-  if ((systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) {
+  if ((systemId === MUSIC || isChoirSystem(systemId) || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'choirs', letters: modules.PEOPLE });
+  if ((isChoirSystem(systemId) || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) {
     own.push({ key: 'rehearsals', letters: modules.PEOPLE });
     own.push({ key: 'sponsorship', letters: modules.PEOPLE });
   }
-  if ((systemId === 'sys-choir' || systemId === 'sys-worship') && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'repertoire', letters: modules.SCHEDULING });
+  if ((isChoirSystem(systemId) || systemId === 'sys-worship') && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'repertoire', letters: modules.SCHEDULING });
   if (systemId === MUSIC && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'oversight', letters: modules.PEOPLE });
   if (systemId === 'sys-protocol') {
     if ((modules.PEOPLE ?? []).length > 0) own.push({ key: 'roster', letters: modules.PEOPLE }, { key: 'teams', letters: modules.SCHEDULING ?? ['R'] });

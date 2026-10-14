@@ -49,12 +49,15 @@ describe('Music and Choir are different systems', () => {
     const inMusic = await get('p-pastor', '/api/music/choirs?systemId=sys-music');
     expect(inMusic.body.choirs).toHaveLength(2);
     expect(inMusic.body.canManage).toBe(true);
-    const inChoir = await get('p-pastor', '/api/music/choirs?systemId=sys-choir');
+    expect(fake.__db.churchSystem.some((s: any) => s.id === 'sys-choir-elim')).toBe(true); // each choir is a system of its own
+    expect(fake.__db.orgUnit.find((u: any) => u.id === 'ou-choir-elim')).toMatchObject({ systemId: 'sys-choir-elim', type: 'TEAM' });
+    expect((await get('p-pastor', '/api/music/choirs?systemId=sys-choir')).body.choirs).toEqual([]); // the umbrella holds none itself
+    const inChoir = await get('p-pastor', '/api/music/choirs?systemId=sys-choir-elim');
     expect(inChoir.body.choirs.map((c: any) => c.name)).toEqual(['Elim']);
     expect(inChoir.body.canManage).toBe(false);
     const inWorship = await get('p-pastor', '/api/music/choirs?systemId=sys-worship');
     expect(inWorship.body.choirs.map((c: any) => c.name)).toEqual(['Praise team']);
-    const picks = await get('p-pastor', '/api/choir/choirs?systemId=sys-choir');
+    const picks = await get('p-pastor', '/api/choir/choirs?systemId=sys-choir-elim');
     expect(picks.body.choirs.map((c: any) => c.name)).toEqual(['Elim']);
   });
 });
@@ -82,6 +85,8 @@ describe('choirs and the register', () => {
   it("a choir's own leader manages its register and sees only their choirs", async () => {
     const id = await choir('Elim');
     const worship = await choir('Praise', 'WORSHIP');
+    // Elim is a system of its own: its President is the one who manages its register.
+    fake.__db.position.push({ id: 'pos-elim', personId: 'p-choir-leader', systemId: 'sys-choir-elim', title: 'Choir President', ministryOffice: 'PRESIDENT', grantsAllSystems: false, status: 'ACTIVE', startDate: new Date('2021-01-01') });
     const list = (await get('p-choir-leader', '/api/music/choirs')).body;
     expect(list.choirs.map((c: any) => c.name)).toEqual(['Elim']);
     expect(list.canManage).toBe(false);

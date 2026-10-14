@@ -40,7 +40,7 @@ export const parse = <T>(json: string | null | undefined, fallback: T): T => {
 export function unitsFrom(choirs: Array<{ id: string; name: string; role: string; active: boolean; systemId?: string | null }>): MusicScheduleUnit[] {
   return choirs.map((c) => ({
     id: c.id, kind: c.role as MusicScheduleUnit['kind'], name: c.name, active: c.active,
-    systemId: (c.systemId === 'sys-worship' ? 'sys-worship' : 'sys-choir') as 'sys-choir' | 'sys-worship',
+    systemId: c.systemId || 'sys-choir',
   }));
 }
 

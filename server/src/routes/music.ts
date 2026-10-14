@@ -8,6 +8,7 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { getPlanned } from '../music/store.js';
+import { createChoirSystem } from '../music/choirSystem.js';
 import { MUSIC, NAME_MAX, ROLES, canManageChoirs, canOversee, canReadChoir, canWriteChoir, isMonth } from '../music/rules.js';
 
 export const musicRouter = Router();
@@ -58,15 +59,17 @@ musicRouter.get('/choirs', requireAuth, async (req: AuthedRequest, res) => {
 
 musicRouter.post('/choirs', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const parsed = z.object({ name: z.string().trim().min(1).max(NAME_MAX), role: z.enum(ROLES), systemId: z.enum(['sys-choir', 'sys-worship']).nullish() }).safeParse(req.body);
+  const parsed = z.object({ name: z.string().trim().min(1).max(NAME_MAX), role: z.enum(ROLES), systemId: z.string().min(1).nullish() }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the choir');
   const b = parsed.data;
   const data = await accessOf(me);
   const target = b.systemId ?? (b.role === 'WORSHIP' ? 'sys-worship' : 'sys-choir');
   if (!canManageChoirs(me, data) && !canWriteChoir(me, target, data)) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
   if ((await choirs()).some((c) => c.active && c.name.toLowerCase() === b.name.toLowerCase())) return fail(res, 409, 'ALREADY_EXISTS', 'A choir with this name exists');
+  // A choir is a system of its own; Worship teams stay in the Worship system.
+  const own = target === 'sys-worship' ? null : await createChoirSystem(b.name);
   const row = (await prisma.musicChoir.create({
-    data: { name: b.name, role: b.role, systemId: b.systemId ?? (b.role === 'WORSHIP' ? 'sys-worship' : 'sys-choir'), active: true, createdById: me },
+    data: { name: b.name, role: b.role, systemId: own?.systemId ?? target, ...(own ? { orgUnitId: own.orgUnitId } : {}), active: true, createdById: me },
   })) as ChoirRow;
   await audit(me, 'PEOPLE', 'CHOIR_ADDED', `Added choir “${b.name}”`, { choirId: row.id });
   res.status(201).json({ id: row.id });

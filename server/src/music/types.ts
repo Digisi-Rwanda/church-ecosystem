@@ -27,7 +27,7 @@ export interface MusicScheduleUnit {
   name: string;
   /** Choir org unit when applicable. */
   orgUnitId?: string;
-  systemId?: 'sys-choir' | 'sys-worship';
+  systemId?: string;
   /** false = retired: kept for history, never scheduled. Missing = active. */
   active?: boolean;
 }

@@ -5,7 +5,7 @@ import { PrismaClient } from '@prisma/client';
 import { backfillCodes } from '../src/lib/codes.js';
 import { backfillStructure } from '../src/lib/offices.js';
 import { seedDemoFlows } from './seedDemoFlows.js';
-import { MINISTRY_KIT_ORGS, SPECIAL_MINISTRY_ORGS, CHOIR_ORGS, CHOIR_PARENT_ORG } from '../src/lib/ministryOrgs.js';
+import { MINISTRY_KIT_ORGS, SPECIAL_MINISTRY_ORGS, CHOIR_ORGS, CHOIR_PARENT_ORG, choirSystemId } from '../src/lib/ministryOrgs.js';
 
 const prisma = new PrismaClient();
 
@@ -26,7 +26,7 @@ const SYSTEMS = [
     shortName: 'Choir',
     kind: 'MINISTRY',
     basePath: '/systems/choir',
-    description: 'Seven named choirs under one peer system',
+    description: 'The Choir Ministry: umbrella over the choirs, each of which is a system of its own',
   },
   {
     id: 'sys-worship',
@@ -375,17 +375,20 @@ async function main() {
   // the church (the Protocol import with --create-choirs, or Music's lineup).
   const seedChoirs = process.env.NODE_ENV !== 'production' || process.env.SEED_DEFAULT_CHOIRS === 'true';
   for (const choir of seedChoirs ? CHOIR_ORGS : []) {
-    await prisma.orgUnit.upsert({
-      where: { id: choir.orgId },
-      create: {
-        id: choir.orgId,
-        name: choir.name,
-        type: 'TEAM',
-        parentId: ouChoirParent.id,
-        systemId: 'sys-choir',
-      },
-      update: { name: choir.name },
+    // Every choir is a system of its own, with its own unit under the Choir Ministry.
+    const systemId = choirSystemId(choir.orgId);
+    const slug = choir.orgId.replace(/^ou-choir-/, '');
+    const place = { name: choir.name, type: 'TEAM', kind: 'TEAM', parentId: ouChoirParent.id, systemId };
+    await prisma.orgUnit.upsert({ where: { id: choir.orgId }, create: { id: choir.orgId, ...place }, update: place });
+    await prisma.churchSystem.upsert({
+      where: { id: systemId },
+      create: { id: systemId, code: choir.code, name: choir.name, shortName: choir.name, kind: 'MINISTRY', basePath: `/systems/choir/${slug}`, description: 'A choir with its own system', orgUnitId: choir.orgId },
+      update: { name: choir.name, shortName: choir.name, orgUnitId: choir.orgId },
     });
+    // Reseeding moves what was already filed under the old single Choir system into the choir's own system.
+    await prisma.position.updateMany({ where: { orgUnitId: choir.orgId }, data: { systemId } });
+    await prisma.membership.updateMany({ where: { orgUnitId: choir.orgId }, data: { systemId } });
+    await prisma.musicChoir.updateMany({ where: { orgUnitId: choir.orgId }, data: { systemId } });
   }
 
   // Temporary ENTER for policy smoke + assignment API demos.
@@ -482,6 +485,8 @@ async function main() {
     ) as { orgUnits: R[]; people: R[]; memberships: R[]; positions: R[] };
     const systems = new Set((await prisma.churchSystem.findMany({ select: { id: true } })).map((x) => x.id));
     const day = (v?: string) => (v ? new Date(v) : undefined);
+    // The roster was written when all choirs shared one system: a choir unit's people now belong to that choir's own system.
+    const sysOf = (r: R): string | null => (r.systemId === 'sys-choir' && typeof r.orgUnitId === 'string' && r.orgUnitId.startsWith('ou-choir-') ? choirSystemId(r.orgUnitId) : r.systemId ?? null);
 
     // Parents before children.
     const placed = new Set((await prisma.orgUnit.findMany({ select: { id: true } })).map((x) => x.id));
@@ -513,16 +518,17 @@ async function main() {
 
     let memAdded = 0;
     for (const m of roster.memberships) {
-      if (m.systemId && !systems.has(m.systemId)) continue;
+      const msys = sysOf(m);
+      if (msys && !systems.has(msys)) continue;
       if (m.orgUnitId && !placed.has(m.orgUnitId)) continue;
       const dup = await prisma.membership.findFirst({
-        where: { OR: [{ id: m.id }, { personId: m.personId, systemId: m.systemId ?? null, type: m.type, orgUnitId: m.orgUnitId ?? null }] },
+        where: { OR: [{ id: m.id }, { personId: m.personId, systemId: msys, type: m.type, orgUnitId: m.orgUnitId ?? null }] },
       });
       if (dup) continue;
       await prisma.membership.create({
         data: {
           id: m.id, personId: m.personId, type: m.type, label: m.label,
-          systemId: m.systemId ?? null, orgUnitId: m.orgUnitId ?? null,
+          systemId: msys, orgUnitId: m.orgUnitId ?? null,
           status: m.status, startDate: day(m.startDate) ?? new Date(), endDate: day(m.endDate),
         },
       });
@@ -531,16 +537,17 @@ async function main() {
 
     let posAdded = 0;
     for (const p of roster.positions) {
-      if (p.systemId && !systems.has(p.systemId)) continue;
+      const psys = sysOf(p);
+      if (psys && !systems.has(psys)) continue;
       if (p.orgUnitId && !placed.has(p.orgUnitId)) continue;
       const dup = await prisma.position.findFirst({
-        where: { OR: [{ id: p.id }, { personId: p.personId, systemId: p.systemId ?? null, title: p.title, status: 'ACTIVE' }] },
+        where: { OR: [{ id: p.id }, { personId: p.personId, systemId: psys, title: p.title, status: 'ACTIVE' }] },
       });
       if (dup) continue;
       await prisma.position.create({
         data: {
           id: p.id, personId: p.personId, title: p.title,
-          systemId: p.systemId ?? null, orgUnitId: p.orgUnitId ?? null,
+          systemId: psys, orgUnitId: p.orgUnitId ?? null,
           systemRole: p.systemRole, ministryOffice: p.ministryOffice, choirOffice: p.choirOffice,
           choirAdvisorRole: p.choirAdvisorRole, worshipOffice: p.worshipOffice,
           protocolOffice: p.protocolOffice, deaconOffice: p.deaconOffice,

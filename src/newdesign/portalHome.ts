@@ -9,7 +9,7 @@ export type SystemKind = 'central' | 'organisation' | 'ministry';
 const ORGANISATIONS = new Set(['sys-choir', 'sys-protocol', 'sys-media']);
 export function kindOfSystem(id: string): SystemKind {
   if (id === CHURCH_SYSTEM) return 'central';
-  return ORGANISATIONS.has(id) ? 'organisation' : 'ministry';
+  return ORGANISATIONS.has(id) || id.startsWith('sys-choir-') ? 'organisation' : 'ministry';
 }
 
 /** Systems that are never opened on their own (Finance becomes a module inside every system). */
