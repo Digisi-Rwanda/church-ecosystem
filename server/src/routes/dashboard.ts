@@ -200,10 +200,6 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const toCheck = visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL' && currentLevel(p as never)?.levelKey === 'TREASURER' && canApprovePlan(p as never, me, data));
   if (toCheck.length > 0) attention.push({ key: 'moneyCheck', count: toCheck.length, href: `/s/${systemId}/money/funds` });
   if (canDecideForChurch(me, data)) {
-    const thisM = churchDay(new Date()).slice(0, 7);
-    const renewed = new Set(((await prisma.planRenewal.findMany()) as Array<{ planId: string; month: string }>).filter((r) => r.month === thisM).map((r) => r.planId));
-    const open = visiblePlans.filter((p) => ['SETUP', 'RUNNING', 'PAUSED'].includes(p.status) && isOngoing(p as never) && !renewed.has(p.id));
-    if (open.length > 0) attention.push({ key: 'renewals', count: open.length, href: `/s/${systemId}/work/plans` });
     const transfers = ((await prisma.budgetAmendment.findMany()) as Array<{ kind: string; status: string; reviewedAt: Date | string | null }>).filter((a) => a.kind === 'TRANSFER' && a.status === 'APPROVED' && !a.reviewedAt).length;
     if (transfers > 0) attention.push({ key: 'transfers', count: transfers, href: `/s/${systemId}/money/funds` });
   }

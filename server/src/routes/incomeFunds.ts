@@ -38,8 +38,8 @@ export async function ownTypes(systemId: string): Promise<Array<{ code: string; 
   return (await types(systemId)).filter((t) => !wide.has(t.code)).map((t) => ({ code: t.code, name: t.name }));
 }
 
-/** Activities whose earmarks still hold money: everything not cancelled or deleted. (An ended activity returns its unspent money at settlement.) */
-const HOLDING = (p: PlanLite) => !p.deletedAt && p.status !== 'CANCELLED';
+/** Activities whose earmarks still hold money: everything submitted and not cancelled or deleted (a draft holds nothing; it is checked again at Submit). (An ended activity returns its unspent money at settlement.) */
+const HOLDING = (p: PlanLite) => !p.deletedAt && p.status !== 'CANCELLED' && p.status !== 'DRAFT';
 
 /** Every pot of a unit with its figures. `exceptPlanId` leaves one activity's own earmark out, to check a new list against the rest. */
 export async function potsOf(systemId: string, exceptPlanId?: string): Promise<Pot[]> {
@@ -89,6 +89,23 @@ const shape = (r: IncomeRow, who: Map<string, string>) => ({
   expectedOn: iso(r.expectedOn)?.slice(0, 10) ?? null, receivedOn: iso(r.receivedOn)?.slice(0, 10) ?? null, recordedByName: who.get(r.recordedById) ?? '',
 });
 
+/** What activities have spent against their earmarks (never more than the earmark), and money that is in but not yet approved. */
+async function spentAndAwaiting(systemId: string): Promise<{ spent: number; awaiting: number }> {
+  const plans = new Map(((await prisma.workPlan.findMany({ where: { systemId } })) as PlanLite[]).map((p) => [p.id, p]));
+  const earmark = new Map<string, number>();
+  for (const s of (await prisma.planSource.findMany({ where: { systemId } })) as SourceRow[]) if (plans.has(s.planId) && HOLDING(plans.get(s.planId)!)) earmark.set(s.planId, (earmark.get(s.planId) ?? 0) + s.amount);
+  const used = new Map<string, number>();
+  for (const e of (await prisma.moneyEntry.findMany({ where: { systemId } })) as Array<{ planId?: string | null; kind: string; status: string; amount: number }>)
+    if (e.planId && e.kind === 'SPENDING' && e.status === 'APPROVED') used.set(e.planId, (used.get(e.planId) ?? 0) + e.amount);
+  let spent = 0;
+  for (const [id, n] of used) spent += Math.min(n, earmark.get(id) ?? 0);
+  const sums = new Map<string, number>();
+  for (const l of (await prisma.contributionLine.findMany()) as LineRow[]) sums.set(l.listId, (sums.get(l.listId) ?? 0) + l.amount);
+  const lists = ((await prisma.contributionList.findMany({ where: { systemId } })) as ListRow[]).filter((l) => l.systemId === systemId && l.level === 'UNIT' && l.status === 'SUBMITTED');
+  const donations = ((await prisma.donation.findMany({ where: { systemId } })) as DonRow[]).filter((d) => d.systemId === systemId && d.status === 'PENDING');
+  return { spent, awaiting: lists.reduce((n, l) => n + (sums.get(l.id) ?? 0), 0) + donations.reduce((n, d) => n + d.amount, 0) };
+}
+
 fundsRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const systemId = String(req.query.systemId ?? '');
   if (!systemId) return fail(res, 400, 'BAD_INPUT', 'systemId is required');
@@ -102,9 +119,12 @@ fundsRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const who = new Map(people.map((p) => [p.id, p.fullName]));
   const pots = await potsOf(systemId);
   const pool = pots.find((p) => p.id === potId('OTHER', POOL_CODE));
+  const totals = pots.reduce((a, p) => ({ secured: a.secured + p.secured, pledged: a.pledged + p.pledged, earmarked: a.earmarked + p.earmarked, available: a.available + p.available }), { secured: 0, pledged: 0, earmarked: 0, available: 0 });
+  const { spent, awaiting } = await spentAndAwaiting(systemId);
   res.json({
     systemId, canRecord: s.write, pots, pool: pool ? { secured: pool.secured, available: pool.available } : null,
-    totals: pots.reduce((a, p) => ({ secured: a.secured + p.secured, pledged: a.pledged + p.pledged, earmarked: a.earmarked + p.earmarked, available: a.available + p.available }), { secured: 0, pledged: 0, earmarked: 0, available: 0 }),
+    // Spent counts inside what is set aside, so secured = spent + still reserved + available.
+    totals: { ...totals, spent, reserved: Math.max(0, totals.earmarked - spent), awaiting },
     ownTypes: await ownTypes(systemId), records: rows.map((r) => shape(r, who)),
   });
 });

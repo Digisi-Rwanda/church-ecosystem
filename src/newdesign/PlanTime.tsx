@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { reviewSeen, setPlanTiming, type PlanDetail } from '../api/frontDoorApi';
+import { requestAmendment, reviewSeen, setPlanTiming, type PlanDetail } from '../api/frontDoorApi';
 import { TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { WhenFields } from './WhenFields';
@@ -43,12 +43,22 @@ export function TimePanel({ p, run }: { p: PlanDetail; run: Run }) {
   const [when, setWhen] = useState(() => whenOf(p));
   const [place, setPlace] = useState(p.location ?? '');
   const [error, setError] = useState('');
+  const [why, setWhy] = useState('');
+  const [sent, setSent] = useState(false);
+  const approved = p.state === 'APPROVED';
   const changeable = p.canSetTiming && p.state !== 'DRAFT';
   const start = () => { setWhen(whenOf(p)); setPlace(p.location ?? ''); setError(''); setOpen(true); };
   const save = () => {
     const bad = whenProblem(when, { needDate: true });
     if (bad) return setError(t(planErrorKey(bad) as 'door.people.actionFailed'));
     if (!whenChanged(when, whenOf(p)) && place.trim() === (p.location ?? '')) return setOpen(false);
+    if (approved) {
+      // Once approved, a change of when or where is an amendment: the President, the Catechist and the Church Leader each look at it.
+      if (!why.trim()) return setError(t('door.when.whyNeeded'));
+      const w = whenToInput(when);
+      void run(async () => { await requestAmendment(p.id, { justification: why.trim(), changes: { timingKind: w.timingKind, startsOn: w.startsOn ?? null, endsOn: w.endsOn ?? null, startTime: w.startTime ?? null, endTime: w.endTime ?? null, repeat: w.repeat ?? null, location: place.trim() || null } as never }); }, () => { setOpen(false); setSent(true); setWhy(''); });
+      return;
+    }
     void run(() => setPlanTiming(p.id, { ...whenToInput(when), location: place.trim() || null }), () => setOpen(false));
   };
   return (
@@ -56,12 +66,14 @@ export function TimePanel({ p, run }: { p: PlanDetail; run: Run }) {
       <h3>{t('door.when.title')}</h3>
       <p>{whenSummary(p, t, locale)}</p>
       {p.location && <p><strong>{t('door.plan.place')}:</strong> {p.location}</p>}
+      {sent && <p className="muted" role="status">{t('door.when.amendSent')}</p>}
       {changeable && !open && <button type="button" className="btn secondary sm" onClick={start}>{t('door.when.change')}</button>}
       {changeable && open && (
         <div className="door-form">
           <WhenFields value={when} onChange={setWhen} idPrefix="t-when" />
           <TextField label={t('door.plan.form.location')} name="t-place" value={place} maxLength={160} onChange={(e) => setPlace(e.target.value)} />
-          <p className="muted">{t('door.when.notice')}</p>
+          <p className="muted">{t(approved ? 'door.when.amendNotice' : 'door.when.notice')}</p>
+          {approved && <TextField label={t('door.pm.amend.why')} name="t-why" value={why} onChange={(e) => setWhy(e.target.value)} />}
           {error && <p className="door-error" role="alert">{error}</p>}
           <div className="door-row">
             <button type="button" className="btn" onClick={save}>{t('door.when.save')}</button>

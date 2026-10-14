@@ -83,7 +83,9 @@ const ERROR_KEYS: Record<string, string> = {
   ONGOING_NEEDS_PROGRAM: 'door.pm.err.ongoing',
   AMENDMENT_OPEN: 'door.pm.err.amendOpen',
   NO_CHANGE: 'door.pm.err.noChange',
-  ALREADY_RENEWED: 'door.pm.err.renewed',
+  NO_PREVIOUS: 'door.plan.err.noPrevious',
+  USE_AMENDMENT: 'door.plan.err.useAmendment',
+  BAD_LINE: 'door.money.err.badLine',
   FORBIDDEN: 'door.gov.err.notAllowed',
   NOT_FOUND: 'door.work.err.gone',
 };

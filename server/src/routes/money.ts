@@ -2,6 +2,7 @@
  * Money (slice 3.4): accounts per unit, income recorded by the treasurer, spending that waits for
  * the president's approval, and a read-only oversight view. Nothing is ever deleted; no limits.
  */
+import { multiplierOf } from '../money/cycles.js';
 import { flagOverspend } from './planMoney.js';
 import { Router } from 'express';
 import { z } from 'zod';
@@ -22,7 +23,7 @@ const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v
 interface Account { id: string; orgUnitId: string; systemId: string; name: string; status: string }
 interface Entry {
   id: string; accountId: string; orgUnitId: string; systemId: string; kind: string; amount: number; occurredOn: Date | string; category: string;
-  note?: string | null; status: string; recordedById: string; recordedAt: Date | string; decidedById?: string | null; decidedAt?: Date | string | null; decisionNote?: string | null; planId?: string | null;
+  note?: string | null; status: string; recordedById: string; recordedAt: Date | string; decidedById?: string | null; decidedAt?: Date | string | null; decisionNote?: string | null; planId?: string | null; lineId?: string | null;
 }
 interface UnitRow { id: string; name: string; systemId?: string | null }
 
@@ -116,7 +117,7 @@ moneyRouter.post('/accounts/:id/close', requireAuth, async (req: AuthedRequest, 
 
 function shapeEntry(e: Entry, who: Map<string, string>, me: string, c: Ctx, accName: string, plans: Map<string, string>) {
   return {
-    planId: e.planId ?? null, planTitle: e.planId ? plans.get(e.planId) ?? '' : null,
+    lineId: e.lineId ?? null, planId: e.planId ?? null, planTitle: e.planId ? plans.get(e.planId) ?? '' : null,
     id: e.id, accountId: e.accountId, accountName: accName, kind: e.kind, amount: e.amount, occurredOn: iso(e.occurredOn)!.slice(0, 10),
     category: e.category, note: e.note ?? '', status: e.status, recordedByName: who.get(e.recordedById) ?? '', recordedAt: iso(e.recordedAt),
     decidedByName: e.decidedById ? who.get(e.decidedById) ?? '' : null, decisionNote: e.decisionNote ?? null,
@@ -149,7 +150,7 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
   const parsed = z
     .object({
       accountId: z.string().min(1), kind: z.enum(KINDS), amount: z.number(), occurredOn: z.string(),
-      category: z.enum(CATEGORIES), note: z.string().trim().max(NOTE_MAX).nullish(), planId: z.string().min(1).nullish(),
+      category: z.enum(CATEGORIES), note: z.string().trim().max(NOTE_MAX).nullish(), planId: z.string().min(1).nullish(), lineId: z.string().min(1).nullish(),
     })
     .safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid entry');
@@ -166,13 +167,25 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
     if (!plan || plan.systemId !== acc.systemId) return fail(res, 400, 'BAD_PLAN', 'Choose a program, project or event of this system');
   }
   const spending = b.kind === 'SPENDING';
+  let inPlan = false;
+  if (spending && b.planId && b.lineId) {
+    const plan = (await prisma.workPlan.findUnique({ where: { id: b.planId } })) as { status: string; timingKind?: string | null; budgetCycle?: string | null } | null;
+    const line = (await prisma.moneyPlanItem.findUnique({ where: { id: b.lineId } })) as { planId: string; amount: number } | null;
+    if (!line || line.planId !== b.planId) return fail(res, 400, 'BAD_LINE', 'Choose a line of this plan');
+    const spent = ((await prisma.moneyEntry.findMany({ where: { planId: b.planId, lineId: b.lineId } })) as Entry[])
+      .filter((e) => e.kind === 'SPENDING' && e.status !== 'REJECTED' && e.status !== 'VOIDED')
+      .reduce((n, e) => n + e.amount, 0);
+    const allowed = line.amount * multiplierOf((plan ?? {}) as never);
+    inPlan = !!plan && ['RUNNING', 'PAUSED', 'CLOSING'].includes(plan.status) && spent + b.amount <= allowed;
+  }
   const row = (await prisma.moneyEntry.create({
     data: {
       accountId: acc.id, orgUnitId: acc.orgUnitId, systemId: acc.systemId, kind: b.kind, amount: b.amount, occurredOn: new Date(`${b.occurredOn}T00:00:00Z`),
-      category: b.category, note: b.note || null, status: spending ? 'PENDING_APPROVAL' : 'RECORDED', recordedById: me, planId: b.planId || null,
+      category: b.category, note: b.note || null, status: spending ? (inPlan ? 'APPROVED' : 'PENDING_APPROVAL') : 'RECORDED', recordedById: me, planId: b.planId || null, lineId: b.lineId || null,
+      ...(inPlan ? { decidedAt: new Date(), decisionNote: 'Within the plan' } : {}),
     },
   })) as Entry;
-  if (spending) {
+  if (spending && !inPlan) {
     for (const id of await approversOf(acc.systemId, me, c)) {
       await notifySafely(prisma as never, {
         kind: 'WAITING_FOR_ME', toPersonId: id, systemId: acc.systemId, title: `Spending to approve: ${b.amount.toLocaleString('en')} RWF`, body: b.note ?? b.category,
@@ -180,7 +193,7 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
       });
     }
   }
-  if (spending && b.planId) await flagOverspend(b.planId, me, { id: row.id, amount: row.amount });
+  if (spending && b.planId && !inPlan) await flagOverspend(b.planId, me, { id: row.id, amount: row.amount });
   await audit(me, acc.systemId, spending ? 'MONEY_SPENDING_REQUESTED' : 'MONEY_INCOME_RECORDED', `${b.kind} ${b.amount} RWF`, { entryId: row.id, accountId: acc.id });
   res.status(201).json({ id: row.id, status: row.status });
 });

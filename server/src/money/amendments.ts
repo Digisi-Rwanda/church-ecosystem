@@ -5,7 +5,7 @@
  */
 import { potId } from './funds.js';
 
-export interface AmendLine { id?: string | null; title: string; amount: number }
+export interface AmendLine { id?: string | null; title: string; amount: number; category?: string | null }
 export interface AmendSource { kind: string; code: string; amount: number }
 export type AmendKind = 'TRANSFER' | 'INCREASE';
 

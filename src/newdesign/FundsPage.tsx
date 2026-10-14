@@ -47,12 +47,20 @@ export function FundsPage() {
 
   const view = (d: FundsView) => (
     <>
-      <div className="door-row">
-        <StatusChip tone="success">{t('door.funds.secured')}: {formatRwf(d.totals.secured)}</StatusChip>
-        <StatusChip tone="info">{t('door.funds.earmarked')}: {formatRwf(d.totals.earmarked)}</StatusChip>
-        <StatusChip tone="success">{t('door.funds.available')}: {formatRwf(d.totals.available)}</StatusChip>
-        <StatusChip tone="warn">{t('door.funds.pledged')}: {formatRwf(d.totals.pledged)}</StatusChip>
+      <div className="stat-tiles" aria-label={t('door.funds.home')}>
+        {([['secured', d.totals.secured], ['spent', d.totals.spent], ['reserved', d.totals.reserved], ['available', d.totals.available]] as const).map(([k, v]) => (
+          <div key={k} className="stat-tile">
+            <span className="muted">{t(`door.funds.tile.${k}` as 'door.funds.tile.secured')}</span>
+            <strong>{formatRwf(v)}</strong>
+          </div>
+        ))}
       </div>
+      <div className="door-row">
+        <StatusChip tone="warn">{t('door.funds.pledged')}: {formatRwf(d.totals.pledged)}</StatusChip>
+        <StatusChip tone="info">{t('door.funds.awaiting')}: {formatRwf(d.totals.awaiting)}</StatusChip>
+        <StatusChip tone="success">{t('door.funds.secured')}: {formatRwf(d.totals.secured)}</StatusChip>
+      </div>
+      <p className="muted">{t('door.funds.homeNote')}</p>
       <div className="panel">
         <h3>{t('door.funds.pots')}</h3>
         <ul className="door-list">

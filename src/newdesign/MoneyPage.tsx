@@ -32,7 +32,14 @@ export function MoneyPage() {
   const options = useLoad(fetchMoneyOptions, 'money-options');
   const waiting = useLoad(() => fetchMoneyEntries({ systemId, status: 'PENDING_APPROVAL' }), `money-q-wait|${systemId}`);
   const declined = useLoad(() => fetchMoneyEntries({ systemId, status: 'REJECTED' }), `money-q-rej|${systemId}`);
-  const toCheck = useLoad(() => fetchMoneyEntries({ systemId, status: 'RECORDED', month: currentMonth() }), `money-q-rec|${systemId}`);
+  // Month-end check: income the treasurer recorded, and spending that went straight through because it was inside the plan.
+  const toCheck = useLoad(async () => {
+    const [recorded, approved] = await Promise.all([
+      fetchMoneyEntries({ systemId, status: 'RECORDED', month: currentMonth() }),
+      fetchMoneyEntries({ systemId, status: 'APPROVED', month: currentMonth() }),
+    ]);
+    return [...recorded, ...approved.filter((e) => e.kind === 'SPENDING' && e.planId && !e.decidedByName)];
+  }, `money-q-rec|${systemId}`);
   const plan = useLoad(() => fetchAccounting(systemId, year), `money-pva|${systemId}|${year}`);
   if (!allowed) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
   const reload = () => {

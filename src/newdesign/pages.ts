@@ -45,6 +45,8 @@ export const MeetingPage = lazy(loadMeetingPage);
 const loadMeetingsPage = () => import('./MeetingsPage').then((m) => ({ default: m.MeetingsPage }));
 export const MeetingsPage = lazy(loadMeetingsPage);
 const loadMoneyBudgetPage = () => import('./MoneyBudgetPage').then((m) => ({ default: m.MoneyBudgetPage }));
+const loadApprovalsPage = () => import('./ApprovalsPage').then((m) => ({ default: m.ApprovalsPage }));
+export const ApprovalsPage = lazy(loadApprovalsPage);
 const loadFundsPage = () => import('./FundsPage').then((m) => ({ default: m.FundsPage }));
 export const FundsPage = lazy(loadFundsPage);
 export const MoneyBudgetPage = lazy(loadMoneyBudgetPage);
@@ -154,6 +156,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   MeetingPage: loadMeetingPage,
   MeetingsPage: loadMeetingsPage,
   FundsPage: loadFundsPage,
+  ApprovalsPage: loadApprovalsPage,
   MoneyBudgetPage: loadMoneyBudgetPage,
   MoneyPage: loadMoneyPage,
   MoneyPlanPage: loadMoneyPlanPage,

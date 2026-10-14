@@ -18,11 +18,12 @@ type PlanItem = BoardItem;
 export function PlansList({ systemId, planType }: { systemId: string; planType?: PlanType }) {
   const t = useT();
   const { locale } = useI18n();
-  const [show, setShow] = useState<'open' | 'all'>('open');
+  const [show, setShow] = useState<'open' | 'all' | 'mine'>('open');
   const [layout, setLayout] = useState<Layout>('table');
   const [text, setText] = useState('');
-  const list = useLoad(() => fetchPlanTable({ systemId, status: show, type: planType }), `plans-table|${systemId}|${show}|${planType ?? ''}`);
-  const items = sortPlans(list.data ?? []).filter((p) => matchesText(text, p.title, p.leaderName, p.unitName, p.state));
+  const list = useLoad(() => fetchPlanTable({ systemId, status: show === 'all' ? 'all' : 'open', type: planType }), `plans-table|${systemId}|${show === 'all' ? 'all' : 'open'}|${planType ?? ''}`);
+  const items = sortPlans(list.data ?? []).filter((p) => matchesText(text, p.title, p.leaderName, p.unitName, p.state))
+    .filter((p) => show !== 'mine' || p.canApprove);
   const waiting = items.filter((p) => p.canApprove);
   const to = (p: PlanItem) => `/s/${systemId}/work/plans/${p.id}`;
   const row = (p: PlanItem) => (
@@ -46,7 +47,8 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
       <div className="view-bar">
         <div className="door-filters">
           <SearchBox value={text} onChange={setText} label={t('door.search.plans')} clearLabel={t('door.search.clear')} />
-          <SelectField label={t('door.work.show')} name="pl-show" value={show} onChange={(e) => setShow(e.target.value as 'open' | 'all')}>
+          <SelectField label={t('door.work.show')} name="pl-show" value={show} onChange={(e) => setShow(e.target.value as 'open' | 'all' | 'mine')}>
+            <option value="mine">{t('door.work.show.mine')}</option>
             <option value="open">{t('door.work.show.open')}</option>
             <option value="all">{t('door.work.show.all')}</option>
           </SelectField>
@@ -63,7 +65,7 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
           ]}
         />
       </div>
-      {waiting.length > 0 && (
+      {waiting.length > 0 && show !== 'mine' && (
         <div className="waiting-strip">
           <h3>{t('door.plan.waitingForYou', { count: waiting.length })}</h3>
           <RowList label={t('door.plan.waitingForYou', { count: waiting.length })}>{waiting.map(row)}</RowList>

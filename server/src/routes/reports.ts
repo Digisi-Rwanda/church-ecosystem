@@ -48,7 +48,7 @@ async function audit(actorId: string, systemId: string, action: string, detail: 
 /** Everything a builder may need for one unit, read once. */
 async function sourcesFor(unit: UnitRow): Promise<Sources> {
   const all = async <T>(m: { findMany: () => Promise<unknown> }) => (await m.findMany()) as T[];
-  const [meetings, decisions, accounts, entries, budgetLines, counts, memberships, positions, plans, people, personRecords, programs] = await Promise.all([
+  const [meetings, decisions, accounts, entries, budgetLines, counts, memberships, positions, plans, people, personRecords, programs, amendments] = await Promise.all([
     all<Sources['meetings'][number]>(prisma.meeting as never),
     all<Sources['decisions'][number]>(prisma.decision as never),
     all<Sources['accounts'][number]>(prisma.moneyAccount as never),
@@ -61,10 +61,11 @@ async function sourcesFor(unit: UnitRow): Promise<Sources> {
     all<{ id: string; fullName: string; status?: string; archivedAt?: Date | null }>(prisma.person as never),
     all<Sources['personRecords'][number]>(prisma.personRecord as never),
     all<Sources['programs'][number]>(prisma.program as never),
+    all<NonNullable<Sources['amendments']>[number]>(prisma.budgetAmendment as never),
   ]);
   return {
     unitId: unit.id, systemId: unit.systemId ?? '', names: new Map(people.map((p) => [p.id, p.fullName])),
-    meetings, decisions, accounts, entries, budgetLines, counts, memberships, positions, plans, personRecords, programs,
+    meetings, decisions, accounts, entries, budgetLines, counts, memberships, positions, plans, personRecords, programs, amendments,
     activePeople: new Set(people.filter((p) => !p.archivedAt && (!p.status || p.status === 'ACTIVE')).map((p) => p.id)),
   };
 }

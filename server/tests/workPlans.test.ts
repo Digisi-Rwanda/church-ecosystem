@@ -548,40 +548,20 @@ describe('when it happens', () => {
     expect(month.map((a: any) => a.title)).not.toContain('Waiting one');
     expect((await get('p-vp', '/api/schedule/month?systemId=sys-choir&month=2026-12')).body.activities.filter((a: any) => a.title === 'Prayer meeting')).toHaveLength(4 + 1); // Tuesdays 1, 8, 15, 22, 29
   });
-  it('changing the date moves it on the schedule, writes the old and new date, and tells the Secretary, the Vice President and the Treasurer', async () => {
-    const db = fake.__db;
-    db.person.push({ id: 'p-sec', fullName: 'Choir Secretary', status: 'ACTIVE' }, { id: 'p-tre', fullName: 'Choir Treasurer', status: 'ACTIVE' });
-    db.position.push(
-      { id: 'pos-sec', personId: 'p-sec', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Secretary', office: 'SECRETARY', status: 'ACTIVE', startDate: new Date('2022-01-01') },
-      { id: 'pos-tre', personId: 'p-tre', systemId: 'sys-choir', orgUnitId: 'ou-choir', title: 'Treasurer', office: 'TREASURER', status: 'ACTIVE', startDate: new Date('2022-01-01') },
-    );
+  it('after approval a change of date or place is an amendment: the President, then the Church Leader; far postponements ask the Church Leader about the money', async () => {
     const id = await approved({ title: 'Youth day', timingKind: 'DATE', startsOn: '2026-11-14T00:00:00Z', endsOn: null });
-    const move = (as: string, b: object) => patch(as, `${B}/${id}/timing`, { timingKind: 'DATE', startsOn: '2026-11-21T00:00:00Z', ...b });
-    expect((await move('p-choir-member', {})).status).toBe(403);
-    const r = await move('p-sec', { location: 'Chapel' });
-    expect(r.status, JSON.stringify(r.body)).toBe(200);
-    expect(r.body.plan.dateChange).toMatchObject({ fromStart: '2026-11-14', toStart: '2026-11-21' });
-    expect(r.body.plan.location).toBe('Chapel');
-    const titles = (to: string) => db.notification.filter((n: any) => n.toPersonId === to && n.title.startsWith('Date changed')).length;
-    expect(titles('p-vp')).toBe(1);
-    expect(titles('p-tre')).toBe(1);
-    expect(titles('p-sec')).toBe(0); // not told of their own change
-    const month = (await get('p-vp', '/api/schedule/month?systemId=sys-choir&month=2026-11')).body.activities;
-    expect(month.filter((a: any) => a.title === 'Youth day').map((a: any) => a.date)).toEqual(['2026-11-21']);
-    expect((await move('p-sec', { startsOn: null })).body.code).toBe('DATE_REQUIRED');
-    expect(db.auditEvent.some((e: any) => e.action === 'WORKPLAN_TIMING')).toBe(true);
-  });
-  it('postponing by more than six months asks the Church Leader to confirm whether the money stays reserved', async () => {
-    const id = await approved({ title: 'Youth day', timingKind: 'DATE', startsOn: '2026-11-14T00:00:00Z', endsOn: null });
-    const near = await patch('p-vp', `${B}/${id}/timing`, { timingKind: 'DATE', startsOn: '2027-03-01T00:00:00Z' });
-    expect(near.body.plan.reviewDue).toBe(false);
-    const far = await patch('p-vp', `${B}/${id}/timing`, { timingKind: 'DATE', startsOn: '2027-10-01T00:00:00Z' });
-    expect(far.body.plan.reviewDue).toBe(true);
-    expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-pastor' && n.kind === 'WAITING_FOR_ME' && n.title.startsWith('Date changed'))).toBe(true);
-    expect((await post('p-vp', `${B}/${id}/review-seen`)).status).toBe(403);
+    expect((await patch('p-vp', `${B}/${id}/timing`, { timingKind: 'DATE', startsOn: '2026-11-21T00:00:00Z' })).body.code).toBe('USE_AMENDMENT');
+    const asked = await post('p-vp', `${B}/${id}/amendments`, { justification: 'Postponed a year', changes: { timingKind: 'DATE', startsOn: '2027-10-01T00:00:00Z', endsOn: null } });
+    expect(asked.status, JSON.stringify(asked.body)).toBe(201);
+    const aid = asked.body.pendingAmendment.id;
+    expect((await post('p-choir-leader', `${B}/${id}/amendments/${aid}/approve`)).status).toBe(200);
+    expect((await post('p-pastor', `${B}/${id}/amendments/${aid}/approve`)).status).toBe(200);
+    const plan = (await get('p-vp', `${B}/${id}`)).body.plan;
+    expect(plan.reviewDue).toBe(true);
+    expect(plan.dateChange).toMatchObject({ fromStart: '2026-11-14', toStart: '2027-10-01' });
     const seen = await get('p-pastor', `${B}/${id}`);
     expect(seen.body.plan.canClearReview).toBe(true);
-    expect((await get('p-choir-leader', `${B}/${id}`)).body.plan.canClearReview).toBe(false);
+    expect((await post('p-vp', `${B}/${id}/review-seen`)).status).toBe(403);
     expect((await post('p-pastor', `${B}/${id}/review-seen`)).body.plan.reviewDue).toBe(false);
     expect((await post('p-pastor', `${B}/${id}/review-seen`)).status).toBe(409);
   });
@@ -611,5 +591,22 @@ describe('files on an activity', () => {
     expect((await del('p-vp', `${B}/${id}/files/${r.body.id}`)).status).toBe(200);
     expect((await get('p-vp', `${B}/${id}/files`)).body.items).toHaveLength(0);
     expect((await get('p-vp', `${B}/${id}/files/${r.body.id}/file`)).status).toBe(404);
+  });
+});
+
+describe('Church Leader suspension', () => {
+  it('the Church Leader suspends with a note and only the Church Leader lifts it; the unit is told', async () => {
+    const id = await approved({ title: 'Youth day', timingKind: 'DATE', startsOn: '2026-11-14T00:00:00Z', endsOn: null });
+    expect((await post('p-vp', `${B}/${id}/suspend`, { note: 'Hold on' })).status).toBe(403);
+    expect((await post('p-pastor', `${B}/${id}/suspend`, {})).body.code).toBe('NOTE_REQUIRED');
+    const s = await post('p-pastor', `${B}/${id}/suspend`, { note: 'Clashes with the revival week' });
+    expect(s.status, JSON.stringify(s.body)).toBe(200);
+    expect(s.body.plan.suspension).toMatchObject({ note: 'Clashes with the revival week' });
+    expect(s.body.plan.canUnsuspend).toBe(true);
+    expect((await post('p-pastor', `${B}/${id}/suspend`, { note: 'again' })).body.code).toBe('WRONG_STATE');
+    expect(fake.__db.notification.some((n: any) => n.toPersonId === 'p-vp' && n.title.startsWith('Suspended by the Church Leader'))).toBe(true);
+    expect((await post('p-choir-leader', `${B}/${id}/unsuspend`)).status).toBe(403);
+    const u = await post('p-pastor', `${B}/${id}/unsuspend`, { note: 'Sorted' });
+    expect(u.body.plan.suspension).toBeNull();
   });
 });

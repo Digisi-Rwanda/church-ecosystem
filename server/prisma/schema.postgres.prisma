@@ -775,6 +775,12 @@ model WorkPlan {
   /// JSON array of { levelKey, label, systemId, status, byId, at, note }
   approvalsJson        String    @default("[]")
   rejectedReason       String?
+  /// Where a plan was sent back to its creator: the level that returned it, the approvals before it, and the money as it stood: {atKey, levels, sig}
+  returnJson           String?
+  /// The Church Leader's suspension of a running activity: a flag with a note, not a block on recording costs already incurred
+  suspendedAt          DateTime?
+  suspendedById        String?
+  suspendNote          String?
   cancelReason         String?
   planningSummary      String?
   executionSummary     String?
@@ -957,6 +963,8 @@ model MoneyEntry {
 
   /// Optional link to the program, project or event (WorkPlan) this entry belongs to
   planId       String?
+  /// The plan line this spending belongs to; inside the line's remaining amount it needs no second approval
+  lineId       String?
 
   @@index([accountId, status])
   @@index([systemId, occurredOn])
@@ -1824,6 +1832,12 @@ model BudgetAmendment {
   decisionNote  String?
   reviewedById  String?
   reviewedAt    DateTime?
+  /// MONEY (cost lines, set-aside sources) | GENERAL (schedule, mission, category or a combined change) | TEAM (leader, team)
+  scope         String    @default("MONEY")
+  /// The proposed changes to the activity's own fields: { keys: [...], set: {...} }
+  changesJson   String?
+  /// GENERAL: the chain of approvals: [{ levelKey, label, systemId, status, byId, at, note }]
+  levelsJson    String?
 
   @@index([planId])
   @@index([systemId, status])
@@ -1852,6 +1866,10 @@ model PlanRevenue {
   receivedOn   DateTime
   recordedById String
   recordedAt   DateTime @default(now())
+  /// PENDING (logged by the leader, waiting for the Treasurer) | CONFIRMED (counts toward the fundraiser)
+  status       String   @default("CONFIRMED")
+  confirmedById String?
+  confirmedAt  DateTime?
 
   @@index([planId])
 }

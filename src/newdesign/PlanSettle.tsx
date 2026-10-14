@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { finalizeSettlement, logRevenue, removeRevenue, type ActivityMoney, type PlanDetail } from '../api/frontDoorApi';
+import { confirmRevenue, finalizeSettlement, logRevenue, removeRevenue, type ActivityMoney, type PlanDetail } from '../api/frontDoorApi';
 import { TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
@@ -43,7 +43,7 @@ export function SettlementPanel({ p, m, onChange }: { p: PlanDetail; m: Activity
       <h4>{t('door.fr.settle.title')}</h4>
       {s.settled ? (
         <p>
-          <StatusChip tone="success">{t('door.fr.settle.closed')}</StatusChip>{' '}
+          <StatusChip tone={s.closedWithLateAdjustment ? 'warn' : 'success'}>{t(s.closedWithLateAdjustment ? 'door.fr.settle.closedLate' : 'door.fr.settle.closed')}</StatusChip>{' '}
           {s.result ? t('door.fr.settle.result', { released: formatRwf(s.result.released), spent: formatRwf(s.result.spent) }) : ''}
         </p>
       ) : (
@@ -81,6 +81,7 @@ export function RevenueTab({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney
       <h3>{t('door.fr.title')}</h3>
       <FundraisingLine m={m} />
       <p>{t('door.fr.received', { total: formatRwf(f.revenueTotal), target: formatRwf(f.target) })}</p>
+      {f.revenueWaiting > 0 && <p className="muted">{t('door.fr.waiting', { amount: formatRwf(f.revenueWaiting) })}</p>}
       {f.outcome && f.net !== null && (
         <p className={f.outcome === 'DEFICIT' ? 'door-error' : 'muted'}>
           <StatusChip tone={f.outcome === 'DEFICIT' ? 'danger' : 'success'}>{t(`door.fr.outcome.${f.outcome}` as 'door.fr.outcome.PROFIT')}</StatusChip>{' '}
@@ -93,7 +94,9 @@ export function RevenueTab({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney
           {f.revenue.map((r) => (
             <li key={r.id}>
               <strong>{r.label}</strong> · {formatRwf(r.amount)} <span className="muted">{r.receivedOn}</span>{' '}
-              {f.canLogRevenue && <button type="button" className="btn ghost sm" onClick={() => void go(() => removeRevenue(p.id, r.id))}>{t('door.pm.remove')}</button>}
+              {r.status === 'PENDING' && <StatusChip tone="warn">{t('door.fr.pending')}</StatusChip>}{' '}
+              {r.canConfirm && <button type="button" className="btn sm" onClick={() => void go(() => confirmRevenue(p.id, r.id))}>{t('door.fr.confirm')}</button>}{' '}
+              {r.canRemove && <button type="button" className="btn ghost sm" onClick={() => void go(() => removeRevenue(p.id, r.id))}>{t('door.pm.remove')}</button>}
             </li>
           ))}
         </ul>

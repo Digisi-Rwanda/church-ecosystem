@@ -130,6 +130,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
     money: [
       ...(shared.has('money')
         ? [
+            place('approvals', 'money/approvals', 'door.approvals.title'),
             place('plan', 'money/plan', 'door.money.plan'),
             place('budget', 'money/budget', 'door.money.budget'),
             place('funds', 'money/funds', 'door.money.funds'),

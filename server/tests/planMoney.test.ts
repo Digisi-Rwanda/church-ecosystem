@@ -56,6 +56,11 @@ const plan = async (o: object = {}) => (await post('p-vp', B, {
 })).body.plan.id as string;
 const line = (id: string, amount = 100000, as = 'p-vp') => post(as, `${B}/${id}/lines`, { title: 'Sound hire', amount });
 const aside = (id: string, sources: object[], as = 'p-vp') => put(as, `${B}/${id}/sources`, { sources });
+/** The Treasurer ticks every line and answers that the figures are right. */
+const checked = async (id: string) => {
+  for (const l of (await get('p-vp', `${B}/${id}/money`)).body.lines) await post('p-ctr', `${B}/${id}/lines/${l.id}/verify`);
+  return post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+};
 const pool = async () => (await get('p-ctr', `${F}?systemId=sys-choir`)).body.pool;
 const levels = async (id: string) => ((await get('p-vp', `${B}/${id}`)).body.plan.levels as Array<{ levelKey: string; status: string; note: string | null }>);
 const funded = async (amount = 100000) => {
@@ -104,10 +109,67 @@ describe('funds (slice 3 gate)', () => {
     expect(over.body.code).toBe('INSUFFICIENT_FUNDS');
     expect(over.body.available).toBe(80000);
     expect((await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
+    // a draft holds nothing: the money is held from Submit
+    expect((await pool()).available).toBe(80000);
+    expect((await post('p-vp', `${B}/${id}/submit`)).status).toBe(200);
     expect((await pool()).available).toBe(30000);
     // saving the same list again does not double count
     expect((await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
     expect((await pool()).available).toBe(30000);
+    // sending it back to its creator frees the money at once
+    expect((await checked(id)).status).toBe(200);
+    expect((await post('p-choir-leader', `${B}/${id}/reject`, { reason: 'Please rework' })).status).toBe(200);
+    expect((await pool()).available).toBe(80000);
+  });
+  it('two drafts may plan the same money; the second Submit finds it already held', async () => {
+    await income(60000);
+    const a = await plan();
+    const b = await plan();
+    await line(a, 50000);
+    await line(b, 50000);
+    expect((await aside(a, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
+    expect((await aside(b, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
+    expect((await post('p-vp', `${B}/${a}/submit`)).status).toBe(200);
+    const second = await post('p-vp', `${B}/${b}/submit`);
+    expect(second.status).toBe(409);
+    expect(second.body.code).toBe('INSUFFICIENT_FUNDS');
+  });
+  it('a plan sent back to its creator resumes at the same step when the money is unchanged, and starts again when it changes', async () => {
+    await income(200000);
+    const id = await plan();
+    await line(id, 50000);
+    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }]);
+    await post('p-vp', `${B}/${id}/submit`);
+    await checked(id);
+    await post('p-choir-leader', `${B}/${id}/reject`, { reason: 'Fix the wording' });
+    expect((await post('p-vp', `${B}/${id}/submit`)).status).toBe(200);
+    const kept = (await get('p-vp', `${B}/${id}`)).body.plan.levels.map((l: any) => `${l.levelKey}:${l.status}`);
+    expect(kept[0]).toBe('TREASURER:APPROVED');
+    expect(kept.slice(1).every((x: string) => x.endsWith('PENDING'))).toBe(true);
+    // again, but this time the money changes before it is resubmitted
+    await post('p-choir-leader', `${B}/${id}/reject`, { reason: 'Cut the cost' });
+    const lid = (await get('p-vp', `${B}/${id}/money`)).body.lines[0].id;
+    await request(app).patch(`${B}/${id}/lines/${lid}`).set(bearer('p-vp')).send({ amount: 40000 });
+    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 40000 }]);
+    expect((await post('p-vp', `${B}/${id}/submit`)).status).toBe(200);
+    expect((await get('p-vp', `${B}/${id}`)).body.plan.levels[0]).toMatchObject({ levelKey: 'TREASURER', status: 'PENDING' });
+  });
+  it('a return to the previous step keeps the money held and reopens that step', async () => {
+    await income(100000);
+    const id = await plan();
+    await line(id, 50000);
+    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }]);
+    await post('p-vp', `${B}/${id}/submit`);
+    await checked(id);
+    await post('p-choir-leader', `${B}/${id}/approve`);
+    expect((await post('p-pastor', `${B}/${id}/reject`, { reason: 'Ask the President again', target: 'PREVIOUS' })).status).toBe(200);
+    const p = (await get('p-vp', `${B}/${id}`)).body.plan;
+    expect(p.status).toBe('PENDING_APPROVAL');
+    expect(p.levels.find((l: any) => l.status === 'PENDING').levelKey).toBe('UNIT');
+    expect((await pool()).available).toBe(50000);
+    // and once more, from the President back to the Treasurer
+    expect((await post('p-choir-leader', `${B}/${id}/reject`, { reason: 'Check the figures again', target: 'PREVIOUS' })).status).toBe(200);
+    expect(((await get('p-vp', `${B}/${id}`)).body.plan.levels as any[]).find((l) => l.status === 'PENDING').levelKey).toBe('TREASURER');
   });
   it('a pledge becomes money once it is received; a cancelled pledge is gone', async () => {
     const rec = (await income(40000, 'PLEDGED')).body;
@@ -149,7 +211,7 @@ describe('money on the page (slice 4 gates)', () => {
     expect((await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' })).body.code).toBe('LINES_NOT_VERIFIED');
     await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
-    expect((await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' })).status).toBe(200);
+    expect((await checked(id)).status).toBe(200);
     expect((await levels(id)).find((l) => l.levelKey === 'TREASURER')?.status).toBe('APPROVED');
     // an edit while it waits for the Church Leader
     const edited = await patch('p-vp', `${B}/${id}/lines/${m.lines[0].id}`, { amount: 90000 });
@@ -177,7 +239,7 @@ describe('money on the page (slice 4 gates)', () => {
     await post('p-vp', `${B}/${id}/submit`);
     const m = (await get('p-ctr', `${B}/${id}/money`)).body;
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
-    await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+    await checked(id);
     await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-pastor', `${B}/${id}/approve`);
     const locked = await line(id, 1000);
@@ -259,7 +321,7 @@ describe('lock and amendments (slice 5 gate)', () => {
     expect((await get('p-pastor', `${B}/transfers-review`)).body.items).toEqual([]);
   });
 
-  it('an increase goes to the Church Leader and holds its extra back while open; a rejection releases it', async () => {
+  it('an increase goes to the President, not the Church Leader, and holds its extra back while open; a rejection releases it', async () => {
     const id = await approvedPlan();
     const m = await moneyOf(id);
     const before = (await pool()).available;
@@ -268,16 +330,53 @@ describe('lock and amendments (slice 5 gate)', () => {
     expect((await post('p-vp', `${B}/${id}/amendments`, { lines, sources: [{ kind: 'OTHER', code: 'POOL', amount: 120000 }], justification: 'More' })).body.code).toBe('FUNDING_GAP');
     const asked = await post('p-vp', `${B}/${id}/amendments`, { lines, sources, justification: 'Bigger hall' });
     expect(asked.body.pendingAmendment.kind).toBe('INCREASE');
+    expect(asked.body.pendingAmendment.scope).toBe('MONEY');
     expect((await pool()).available).toBe(before - 50000);
+    expect(notices('p-pastor').some((t) => t.startsWith('Budget increase asked for'))).toBe(true);
     const aid = asked.body.pendingAmendment.id;
-    expect((await post('p-choir-leader', `${B}/${id}/amendments/${aid}/approve`)).body.code).toBe('FORBIDDEN');
-    expect((await post('p-pastor', `${B}/${id}/amendments/${aid}/reject`, {})).body.code).toBe('REASON_REQUIRED');
-    expect((await post('p-pastor', `${B}/${id}/amendments/${aid}/reject`, { reason: 'Not now' })).status).toBe(200);
+    expect((await post('p-pastor', `${B}/${id}/amendments/${aid}/approve`)).body.code).toBe('FORBIDDEN');
+    expect((await post('p-choir-leader', `${B}/${id}/amendments/${aid}/reject`, {})).body.code).toBe('REASON_REQUIRED');
+    expect((await post('p-choir-leader', `${B}/${id}/amendments/${aid}/reject`, { reason: 'Not now' })).status).toBe(200);
     expect((await pool()).available).toBe(before);
     const again = await post('p-vp', `${B}/${id}/amendments`, { lines, sources, justification: 'Bigger hall' });
-    expect((await post('p-pastor', `${B}/${id}/amendments/${again.body.pendingAmendment.id}/approve`)).status).toBe(200);
+    expect((await post('p-choir-leader', `${B}/${id}/amendments/${again.body.pendingAmendment.id}/approve`)).status).toBe(200);
     expect((await pool()).available).toBe(before - 50000);
     expect((await moneyOf(id)).planned).toBe(170000);
+  });
+
+  it('a schedule change goes President then Church Leader; the plan changes only at the last step; the old plan runs meanwhile', async () => {
+    const id = await approvedPlan();
+    const asked = await post('p-vp', `${B}/${id}/amendments`, { justification: 'Hall is taken', changes: { location: 'Chapel', startsOn: '2027-01-10T07:00:00Z', endsOn: '2027-01-10T10:00:00Z' } });
+    expect(asked.status, JSON.stringify(asked.body)).toBe(201);
+    const pa = asked.body.pendingAmendment;
+    expect(pa.scope).toBe('GENERAL');
+    expect(pa.levels.map((l: any) => l.levelKey)).toEqual(['UNIT', 'CHURCH']);
+    expect((await get('p-vp', `${B}/${id}`)).body.plan.location).toBe('Hall');
+    expect((await post('p-pastor', `${B}/${id}/amendments/${pa.id}/approve`)).body.code).toBe('FORBIDDEN');
+    expect((await post('p-choir-leader', `${B}/${id}/amendments/${pa.id}/approve`)).status).toBe(200);
+    expect((await get('p-vp', `${B}/${id}`)).body.plan.location).toBe('Hall');
+    expect((await post('p-choir-leader', `${B}/${id}/amendments/${pa.id}/approve`)).body.code).toBe('FORBIDDEN');
+    expect((await post('p-pastor', `${B}/${id}/amendments/${pa.id}/approve`)).status).toBe(200);
+    const now = (await get('p-vp', `${B}/${id}`)).body.plan;
+    expect(now.location).toBe('Chapel');
+    expect(now.dateChange).toMatchObject({ toStart: '2027-01-10' });
+    expect((await patch('p-vp', `${B}/${id}/timing`, { timingKind: 'DATE', startsOn: '2027-02-01T00:00:00Z' })).body.code).toBe('USE_AMENDMENT');
+  });
+
+  it('a change of leader goes to the President alone; a President asking sends a money change to the Treasurer', async () => {
+    const id = await approvedPlan();
+    const team = await post('p-vp', `${B}/${id}/amendments`, { justification: 'New lead', changes: { leaderId: 'p-ctr' } });
+    expect(team.body.pendingAmendment.scope).toBe('TEAM');
+    expect((await post('p-choir-leader', `${B}/${id}/amendments/${team.body.pendingAmendment.id}/approve`)).status).toBe(200);
+    expect((await get('p-vp', `${B}/${id}`)).body.plan.leaderId ?? (await get('p-vp', `${B}/${id}`)).body.plan.leaderPersonId).toBeTruthy();
+    const m = await moneyOf(id);
+    const lines = [{ id: m.lines[0].id, title: 'Sound hire', amount: 90000 }, { id: m.lines[1].id, title: 'Tea', amount: 30000 }];
+    const keep = m.sources.map((s: any) => ({ kind: s.kind, code: s.code, amount: s.amount }));
+    const asked = await post('p-choir-leader', `${B}/${id}/amendments`, { lines, sources: keep, justification: 'Tea costs more' });
+    expect(asked.status, JSON.stringify(asked.body)).toBe(201);
+    const aid = asked.body.pendingAmendment.id;
+    expect((await post('p-choir-leader', `${B}/${id}/amendments/${aid}/approve`)).body.code).toBe('FORBIDDEN');
+    expect((await post('p-ctr', `${B}/${id}/amendments/${aid}/approve`)).status).toBe(200);
   });
 
   it('a second request cannot reserve more than what remains', async () => {
@@ -374,7 +473,7 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     await post('p-vp', `${B}/${id}/submit`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
-    await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+    await checked(id);
     await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-pastor', `${B}/${id}/approve`);
     (fake.__db.moneyAccount as any[]).push({ id: 'acc-choir', orgUnitId: 'ou-choir', systemId: 'sys-choir', name: 'Cash', status: 'ACTIVE' });
@@ -395,7 +494,7 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     await post('p-vp', `${B}/${id}/submit`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
-    await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+    await checked(id);
     await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-pastor', `${B}/${id}/approve`);
     const before = (await pool()).available;
@@ -409,7 +508,7 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     expect((await moneyOf(id)).earmarked).toBe(30000);
   });
 
-  it('an ongoing program is a program with a monthly budget; an unrenewed month shows Not released, and spending in it is flagged', async () => {
+  it('an ongoing program is a program with a monthly budget, with no monthly release step', async () => {
     await income(1000000);
     const id = await plan({ planType: 'PROGRAM', title: 'Discipleship', endsOn: null });
     expect((await put('p-vp', `${B}/${id}/cycle`, { cycle: 'MONTHLY' })).status).toBe(200);
@@ -419,18 +518,73 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     await post('p-vp', `${B}/${id}/submit`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
-    await post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
+    await checked(id);
     await post('p-choir-leader', `${B}/${id}/approve`);
     await post('p-pastor', `${B}/${id}/approve`);
     const now = await moneyOf(id);
-    expect(now.ongoingMonth.released).toBe(false);
-    (fake.__db.moneyAccount as any[]).push({ id: 'acc-choir', orgUnitId: 'ou-choir', systemId: 'sys-choir', name: 'Cash', status: 'ACTIVE' });
-    const today = new Date().toISOString().slice(0, 10);
-    expect((await post('p-ctr', ENTRIES, { accountId: 'acc-choir', kind: 'SPENDING', amount: 5000, occurredOn: today, category: 'EVENT', planId: id })).status).toBe(201);
-    expect(notices('p-pastor').some((t) => t.startsWith('Spending in a month that is not released'))).toBe(true);
-    expect((await post('p-vp', `${B}/${id}/renew-month`)).status).toBe(403);
-    expect((await post('p-pastor', `${B}/${id}/renew-month`)).status).toBe(200);
-    expect((await post('p-pastor', `${B}/${id}/renew-month`)).body.code).toBe('ALREADY_RENEWED');
-    expect((await moneyOf(id)).ongoingMonth.released).toBe(true);
+    expect(now.ongoingMonth).toBeUndefined();
+    expect(now.canRenew).toBeUndefined();
+    expect((await post('p-pastor', `${B}/${id}/renew-month`)).status).toBe(404);
+    expect(notices('p-pastor').some((t) => t.startsWith('Spending in a month that is not released'))).toBe(false);
+  });
+});
+
+describe('expenses by plan line', () => {
+  it('spending inside the line goes straight through; over the line waits for the President', async () => {
+    const id = await approvedPlan();
+    const m = await moneyOf(id);
+    const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Choir fund' })).body.id;
+    const spend = (amount: number, lineId: string) => post('p-ctr', ENTRIES, { accountId: acc, kind: 'SPENDING', amount, occurredOn: '2026-11-09', category: 'OTHER', planId: id, lineId });
+    const tea = m.lines.find((l: any) => l.title === 'Tea').id;
+    const a = await spend(15000, tea);
+    expect(a.status, JSON.stringify(a.body)).toBe(201);
+    expect(a.body.status).toBe('APPROVED');
+    const b = await spend(10000, tea);
+    expect(b.body.status).toBe('PENDING_APPROVAL');
+    expect((await spend(1, 'nope')).body.code).toBe('BAD_LINE');
+  });
+});
+
+describe('proportional return', () => {
+  it('gives money back in proportion to each source, in whole francs', async () => {
+    const { reduceProportional } = await import('../src/money/cycles');
+    const src = [{ code: 'A', amount: 60000 }, { code: 'B', amount: 40000 }];
+    expect(reduceProportional(src, 50000).map((s) => s.amount)).toEqual([30000, 20000]);
+    expect(reduceProportional([{ amount: 1 }, { amount: 1 }, { amount: 1 }], 2).reduce((n, s) => n + s.amount, 0)).toBe(1);
+    expect(reduceProportional(src, 100000)).toEqual([]);
+    expect(reduceProportional(src, 0).map((s) => s.amount)).toEqual([60000, 40000]);
+  });
+});
+
+describe('one approval queue and the money home figures', () => {
+  it('lists what waits, and says which rows wait for me', async () => {
+    const id = await funded();
+    await post('p-vp', `${B}/${id}/submit`);
+    const q = async (as: string) => (await get(as, '/api/approvals')).body;
+    const ctr = await q('p-ctr');
+    const row = ctr.items.find((i: any) => i.id === id);
+    expect(row).toMatchObject({ kind: 'ACTIVITY', waitingFor: 'Treasurer', mine: true });
+    expect((await q('p-vp')).items.find((i: any) => i.id === id).mine).toBe(false);
+    expect(ctr.counts.mine).toBeGreaterThanOrEqual(1);
+    const done = await approvedPlan({ title: 'Second' });
+    const m = await moneyOf(done);
+    const asked = await post('p-vp', `${B}/${done}/amendments`, { justification: 'Hall is taken', changes: { location: 'Chapel' } });
+    expect(asked.status).toBe(201);
+    const mineAmend = (await q('p-choir-leader')).items.find((i: any) => i.kind === 'AMENDMENT');
+    expect(mineAmend).toMatchObject({ mine: true, waitingFor: 'President' });
+    expect((await q('p-vp')).items.find((i: any) => i.kind === 'AMENDMENT').mine).toBe(false);
+    expect(m.lines.length).toBeGreaterThan(0);
+  });
+
+  it('secured splits into spent, still reserved and available', async () => {
+    const id = await approvedPlan();
+    const m = await moneyOf(id);
+    const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Choir fund' })).body.id;
+    const tea = m.lines.find((l: any) => l.title === 'Tea').id;
+    await post('p-ctr', ENTRIES, { accountId: acc, kind: 'SPENDING', amount: 15000, occurredOn: '2026-11-09', category: 'OTHER', planId: id, lineId: tea });
+    const t = (await get('p-ctr', `${F}?systemId=sys-choir`)).body.totals;
+    expect(t.spent).toBe(15000);
+    expect(t.spent + t.reserved + t.available).toBe(t.secured);
+    expect(t.awaiting).toBe(0);
   });
 });

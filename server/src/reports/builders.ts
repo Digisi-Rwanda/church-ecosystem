@@ -25,7 +25,7 @@ export const SOURCE: Record<ReportKind, 'GOVERNANCE' | 'MONEY' | 'PEOPLE' | 'MIS
 export const SECTIONS: Record<ReportKind, readonly string[]> = {
   MEETINGS: ['summary', 'meetings', 'decisions'],
   ATTENDANCE: ['summary', 'perMeeting', 'perPerson'],
-  MONEY: ['summary', 'accounts', 'budget', 'entries'],
+  MONEY: ['summary', 'accounts', 'budget', 'entries', 'amendments'],
   COLLECTIONS: ['summary', 'counts'],
   PEOPLE_LIST: ['summary', 'members'],
   WORK_PLANS: ['summary', 'ended'],
@@ -71,7 +71,8 @@ export interface Sources {
   counts: Array<{ orgUnitId: string; serviceOn: D; label: string; kind: string; amount: number; status: string; handedToId?: string | null }>;
   memberships: Array<{ personId: string; orgUnitId?: string | null; systemId?: string | null; type: string; status: string; startDate: D; endDate?: D | null }>;
   positions: Array<{ personId: string; orgUnitId?: string | null; title: string; status: string }>;
-  plans: Array<{ orgUnitId: string; title: string; status: string; leaderPersonId: string; outcome?: string | null; reportPublishedAt?: D | null; deletedAt?: D | null }>;
+  amendments?: Array<{ planId: string; systemId: string; kind: string; scope?: string | null; status: string; oldTotal: number; newTotal: number; justification: string; requestedById: string; decidedAt?: D | null }>;
+  plans: Array<{ id?: string; orgUnitId: string; title: string; status: string; leaderPersonId: string; outcome?: string | null; reportPublishedAt?: D | null; deletedAt?: D | null }>;
   personRecords: Array<{ personId: string; section: string; dataJson: string; status: string; programId?: string | null }>;
   programs: Array<{ id: string; name: string }>;
   /** People whose records exist: used to skip anyone archived. */
@@ -160,6 +161,17 @@ function money(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
       const ytd = actualOf(l.kind, l.category, throughPeriod);
       return [l.kind, l.category, inPer, ytd, l.planned, ytd - l.planned] as Cell[];
     });
+  // Every approved amendment of the period, so the Church Leader sees each change to a plan's money, schedule, mission or team.
+  const titles = new Map(s.plans.filter((p) => p.id).map((p) => [p.id!, p.title]));
+  const amended = (s.amendments ?? [])
+    .filter((a) => a.systemId === s.systemId && a.status === 'APPROVED' && inPeriod(a.decidedAt, key))
+    .sort((a, b) => +new Date(a.decidedAt!) - +new Date(b.decidedAt!));
+  const amendRows: Cell[][] = amended.map((a) => [day(a.decidedAt), titles.get(a.planId) ?? '', a.scope ?? 'MONEY', a.kind, a.oldTotal, a.newTotal, s.names.get(a.requestedById) ?? '', a.justification]);
+  const amendTable: Snapshot['tables'][number] = {
+    key: 'amendments',
+    columns: [{ key: 'date', type: 'date' }, { key: 'activity', type: 'text' }, { key: 'scope', type: 'code' }, { key: 'kind', type: 'code' }, { key: 'was', type: 'money' }, { key: 'now', type: 'money' }, { key: 'askedBy', type: 'text' }, { key: 'note', type: 'text' }],
+    rows: amendRows,
+  };
   return {
     summary: [
       { key: 'income', value: tIn, type: 'money' },
@@ -177,6 +189,7 @@ function money(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
         columns: [{ key: 'date', type: 'date' }, { key: 'kind', type: 'code' }, { key: 'category', type: 'code' }, { key: 'amount', type: 'money' }, { key: 'note', type: 'text' }],
         rows: entries.map((e) => [day(e.occurredOn), e.kind, e.category, e.amount, e.note ?? '']),
       },
+      ...(amendRows.length > 0 ? [amendTable] : []),
     ],
   };
 }

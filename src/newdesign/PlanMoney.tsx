@@ -8,7 +8,7 @@ import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { formatRwf } from './money';
 import { planErrorKey } from './plans';
-import { AmendForm, CyclePanel, OngoingMonth, PendingAmendment, SpendingVsPlan } from './PlanAmend';
+import { AmendForm, CyclePanel, PendingAmendment, SpendingVsPlan } from './PlanAmend';
 import { FundraisingLine, SettlementPanel } from './PlanSettle';
 import { StatusChip } from './kit';
 
@@ -58,7 +58,6 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
       {m.gap > 0 && m.canEdit && <p className="muted">{t('door.pm.gapNote')}</p>}
       {m.gap < 0 && m.canEdit && <p className="muted">{t('door.pm.over')}</p>}
       {!m.open && <p className="muted">{t('door.pm.locked')}</p>}
-      <OngoingMonth p={p} m={m} onChange={onChange} />
       <SettlementPanel p={p} m={m} onChange={() => onChange()} />
       {m.pendingAmendment && <PendingAmendment p={p} a={m.pendingAmendment} m={m} go={go} />}
       {m.canRequestAmendment && !amending && (

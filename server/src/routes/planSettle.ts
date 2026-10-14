@@ -11,7 +11,7 @@ import { NOTE_MAX, TITLE_MAX, canSee } from '../work/rules.js';
 import { asWorkRow, canApprove, canManagePlan, type PlanRow } from '../work/plan.js';
 import { canReadMoney, canRecord, isDay } from '../money/rules.js';
 import { SETTLE_DAYS, netOf, outcomeOf, projectedNet, revenueProblem, settleDue, settlementOpen, underBudget } from '../money/settle.js';
-import { churchLeaders, finalize, revenueOf, spentOf, syncFundraising, tell, warnPool, type SettlePlan } from '../money/settlement.js';
+import { churchLeaders, confirmedRevenue, finalize, revenueOf, spentOf, syncFundraising, tell, warnPool, type SettlePlan } from '../money/settlement.js';
 
 export const planSettleRouter = Router();
 type Res = import('express').Response;
@@ -46,13 +46,14 @@ export async function settleView(p: Plan, me: string, data: Data, planned: numbe
   let fundraising = null;
   if (p.fundraising) {
     const revenue = await revenueOf(p.id);
-    const total = revenue.reduce((n, r) => n + r.amount, 0);
+    const total = revenue.filter((r) => (r.status ?? 'CONFIRMED') === 'CONFIRMED').reduce((n, r) => n + r.amount, 0);
+    const waiting = revenue.filter((r) => r.status === 'PENDING').reduce((n, r) => n + r.amount, 0);
     const spent = await spentOf(p.id);
     const net = netOf(total, spent);
     fundraising = {
-      target: p.fundTarget ?? 0, projectedNet: projectedNet(p.fundTarget ?? 0, planned), revenueTotal: total,
-      revenue: revenue.sort((a, b) => new Date(a.receivedOn).getTime() - new Date(b.receivedOn).getTime()).map((r) => ({ id: r.id, label: r.label, amount: r.amount, receivedOn: new Date(r.receivedOn).toISOString().slice(0, 10) })),
-      canLogRevenue: write && LIVE.includes(p.status) && !settled,
+      target: p.fundTarget ?? 0, projectedNet: projectedNet(p.fundTarget ?? 0, planned), revenueTotal: total, revenueWaiting: waiting,
+      revenue: revenue.sort((a, b) => new Date(a.receivedOn).getTime() - new Date(b.receivedOn).getTime()).map((r) => ({ id: r.id, label: r.label, amount: r.amount, receivedOn: new Date(r.receivedOn).toISOString().slice(0, 10), status: r.status ?? 'CONFIRMED', canConfirm: write && r.status === 'PENDING' && LIVE.includes(p.status) && !settled, canRemove: !settled && LIVE.includes(p.status) && (write || (r.status === 'PENDING' && r.recordedById === me)) })),
+      canLogRevenue: (write || canManagePlan(p, me, data)) && LIVE.includes(p.status) && !settled,
       net: p.doneAt ? net : null, outcome: p.doneAt ? outcomeOf(net) : null,
     };
   }
@@ -62,6 +63,7 @@ export async function settleView(p: Plan, me: string, data: Data, planned: numbe
     try { result = p.settlementJson ? JSON.parse(p.settlementJson) : null; } catch { result = null; }
     settlement = {
       doneAt: new Date(p.doneAt).toISOString(), due: settleDue(p.doneAt).toISOString(), days: SETTLE_DAYS, settled, open: settlementOpen(p),
+      closedWithLateAdjustment: Array.isArray((result as { late?: unknown[] } | null)?.late) && ((result as { late: unknown[] }).late.length > 0),
       canFinalize: write && p.status === 'ENDED' && !settled, toRelease: settled ? 0 : underBudget(earmarked, await spentOf(p.id)), result,
     };
   }
@@ -82,7 +84,7 @@ const revenueSchema = z.object({ label: z.string().trim().min(1).max(TITLE_MAX),
 async function logging(req: AuthedRequest, res: Res) {
   const got = await load(req, res);
   if (!got) return null;
-  if (!canRecord(got.me, got.p.systemId, got.data)) return fail(res, 403, 'FORBIDDEN', 'Only the treasurer logs what the event receives'), null;
+  if (!canRecord(got.me, got.p.systemId, got.data) && !canManagePlan(got.p, got.me, got.data)) return fail(res, 403, 'FORBIDDEN', 'Only the event’s leader or the treasurer logs what the event receives'), null;
   if (!got.p.fundraising) return fail(res, 409, 'NOT_FUNDRAISING', 'This event is not a fundraiser'), null;
   if (!LIVE.includes(got.p.status)) return fail(res, 409, 'NOT_APPROVED', 'Revenue is logged once the plan is approved'), null;
   if (got.p.settledAt) return fail(res, 409, 'SETTLED', 'This activity is settled'), null;
@@ -97,7 +99,7 @@ planSettleRouter.post('/:id/revenue', requireAuth, async (req: AuthedRequest, re
   if (revenueProblem(b.data.amount)) return fail(res, 400, 'AMOUNT', 'Enter a whole amount in francs, above zero');
   if (b.data.receivedOn && !isDay(b.data.receivedOn)) return fail(res, 400, 'BAD_DATE', 'Enter a real day');
   const now = new Date();
-  const row = (await prisma.planRevenue.create({ data: { planId: got.p.id, systemId: got.p.systemId, label: b.data.label, amount: b.data.amount, receivedOn: b.data.receivedOn ? new Date(`${b.data.receivedOn}T00:00:00Z`) : now, recordedById: got.me, recordedAt: now } })) as { id: string };
+  const row = (await prisma.planRevenue.create({ data: { planId: got.p.id, systemId: got.p.systemId, label: b.data.label, amount: b.data.amount, receivedOn: b.data.receivedOn ? new Date(`${b.data.receivedOn}T00:00:00Z`) : now, recordedById: got.me, recordedAt: now, ...(canRecord(got.me, got.p.systemId, got.data) ? { status: 'CONFIRMED', confirmedById: got.me, confirmedAt: now } : { status: 'PENDING' }) } })) as { id: string };
   await audit(got.me, got.p.systemId, 'MONEY_REVENUE_LOGGED', `Revenue ${b.data.amount} RWF: ${b.data.label}`, { planId: got.p.id, id: row.id });
   if (got.p.doneAt) { await syncFundraising(got.p, got.me); await warnPool(got.p, got.me); }
   res.status(201).json({ id: row.id });
@@ -106,10 +108,25 @@ planSettleRouter.post('/:id/revenue', requireAuth, async (req: AuthedRequest, re
 planSettleRouter.delete('/:id/revenue/:rid', requireAuth, async (req: AuthedRequest, res) => {
   const got = await logging(req, res);
   if (!got) return;
-  const r = ((await prisma.planRevenue.findMany({ where: { planId: got.p.id } })) as Array<{ id: string; planId: string; label: string; amount: number }>).find((x) => x.id === String(req.params.rid) && x.planId === got.p.id);
+  const r = ((await prisma.planRevenue.findMany({ where: { planId: got.p.id } })) as Array<{ id: string; planId: string; label: string; amount: number; status?: string | null; recordedById: string }>).find((x) => x.id === String(req.params.rid) && x.planId === got.p.id);
   if (!r) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (!canRecord(got.me, got.p.systemId, got.data) && !(r.status === 'PENDING' && r.recordedById === got.me)) return fail(res, 403, 'FORBIDDEN', 'Only the treasurer removes revenue that is confirmed');
   await prisma.planRevenue.delete({ where: { id: r.id } });
   await audit(got.me, got.p.systemId, 'MONEY_REVENUE_REMOVED', `Removed revenue ${r.amount} RWF: ${r.label}`, { planId: got.p.id, id: r.id });
+  if (got.p.doneAt) { await syncFundraising(got.p, got.me); await warnPool(got.p, got.me); }
+  res.json({ ok: true });
+});
+
+/** The Treasurer confirms what the leader logged; only confirmed revenue counts toward the fundraiser. */
+planSettleRouter.post('/:id/revenue/:rid/confirm', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await logging(req, res);
+  if (!got) return;
+  if (!canRecord(got.me, got.p.systemId, got.data)) return fail(res, 403, 'FORBIDDEN', 'Only the treasurer confirms revenue');
+  const r = ((await prisma.planRevenue.findMany({ where: { planId: got.p.id } })) as Array<{ id: string; planId: string; label: string; amount: number; status?: string | null }>).find((x) => x.id === String(req.params.rid) && x.planId === got.p.id);
+  if (!r) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if ((r.status ?? 'CONFIRMED') !== 'PENDING') return fail(res, 409, 'WRONG_STATE', 'Already confirmed');
+  await prisma.planRevenue.update({ where: { id: r.id }, data: { status: 'CONFIRMED', confirmedById: got.me, confirmedAt: new Date() } });
+  await audit(got.me, got.p.systemId, 'MONEY_REVENUE_CONFIRMED', `Confirmed revenue ${r.amount} RWF: ${r.label}`, { planId: got.p.id, id: r.id });
   if (got.p.doneAt) { await syncFundraising(got.p, got.me); await warnPool(got.p, got.me); }
   res.json({ ok: true });
 });

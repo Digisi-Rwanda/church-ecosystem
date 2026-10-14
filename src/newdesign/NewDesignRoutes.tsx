@@ -18,6 +18,7 @@ import {
   GroupsPage,
   MeetingPage,
   MeetingsPage,
+  ApprovalsPage,
   FundsPage,
   MoneyBudgetPage,
   MoneyPage,
@@ -128,6 +129,7 @@ export function newDesignRoutes() {
           <Route path="money/plan" element={<MoneyPlanPage />} />
           <Route path="money/plan/new/:kind" element={<ActionPlanCreate />} />
           <Route path="money/budget" element={<MoneyBudgetPage />} />
+          <Route path="money/approvals" element={<ApprovalsPage />} />
           <Route path="money/funds" element={<FundsPage />} />
           <Route path="money/contributions" element={<ContributionsPage />} />
           <Route path="money/reports" element={<Navigate to="../../reports" relative="path" replace />} />

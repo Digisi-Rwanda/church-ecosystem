@@ -1,6 +1,6 @@
 import { useState, type FormEvent } from 'react';
 import {
-  closeMoneyAccount, decideMoneyEntry, openMoneyAccount, recordMoneyEntry, voidMoneyEntry,
+  closeMoneyAccount, decideMoneyEntry, fetchActivityMoney, openMoneyAccount, recordMoneyEntry, voidMoneyEntry,
   type MoneyAccountItem, type MoneyEntryItem, type MoneyEntryKind, type MoneyOptions,
 } from '../api/frontDoorApi';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
@@ -8,6 +8,23 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { categoryKey, formatRwf, moneyErrorKey, moneyStatusKey, parseAmount } from './money';
 import { PlanSelect } from './MoneyBlockParts';
+import { useLoad } from './useLoad';
+
+/** Which line of the plan this spending belongs to, and how much of it is left. Inside what is left it needs no second approval. */
+function LinePick({ planId, value, onChange }: { planId: string; value: string; onChange: (id: string, left: number | null) => void }) {
+  const t = useT();
+  const m = useLoad(() => fetchActivityMoney(planId), `line-pick|${planId}`);
+  const lines = m.data?.lines ?? [];
+  if (lines.length === 0) return null;
+  return (
+    <SelectField label={t('door.money.line.for')} name="m-line" hint={t('door.money.line.hint')} value={value} onChange={(e) => onChange(e.target.value, lines.find((l) => l.id === e.target.value)?.remaining ?? null)}>
+      <option value="">{t('door.money.line.none')}</option>
+      {lines.map((l) => (
+        <option key={l.id} value={l.id}>{l.title} · {t('door.money.line.left', { left: formatRwf(l.remaining) })}</option>
+      ))}
+    </SelectField>
+  );
+}
 
 /** Open a money account for a unit the treasurer serves. */
 export function AccountForm({ options, systemId, onDone, onCancel }: { options: MoneyOptions; systemId: string; onDone: () => void; onCancel: () => void }) {
@@ -72,8 +89,12 @@ export function EntryForm({ options, accounts, systemId, onDone, onCancel, fixed
   const [category, setCategory] = useState(options.categories[0] ?? 'OTHER');
   const [note, setNote] = useState('');
   const [planId, setPlanId] = useState('');
+  const [lineId, setLineId] = useState('');
+  const [lineLeft, setLineLeft] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  const typed = parseAmount(amount);
+  const straight = kind === 'SPENDING' && !!lineId && lineLeft !== null && typed !== null && typed <= lineLeft;
   const submit = async (e: FormEvent) => {
     e.preventDefault();
     const n = parseAmount(amount);
@@ -82,7 +103,7 @@ export function EntryForm({ options, accounts, systemId, onDone, onCancel, fixed
     setBusy(true);
     setError('');
     try {
-      await recordMoneyEntry({ accountId, kind, amount: n, occurredOn: day, category, note: note.trim() || null, planId: planId || null });
+      await recordMoneyEntry({ accountId, kind, amount: n, occurredOn: day, category, note: note.trim() || null, planId: planId || null, lineId: kind === 'SPENDING' && planId && lineId ? lineId : null });
       onDone();
     } catch (err) {
       setError(t(moneyErrorKey(errorCode(err)) as 'door.people.actionFailed'));
@@ -115,7 +136,9 @@ export function EntryForm({ options, accounts, systemId, onDone, onCancel, fixed
           </option>
         ))}
       </SelectField>
-      <PlanSelect systemId={systemId} name="m-plan" value={planId} onChange={setPlanId} />
+      <PlanSelect systemId={systemId} name="m-plan" value={planId} onChange={(v) => { setPlanId(v); setLineId(''); setLineLeft(null); }} />
+      {kind === 'SPENDING' && planId && <LinePick planId={planId} value={lineId} onChange={(id, left) => { setLineId(id); setLineLeft(left); }} />}
+      {straight && <p className="muted" role="status">{t('door.money.line.straight')}</p>}
       <TextAreaField label={t('door.money.entry.note')} name="m-note" rows={2} value={note} maxLength={options.limits.noteMax} onChange={(e) => setNote(e.target.value)} />
       {error && (
         <p className="door-error" role="alert">
@@ -124,7 +147,7 @@ export function EntryForm({ options, accounts, systemId, onDone, onCancel, fixed
       )}
       <div className="door-row">
         <button type="submit" className="btn" disabled={busy}>
-          {kind === 'SPENDING' ? t('door.money.entry.askApproval') : t('door.money.entry.record')}
+          {kind === 'SPENDING' && !straight ? t('door.money.entry.askApproval') : t('door.money.entry.record')}
         </button>
         <button type="button" className="btn ghost" onClick={onCancel}>
           {t('door.settings.cancel')}

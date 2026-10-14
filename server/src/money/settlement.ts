@@ -8,7 +8,7 @@ import { notifySafely } from '../lib/notify.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { holdersWith, canDecideForChurch, CHURCH_SYSTEM } from '../work/plan.js';
 import { POOL_CODE } from './funds.js';
-import { reduceSources } from './cycles.js';
+import { reduceProportional } from './cycles.js';
 import { netOf, outcomeOf, settlementLapsed, underBudget } from './settle.js';
 
 export interface SettlePlan {
@@ -22,7 +22,9 @@ interface Ent { id: string; planId: string | null; kind: string; status: string;
 export const FUNDRAISING_TAG = 'fundraising-net';
 const LATE_TAG = 'post-settlement:';
 
-export const revenueOf = async (planId: string) => ((await prisma.planRevenue.findMany({ where: { planId } })) as Array<{ id: string; planId: string; label: string; amount: number; receivedOn: Date | string; recordedById: string }>).filter((r) => r.planId === planId);
+/** Every revenue line of an event, confirmed or not; only the confirmed ones count (see `confirmedRevenue`). */
+export const revenueOf = async (planId: string) => ((await prisma.planRevenue.findMany({ where: { planId } })) as Array<{ id: string; planId: string; label: string; amount: number; receivedOn: Date | string; recordedById: string; status?: string | null }>).filter((r) => r.planId === planId);
+export const confirmedRevenue = async (planId: string) => (await revenueOf(planId)).filter((r) => (r.status ?? 'CONFIRMED') === 'CONFIRMED');
 export const spentOf = async (planId: string, exceptEntryId?: string): Promise<number> =>
   ((await prisma.moneyEntry.findMany({ where: { planId } })) as Ent[]).filter((e) => e.planId === planId && e.kind === 'SPENDING' && e.status !== 'REJECTED' && e.status !== 'VOIDED' && e.id !== exceptEntryId).reduce((n, e) => n + e.amount, 0);
 const sourcesOf = async (planId: string) => ((await prisma.planSource.findMany({ where: { planId } })) as Src[]).filter((s) => s.planId === planId);
@@ -39,7 +41,7 @@ export async function tell(ids: string[], p: SettlePlan, title: string, body: st
 /** Keep the fundraising event's single pool record equal to revenue minus spending. Only once the event is Done. */
 export async function syncFundraising(p: SettlePlan, by: string): Promise<number | null> {
   if (!p.fundraising || !p.doneAt || p.deletedAt) return null;
-  const net = netOf((await revenueOf(p.id)).reduce((n, r) => n + r.amount, 0), await spentOf(p.id));
+  const net = netOf((await confirmedRevenue(p.id)).reduce((n, r) => n + r.amount, 0), await spentOf(p.id));
   const all = ((await prisma.incomeRecord.findMany({ where: { systemId: p.systemId } })) as Rec[]).filter((r) => r.planId === p.id && r.note === FUNDRAISING_TAG);
   const now = new Date();
   const label = `${net < 0 ? 'Fundraising deficit' : 'Fundraising profit'}: ${p.title}`;
@@ -67,7 +69,7 @@ export async function finalize(p: SettlePlan, by: string, why: 'TREASURER' | 'PE
   const spent = await spentOf(p.id, exceptEntryId);
   const released = underBudget(earmarked, spent);
   if (released > 0) {
-    const next = reduceSources(sources, released);
+    const next = reduceProportional(sources, released);
     for (const s of sources) {
       const left = next.find((n) => n.id === s.id);
       if (!left) await prisma.planSource.delete({ where: { id: s.id } });
@@ -95,6 +97,11 @@ export async function sweepSettlements(systemId: string): Promise<void> {
 export async function postSettlement(p: SettlePlan, entry: { id: string; amount: number }, by: string): Promise<void> {
   const now = new Date();
   await prisma.incomeRecord.create({ data: { systemId: p.systemId, kind: 'OTHER', code: POOL_CODE, label: `Post-settlement invoice: ${p.title}`, amount: -entry.amount, status: 'SECURED', note: `${LATE_TAG}${entry.id}`, planId: p.id, receivedOn: now, recordedById: by, recordedAt: now, updatedAt: now } });
+  let result: Record<string, unknown> = {};
+  try { result = p.settlementJson ? JSON.parse(p.settlementJson) : {}; } catch { result = {}; }
+  const late = Array.isArray(result.late) ? (result.late as unknown[]) : [];
+  late.push({ entryId: entry.id, amount: entry.amount, at: now.toISOString() });
+  await prisma.workPlan.update({ where: { id: p.id }, data: { settlementJson: JSON.stringify({ ...result, late }) } });
   await tell(await churchLeaders(by), p, `Post-settlement invoice: ${p.title}`, `${entry.amount.toLocaleString('en')} RWF was charged to the general pool`, `late-invoice:${entry.id}`, true);
   await warnPool(p, by);
 }

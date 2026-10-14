@@ -29,6 +29,7 @@ import { publicEventsRouter } from './routes/publicEvents.js';
 import { moneyRouter } from './routes/money.js';
 import { moneyBlockRouter } from './routes/moneyBlock.js';
 import { fundsRouter } from './routes/incomeFunds.js';
+import { approvalsRouter } from './routes/approvals.js';
 import { collectionsRouter } from './routes/collections.js';
 import { reportsRouter } from './routes/reports.js';
 import { person360Router } from './routes/person360.js';
@@ -132,6 +133,7 @@ export function createApp() {
   app.use('/api/money', moneyRouter);
   app.use('/api/money', moneyBlockRouter);
   app.use('/api/funds', fundsRouter);
+  app.use('/api/approvals', approvalsRouter);
   app.use('/api/collections', collectionsRouter);
   app.use('/api/reports', reportsRouter);
   app.use('/api/person360', person360Router);

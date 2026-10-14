@@ -228,3 +228,24 @@ describe('choosing the parts of a report', () => {
     expect(SECTIONS.MONEY).toContain('entries');
   });
 });
+
+describe('amendments in the money report', () => {
+  it('lists the approved amendments of the period, monthly and yearly', async () => {
+    const { buildSnapshot } = await import('../src/reports/builders');
+    const base = src({});
+    const s = {
+      ...base,
+      unitId: 'u1', systemId: 'sys-x', names: new Map([['p1', 'Vice President']]),
+      plans: [{ id: 'pl1', orgUnitId: 'u1', title: 'Harvest', status: 'RUNNING', leaderPersonId: 'p1' }],
+      amendments: [
+        { planId: 'pl1', systemId: 'sys-x', kind: 'INCREASE', scope: 'MONEY', status: 'APPROVED', oldTotal: 100, newTotal: 150, justification: 'Bigger hall', requestedById: 'p1', decidedAt: '2026-10-05T10:00:00Z' },
+        { planId: 'pl1', systemId: 'sys-x', kind: 'CHANGE', scope: 'GENERAL', status: 'REJECTED', oldTotal: 100, newTotal: 100, justification: 'No', requestedById: 'p1', decidedAt: '2026-10-06T10:00:00Z' },
+        { planId: 'pl1', systemId: 'sys-x', kind: 'TRANSFER', scope: 'MONEY', status: 'APPROVED', oldTotal: 150, newTotal: 150, justification: 'Later', requestedById: 'p1', decidedAt: '2026-11-02T10:00:00Z' },
+      ],
+    } as never;
+    const month = buildSnapshot('MONEY', '2026-10', 'Choir', s).tables.find((t) => t.key === 'amendments')!;
+    expect(month.rows).toHaveLength(1);
+    expect(month.rows[0]).toEqual(['2026-10-05', 'Harvest', 'MONEY', 'INCREASE', 100, 150, 'Vice President', 'Bigger hall']);
+    expect(buildSnapshot('MONEY', '2026', 'Choir', s).tables.find((t) => t.key === 'amendments')!.rows).toHaveLength(2);
+  });
+});

@@ -130,14 +130,24 @@ describe('fundraising (slice 7 gate)', () => {
     expect(v.fundraising.projectedNet).toBe(500000 - v.planned);
   });
 
-  it('only the Treasurer logs revenue, and only on an approved fundraiser', async () => {
+  it('the leader logs revenue, the Treasurer confirms it, and only confirmed revenue counts', async () => {
     const id = await fundraiser();
-    expect((await revenue(id, 1000, 'p-vp')).status).toBe(403);
     expect((await revenue(id, 0)).body.code).toBe('AMOUNT');
-    expect((await revenue(id, 1000)).status).toBe(201);
+    const asked = await revenue(id, 1000, 'p-vp');
+    expect(asked.status).toBe(201);
+    let m = (await moneyOf(id, 'p-ctr')).fundraising;
+    expect(m.revenueTotal).toBe(0);
+    expect(m.revenueWaiting).toBe(1000);
+    expect(m.revenue[0]).toMatchObject({ status: 'PENDING', canConfirm: true });
+    expect((await post('p-vp', `${B}/${id}/revenue/${asked.body.id}/confirm`)).status).toBe(403);
+    expect((await post('p-ctr', `${B}/${id}/revenue/${asked.body.id}/confirm`)).status).toBe(200);
+    expect((await post('p-ctr', `${B}/${id}/revenue/${asked.body.id}/confirm`)).body.code).toBe('WRONG_STATE');
+    m = (await moneyOf(id, 'p-ctr')).fundraising;
+    expect(m.revenueTotal).toBe(1000);
+    expect((await revenue(id, 500)).status).toBe(201);
+    expect((await moneyOf(id)).fundraising.revenueTotal).toBe(1500);
     const plain = await approvedPlan({ title: 'Plain' });
     expect((await revenue(plain, 1000)).body.code).toBe('NOT_FUNDRAISING');
-    expect((await moneyOf(id)).fundraising.revenueTotal).toBe(1000);
   });
 
   it('net profit is added to the general pool when the event is Done', async () => {
@@ -237,5 +247,6 @@ describe('settlement (slice 7 gate)', () => {
     expect(rec[0].amount).toBe(-20000);
     expect((await pool()).secured).toBe(before - 20000);
     expect(notices('p-pastor').some((t) => t.startsWith('Post-settlement invoice'))).toBe(true);
+    expect((await moneyOf(id, 'p-ctr')).settlement.closedWithLateAdjustment).toBe(true);
   });
 });

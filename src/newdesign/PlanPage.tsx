@@ -2,11 +2,11 @@ import { levelKeyOf } from './planLevels';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
-  cancelPlan, deletePlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, rejectPlan,
+  cancelPlan, deletePlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, rejectPlan, suspendPlan, unsuspendPlan,
   type ActivityMoney, type PlanDetail,
 } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
-import { TextAreaField } from '../components/ui/Field';
+import { SelectField, TextAreaField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
@@ -23,7 +23,7 @@ import { whenSummary } from './when';
 import { useLoad } from './useLoad';
 import { PageHeader, StatusChip, Tabs } from './kit';
 
-type Ask = 'reject' | 'cancel' | 'delete' | 'done' | 'approve' | null;
+type Ask = 'reject' | 'cancel' | 'delete' | 'done' | 'approve' | 'suspend' | 'unsuspend' | null;
 type Tab = 'overview' | 'money' | 'revenue' | 'work' | 'notes' | 'files' | 'details' | 'history';
 
 /** One activity: its overview and, once approved, three working tabs (Checklist, Money, Notes) plus Revenue for a fundraiser; details and history. */
@@ -42,6 +42,7 @@ export function PlanPage() {
   const [editing, setEditing] = useState(false);
   const [ask, setAsk] = useState<Ask>(null);
   const [reason, setReason] = useState('');
+  const [target, setTarget] = useState<'CREATOR' | 'PREVIOUS'>('CREATOR');
   const [error, setError] = useState('');
   const [tab0, setTab0] = useState<Tab | null>(null);
 
@@ -112,7 +113,8 @@ export function PlanPage() {
           <PlanLinks p={p} systemId={systemId} run={run} />
           {m && (m.planned > 0 || m.earmarked > 0) && <GapLine m={m} />}
 
-          {p.rejectedReason && p.status === 'DRAFT' && <p className="door-error">{t('door.plan.sentBack', { reason: p.rejectedReason })}</p>}
+          {p.rejectedReason && (p.status === 'DRAFT' || p.status === 'PENDING_APPROVAL') && <p className="door-error">{t('door.plan.sentBack', { reason: p.rejectedReason })}</p>}
+          {p.suspension && <p className="door-error" role="status">{t('door.plan.suspended', { name: p.suspension.byName, note: p.suspension.note })}</p>}
           {p.cancelReason && <p className="door-error">{t('door.plan.cancelled', { reason: p.cancelReason })}</p>}
           {error && (
             <p className="door-error" role="alert">
@@ -151,6 +153,16 @@ export function PlanPage() {
                 {t('door.plan.action.cancel')}
               </button>
             )}
+            {p.canSuspend && (
+              <button type="button" className="btn secondary" onClick={() => setAsk('suspend')}>
+                {t('door.plan.action.suspend')}
+              </button>
+            )}
+            {p.canUnsuspend && (
+              <button type="button" className="btn secondary" onClick={() => setAsk('unsuspend')}>
+                {t('door.plan.action.unsuspend')}
+              </button>
+            )}
             {p.canDelete && (
               <button type="button" className="btn ghost" onClick={() => setAsk('delete')}>
                 {t('door.work.delete')}
@@ -186,10 +198,16 @@ export function PlanPage() {
           )}
           {ask && ask !== 'delete' && ask !== 'done' && ask !== 'approve' && (
             <div className="panel door-form">
-              <TextAreaField label={ask === 'reject' ? t('door.plan.rejectAsk') : t('door.plan.cancelAsk')} name="p-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+              <TextAreaField label={ask === 'reject' ? t('door.plan.rejectAsk') : ask === 'suspend' ? t('door.plan.suspendAsk') : ask === 'unsuspend' ? t('door.plan.unsuspendAsk') : t('door.plan.cancelAsk')} name="p-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+              {ask === 'reject' && p.levels.some((l) => l.status === 'APPROVED') && (
+                <SelectField label={t('door.plan.returnTo')} name="p-return" value={target} onChange={(e) => setTarget(e.target.value as 'CREATOR' | 'PREVIOUS')}>
+                  <option value="CREATOR">{t('door.plan.returnTo.CREATOR')}</option>
+                  <option value="PREVIOUS">{t('door.plan.returnTo.PREVIOUS')}</option>
+                </SelectField>
+              )}
               <div className="door-row">
-                <button type="button" className="btn" disabled={!reason.trim()} onClick={() => void run(() => (ask === 'reject' ? rejectPlan(p.id, reason.trim()) : cancelPlan(p.id, reason.trim())))}>
-                  {ask === 'reject' ? t('door.plan.action.reject') : t('door.plan.action.cancel')}
+                <button type="button" className="btn" disabled={ask !== 'unsuspend' && !reason.trim()} onClick={() => void run(() => (ask === 'reject' ? rejectPlan(p.id, reason.trim(), target) : ask === 'suspend' ? suspendPlan(p.id, reason.trim()) : ask === 'unsuspend' ? unsuspendPlan(p.id, reason.trim() || undefined) : cancelPlan(p.id, reason.trim())))}>
+                  {ask === 'reject' ? t('door.plan.action.reject') : ask === 'suspend' ? t('door.plan.action.suspend') : ask === 'unsuspend' ? t('door.plan.action.unsuspend') : t('door.plan.action.cancel')}
                 </button>
                 <button type="button" className="btn ghost" onClick={() => setAsk(null)}>
                   {t('door.settings.cancel')}

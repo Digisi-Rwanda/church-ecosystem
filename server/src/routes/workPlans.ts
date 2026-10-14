@@ -15,12 +15,14 @@ import { NOTE_MAX, TEXT_MAX, TITLE_MAX, VISIBILITIES, canSee } from '../work/rul
 import {
   CHECKS_MAX, ROLE_MAX, TEAM_MAX, approversOf, asWorkRow, buildLevels, catechistStepApplies, canApprove, canComposeReport, canManagePlan, canPublishReport,
   canWritePlan, canDecideForChurch, currentLevel, treasurerExists, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, parseJson, publishProblem, skipUnitLevel, stateOf, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
+  unitApproverIds, holdersWith,
 } from '../work/plan.js';
 import { figures, submitProblem } from '../money/planMoney.js';
 import { fundraisingProblem } from '../money/settle.js';
 import { onDone } from './planSettle.js';
 import { cycleProblem, isOngoing, multiplierOf } from '../money/cycles.js';
 import { fileCounts } from './planFiles.js';
+import { carryOver, moneySig, parseReturn } from '../money/resume.js';
 import { potsOf } from './incomeFunds.js';
 import { earmarkProblem } from '../money/funds.js';
 import { TIMING_KINDS, churchDay, normalizeTiming, postponedOverSixMonths, repeatOf, repeatSchema, timingProblem, timingText, type Timing } from '../work/timing.js';
@@ -44,7 +46,7 @@ const detailsOf = (p: { detailsJson?: string | null }): Record<string, string> =
 interface Plan extends PlanRow {
   planType?: string | null;
   aim?: string | null; needs?: string | null; location?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null;
-  rejectedReason?: string | null; cancelReason?: string | null; planningSummary?: string | null; executionSummary?: string | null;
+  rejectedReason?: string | null; returnJson?: string | null; suspendedAt?: Date | string | null; suspendedById?: string | null; suspendNote?: string | null; cancelReason?: string | null; planningSummary?: string | null; executionSummary?: string | null;
   parentId?: string | null; steeringJson?: string | null; detailsJson?: string | null; registrationOpen?: boolean | null; capacity?: number | null; publicToken?: string | null; registrationUrl?: string | null;
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
   timingKind?: string | null; startTime?: string | null; endTime?: string | null; repeatJson?: string | null; dateChangeJson?: string | null; reviewDue?: boolean | null;
@@ -144,7 +146,7 @@ function flags(p: Plan, c: Ctx, me: string) {
   const type = p.planType ?? 'PROJECT';
   return {
     canEdit: manage && p.status === 'DRAFT',
-    canSetTiming: !p.deletedAt && (manage || canScheduleIn(me, p.systemId, c.data)) && ['DRAFT', 'SETUP', 'RUNNING', 'PAUSED'].includes(p.status),
+    canSetTiming: !p.deletedAt && (manage || (canScheduleIn(me, p.systemId, c.data) && ['DRAFT', 'PENDING_APPROVAL'].includes(p.status))) && ['DRAFT', 'PENDING_APPROVAL', 'SETUP', 'RUNNING', 'PAUSED'].includes(p.status),
     canClearReview: !!p.reviewDue && canDecideForChurch(me, c.data),
     canSubmit: manage && p.status === 'DRAFT',
     canWithdraw: manage && p.status === 'PENDING_APPROVAL',
@@ -153,6 +155,8 @@ function flags(p: Plan, c: Ctx, me: string) {
     canReopen: manage && p.status === 'SETUP',
     canStart: manage && p.status === 'SETUP',
     canClose: manage && ['SETUP', 'RUNNING'].includes(p.status),
+    canSuspend: !p.suspendedAt && !p.deletedAt && ['SETUP', 'RUNNING', 'PAUSED', 'CLOSING'].includes(p.status) && canDecideForChurch(me, c.data),
+    canUnsuspend: !!p.suspendedAt && !p.deletedAt && canDecideForChurch(me, c.data),
     canPause: manage && p.status === 'RUNNING' && !typeProblem('pause', type),
     canResume: manage && p.status === 'PAUSED' && !typeProblem('resume', type),
     canRenew: manage && p.status === 'CLOSING' && !typeProblem('renew', type),
@@ -241,7 +245,7 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
   const regs = detail && type === 'EVENT' ? await registrationsOf(p.id) : [];
   const family = detail ? await familyOf(p, c, me) : { parent: null, children: [] };
   const program = detail && type === 'PROGRAM' ? await programView(p, c, me) : null;
-  const who = await names([...regs.map((r) => r.personId), p.leaderPersonId, p.createdById, ...team.map((t) => t.personId), ...levels.map((l) => l.byId), ...notes.map((n) => n.authorId)]);
+  const who = await names([...regs.map((r) => r.personId), p.leaderPersonId, p.createdById, ...team.map((t) => t.personId), ...levels.map((l) => l.byId), ...notes.map((n) => n.authorId), p.suspendedById]);
   const base = {
     id: p.id, title: p.title, status: p.status, systemId: p.systemId, orgUnitId: p.orgUnitId,
     unitName: c.units.find((u) => u.id === p.orgUnitId)?.name ?? '',
@@ -259,6 +263,7 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
     team: team.map((t) => ({ personId: t.personId, name: who.get(t.personId) ?? '', role: t.role })),
     createdByName: who.get(p.createdById) ?? '',
     levels: levels.map((l) => ({ levelKey: l.levelKey, label: l.label, status: l.status, byName: l.byId ? who.get(l.byId) ?? '' : null, at: l.at, note: l.note })),
+    suspension: p.suspendedAt ? { at: iso(p.suspendedAt), byName: p.suspendedById ? who.get(p.suspendedById) ?? '' : '', note: p.suspendNote ?? '' } : null,
     rejectedReason: p.rejectedReason ?? null, cancelReason: p.cancelReason ?? null, dateChange: dateChangeOf(p),
     notes: notes.map((n) => ({ id: n.id, authorName: who.get(n.authorId) ?? '', text: n.text, at: iso(n.createdAt) })),
     checks: checks.map((k) => ({ id: k.id, label: k.label, done: k.done, doneAt: iso(k.doneAt) })),
@@ -550,15 +555,18 @@ workPlansRouter.post('/:id/submit', requireAuth, (req: AuthedRequest, res) =>
     if (submitProblem(f.planned, f.earmarked)) throw new SubmitStop(409, 'FUNDING_GAP', 'The money set aside must match the planned spending');
     const held = earmarkProblem(await potsOf(p.systemId, p.id), sources.filter((s) => s.planId === p.id));
     if (held) throw new SubmitStop(409, 'INSUFFICIENT_FUNDS', 'The money set aside is no longer available');
-    const levels = buildLevels(p.systemId, skipUnitLevel(p.createdById, p.systemId, c.data), f.planned > 0 && treasurerExists(p.createdById, p.systemId, c.data), catechistStepApplies(p.createdById, p.systemId, c.data));
-    const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'PENDING_APPROVAL', approvalsJson: JSON.stringify(levels), rejectedReason: null } })) as Plan;
+    const fresh = buildLevels(p.systemId, skipUnitLevel(p.createdById, p.systemId, c.data), f.planned > 0 && treasurerExists(p.createdById, p.systemId, c.data), catechistStepApplies(p.createdById, p.systemId, c.data));
+    // Sent back and fixed: with the same money, the approvals before the step that returned it still stand; changed money starts again from the Treasurer.
+    const levels = carryOver(fresh, parseReturn(p.returnJson), moneySig(lines.filter((l) => l.planId === p.id) as never, sources.filter((x) => x.planId === p.id)));
+    const treasurerStands = levels.some((l) => l.levelKey === 'TREASURER' && l.status === 'APPROVED');
+    const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'PENDING_APPROVAL', approvalsJson: JSON.stringify(levels), rejectedReason: null, returnJson: null, ...(treasurerStands ? {} : { moneyCheckJson: null }) } })) as Plan;
     await askApprovers(row, c, me, 'Plan to approve');
   }),
 );
 
 workPlansRouter.post('/:id/withdraw', requireAuth, (req: AuthedRequest, res) =>
   move(req, res, { action: 'withdraw', allow: managers }, async (p) => {
-    await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'DRAFT', approvalsJson: '[]' } });
+    await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'DRAFT', approvalsJson: '[]', returnJson: null } });
   }),
 );
 
@@ -612,11 +620,26 @@ workPlansRouter.post('/:id/reject', requireAuth, async (req: AuthedRequest, res)
   if (p.status !== 'PENDING_APPROVAL') return fail(res, 409, 'WRONG_STATE', 'This plan is not waiting for approval');
   if (currentLevel(p)?.levelKey === 'TREASURER') return fail(res, 409, 'USE_MONEY_CHECK', 'The Treasurer answers with the figures check');
   if (!canApprove(p, me, c.data)) return p.createdById === me ? fail(res, 403, 'OWN_ENTRY', 'Nobody decides on their own plan') : fail(res, 403, 'FORBIDDEN', 'You may not decide at this level');
-  const parsed = z.object({ reason: z.string().trim().min(1).max(NOTE_MAX) }).safeParse(req.body);
+  const parsed = z.object({ reason: z.string().trim().min(1).max(NOTE_MAX), target: z.enum(['CREATOR', 'PREVIOUS']).optional() }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'REASON_REQUIRED', 'Please give a reason');
-  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'DRAFT', approvalsJson: '[]', rejectedReason: parsed.data.reason } })) as Plan;
+  const reason = parsed.data.reason;
+  const levels = levelsOf(p);
+  const idx = levels.findIndex((l) => l.status === 'PENDING');
+  // A return goes to the creator unless the one returning chooses the step before theirs. Only a return to the creator frees the money.
+  if (parsed.data.target === 'PREVIOUS') {
+    if (idx < 1) return fail(res, 409, 'NO_PREVIOUS', 'There is no step before this one');
+    levels[idx - 1] = { ...levels[idx - 1]!, status: 'PENDING', byId: null, at: null, note: null };
+    const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { approvalsJson: JSON.stringify(levels), rejectedReason: reason } })) as Plan;
+    await askApprovers(row, c, me, 'Returned to you');
+    await audit(me, p.systemId, 'WORKPLAN_RETURNED', `Returned “${p.title}” to ${levels[idx - 1]!.label}`, { planId: p.id, to: levels[idx - 1]!.levelKey, reason });
+    return res.json({ plan: await shape(row, c, me, true) });
+  }
+  const lines = (await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as Array<{ planId: string | null; amount: number; status: string }>;
+  const sources = ((await prisma.planSource.findMany({ where: { planId: p.id } })) as Array<{ planId: string; kind: string; code: string; amount: number }>).filter((x) => x.planId === p.id);
+  const mark = { atKey: levels[idx]!.levelKey, levels: levels.slice(0, idx), sig: moneySig(lines.filter((l) => l.planId === p.id) as never, sources) };
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { status: 'DRAFT', approvalsJson: '[]', rejectedReason: reason, returnJson: JSON.stringify(mark) } })) as Plan;
   await tellOne(p.createdById, p, `Sent back: ${p.title}`, `plan-rejected:${p.id}:${Date.now()}`);
-  await audit(me, p.systemId, 'WORKPLAN_REJECTED', `Sent back “${p.title}”`, { planId: p.id, reason: parsed.data.reason });
+  await audit(me, p.systemId, 'WORKPLAN_REJECTED', `Sent back “${p.title}”`, { planId: p.id, reason, to: 'CREATOR' });
   res.json({ plan: await shape(row, c, me, true) });
 });
 
@@ -658,6 +681,38 @@ workPlansRouter.post('/:id/renew', requireAuth, (req: AuthedRequest, res) =>
   }),
 );
 
+/**
+ * The Church Leader suspends any running activity with a note, and only the Church Leader lifts it. It is a flag, so every kind of activity (an event too)
+ * can carry it, and costs already incurred are still recorded.
+ */
+workPlansRouter.post('/:id/suspend', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!canDecideForChurch(me, c.data)) return fail(res, 403, 'FORBIDDEN', 'Only the Church Leader suspends an activity');
+  if (p.suspendedAt || !['SETUP', 'RUNNING', 'PAUSED', 'CLOSING'].includes(p.status)) return fail(res, 409, 'WRONG_STATE', 'Not possible in the activity’s current state');
+  const b = z.object({ note: z.string().trim().min(1).max(NOTE_MAX) }).safeParse(req.body);
+  if (!b.success) return fail(res, 400, 'NOTE_REQUIRED', 'Say why it is suspended');
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { suspendedAt: new Date(), suspendedById: me, suspendNote: b.data.note } })) as Plan;
+  for (const id of new Set([p.createdById, p.leaderPersonId, ...unitApproverIds(p.systemId, c.data), ...holdersWith(p.systemId, 'MONEY', 'W', c.data)]))
+    if (id !== me) await notifySafely(prisma as never, { kind: 'WAITING_FOR_ME', toPersonId: id, systemId: p.systemId, title: `Suspended by the Church Leader: ${p.title}`, body: b.data.note, href: `/s/${p.systemId}/work/plans/${p.id}`, important: true, sourceKey: `plan-suspend:${p.id}:${id}:${Date.now()}` });
+  await audit(me, p.systemId, 'WORKPLAN_SUSPENDED', `Suspended “${p.title}”`, { planId: p.id, note: b.data.note });
+  res.json({ plan: await shape(row, c, me, true) });
+});
+workPlansRouter.post('/:id/unsuspend', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!canDecideForChurch(me, c.data)) return fail(res, 403, 'FORBIDDEN', 'Only the Church Leader lifts a suspension');
+  if (!p.suspendedAt) return fail(res, 409, 'WRONG_STATE', 'This activity is not suspended');
+  const b = z.object({ note: z.string().trim().max(NOTE_MAX).nullish() }).safeParse(req.body ?? {});
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { suspendedAt: null, suspendedById: null, suspendNote: null } })) as Plan;
+  for (const id of new Set([p.createdById, p.leaderPersonId, ...unitApproverIds(p.systemId, c.data), ...holdersWith(p.systemId, 'MONEY', 'W', c.data)]))
+    if (id !== me) await notifySafely(prisma as never, { kind: 'FOR_INFORMATION', toPersonId: id, systemId: p.systemId, title: `Suspension lifted: ${p.title}`, body: (b.success && b.data.note) || null, href: `/s/${p.systemId}/work/plans/${p.id}`, sourceKey: `plan-unsuspend:${p.id}:${id}:${Date.now()}` });
+  await audit(me, p.systemId, 'WORKPLAN_UNSUSPENDED', `Lifted the suspension of “${p.title}”`, { planId: p.id });
+  res.json({ plan: await shape(row, c, me, true) });
+});
+
 workPlansRouter.post('/:id/cancel', requireAuth, async (req: AuthedRequest, res) => {
   const got = await visible(req, res);
   if (!got) return;
@@ -688,6 +743,8 @@ workPlansRouter.patch('/:id/timing', requireAuth, async (req: AuthedRequest, res
   if (!got) return;
   const { me, c, p } = got;
   if (!flags(p, c, me).canSetTiming) return fail(res, 403, 'FORBIDDEN', 'You may not change the time of this activity');
+  // Once approved, a change of date, time, repeat or place is an amendment: the President, the Catechist and the Church Leader each look at it.
+  if (!['DRAFT', 'PENDING_APPROVAL'].includes(p.status)) return fail(res, 409, 'USE_AMENDMENT', 'This activity is approved. Ask for an amendment to change when or where it happens.');
   const parsed = z
     .object({
       timingKind: z.enum(TIMING_KINDS), startsOn: z.string().datetime().nullish(), endsOn: z.string().datetime().nullish(),

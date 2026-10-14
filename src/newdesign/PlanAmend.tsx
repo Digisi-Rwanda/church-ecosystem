@@ -1,10 +1,11 @@
 import { useState } from 'react';
 import {
-  decideAmendment, renewMonth, requestAmendment, setBudgetCycle,
-  type ActivityMoney, type AmendmentView, type BudgetCycle, type PlanDetail,
+  decideAmendment, requestAmendment, setBudgetCycle,
+  type ActivityMoney, type AmendChanges, type AmendmentView, type BudgetCycle, type PlanDetail,
 } from '../api/frontDoorApi';
 import { ApiError } from '../api/client';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
+import { PersonPicker } from './PersonPicker';
 import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { formatRwf } from './money';
@@ -90,24 +91,6 @@ export function CyclePanel({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney
   );
 }
 
-/** An ongoing program's month: released by the Church Leader or "Not released". */
-export function OngoingMonth({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney; onChange: (next: ActivityMoney) => void }) {
-  const t = useT();
-  const [error, setError] = useState('');
-  if (!m.ongoingMonth) return null;
-  return (
-    <div className="door-row">
-      <StatusChip tone={m.ongoingMonth.released ? 'success' : 'warn'}>{m.ongoingMonth.month}: {t(m.ongoingMonth.released ? 'door.pm.released' : 'door.pm.notReleased')}</StatusChip>
-      {m.canRenew && !m.ongoingMonth.released && (
-        <button type="button" className="btn sm" onClick={() => void renewMonth(p.id).then(onChange).catch((e) => setError(t(planErrorKey(errorCode(e)) as 'door.people.actionFailed')))}>
-          {t('door.pm.release', { month: m.ongoingMonth.month })}
-        </button>
-      )}
-      {error && <span className="door-error" role="alert">{error}</span>}
-    </div>
-  );
-}
-
 /** The open amendment: what is asked, and for those who decide, Approve or Decline with a reason. */
 export function PendingAmendment({ p, a, m, go }: { p: PlanDetail; a: AmendmentView; m: ActivityMoney; go: Go }) {
   const t = useT();
@@ -117,12 +100,28 @@ export function PendingAmendment({ p, a, m, go }: { p: PlanDetail; a: AmendmentV
     <div className="panel">
       <StatusChip tone="warn">{t('door.pm.amend.pending')}</StatusChip>
       <p>
-        <strong>{t(`door.pm.amend.kind.${a.kind}` as 'door.pm.amend.kind.TRANSFER')}</strong> · {formatRwf(a.oldTotal)} → {formatRwf(a.newTotal)} · {a.requestedByName}
+        <strong>{t(`door.pm.amend.scope.${a.scope}` as 'door.pm.amend.scope.MONEY')}</strong>
+        {a.kind !== 'CHANGE' && <> · {t(`door.pm.amend.kind.${a.kind}` as 'door.pm.amend.kind.TRANSFER')} · {formatRwf(a.oldTotal)} → {formatRwf(a.newTotal)}</>} · {a.requestedByName}
       </p>
       <p className="muted">{a.justification}</p>
-      <ul className="door-list">
-        {a.lines.map((l, i) => <li key={l.id ?? `n${i}`}>{l.title} · {formatRwf(l.amount)}</li>)}
-      </ul>
+      {a.levels.length > 0 && (
+        <ol className="door-list">
+          {a.levels.map((l) => (
+            <li key={l.levelKey}>
+              <StatusChip tone={l.status === 'APPROVED' ? 'success' : 'warn'}>{l.label}</StatusChip>{' '}
+              {l.status === 'APPROVED' ? t('door.pm.amend.approvedBy', { name: l.byName ?? '' }) : t('door.pm.amend.waiting')}
+            </li>
+          ))}
+        </ol>
+      )}
+      {a.changes && a.changes.keys.length > 0 && (
+        <p className="muted">{t('door.pm.amend.changes', { fields: a.changes.keys.map((k) => t(`door.pm.amend.field.${k}` as 'door.pm.amend.field.title')).join(', ') })}</p>
+      )}
+      {a.kind !== 'CHANGE' && (
+        <ul className="door-list">
+          {a.lines.map((l, i) => <li key={l.id ?? `n${i}`}>{l.title} · {formatRwf(l.amount)}</li>)}
+        </ul>
+      )}
       <div className="door-row">
         {a.canDecide && <button type="button" className="btn sm" onClick={() => void go(() => decideAmendment(p.id, a.id, 'approve'))}>{t('door.plan.action.approve')}</button>}
         {a.canDecide && <button type="button" className="btn secondary sm" onClick={() => setDeclining(true)}>{t('door.pm.amend.decline')}</button>}
@@ -141,23 +140,41 @@ export function PendingAmendment({ p, a, m, go }: { p: PlanDetail; a: AmendmentV
 /** "Request budget amendment": new lines and new money set aside, with the same live gap line and a reason. */
 export function AmendForm({ p, m, go, onCancel }: { p: PlanDetail; m: ActivityMoney; go: Go; onCancel: () => void }) {
   const t = useT();
-  const [lines, setLines] = useState(m.lines.map((l) => ({ id: l.id as string | null, title: l.title, amount: String(l.amount) })));
+  const [lines, setLines] = useState(m.lines.map((l) => ({ id: l.id as string | null, title: l.title, amount: String(l.amount), category: l.category ?? '' })));
+  const [leader, setLeader] = useState<{ id: string; name: string } | null>(null);
   const [aside, setAside] = useState<Record<string, string>>(Object.fromEntries(m.sources.map((s) => [s.potId, String(s.amount)])));
   const [why, setWhy] = useState('');
   const [title, setTitle] = useState('');
   const [amount, setAmount] = useState('');
+  const [name, setName] = useState(p.title);
+  const [aim, setAim] = useState(p.aim);
+  const [needs, setNeeds] = useState(p.needs);
   const mult = m.cycle.multiplier || 1;
   const planned = lines.reduce((n, l) => n + num(l.amount), 0) * mult;
   const set = m.pots.reduce((n, pot) => n + num(aside[pot.id] ?? ''), 0);
   const gap = planned - set;
   const kind = planned > m.planned ? 'INCREASE' : 'TRANSFER';
-  const ready = why.trim() && gap === 0 && lines.every((l) => l.title.trim() && num(l.amount) > 0) && lines.length > 0;
+  const moneyChanged = lines.length !== m.lines.length || lines.some((l) => { const old = m.lines.find((x) => x.id === l.id); return !old || old.title !== l.title.trim() || old.amount !== num(l.amount); })
+    || m.pots.some((pot) => num(aside[pot.id] ?? '') !== (m.sources.find((s) => s.potId === pot.id)?.amount ?? 0));
+  const changes: AmendChanges = {
+    ...(name.trim() !== p.title ? { title: name.trim() } : {}),
+    ...(aim.trim() !== p.aim ? { aim: aim.trim() } : {}),
+    ...(needs.trim() !== p.needs ? { needs: needs.trim() || null } : {}),
+  };
+  if (leader && leader.id !== p.leaderId) changes.leaderId = leader.id;
+  const detailsChanged = Object.keys(changes).filter((k) => k !== 'leaderId').length > 0;
+  const leaderChanged = !!changes.leaderId;
+  const catChanged = lines.some((l) => { const old = m.lines.find((x) => x.id === l.id); return !!old && (old.category ?? '') !== l.category.trim(); });
+  const moneyOk = !moneyChanged || (gap === 0 && lines.every((l) => l.title.trim() && num(l.amount) > 0) && lines.length > 0);
+  const ready = !!why.trim() && (moneyChanged || detailsChanged || leaderChanged || catChanged) && moneyOk && !!name.trim();
+  const route = detailsChanged || catChanged || (leaderChanged && moneyChanged) ? 'GENERAL' : leaderChanged ? 'TEAM' : 'MONEY';
   const send = () =>
     go(
       () => requestAmendment(p.id, {
         justification: why.trim(),
-        lines: lines.map((l) => ({ id: l.id, title: l.title.trim(), amount: num(l.amount) })),
-        sources: m.pots.map((pot) => ({ kind: pot.kind, code: pot.code, amount: num(aside[pot.id] ?? '') })).filter((s) => s.amount > 0),
+        ...(moneyChanged || catChanged ? { lines: lines.map((l) => ({ id: l.id, title: l.title.trim(), amount: num(l.amount), category: l.category.trim() || null })) } : {}),
+        ...(moneyChanged ? { sources: m.pots.map((pot) => ({ kind: pot.kind, code: pot.code, amount: num(aside[pot.id] ?? '') })).filter((s) => s.amount > 0) } : {}),
+        ...(detailsChanged || leaderChanged ? { changes } : {}),
       }),
       onCancel,
     );
@@ -165,11 +182,22 @@ export function AmendForm({ p, m, go, onCancel }: { p: PlanDetail; m: ActivityMo
     <div className="panel door-form">
       <h4>{t('door.pm.amend.title')}</h4>
       <p className="muted">{t(`door.pm.amend.hint.${kind}` as 'door.pm.amend.hint.TRANSFER')}</p>
+      <p className="muted" role="status">{t(`door.pm.amend.route.${route}` as 'door.pm.amend.route.MONEY')}</p>
+      <h4>{t('door.pm.amend.mission')}</h4>
+      <TextField label={t('door.plan.form.title')} name="am-name" value={name} onChange={(e) => setName(e.target.value)} />
+      <TextAreaField label={t('door.plan.form.aim')} name="am-aim" rows={2} value={aim} onChange={(e) => setAim(e.target.value)} />
+      <TextAreaField label={t('door.plan.form.needs')} name="am-needs" rows={2} value={needs} onChange={(e) => setNeeds(e.target.value)} />
+      <p>
+        <strong>{t('door.plan.leader')}:</strong> {leader ? leader.name : p.leaderName}
+      </p>
+      <PersonPicker label={t('door.pm.amend.leader')} name="am-leader" onPick={(x) => setLeader({ id: x.id, name: x.fullName })} />
+      <h4>{t('door.pm.amend.moneyPart')}</h4>
       <ul className="door-list">
         {lines.map((l, i) => (
           <li key={l.id ?? `n${i}`}>
             <TextField label={t('door.pm.for')} name={`am-t-${i}`} value={l.title} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))} />
             <TextField label={t('door.pm.amount')} name={`am-a-${i}`} inputMode="numeric" value={l.amount} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, amount: e.target.value } : x)))} />
+            <TextField label={t('door.pm.amend.category')} name={`am-c-${i}`} value={l.category} onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, category: e.target.value } : x)))} />
             {!l.id && <button type="button" className="btn ghost sm" onClick={() => setLines(lines.filter((_, j) => j !== i))}>{t('door.pm.remove')}</button>}
           </li>
         ))}
@@ -177,7 +205,7 @@ export function AmendForm({ p, m, go, onCancel }: { p: PlanDetail; m: ActivityMo
       <div className="door-form">
         <TextField label={t('door.pm.for')} name="am-new-t" value={title} onChange={(e) => setTitle(e.target.value)} />
         <TextField label={t('door.pm.amount')} name="am-new-a" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
-        <button type="button" className="btn secondary sm" disabled={!title.trim() || num(amount) < 1} onClick={() => { setLines([...lines, { id: null, title: title.trim(), amount: String(num(amount)) }]); setTitle(''); setAmount(''); }}>{t('door.pm.add')}</button>
+        <button type="button" className="btn secondary sm" disabled={!title.trim() || num(amount) < 1} onClick={() => { setLines([...lines, { id: null, title: title.trim(), amount: String(num(amount)), category: '' }]); setTitle(''); setAmount(''); }}>{t('door.pm.add')}</button>
       </div>
       <h4>{t('door.pm.sources')}</h4>
       <ul className="door-list">
