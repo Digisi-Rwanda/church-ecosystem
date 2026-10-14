@@ -1,6 +1,6 @@
 import { levelKeyOf } from './planLevels';
 import { useState } from 'react';
-import { fetchPlans, type PlanItem, type PlanType } from '../api/frontDoorApi';
+import { fetchPlanTable, type BoardItem, type PlanType } from '../api/frontDoorApi';
 import { SelectField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
@@ -9,18 +9,19 @@ import { useLoad } from './useLoad';
 import { EmptyState, ListRow, RowList, SearchBox, Segmented, StatusChip, matchesText } from './kit';
 import { Link } from 'react-router-dom';
 import { monthKeyOf } from './plans';
+import { PlansTable } from './PlansTable';
 
-type Layout = 'list' | 'board' | 'calendar';
+type Layout = 'table' | 'list' | 'board' | 'calendar';
+type PlanItem = BoardItem;
 
 /** Full work in one system: plans that are approved, run, closed and reported. */
 export function PlansList({ systemId, planType }: { systemId: string; planType?: PlanType }) {
   const t = useT();
   const { locale } = useI18n();
-  const view = 'all' as const;
   const [show, setShow] = useState<'open' | 'all'>('open');
-  const [layout, setLayout] = useState<Layout>('list');
+  const [layout, setLayout] = useState<Layout>('table');
   const [text, setText] = useState('');
-  const list = useLoad(() => fetchPlans({ systemId, view, status: show, type: planType }), `plans|${systemId}|${view}|${show}|${planType ?? ''}`);
+  const list = useLoad(() => fetchPlanTable({ systemId, status: show, type: planType }), `plans-table|${systemId}|${show}|${planType ?? ''}`);
   const items = sortPlans(list.data ?? []).filter((p) => matchesText(text, p.title, p.leaderName, p.unitName, p.state));
   const waiting = items.filter((p) => p.canApprove);
   const to = (p: PlanItem) => `/s/${systemId}/work/plans/${p.id}`;
@@ -55,6 +56,7 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
           value={layout}
           onChange={setLayout}
           items={[
+            { key: 'table', label: t('door.plan.layout.table') },
             { key: 'list', label: t('door.work.layout.list') },
             { key: 'board', label: t('door.work.layout.board') },
             { key: 'calendar', label: t('door.plan.layout.calendar') },
@@ -70,6 +72,8 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
       <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
         {items.length === 0 ? (
           <EmptyState title={t('door.plan.none')} detail={t('door.plan.noneDetail')} />
+        ) : layout === 'table' ? (
+          <PlansTable items={items} />
         ) : layout === 'board' ? (
           <div className="board">
             {[...PLAN_STEPS.slice(0, 4), ...(items.some((p) => p.status === 'PAUSED') ? (['PAUSED'] as const) : []), ...PLAN_STEPS.slice(4)].filter((s) => show === 'all' || s !== 'ENDED').map((st) => {

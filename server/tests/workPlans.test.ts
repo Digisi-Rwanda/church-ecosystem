@@ -280,6 +280,7 @@ describe('the Activities board', () => {
     expect(row).toMatchObject({ planType: 'EVENT', state: 'WAITING', perMonth: false, amount: 0 });
     expect(row.levels.map((l: any) => [l.levelKey, l.status])).toEqual([['UNIT', 'APPROVED'], ['CHURCH', 'PENDING']]);
     expect(row.levels[0].byName).toBeTruthy();
+    expect(row.createdByName).toBeTruthy();
     expect(row.levels[1].byName).toBeNull();
   });
 });

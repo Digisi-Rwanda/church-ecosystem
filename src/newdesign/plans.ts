@@ -36,7 +36,7 @@ export function actionKey(a: PlanAction, type: PlanType, _beyondUnit?: boolean):
 }
 
 /** Open plans first (in step order), then closed ones. */
-export function sortPlans(list: PlanItem[]): PlanItem[] {
+export function sortPlans<T extends PlanItem>(list: T[]): T[] {
   const rank = (s: WorkPlanStatus) => (s === 'ENDED' ? 100 : s === 'CANCELLED' ? 101 : stepIndex(s) + (s === 'PAUSED' ? 0.5 : 0));
   return [...list].sort((a, b) => rank(a.status) - rank(b.status) || a.title.localeCompare(b.title));
 }

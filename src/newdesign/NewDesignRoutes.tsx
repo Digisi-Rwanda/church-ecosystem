@@ -31,7 +31,6 @@ import {
   Person360Page,
   PersonCardPage,
   PlanPage,
-  ActivitiesBoard,
   PublicEventPage,
   PublicCheckinPage,
   ActionPlanCreate,
@@ -120,7 +119,6 @@ export function newDesignRoutes() {
           <Route path="schedule/mine" element={<MyAssignmentsPage />} />
           <Route path="import/:target" element={<ImportPage />} />
           <Route path="work" element={<WorkPage />} />
-          <Route path="work/board" element={<ActivitiesBoard />} />
           <Route path="programs" element={<PlansPage planType="PROGRAM" />} />
           <Route path="events" element={<PlansPage planType="EVENT" />} />
           <Route path="projects" element={<PlansPage planType="PROJECT" />} />

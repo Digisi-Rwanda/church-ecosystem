@@ -116,7 +116,6 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
     work: shared.has('work')
       ? [
           place('tasks', 'work', 'door.work.tasks'),
-          ...(central ? [place('board', 'work/board', 'door.board.title')] : []),
           place('programs', 'programs', 'door.plans.PROGRAM'),
           place('events', 'events', 'door.plans.EVENT'),
           place('projects', 'projects', 'door.plans.PROJECT'),

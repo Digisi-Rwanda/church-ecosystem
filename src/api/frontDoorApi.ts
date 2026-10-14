@@ -1084,13 +1084,15 @@ const P = '/api/work-plans';
 const planBody = async (p: Promise<{ plan: PlanDetail }>): Promise<PlanDetail> => (await p).plan;
 export const savePlanDetails = (id: string, details: Record<string, string>) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/details`, { method: 'PUT', body: { details } }));
 export const fetchPlanOptions = (): Promise<PlanOptions> => apiFetch(`${P}/options`);
-/** A plan on the Activities board: the list item plus its approval steps and its money. */
+/** A plan in the table view: the list item plus its money and approval steps. */
 export type BoardItem = PlanItem & {
-  amount: number; perMonth: boolean;
+  amount: number; perMonth: boolean; createdByName: string;
   levels: Array<{ levelKey: 'UNIT' | 'TREASURER' | 'CATECHIST' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null }>;
 };
-export async function fetchBoard(systemId: string): Promise<BoardItem[]> {
-  const res = await apiFetch<{ items: BoardItem[] }>(`${P}?${new URLSearchParams({ systemId, view: 'all', status: 'all', board: '1' })}`);
+export async function fetchPlanTable(opts: { systemId: string; status: string; type?: PlanType }): Promise<BoardItem[]> {
+  const qs = new URLSearchParams({ systemId: opts.systemId, view: 'all', status: opts.status, board: '1' });
+  if (opts.type) qs.set('type', opts.type);
+  const res = await apiFetch<{ items: BoardItem[] }>(`${P}?${qs}`);
   return res.items;
 }
 export async function fetchPlans(opts: { systemId?: string; view?: 'mine' | 'all'; status?: string; q?: string; type?: PlanType } = {}): Promise<PlanItem[]> {

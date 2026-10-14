@@ -8241,16 +8241,3 @@ a.feed-row:hover { background: var(--f-hover); }
 .agenda-item a:hover { text-decoration: underline; }
 .agenda-item .muted { font-size: 0.82rem; }
 
-/* Activities board: one row per activity, its approval steps underneath */
-.board-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.6rem; }
-.board-row { display: grid; gap: 0.6rem; padding: 0.8rem 1rem; border: 1px solid var(--line, #e5e7eb); border-radius: 12px; background: var(--surface, #fff); }
-.board-main { display: flex; flex-direction: column; gap: 0.1rem; }
-.board-title { font-weight: 600; color: var(--ink); text-decoration: none; }
-.board-title:hover { text-decoration: underline; }
-.board-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: 0.5rem 1rem; margin: 0; }
-.board-facts dt { font-size: 0.75rem; color: var(--muted, #6b7280); }
-.board-facts dd { margin: 0; }
-.board-steps { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(8rem, 1fr)); gap: 0.4rem; }
-.board-step { display: flex; flex-direction: column; padding: 0.35rem 0.6rem; border-radius: 8px; background: color-mix(in srgb, var(--muted, #6b7280) 10%, transparent); font-size: 0.85rem; }
-.board-step.done { background: color-mix(in srgb, #16a34a 14%, transparent); }
-.board-step.now { background: color-mix(in srgb, #d97706 16%, transparent); }
