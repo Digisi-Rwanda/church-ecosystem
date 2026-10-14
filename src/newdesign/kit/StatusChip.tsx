@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 
-export type ChipTone = 'neutral' | 'info' | 'success' | 'warn' | 'danger';
+export type ChipTone = 'neutral' | 'info' | 'success' | 'warn' | 'danger' | 'done' | 'paused';
 
 /** A short state label. The words always carry the meaning; colour only backs them up. */
 export function StatusChip({ tone = 'neutral', children }: { tone?: ChipTone; children: ReactNode }) {

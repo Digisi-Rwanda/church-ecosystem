@@ -1086,9 +1086,19 @@ export const savePlanDetails = (id: string, details: Record<string, string>) => 
 export const fetchPlanOptions = (): Promise<PlanOptions> => apiFetch(`${P}/options`);
 /** A plan in the table view: the list item plus its money and approval steps. */
 export type BoardItem = PlanItem & {
-  amount: number; perMonth: boolean; createdByName: string;
+  amount: number; perMonth: boolean; createdByName: string; aim: string; files: number;
   levels: Array<{ levelKey: 'UNIT' | 'TREASURER' | 'CATECHIST' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null }>;
 };
+/** Files attached to an activity: small ones, kept with it. */
+export type PlanFileItem = { id: string; name: string; mime: string; size: number; uploadedByName: string; uploadedAt: string | null };
+export const fetchPlanFiles = (planId: string): Promise<{ canWrite: boolean; items: PlanFileItem[] }> => apiFetch(`${P}/${encodeURIComponent(planId)}/files`);
+export async function uploadPlanFile(planId: string, b: { name: string; mime: string; data: string }): Promise<void> {
+  await apiFetch(`${P}/${encodeURIComponent(planId)}/files`, { method: 'POST', body: b });
+}
+export const fetchPlanFile = (planId: string, fileId: string): Promise<{ name: string; mime: string; data: string }> => apiFetch(`${P}/${encodeURIComponent(planId)}/files/${encodeURIComponent(fileId)}/file`);
+export async function deletePlanFile(planId: string, fileId: string): Promise<void> {
+  await apiFetch(`${P}/${encodeURIComponent(planId)}/files/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
+}
 export async function fetchPlanTable(opts: { systemId: string; status: string; type?: PlanType }): Promise<BoardItem[]> {
   const qs = new URLSearchParams({ systemId: opts.systemId, view: 'all', status: opts.status, board: '1' });
   if (opts.type) qs.set('type', opts.type);

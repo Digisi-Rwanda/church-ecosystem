@@ -1,6 +1,6 @@
 import { levelKeyOf } from './planLevels';
 import { useState } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   cancelPlan, deletePlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, rejectPlan,
   type ActivityMoney, type PlanDetail,
@@ -16,20 +16,22 @@ import { RevenueTab } from './PlanSettle';
 import { PlanForm } from './PlanForm';
 import { PlanLinks } from './PlanLinks';
 import { GapLine, PlanMoney } from './PlanMoney';
-import { actionKey, planActions, planErrorKey, planStatusKey, stateTone } from './plans';
+import { actionKey, planActions, planErrorKey, planStatusKey, planTone } from './plans';
+import { PlanFiles } from './PlanFiles';
 import { DateChangeBanner, ReviewPrompt, TimePanel } from './PlanTime';
 import { whenSummary } from './when';
 import { useLoad } from './useLoad';
 import { PageHeader, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | 'done' | 'approve' | null;
-type Tab = 'overview' | 'money' | 'revenue' | 'work' | 'notes' | 'details' | 'history';
+type Tab = 'overview' | 'money' | 'revenue' | 'work' | 'notes' | 'files' | 'details' | 'history';
 
 /** One activity: its overview and, once approved, three working tabs (Checklist, Money, Notes) plus Revenue for a fundraiser; details and history. */
 export function PlanPage() {
   const t = useT();
   const { locale } = useI18n();
   const navigate = useNavigate();
+  const loc = useLocation();
   const { systemId = '', planId = '' } = useParams();
   const load = useLoad(() => fetchPlan(planId), `plan|${planId}`);
   const options = useLoad(fetchPlanOptions, 'plan-options');
@@ -45,7 +47,7 @@ export function PlanPage() {
 
   const p = plan && plan.id === planId ? plan : load.data;
   const live = !!p && (p.state === 'APPROVED' || p.state === 'DONE');
-  const tab: Tab = tab0 ?? 'overview';
+  const tab: Tab = tab0 ?? ((loc.state as { tab?: Tab } | null)?.tab ?? 'overview');
   const setTab = (k: Tab) => setTab0(k);
   const day = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
 
@@ -75,8 +77,8 @@ export function PlanPage() {
             purpose={`${p.unitName} · ${t('door.plan.leader')}: ${p.leaderName}${p.startsOn ? ` · ${whenSummary(p, t, locale)}` : ''}`}
             meta={
               <>
-                <StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${levelKeyOf(p.waitingLevel)}` as 'door.level.UNIT') }) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>
-                {p.state === 'APPROVED' && <StatusChip>{t(planStatusKey(p.status, p.planType))}</StatusChip>}
+                <StatusChip tone={planTone(p.state, p.status)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${levelKeyOf(p.waitingLevel)}` as 'door.level.UNIT') }) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>
+                {p.state === 'APPROVED' && <StatusChip tone={planTone(p.state, p.status)}>{t(planStatusKey(p.status, p.planType))}</StatusChip>}
                 {m?.pendingAmendment && <StatusChip tone="warn">{t('door.pm.amend.pending')}</StatusChip>}
                 <StatusChip>{t(`door.work.visibility.${p.visibility}` as const)}</StatusChip>
               </>
@@ -92,11 +94,13 @@ export function PlanPage() {
               ...(m ? [{ key: 'money' as const, label: t('door.plan.tab.money') }] : []),
               ...(live && m?.fundraising ? [{ key: 'revenue' as const, label: t('door.plan.tab.revenue') }] : []),
               ...(live ? [{ key: 'notes' as const, label: t('door.plan.tab.notes') }] : []),
+              { key: 'files', label: t('door.plan.tab.files') },
               { key: 'details', label: t('door.ap.details') },
               { key: 'history', label: t('door.plan.tab.history') },
             ]}
           />
           {tab === 'details' && <PlanDetailsView p={p} />}
+          {tab === 'files' && <PlanFiles planId={p.id} />}
           {tab === 'work' && live && <WorkTab p={p} run={run} systemId={systemId} />}
           {tab === 'notes' && live && <NotesTab p={p} run={run} />}
           {tab === 'revenue' && live && m && <RevenueTab p={p} m={m} onChange={() => { moneyLoad.reload(); load.reload(); }} />}

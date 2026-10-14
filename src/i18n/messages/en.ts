@@ -2984,6 +2984,12 @@ export const en = {
   'door.plan.tbl.waiting': 'Waiting',
   'door.plan.tbl.label': 'Activities as a table',
   'door.plan.layout.table': 'Table',
+  'door.plan.tbl.about': 'Purpose',
+  'door.plan.tbl.files': 'Files',
+  'door.plan.tbl.filesCount': '{count} attached',
+  'door.plan.tab.files': 'Files',
+  'door.plan.files.add': 'Attach a file',
+  'door.plan.files.none': 'No files attached yet.',
   // Test and demo markers
 } as const;
 

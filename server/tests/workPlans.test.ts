@@ -586,3 +586,30 @@ describe('when it happens', () => {
     expect((await post('p-pastor', `${B}/${id}/review-seen`)).status).toBe(409);
   });
 });
+
+describe('files on an activity', () => {
+  const png = Buffer.from('hello').toString('base64');
+  const add = (as: string, id: string, o: object = {}) => post(as, `${B}/${id}/files`, { name: 'plan.pdf', mime: 'application/pdf', data: png, ...o });
+  it('the leader adds, anyone who sees it downloads, only managers remove; the list shows the count and the aim', async () => {
+    const id = await draft();
+    const r = await add('p-vp', id);
+    expect(r.status).toBe(201);
+    expect((await add('p-choir-member', id)).status).toBe(403);
+    expect((await add('p-vp', id, { mime: 'application/x-msdownload' })).body.code).toBe('BAD_TYPE');
+    expect((await add('p-vp', id, { data: 'not base64!' })).body.code).toBe('BAD_INPUT');
+    expect((await add('p-vp', id, { data: Buffer.alloc(1_600_000).toString('base64') })).body.code).toBe('TOO_BIG');
+    const list = await get('p-vp', `${B}/${id}/files`);
+    expect(list.body.canWrite).toBe(true);
+    expect(list.body.items).toHaveLength(1);
+    expect(list.body.items[0]).not.toHaveProperty('dataBase64');
+    const file = await get('p-choir-member', `${B}/${id}/files/${r.body.id}/file`);
+    expect(file.body).toMatchObject({ name: 'plan.pdf', mime: 'application/pdf', data: png });
+    expect((await get('p-choir-member', `${B}/${id}/files`)).body.canWrite).toBe(false);
+    const board = (await get('p-vp', `${B}?board=1&view=all&status=all`)).body.items.find((x: any) => x.id === id);
+    expect(board).toMatchObject({ files: 1, aim: 'Thank God for the harvest' });
+    expect((await del('p-choir-member', `${B}/${id}/files/${r.body.id}`)).status).toBe(403);
+    expect((await del('p-vp', `${B}/${id}/files/${r.body.id}`)).status).toBe(200);
+    expect((await get('p-vp', `${B}/${id}/files`)).body.items).toHaveLength(0);
+    expect((await get('p-vp', `${B}/${id}/files/${r.body.id}/file`)).status).toBe(404);
+  });
+});

@@ -1854,3 +1854,19 @@ model PlanRevenue {
 
   @@index([planId])
 }
+
+/// A file attached to an activity (a proposal, a letter, a budget sheet, a picture). Stored as base64 text; small files only.
+model PlanFile {
+  id           String    @id @default(cuid())
+  planId       String
+  name         String
+  mime         String
+  size         Int
+  dataBase64   String
+  uploadedById String
+  uploadedAt   DateTime  @default(now())
+  deletedAt    DateTime?
+  deletedById  String?
+
+  @@index([planId])
+}

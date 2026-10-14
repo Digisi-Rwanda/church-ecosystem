@@ -2,20 +2,14 @@ import { useRef, useState, type FormEvent } from 'react';
 import { deleteP360Document, fetchP360DocumentFile, fetchP360Documents, updatePerson, uploadP360Document, type P360Person } from '../api/frontDoorApi';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
+import { FILE_ACCEPT, FILE_MAX, FILE_MIME, fileSize, toBase64 } from './fileKit';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
 
-const ACCEPT = '.pdf,.png,.jpg,.jpeg,.webp,.txt,.doc,.docx,.xls,.xlsx';
-const MAX = 1_500_000;
-const MIME: Record<string, string> = { pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp', txt: 'text/plain', doc: 'application/msword', docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', xls: 'application/vnd.ms-excel', xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' };
-const size = (n: number) => (n >= 1_000_000 ? `${(n / 1_000_000).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1000))} KB`);
-const toBase64 = (file: File): Promise<string> =>
-  new Promise((resolve, reject) => {
-    const r = new FileReader();
-    r.onload = () => resolve(String(r.result).split(',')[1] ?? '');
-    r.onerror = () => reject(r.error);
-    r.readAsDataURL(file);
-  });
+const ACCEPT = FILE_ACCEPT;
+const MAX = FILE_MAX;
+const MIME = FILE_MIME;
+const size = fileSize;
 
 /** The basic details of a person: name, contact, birthday, gender, address, National ID, joined date. */
 export function BasicsForm({ person, onSaved }: { person: P360Person; onSaved: () => void }) {

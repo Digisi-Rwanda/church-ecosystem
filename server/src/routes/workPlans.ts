@@ -20,6 +20,7 @@ import { figures, submitProblem } from '../money/planMoney.js';
 import { fundraisingProblem } from '../money/settle.js';
 import { onDone } from './planSettle.js';
 import { cycleProblem, isOngoing, multiplierOf } from '../money/cycles.js';
+import { fileCounts } from './planFiles.js';
 import { potsOf } from './incomeFunds.js';
 import { earmarkProblem } from '../money/funds.js';
 import { TIMING_KINDS, churchDay, normalizeTiming, postponedOverSixMonths, repeatOf, repeatSchema, timingProblem, timingText, type Timing } from '../work/timing.js';
@@ -380,6 +381,7 @@ workPlansRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   // The Activities board: each plan also carries its approval steps (with who decided) and its money, so one list shows the whole pipeline.
   const lines = (await prisma.moneyPlanItem.findMany()) as Array<{ planId: string | null; amount: number; status: string }>;
   const who = await names(rows.flatMap((p) => [p.createdById, ...levelsOf(p).map((l) => l.byId)]));
+  const fileTotals = await fileCounts();
   const board = items.map((it, i) => {
     const p = rows[i]!;
     const mine = lines.filter((l) => l.planId === p.id && l.status !== 'DROPPED');
@@ -389,6 +391,8 @@ workPlansRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
       ...it,
       amount: monthly ? one : figures(mine as never, [], multiplierOf(p as never)).planned,
       perMonth: monthly,
+      aim: (p.aim ?? '').slice(0, 240),
+      files: fileTotals.get(p.id) ?? 0,
       createdByName: who.get(p.createdById) ?? '',
       levels: levelsOf(p).map((l) => ({ levelKey: l.levelKey, label: l.label, status: l.status, byName: l.byId ? who.get(l.byId) ?? '' : null, at: l.at })),
     };

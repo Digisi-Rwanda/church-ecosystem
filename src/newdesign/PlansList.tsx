@@ -4,7 +4,7 @@ import { fetchPlanTable, type BoardItem, type PlanType } from '../api/frontDoorA
 import { SelectField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
-import { PLAN_STEPS, planStatusKey, sortPlans, stateTone } from './plans';
+import { PLAN_STEPS, planStatusKey, planTone, sortPlans } from './plans';
 import { useLoad } from './useLoad';
 import { EmptyState, ListRow, RowList, SearchBox, Segmented, StatusChip, matchesText } from './kit';
 import { Link } from 'react-router-dom';
@@ -31,7 +31,7 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
       avatarName={p.leaderName}
       title={p.title}
       detail={`${p.leaderName} · ${p.unitName}`}
-      status={<StatusChip tone={stateTone(p.state)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${levelKeyOf(p.waitingLevel)}` as 'door.level.UNIT') }) : p.state === 'APPROVED' ? t(planStatusKey(p.status, p.planType)) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>}
+      status={<StatusChip tone={planTone(p.state, p.status)}>{p.state === 'WAITING' && p.waitingLevel ? t('door.state.waitingFor', { who: t(`door.level.${levelKeyOf(p.waitingLevel)}` as 'door.level.UNIT') }) : p.state === 'APPROVED' ? t(planStatusKey(p.status, p.planType)) : t(`door.state.${p.state}` as 'door.state.DRAFT')}</StatusChip>}
       to={to(p)}
     />
   );
@@ -73,7 +73,7 @@ export function PlansList({ systemId, planType }: { systemId: string; planType?:
         {items.length === 0 ? (
           <EmptyState title={t('door.plan.none')} detail={t('door.plan.noneDetail')} />
         ) : layout === 'table' ? (
-          <PlansTable items={items} />
+          <PlansTable items={items} systemId={systemId} />
         ) : layout === 'board' ? (
           <div className="board">
             {[...PLAN_STEPS.slice(0, 4), ...(items.some((p) => p.status === 'PAUSED') ? (['PAUSED'] as const) : []), ...PLAN_STEPS.slice(4)].filter((s) => show === 'all' || s !== 'ENDED').map((st) => {

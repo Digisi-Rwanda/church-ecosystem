@@ -24,6 +24,7 @@ import { workRouter } from './routes/work.js';
 import { workPlansRouter } from './routes/workPlans.js';
 import { planMoneyRouter } from './routes/planMoney.js';
 import { planSettleRouter } from './routes/planSettle.js';
+import { planFilesRouter } from './routes/planFiles.js';
 import { publicEventsRouter } from './routes/publicEvents.js';
 import { moneyRouter } from './routes/money.js';
 import { moneyBlockRouter } from './routes/moneyBlock.js';
@@ -73,6 +74,7 @@ export function createApp() {
   // Bigger bodies for the module documents; mounted before the 1 MB parser.
   app.use('/api/schedule-state', scheduleStateRouter);
   app.use('/api/person360/:personId/documents', express.json({ limit: '3mb' }));
+  app.use('/api/work-plans/:id/files', express.json({ limit: '3mb' }));
   app.use(express.json({ limit: '1mb' }));
 
   app.get('/', (_req, res) => {
@@ -123,6 +125,7 @@ export function createApp() {
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/work', workRouter);
   app.use('/api/work-plans', planSettleRouter);
+  app.use('/api/work-plans', planFilesRouter);
   app.use('/api/work-plans', planMoneyRouter);
   app.use('/api/work-plans', workPlansRouter);
   app.use('/api/public/events', publicEventsRouter);

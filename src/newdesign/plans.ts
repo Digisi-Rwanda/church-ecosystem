@@ -1,3 +1,4 @@
+import type { ChipTone } from './kit/StatusChip';
 import type { ActivityState, PlanDetail, PlanItem, PlanType, WorkPlanStatus } from '../api/frontDoorApi';
 
 /** A status in the words of its kind of work: an event is "In progress", a project "Active", a program "Active" or "Suspended". */
@@ -104,5 +105,12 @@ export const publicCheckinUrl = (token: string): string => `${window.location.or
 /** The four states people see (and Cancelled): the status chip's tone for each. */
 export const stateTone = (s: ActivityState): 'neutral' | 'warn' | 'info' | 'success' | 'danger' =>
   s === 'WAITING' ? 'warn' : s === 'APPROVED' ? 'info' : s === 'DONE' ? 'success' : s === 'CANCELLED' ? 'danger' : 'neutral';
+
+/**
+ * The colour of an activity's status, one per step people see: Draft grey, Waiting amber, Set up blue,
+ * Active green, On hold orange, Done violet, Cancelled red. The words always say the same thing.
+ */
+export const planTone = (state: ActivityState, status?: WorkPlanStatus): ChipTone =>
+  state === 'APPROVED' ? (status === 'PAUSED' ? 'paused' : status === 'SETUP' ? 'info' : 'success') : state === 'DONE' ? 'done' : stateTone(state);
 
 /** An approved activity runs from its approval; only an older plan can still be waiting to be started. */
