@@ -30,7 +30,7 @@ export function PlansTable({ items }: { items: BoardItem[] }) {
             <th scope="col">{t('door.plan.tbl.unit')}</th>
             <th scope="col">{t('door.plan.type')}</th>
             <th scope="col">{t('door.plan.tbl.date')}</th>
-            <th scope="col">{t('door.plan.tbl.amount')}</th>
+            <th scope="col" className="num">{t('door.plan.tbl.amount')}</th>
             <th scope="col">{t('door.plan.tbl.submittedBy')}</th>
             <th scope="col">{t('door.plan.tbl.verifiedBy')}</th>
             <th scope="col">{t('door.plan.tbl.status')}</th>
@@ -43,7 +43,7 @@ export function PlansTable({ items }: { items: BoardItem[] }) {
               <td data-label={t('door.plan.tbl.unit')}>{p.unitName}</td>
               <td data-label={t('door.plan.type')}>{t(`door.plan.type.${p.planType}` as 'door.plan.type.EVENT')}</td>
               <td data-label={t('door.plan.tbl.date')}>{whenSummary(p, t, locale)}</td>
-              <td data-label={t('door.plan.tbl.amount')}>{p.amount > 0 ? `${formatRwf(p.amount)}${p.perMonth ? ` ${t('door.plan.tbl.perMonth')}` : ''}` : '—'}</td>
+              <td className="num" data-label={t('door.plan.tbl.amount')}>{p.amount > 0 ? `${formatRwf(p.amount)}${p.perMonth ? ` ${t('door.plan.tbl.perMonth')}` : ''}` : '—'}</td>
               <td data-label={t('door.plan.tbl.submittedBy')}>{submittedBy(p)}</td>
               <td data-label={t('door.plan.tbl.verifiedBy')}>{verifiedBy(p)}</td>
               <td data-label={t('door.plan.tbl.status')}><StatusChip tone={stateTone(p.state)}>{status(p)}</StatusChip></td>

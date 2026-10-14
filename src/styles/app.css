@@ -8241,3 +8241,110 @@ a.feed-row:hover { background: var(--f-hover); }
 .agenda-item a:hover { text-decoration: underline; }
 .agenda-item .muted { font-size: 0.82rem; }
 
+
+/* ── Tables (door-table): one calm style for every list shown as a table ── */
+.door-table-wrap {
+  overflow-x: auto;
+  padding: 0;
+  max-width: 100%;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface-2);
+  box-shadow: var(--shadow-xs);
+}
+.door-table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 0.92rem; }
+.door-table caption { text-align: left; padding: 0.75rem 1rem; font-weight: 650; }
+.door-table thead th {
+  position: sticky; top: 0; z-index: 1;
+  padding: 0.7rem 1rem;
+  background: var(--surface);
+  border-bottom: 1px solid var(--line-strong);
+  color: var(--ink-muted);
+  font-size: 0.74rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase;
+  text-align: left; white-space: nowrap;
+}
+.door-table tbody th, .door-table tbody td {
+  padding: 0.8rem 1rem;
+  border-bottom: 1px solid var(--line);
+  text-align: left; vertical-align: middle;
+}
+.door-table tbody th[scope="row"] { font-weight: 650; min-width: 12rem; }
+.door-table tbody th[scope="row"] a { color: var(--accent); text-decoration: none; }
+.door-table tbody th[scope="row"] a:hover { text-decoration: underline; text-underline-offset: 3px; }
+.door-table tbody tr:last-child th, .door-table tbody tr:last-child td { border-bottom: 0; }
+.door-table tbody tr { transition: background var(--dur-fast) var(--ease-out); }
+.door-table tbody tr:hover { background: color-mix(in srgb, var(--accent) 5%, transparent); }
+.door-table td.num, .door-table th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.door-table td { color: var(--ink); }
+.door-table td:empty::after, .door-table .dash { content: "—"; color: var(--ink-muted); }
+.door-table tfoot td, .door-table tfoot th { padding: 0.7rem 1rem; border-top: 1px solid var(--line-strong); font-weight: 650; background: var(--surface); }
+.door-matrix th, .door-matrix td { text-align: center; }
+.door-matrix tbody th[scope="row"] { text-align: left; }
+@media (max-width: 640px) {
+  .door-table-wrap { border: 0; background: transparent; box-shadow: none; }
+  table.door-stack tr {
+    margin-bottom: 0.7rem; padding: 0.7rem 0.9rem;
+    border: 1px solid var(--line); border-radius: var(--radius);
+    background: var(--surface-2); box-shadow: var(--shadow-xs);
+  }
+  table.door-stack tbody th, table.door-stack tbody td { border-bottom: 0; padding: 0.25rem 0; }
+  table.door-stack tbody th[scope="row"] { font-size: 1rem; padding-bottom: 0.4rem; min-width: 0; }
+  table.door-stack td.num { text-align: right; }
+}
+
+/* ——— UI polish pass ——— */
+/* Bare form controls (toolbars, filters) look like the labelled ones. Low specificity so any specific rule still wins. */
+:where(input:not([type]), input[type="text"], input[type="search"], input[type="email"], input[type="tel"], input[type="number"], input[type="date"], input[type="month"], input[type="time"], input[type="url"], input[type="password"], select, textarea) {
+  min-height: var(--control-h, 2.5rem);
+  padding: 0 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--ink);
+  transition: border-color var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+:where(textarea) { padding: 0.55rem 0.75rem; min-height: 5.5rem; resize: vertical; }
+:where(select) { padding-right: 2rem; cursor: pointer; }
+:where(input, select, textarea):where(:hover:not(:disabled):not(:focus)) { border-color: var(--line-strong); }
+:where(input, select, textarea):where(:focus-visible) { border-color: var(--accent); box-shadow: var(--focus-ring); }
+:where(input, select, textarea):where(:disabled) { opacity: 0.6; cursor: not-allowed; }
+.door-toolbar { padding: 0.15rem 0; }
+.door-toolbar input[type="search"], .door-toolbar input[type="text"] { border-radius: 999px; padding-left: 1rem; }
+.door-toolbar label { display: inline-flex; align-items: center; gap: 0.4rem; font-size: 0.88rem; font-weight: 600; color: var(--ink-muted); }
+.door-toolbar label input[type="checkbox"] { width: 1.05rem; height: 1.05rem; min-height: 0; accent-color: var(--accent); }
+
+/* Empty states: icon above the message, centred */
+.empty-state .empty-icon, .forbidden-state .empty-icon { display: flex; justify-content: center; }
+.empty-state h3, .empty-state h2, .forbidden-state h3 { margin: 0; font-size: 1.05rem; }
+.empty-state, .forbidden-state { padding: 2rem 1rem; }
+
+/* Dashboard panels: "View all" never wraps, headings sit on one line */
+.panel-head a, .panel header a, .cen-head a { white-space: nowrap; }
+.panel header, .panel-head { gap: 0.5rem; }
+
+/* Lists of people and rows: calmer hover */
+.door-list li, .person-row { transition: background var(--dur-fast) var(--ease-out); }
+.person-row:hover, a.person-row:hover { background: var(--accent-soft); text-decoration: none; }
+
+/* Global search groups */
+.gsearch-group { padding: 0.35rem 0; border-top: 1px solid var(--line); }
+.gsearch-group:first-child { border-top: 0; }
+
+/* Budget cards */
+.bud-card { padding: 1rem 1.1rem; }
+.bud-fund-name { font-weight: 600; min-width: 0; overflow-wrap: anywhere; }
+.bud-layer { display: block; width: 100%; height: 0.5rem; }
+
+/* Duplicates, central urgent card, unit page spacing */
+.door-dup { display: grid; gap: 0.6rem; padding: 0.9rem 1rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface-2); }
+.cen-urgent { border-color: color-mix(in srgb, var(--danger) 30%, var(--line)); }
+.unit-page { display: grid; gap: 1rem; }
+.pt-relax { display: grid; gap: 0.75rem; }
+.act-view { display: grid; gap: 1rem; }
+.page-head { width: 100%; justify-self: stretch; }
+.page-head-row { flex-wrap: nowrap; }
+.page-head-text { flex: 1 1 auto; }
+.page-actions { flex: none; justify-content: flex-end; }
+@media (max-width: 720px) { .page-head-row { flex-wrap: wrap; } .page-actions { justify-content: flex-start; } }
+.page-head-row { width: 100%; }
+.page-head { grid-template-columns: minmax(0, 1fr); }
