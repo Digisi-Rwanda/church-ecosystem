@@ -19,6 +19,7 @@ import { CHANGE_KEYS, fieldDiff, moneySig, scopeOf, type ChangeKey, type StoredS
 import { fundraisingProblem } from '../money/settle.js';
 import { SOURCE_KINDS, codeFor, earmarkProblem, potId } from '../money/funds.js';
 import { adjustLevels, afterEdit, allVerified, checkNote, figures, liveLines, submitProblem, type MoneyCheck } from '../money/planMoney.js';
+import { burnOf, phasesOf } from '../money/burn.js';
 import { canReadMoney } from '../money/rules.js';
 import { potsOf } from './incomeFunds.js';
 import { settleView } from './planSettle.js';
@@ -33,7 +34,7 @@ const fail = (res: Res, status: number, code: string, error: string, extra: obje
 export interface Plan extends PlanRow { title: string; moneyCheckJson?: string | null; startsOn?: Date | string | null; endsOn?: Date | string | null; planType?: string | null; timingKind?: string | null; repeatJson?: string | null; budgetCycle?: string | null; budgetCycles?: number | null; fundraising?: boolean | null; fundTarget?: number | null; doneAt?: Date | string | null; settledAt?: Date | string | null; settlementJson?: string | null; createdById: string }
 export interface Amend { id: string; planId: string; systemId: string; kind: string; status: string; oldTotal: number; newTotal: number; justification: string; linesJson: string; sourcesJson: string; reserveJson: string; requestedById: string; requestedAt: Date | string; decidedById: string | null; decidedAt: Date | string | null; decisionNote: string | null; reviewedAt: Date | string | null; scope?: string | null; changesJson?: string | null; levelsJson?: string | null }
 interface Entry { id: string; planId: string | null; kind: string; status: string; amount: number; occurredOn: Date | string }
-interface Line { id: string; planId: string | null; systemId: string; title: string; amount: number; category: string | null; status: string; note: string | null; checkState: string | null; checkedById: string | null; checkedAt: Date | string | null; year: number; createdAt: Date | string }
+interface Line { id: string; planId: string | null; systemId: string; title: string; amount: number; category: string | null; status: string; note: string | null; checkState: string | null; checkedById: string | null; checkedAt: Date | string | null; milestoneId?: string | null; year: number; createdAt: Date | string }
 interface Source { id: string; planId: string; systemId: string; kind: string; code: string; amount: number }
 
 /** Money stays open only while the activity is not yet approved. */
@@ -164,8 +165,13 @@ async function view(p: Plan, me: string, data: Awaited<ReturnType<typeof loadAcc
   const lineSpent = new Map<string, number>();
   for (const e of (await prisma.moneyEntry.findMany({ where: { planId: p.id } })) as { kind: string; status: string; lineId?: string | null; amount: number }[])
     if (e.kind === 'SPENDING' && e.lineId && e.status !== 'REJECTED' && e.status !== 'VOIDED') lineSpent.set(e.lineId, (lineSpent.get(e.lineId) ?? 0) + e.amount);
+  const totalSpent = [...lineSpent.values()].reduce((n, x) => n + x, 0);
+  const allSpent = (await actualOf(p)).reduce((n, e) => n + e.amount, 0);
+  const miles = p.planType === 'PROJECT' ? ((await prisma.workPlanMilestone.findMany({ where: { planId: p.id } })) as Array<{ id: string; planId: string; title: string; dueOn: Date | null; createdAt: Date }>).filter((x) => x.planId === p.id).sort((a, b) => new Date(a.dueOn ?? a.createdAt).getTime() - new Date(b.dueOn ?? b.createdAt).getTime()) : [];
+  const phases = p.planType === 'PROJECT' ? phasesOf(miles, live.map((l) => ({ milestoneId: l.milestoneId, amount: l.amount * mult(p), spent: lineSpent.get(l.id) ?? 0 })), Math.max(0, allSpent - totalSpent)) : null;
+  const burn = p.planType === 'PROGRAM' && !OPEN.includes(p.status) ? burnOf({ planned: f.planned, spent: allSpent, startsOn: p.startsOn ? new Date(p.startsOn) : null, endsOn: p.endsOn ? new Date(p.endsOn) : null, now: new Date() }) : null;
   return {
-    planId: p.id, status: p.status, open: OPEN.includes(p.status), ...f,
+    planId: p.id, status: p.status, planType: p.planType ?? 'EVENT', phases, burn, open: OPEN.includes(p.status), ...f,
     canEdit: manage && OPEN.includes(p.status),
     canVerify: atTreasurer && canApprove(p, me, data),
     canCheck: atTreasurer && canApprove(p, me, data),
@@ -173,7 +179,7 @@ async function view(p: Plan, me: string, data: Awaited<ReturnType<typeof loadAcc
     lines: live.map((l) => {
       const spent = lineSpent.get(l.id) ?? 0;
       const allowed = l.amount * mult(p);
-      return { id: l.id, title: l.title, amount: l.amount, category: l.category, note: l.note, checkState: l.checkState ?? null, spent, remaining: Math.max(0, allowed - spent) };
+      return { id: l.id, milestoneId: l.milestoneId ?? null, title: l.title, amount: l.amount, category: l.category, note: l.note, checkState: l.checkState ?? null, spent, remaining: Math.max(0, allowed - spent) };
     }),
     sources: sources.map((s) => ({ kind: s.kind, code: s.code, amount: s.amount, potId: potId(s.kind, s.code) })),
     pots, check: check ? { result: check.result, note: check.note, at: check.at, byName: who.get(check.byId) ?? '' } : null,
@@ -181,6 +187,8 @@ async function view(p: Plan, me: string, data: Awaited<ReturnType<typeof loadAcc
     ...(await settleView(p, me, data, f.planned, f.earmarked)),
   };
 }
+
+const phaseOk = async (planId: string, id: string | null | undefined) => !id || ((await prisma.workPlanMilestone.findMany({ where: { planId } })) as Array<{ id: string; planId: string }>).some((m) => m.id === id && m.planId === planId);
 
 const planYear = (p: Plan) => (p.startsOn ? new Date(p.startsOn).getUTCFullYear() : new Date().getUTCFullYear());
 
@@ -218,7 +226,7 @@ planMoneyRouter.get('/:id/money', requireAuth, async (req: AuthedRequest, res) =
   res.json(await view(got.p, got.me, got.data));
 });
 
-const lineSchema = z.object({ title: z.string().trim().min(1).max(TITLE_MAX), amount: z.number().int().min(1).max(AMOUNT_MAX), category: z.string().trim().max(60).nullish(), note: z.string().trim().max(NOTE_MAX).nullish() });
+const lineSchema = z.object({ title: z.string().trim().min(1).max(TITLE_MAX), amount: z.number().int().min(1).max(AMOUNT_MAX), category: z.string().trim().max(60).nullish(), note: z.string().trim().max(NOTE_MAX).nullish(), milestoneId: z.string().max(60).nullish() });
 
 async function editable(req: AuthedRequest, res: Res) {
   const got = await load(req, res);
@@ -236,7 +244,8 @@ planMoneyRouter.post('/:id/lines', requireAuth, async (req: AuthedRequest, res) 
   // A repeat cannot hold spending until it says how its allowance is counted and how long it runs.
   const cp = cycleProblem(got.p as never);
   if (cp) return fail(res, 409, cp, 'Say how the allowance is counted and for how long');
-  await prisma.moneyPlanItem.create({ data: { systemId: got.p.systemId, year: planYear(got.p), title: b.data.title, amount: b.data.amount, category: b.data.category ?? null, note: b.data.note ?? null, planId: got.p.id, createdById: got.me } });
+  if (!(await phaseOk(got.p.id, b.data.milestoneId))) return fail(res, 400, 'BAD_MILESTONE', 'That phase does not belong to this project');
+  await prisma.moneyPlanItem.create({ data: { milestoneId: b.data.milestoneId ?? null, systemId: got.p.systemId, year: planYear(got.p), title: b.data.title, amount: b.data.amount, category: b.data.category ?? null, note: b.data.note ?? null, planId: got.p.id, createdById: got.me } });
   await audit(got.me, got.p.systemId, 'MONEY_LINE_ADDED', `Added “${b.data.title}” to “${got.p.title}”`, { planId: got.p.id });
   await changed(got.p, got.me, got.data);
   res.json(await view((await prisma.workPlan.findUnique({ where: { id: got.p.id } })) as Plan, got.me, got.data));
@@ -249,6 +258,7 @@ planMoneyRouter.patch('/:id/lines/:lineId', requireAuth, async (req: AuthedReque
   if (!line || line.planId !== got.p.id || line.status === 'DROPPED') return fail(res, 404, 'NOT_FOUND', 'Line not found');
   const b = lineSchema.partial().safeParse(req.body);
   if (!b.success) return fail(res, 400, 'BAD_INPUT', 'Invalid line');
+  if (b.data.milestoneId !== undefined && !(await phaseOk(got.p.id, b.data.milestoneId))) return fail(res, 400, 'BAD_MILESTONE', 'That phase does not belong to this project');
   // Any edit takes the Treasurer's tick away: the line is "modified, pending re-verification".
   await prisma.moneyPlanItem.update({ where: { id: line.id }, data: { ...b.data, checkState: afterEdit(line.checkState), checkedById: null, checkedAt: null } });
   await audit(got.me, got.p.systemId, 'MONEY_LINE_CHANGED', `Changed “${line.title}” in “${got.p.title}”`, { planId: got.p.id, lineId: line.id });

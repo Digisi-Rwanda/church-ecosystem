@@ -1633,6 +1633,8 @@ model MoneyPlanItem {
   checkState  String?
   checkedById String?
   checkedAt   DateTime?
+  /// A project's cost line belongs to one of its milestones (its phase); empty means the automatic General phase
+  milestoneId String?
 
   @@index([systemId, year])
   @@index([planId])

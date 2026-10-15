@@ -106,6 +106,14 @@ async function spentAndAwaiting(systemId: string): Promise<{ spent: number; awai
   return { spent, awaiting: lists.reduce((n, l) => n + (sums.get(l.id) ?? 0), 0) + donations.reduce((n, d) => n + d.amount, 0) };
 }
 
+/** The Money home figures for a system: secured = spent + still reserved + available. */
+export async function fundTotals(systemId: string) {
+  const pots = await potsOf(systemId);
+  const t = pots.reduce((a, x) => ({ secured: a.secured + x.secured, earmarked: a.earmarked + x.earmarked, available: a.available + x.available }), { secured: 0, earmarked: 0, available: 0 });
+  const { spent } = await spentAndAwaiting(systemId);
+  return { secured: t.secured, spent, reserved: Math.max(0, t.earmarked - spent), available: t.available };
+}
+
 fundsRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const systemId = String(req.query.systemId ?? '');
   if (!systemId) return fail(res, 400, 'BAD_INPUT', 'systemId is required');

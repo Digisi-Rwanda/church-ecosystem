@@ -9,6 +9,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { categoryKey } from './money';
 import { PageHeader } from './kit';
+import { PendingFiles, uploadPending } from './PendingFiles';
 import { PersonPicker } from './PersonPicker';
 import { planErrorKey } from './plans';
 import { useLoad } from './useLoad';
@@ -37,6 +38,7 @@ export function ActionPlanCreate() {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
+  const [files, setFiles] = useState<File[]>([]);
 
   useEffect(() => {
     const p = resume.data;
@@ -83,12 +85,12 @@ export function ActionPlanCreate() {
     return withDetails;
   };
 
-  const run = async (after: (p: PlanDetail) => void) => {
+  const run = async (after: (p: PlanDetail) => void | Promise<void>) => {
     setBusy(true);
     setError('');
     setNote('');
     try {
-      after(await persist());
+      await after(await persist());
     } catch (err) {
       setError(t(planErrorKey(errorCode(err)) as 'door.people.actionFailed'));
     } finally {
@@ -103,7 +105,15 @@ export function ActionPlanCreate() {
   const next = (e: FormEvent) => {
     e.preventDefault();
     if (!gate()) return;
-    void run(() => (step === flow.steps.length - 1 ? setDone(true) : (setStep(step + 1), window.scrollTo?.({ top: 0 }))));
+    void run(async (p) => {
+      if (step < flow.steps.length - 1) return setStep(step + 1), window.scrollTo?.({ top: 0 });
+      if (files.length > 0) {
+        const failed = await uploadPending(p.id, files);
+        setFiles(failed);
+        if (failed.length > 0) setNote(t('door.plan.files.partial'));
+      }
+      setDone(true);
+    });
   };
   const draft = () => {
     if (!plan && (!unit || !str(vals[flow.steps[0].fields.find((f) => f.map === 'name')!.key]).trim())) return setError(t('door.ap.required'));
@@ -162,9 +172,10 @@ export function ActionPlanCreate() {
             <span className="ap-check" aria-hidden="true">✓</span>
             <h3>{t(`door.ap.done.${kind}` as 'door.ap.done.event')}</h3>
             <p className="muted">{t(`door.ap.doneText.${kind}` as 'door.ap.doneText.event')}</p>
+            {note && <p className="door-error">{note}</p>}
             <div className="door-row">
               <button type="button" className="btn" onClick={() => navigate(`/s/${systemId}/work/plans/${plan.id}`)}>{t(`door.ap.view.${kind}` as 'door.ap.view.event')}</button>
-              <button type="button" className="btn ghost" onClick={() => { setDone(false); setPlan(null); setVals({}); setStep(0); setUnitId(''); navigate(`/s/${systemId}/money/plan/new/${kind}`, { replace: true }); }}>{t(`door.ap.another.${kind}` as 'door.ap.another.event')}</button>
+              <button type="button" className="btn ghost" onClick={() => { setDone(false); setPlan(null); setVals({}); setFiles([]); setStep(0); setUnitId(''); navigate(`/s/${systemId}/money/plan/new/${kind}`, { replace: true }); }}>{t(`door.ap.another.${kind}` as 'door.ap.another.event')}</button>
             </div>
           </div>
         ) : (
@@ -194,6 +205,13 @@ export function ActionPlanCreate() {
                 </div>
               )}
               {cur.fields.map(field)}
+              {last && (
+                <div className="ap-full">
+                  <h4>{t('door.plan.files.heading')}</h4>
+                  <p className="muted">{t('door.plan.files.optional')}</p>
+                  <PendingFiles files={files} onChange={setFiles} disabled={busy} />
+                </div>
+              )}
             </div>
             {error && <p className="door-error" role="alert">{error}</p>}
             {note && <p className="muted" role="status">{note}</p>}

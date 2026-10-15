@@ -30,7 +30,8 @@ function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportO
   const [left, setLeft] = useState<string[]>([]);
   const kinds = units.find((u) => u.id === unitId)?.kinds ?? [];
   const parts = kind ? options.sections?.[kind] ?? [] : [];
-  const period = mode === 'month' ? month : year;
+  const yearly = kind === 'YEARLY_BUDGET' || kind === 'ACTION_PLAN';
+  const period = mode === 'month' && !yearly ? month : year;
   const thisYear = new Date().getUTCFullYear();
   const submit = async (e: FormEvent) => {
     e.preventDefault();
@@ -82,7 +83,8 @@ function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportO
           ))}
         </fieldset>
       )}
-      <Segmented
+      {kind === 'YEARLY_BUDGET' && <p className="muted">{t('door.reports.hint.YEARLY_BUDGET')}</p>}
+      {!yearly && <Segmented
         label={t('door.reports.period')}
         value={mode}
         onChange={setMode}
@@ -90,8 +92,8 @@ function ComposeForm({ options, systemId, onDone, onCancel }: { options: ReportO
           { key: 'month', label: t('door.reports.mode.month') },
           { key: 'year', label: t('door.reports.mode.year') },
         ]}
-      />
-      {mode === 'month' ? (
+      />}
+      {mode === 'month' && !yearly ? (
         <div className="rk-period">
           <TextField label={t('door.reports.period')} name="r-month" type="month" value={month} onChange={(e) => setMonth(e.target.value)} />
           <div className="door-row">

@@ -588,3 +588,40 @@ describe('one approval queue and the money home figures', () => {
     expect(t.awaiting).toBe(0);
   });
 });
+
+import { burnOf, phasesOf } from '../src/money/burn';
+
+describe('type-specific money views', () => {
+  it('phases: lines with no phase sit in General; unlinked spending lands there too', () => {
+    const rows = phasesOf([{ id: 'm1', title: 'Foundation' }, { id: 'm2', title: 'Roof' }], [
+      { milestoneId: 'm1', amount: 500, spent: 200 }, { milestoneId: null, amount: 100, spent: 0 }, { milestoneId: 'gone', amount: 50, spent: 10 },
+    ], 30);
+    expect(rows.map((r) => [r.title, r.planned, r.spent, r.remaining])).toEqual([['General', 150, 40, 110], ['Foundation', 500, 200, 300], ['Roof', 0, 0, 0]]);
+  });
+  it('burn: monthly rate, projection, runway and pace', () => {
+    const b = burnOf({ planned: 1200, spent: 600, startsOn: new Date('2026-01-10'), endsOn: null, now: new Date('2026-04-20') });
+    expect(b).toMatchObject({ months: 12, elapsed: 4, perMonth: 150, projected: 1800, runway: 4, pace: 'FAST' });
+    expect(burnOf({ planned: 1200, spent: 0, startsOn: null, endsOn: null, now: new Date('2026-03-01') }).pace).toBe('NONE');
+  });
+  it('a project line can be put in a phase; removing the phase sends the line back to General', async () => {
+    const id = await plan({ planType: 'PROJECT' });
+    await post('p-vp', `${B}/${id}/milestones`, { title: 'Foundation' });
+    const mid = (await get('p-vp', `${B}/${id}`)).body.plan.milestones[0].id;
+    expect((await post('p-vp', `${B}/${id}/lines`, { title: 'Cement', amount: 40000, milestoneId: 'nope' })).status).toBe(400);
+    const r = await post('p-vp', `${B}/${id}/lines`, { title: 'Cement', amount: 40000, milestoneId: mid });
+    await post('p-vp', `${B}/${id}/lines`, { title: 'Permit', amount: 10000 });
+    expect(r.body.burn).toBeNull();
+    const now = (await get('p-vp', `${B}/${id}/money`)).body;
+    expect(now.phases.map((x: any) => [x.title, x.planned])).toEqual([['General', 10000], ['Foundation', 40000]]);
+    expect(now.lines.find((l: any) => l.title === 'Cement').milestoneId).toBe(mid);
+    await del('p-vp', `${B}/${id}/milestones/${mid}`);
+    const after = (await get('p-vp', `${B}/${id}/money`)).body;
+    expect(after.phases).toEqual([expect.objectContaining({ title: 'General', planned: 50000 })]);
+  });
+  it('events show no phases and no burn', async () => {
+    const id = await plan({ planType: 'EVENT' });
+    const m = (await line(id)).body;
+    expect(m.phases).toBeNull();
+    expect(m.burn).toBeNull();
+  });
+});

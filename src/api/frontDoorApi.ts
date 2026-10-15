@@ -1362,7 +1362,7 @@ export async function voidCollection(id: string, reason: string): Promise<void> 
 }
 
 // ── Reports (slice 3.5) ─────────────────────────────────────────────────────────
-export type ReportKind = 'MEETINGS' | 'ATTENDANCE' | 'MONEY' | 'COLLECTIONS' | 'PEOPLE_LIST' | 'WORK_PLANS' | 'BAPTISMS' | 'MARRIAGES';
+export type ReportKind = 'MEETINGS' | 'ATTENDANCE' | 'MONEY' | 'COLLECTIONS' | 'PEOPLE_LIST' | 'WORK_PLANS' | 'BAPTISMS' | 'MARRIAGES' | 'YEARLY_BUDGET' | 'ACTION_PLAN';
 export type ReportCellType = 'text' | 'date' | 'money' | 'number' | 'code' | 'percent';
 export type ReportCell = string | number | null;
 export type ReportSnapshot = {
@@ -1870,9 +1870,12 @@ export const recordIncome = (input: IncomeInput) => apiFetch('/api/funds/income'
 export const incomeReceived = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });
 export const incomeCancel = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
 
-export type MoneyLineView = { id: string; title: string; amount: number; category: string | null; note: string | null; checkState: 'VERIFIED' | 'MODIFIED' | null; spent: number; remaining: number };
+export type MoneyLineView = { id: string; milestoneId: string | null; title: string; amount: number; category: string | null; note: string | null; checkState: 'VERIFIED' | 'MODIFIED' | null; spent: number; remaining: number };
+export type PhaseView = { id: string | null; title: string; planned: number; spent: number; remaining: number; lines: number };
+export type BurnView = { months: number; elapsed: number; spent: number; planned: number; perMonth: number; projected: number; runway: number | null; pace: 'NONE' | 'ON_TRACK' | 'FAST' | 'SLOW' };
 export type ActivityMoney = {
-  planId: string; status: string; open: boolean; planned: number; earmarked: number; gap: number;
+  planId: string; status: string; planType: string; open: boolean; planned: number; earmarked: number; gap: number;
+  phases: PhaseView[] | null; burn: BurnView | null;
   canEdit: boolean; canVerify: boolean; canCheck: boolean; allVerified: boolean;
   lines: MoneyLineView[]; sources: Array<{ kind: string; code: string; amount: number; potId: string }>; pots: FundPot[];
   check: { result: 'CHECKED' | 'FLAGGED'; note: string | null; at: string; byName: string } | null;
@@ -1902,8 +1905,8 @@ export type AmendmentView = {
 };
 const PM = (id: string) => `/api/work-plans/${encodeURIComponent(id)}`;
 export const fetchActivityMoney = (id: string) => apiFetch<ActivityMoney>(`${PM(id)}/money`);
-export const addMoneyLine = (id: string, line: { title: string; amount: number; category?: string }) => apiFetch<ActivityMoney>(`${PM(id)}/lines`, { method: 'POST', body: line });
-export const editMoneyLine = (id: string, lineId: string, line: { title?: string; amount?: number }) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}`, { method: 'PATCH', body: line });
+export const addMoneyLine = (id: string, line: { title: string; amount: number; category?: string; milestoneId?: string | null }) => apiFetch<ActivityMoney>(`${PM(id)}/lines`, { method: 'POST', body: line });
+export const editMoneyLine = (id: string, lineId: string, line: { title?: string; amount?: number; milestoneId?: string | null }) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}`, { method: 'PATCH', body: line });
 export const removeMoneyLine = (id: string, lineId: string) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}`, { method: 'DELETE' });
 export const setMoneySources = (id: string, sources: Array<{ kind: string; code: string; amount: number }>) => apiFetch<ActivityMoney>(`${PM(id)}/sources`, { method: 'PUT', body: { sources } });
 export const verifyMoneyLine = (id: string, lineId: string, verified: boolean) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}/verify`, { method: 'POST', body: { verified } });

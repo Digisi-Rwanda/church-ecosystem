@@ -3,7 +3,7 @@
  * figures and some tables. Pure, so every figure is testable. Money and offering counts are
  * built by different builders from different records and never appear in the same report.
  */
-export const KINDS = ['MEETINGS', 'ATTENDANCE', 'MONEY', 'COLLECTIONS', 'PEOPLE_LIST', 'WORK_PLANS', 'BAPTISMS', 'MARRIAGES'] as const;
+export const KINDS = ['MEETINGS', 'ATTENDANCE', 'MONEY', 'COLLECTIONS', 'PEOPLE_LIST', 'WORK_PLANS', 'BAPTISMS', 'MARRIAGES', 'YEARLY_BUDGET', 'ACTION_PLAN'] as const;
 export type ReportKind = (typeof KINDS)[number];
 
 /** The module and letter a person must hold in the system to compose a report of this kind. */
@@ -16,6 +16,8 @@ export const SOURCE: Record<ReportKind, 'GOVERNANCE' | 'MONEY' | 'PEOPLE' | 'MIS
   WORK_PLANS: 'MISSION',
   BAPTISMS: 'PERSON_360',
   MARRIAGES: 'PERSON_360',
+  YEARLY_BUDGET: 'MONEY',
+  ACTION_PLAN: 'MISSION',
 };
 
 /**
@@ -31,7 +33,12 @@ export const SECTIONS: Record<ReportKind, readonly string[]> = {
   WORK_PLANS: ['summary', 'ended'],
   BAPTISMS: ['summary', 'baptisms'],
   MARRIAGES: ['summary', 'marriages'],
+  YEARLY_BUDGET: ['summary', 'activities', 'byType', 'months', 'amendments'],
+  ACTION_PLAN: ['summary', 'activities', 'byMonth'],
 };
+
+/** Reports that describe a whole year and are composed on demand, never on the monthly schedule. */
+export const YEARLY_KINDS: ReportKind[] = ['YEARLY_BUDGET', 'ACTION_PLAN'];
 
 /** Church-wide reports made from Person 360: composed only in the main church's own system. */
 /** Reports that are composed in Central Administration only (their records are kept there). */
@@ -72,6 +79,10 @@ export interface Sources {
   memberships: Array<{ personId: string; orgUnitId?: string | null; systemId?: string | null; type: string; status: string; startDate: D; endDate?: D | null }>;
   positions: Array<{ personId: string; orgUnitId?: string | null; title: string; status: string }>;
   amendments?: Array<{ planId: string; systemId: string; kind: string; scope?: string | null; status: string; oldTotal: number; newTotal: number; justification: string; requestedById: string; decidedAt?: D | null }>;
+  /** Live activities of the unit with their money: what the Yearly Budget and the Action Plan are made from. */
+  activities?: Array<{ id: string; orgUnitId: string; title: string; planType: string; status: string; startsOn: D | null; leaderPersonId: string; planned: number; spent: number }>;
+  /** The system's money now, as the Money home shows it. */
+  funds?: { secured: number; spent: number; reserved: number; available: number };
   plans: Array<{ id?: string; orgUnitId: string; title: string; status: string; leaderPersonId: string; outcome?: string | null; reportPublishedAt?: D | null; deletedAt?: D | null }>;
   personRecords: Array<{ personId: string; section: string; dataJson: string; status: string; programId?: string | null }>;
   programs: Array<{ id: string; name: string }>;
@@ -251,6 +262,67 @@ function workPlans(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'
   };
 }
 
+const LIVE = ['SETUP', 'RUNNING', 'PAUSED', 'CLOSING'];
+const TYPES = ['PROGRAM', 'PROJECT', 'EVENT'];
+
+/** The activities of the unit that fall in the period: those that start in it, and programs that were already running. */
+function activitiesIn(s: Sources, key: string) {
+  return (s.activities ?? [])
+    .filter((a) => a.orgUnitId === s.unitId && a.status !== 'CANCELLED')
+    .filter((a) => inPeriod(a.startsOn, key) || (a.planType === 'PROGRAM' && LIVE.includes(a.status) && !!a.startsOn && day(a.startsOn)!.slice(0, 4) <= key.slice(0, 4)))
+    .sort((a, b) => +new Date(a.startsOn ?? 0) - +new Date(b.startsOn ?? 0) || a.title.localeCompare(b.title));
+}
+
+/** Yearly Budget: derived from the live plans. The forecast (the income budget lines) is the only figure typed by hand. */
+function yearlyBudget(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
+  const year = Number(key.slice(0, 4));
+  const acts = activitiesIn(s, key);
+  const planned = sum(acts.map((a) => a.planned));
+  const spent = sum(acts.map((a) => a.spent));
+  const forecast = sum(s.budgetLines.filter((l) => l.systemId === s.systemId && l.year === year && l.kind === 'INCOME').map((l) => l.planned));
+  const titles = new Map(acts.map((a) => [a.id, a.title]));
+  const amended = (s.amendments ?? []).filter((a) => a.systemId === s.systemId && a.status === 'APPROVED' && titles.has(a.planId) && inPeriod(a.decidedAt, key)).sort((a, b) => +new Date(a.decidedAt!) - +new Date(b.decidedAt!));
+  const months: Cell[][] = key.length === 4
+    ? Array.from({ length: 12 }, (_, i) => {
+        const m = `${key}-${String(i + 1).padStart(2, '0')}`;
+        return [m, sum(acts.filter((a) => inPeriod(a.startsOn, m)).map((a) => a.planned)), sum((s.entries as Array<Sources['entries'][number] & { planId?: string | null }>).filter((e) => e.planId && titles.has(e.planId) && e.kind === 'SPENDING' && e.status === 'APPROVED' && inPeriod(e.occurredOn, m)).map((e) => e.amount))] as Cell[];
+      })
+    : [];
+  return {
+    summary: [
+      { key: 'forecast', value: forecast, type: 'money' },
+      { key: 'planned', value: planned, type: 'money' },
+      { key: 'spent', value: spent, type: 'money' },
+      { key: 'availableNow', value: s.funds?.available ?? 0, type: 'money' },
+      { key: 'unreservedForecast', value: forecast - planned, type: 'money' },
+      { key: 'amended', value: amended.length, type: 'number' },
+    ],
+    tables: [
+      { key: 'activities', columns: [{ key: 'title', type: 'text' }, { key: 'type', type: 'code' }, { key: 'status', type: 'code' }, { key: 'planned', type: 'money' }, { key: 'spent', type: 'money' }, { key: 'left', type: 'money' }], rows: acts.map((a) => [a.title, a.planType, a.status, a.planned, a.spent, Math.max(0, a.planned - a.spent)]) },
+      { key: 'byType', columns: [{ key: 'type', type: 'code' }, { key: 'count', type: 'number' }, { key: 'planned', type: 'money' }, { key: 'spent', type: 'money' }], rows: TYPES.map((t) => [t, acts.filter((a) => a.planType === t).length, sum(acts.filter((a) => a.planType === t).map((a) => a.planned)), sum(acts.filter((a) => a.planType === t).map((a) => a.spent))] as Cell[]).filter((r) => (r[1] as number) > 0) },
+      ...(months.length > 0 ? [{ key: 'months', columns: [{ key: 'month', type: 'text' as const }, { key: 'planned', type: 'money' as const }, { key: 'spent', type: 'money' as const }], rows: months }] : []),
+      ...(amended.length > 0 ? [{ key: 'amendments', columns: [{ key: 'date', type: 'date' as const }, { key: 'activity', type: 'text' as const }, { key: 'scope', type: 'code' as const }, { key: 'kind', type: 'code' as const }, { key: 'was', type: 'money' as const }, { key: 'now', type: 'money' as const }], rows: amended.map((a) => [day(a.decidedAt), titles.get(a.planId) ?? '', a.scope ?? 'MONEY', a.kind, a.oldTotal, a.newTotal] as Cell[]) }] : []),
+    ],
+  };
+}
+
+/** Action Plan: what the unit plans to do in the period, from its live activities. */
+function actionPlan(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
+  const acts = activitiesIn(s, key);
+  return {
+    summary: [
+      { key: 'activities', value: acts.length, type: 'number' },
+      { key: 'running', value: acts.filter((a) => LIVE.includes(a.status)).length, type: 'number' },
+      { key: 'ended', value: acts.filter((a) => a.status === 'ENDED').length, type: 'number' },
+      { key: 'planned', value: sum(acts.map((a) => a.planned)), type: 'money' },
+    ],
+    tables: [
+      { key: 'activities', columns: [{ key: 'title', type: 'text' }, { key: 'type', type: 'code' }, { key: 'start', type: 'date' }, { key: 'leader', type: 'text' }, { key: 'status', type: 'code' }, { key: 'planned', type: 'money' }], rows: acts.map((a) => [a.title, a.planType, day(a.startsOn), s.names.get(a.leaderPersonId) ?? '—', a.status, a.planned]) },
+      ...(key.length === 4 ? [{ key: 'byMonth', columns: [{ key: 'month', type: 'text' as const }, { key: 'count', type: 'number' as const }], rows: Array.from({ length: 12 }, (_, i) => { const m = `${key}-${String(i + 1).padStart(2, '0')}`; return [m, acts.filter((a) => inPeriod(a.startsOn, m)).length] as Cell[]; }) }] : []),
+    ],
+  };
+}
+
 const data = (r: { dataJson: string }): Record<string, unknown> => {
   try {
     return JSON.parse(r.dataJson);
@@ -307,7 +379,7 @@ export function chooseSections(snap: Snapshot, chosen: readonly string[] | undef
 }
 
 export function buildSnapshot(kind: ReportKind, periodKey: string, unitName: string, s: Sources, chosen?: readonly string[]): Snapshot {
-  const make = { MEETINGS: meetings, ATTENDANCE: attendance, MONEY: money, COLLECTIONS: collections, PEOPLE_LIST: peopleList, WORK_PLANS: workPlans, BAPTISMS: baptisms, MARRIAGES: marriages }[kind];
+  const make = { MEETINGS: meetings, ATTENDANCE: attendance, MONEY: money, COLLECTIONS: collections, PEOPLE_LIST: peopleList, WORK_PLANS: workPlans, BAPTISMS: baptisms, MARRIAGES: marriages, YEARLY_BUDGET: yearlyBudget, ACTION_PLAN: actionPlan }[kind];
   return chooseSections({ version: 1, kind, periodKey, unitName, ...make(s, periodKey) }, chosen);
 }
 

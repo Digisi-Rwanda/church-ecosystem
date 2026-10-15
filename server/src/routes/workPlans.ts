@@ -937,6 +937,8 @@ workPlansRouter.delete('/:id/milestones/:mid', requireAuth, async (req: AuthedRe
   const m = (await milestonesOf(p.id)).find((x) => x.id === String(req.params.mid));
   if (!m) return fail(res, 404, 'NOT_FOUND', 'Milestone not found');
   await prisma.workPlanMilestone.delete({ where: { id: m.id } });
+  // Its cost lines fall back to the automatic General phase.
+  await prisma.moneyPlanItem.updateMany({ where: { planId: p.id, milestoneId: m.id }, data: { milestoneId: null } });
   res.json({ plan: await shape(p, c, me, true) });
 });
 

@@ -9,8 +9,10 @@ import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { notifySafely } from '../lib/notify.js';
 import type { AccessData } from '../capabilities/engine.js';
-import { CENTRAL_ONLY_KINDS, CHURCH_WIDE, KINDS, SECTIONS, buildSnapshot, periodOk, scheduleStatus, type ReportKind, type Sources } from '../reports/builders.js';
+import { CENTRAL_ONLY_KINDS, CHURCH_WIDE, KINDS, SECTIONS, YEARLY_KINDS, buildSnapshot, periodOk, scheduleStatus, type ReportKind, type Sources } from '../reports/builders.js';
 import { isCentralOnly } from '../capabilities/engine.js';
+import { multiplierOf } from '../money/cycles.js';
+import { fundTotals } from './incomeFunds.js';
 import { canCompose, canPublish, canReadReports, canReadSource } from '../reports/access.js';
 
 export const reportsRouter = Router();
@@ -63,8 +65,17 @@ async function sourcesFor(unit: UnitRow): Promise<Sources> {
     all<Sources['programs'][number]>(prisma.program as never),
     all<NonNullable<Sources['amendments']>[number]>(prisma.budgetAmendment as never),
   ]);
+  const systemId = unit.systemId ?? '';
+  const mine = plans.filter((p) => !(p as { deletedAt?: unknown }).deletedAt && p.orgUnitId === unit.id) as Array<Sources['plans'][number] & { systemId?: string; planType?: string | null; startsOn?: Date | string | null; timingKind?: string | null }>;
+  const lines = (await prisma.moneyPlanItem.findMany({ where: { systemId } })) as Array<{ planId?: string | null; amount: number; status: string }>;
+  const spentBy = new Map<string, number>();
+  for (const e of entries as Array<Sources['entries'][number] & { planId?: string | null }>) if (e.planId && e.kind === 'SPENDING' && e.status === 'APPROVED') spentBy.set(e.planId, (spentBy.get(e.planId) ?? 0) + e.amount);
+  const activities = mine.map((p) => ({
+    id: p.id!, orgUnitId: p.orgUnitId, title: p.title, planType: p.planType ?? 'PROJECT', status: p.status, startsOn: p.startsOn ?? null, leaderPersonId: p.leaderPersonId,
+    planned: lines.filter((l) => l.planId === p.id && l.status !== 'DROPPED').reduce((n, l) => n + l.amount, 0) * multiplierOf(p as never), spent: spentBy.get(p.id!) ?? 0,
+  }));
   return {
-    unitId: unit.id, systemId: unit.systemId ?? '', names: new Map(people.map((p) => [p.id, p.fullName])),
+    unitId: unit.id, systemId, activities, funds: await fundTotals(systemId), names: new Map(people.map((p) => [p.id, p.fullName])),
     meetings, decisions, accounts, entries, budgetLines, counts, memberships, positions, plans, personRecords, programs, amendments,
     activePeople: new Set(people.filter((p) => !p.archivedAt && (!p.status || p.status === 'ACTIVE')).map((p) => p.id)),
   };
@@ -149,6 +160,7 @@ reportsRouter.post('/schedules', requireAuth, async (req: AuthedRequest, res) =>
   const unit = c.units.find((u) => u.id === parsed.data.unitId);
   if (!unit?.systemId) return fail(res, 404, 'NOT_FOUND', 'Unit not found');
   if (!canPublish(me, unit.systemId, c.data)) return fail(res, 403, 'FORBIDDEN', 'You may not set schedules here');
+  if (YEARLY_KINDS.includes(parsed.data.kind)) return fail(res, 400, 'BAD_INPUT', 'A yearly report is composed when needed, not on the monthly schedule');
   if ((CHURCH_WIDE.includes(parsed.data.kind) || CENTRAL_ONLY_KINDS.includes(parsed.data.kind)) && unit.systemId !== 'sys-main') return fail(res, 400, 'BAD_INPUT', 'This report belongs to the main church');
   const dup = ((await prisma.reportSchedule.findMany()) as ScheduleRow[]).some((s) => s.active && s.orgUnitId === unit.id && s.kind === parsed.data.kind);
   if (dup) return fail(res, 409, 'ALREADY_EXISTS', 'This report is already scheduled for this unit');

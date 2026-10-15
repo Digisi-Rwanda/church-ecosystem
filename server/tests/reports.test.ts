@@ -182,6 +182,15 @@ describe('reports routes', () => {
     const opts = await get('p-vp', '/api/reports/options');
     expect(opts.body.units[0].kinds).toContain('MONEY');
   });
+  it('yearly budget and action plan compose from the live plans, and cannot be put on the monthly schedule', async () => {
+    const y = await compose('p-vp', { kind: 'YEARLY_BUDGET', periodKey: '2026' });
+    expect(y.status).toBe(201);
+    const snap = (await get('p-vp', `/api/reports/${y.body.id}`)).body.report?.snapshot ?? (await get('p-vp', `/api/reports/${y.body.id}`)).body.snapshot;
+    expect(snap?.kind ?? 'YEARLY_BUDGET').toBe('YEARLY_BUDGET');
+    expect((await compose('p-vp', { kind: 'ACTION_PLAN', periodKey: '2026' })).status).toBe(201);
+    expect((await post('p-choir-leader', '/api/reports/schedules', { unitId: 'ou-choir', kind: 'YEARLY_BUDGET', dueDay: 5 })).status).toBe(400);
+  });
+
   it('a draft can be discarded and then composed again', async () => {
     const r = await compose();
     expect((await del('p-vp', `/api/reports/${r.body.id}`)).status).toBe(200);
@@ -247,5 +256,34 @@ describe('amendments in the money report', () => {
     expect(month.rows).toHaveLength(1);
     expect(month.rows[0]).toEqual(['2026-10-05', 'Harvest', 'MONEY', 'INCREASE', 100, 150, 'Vice President', 'Bigger hall']);
     expect(buildSnapshot('MONEY', '2026', 'Choir', s).tables.find((t) => t.key === 'amendments')!.rows).toHaveLength(2);
+  });
+});
+
+describe('yearly budget and action plan', () => {
+  const acts = [
+    { id: 'a1', orgUnitId: 'u', title: 'Harvest concert', planType: 'EVENT', status: 'ENDED', startsOn: '2026-03-08T07:00:00Z', leaderPersonId: 'a', planned: 100000, spent: 80000 },
+    { id: 'a2', orgUnitId: 'u', title: 'Discipleship', planType: 'PROGRAM', status: 'RUNNING', startsOn: '2026-01-10T07:00:00Z', leaderPersonId: 'b', planned: 600000, spent: 150000 },
+    { id: 'a3', orgUnitId: 'u', title: 'Old', planType: 'EVENT', status: 'CANCELLED', startsOn: '2026-04-01T07:00:00Z', leaderPersonId: 'a', planned: 5, spent: 0 },
+    { id: 'a4', orgUnitId: 'other', title: 'Not mine', planType: 'EVENT', status: 'RUNNING', startsOn: '2026-05-01T07:00:00Z', leaderPersonId: 'a', planned: 9, spent: 0 },
+  ];
+  const s = src({
+    activities: acts, funds: { secured: 900000, spent: 230000, reserved: 400000, available: 270000 },
+    budgetLines: [{ systemId: 's', year: 2026, kind: 'INCOME', category: 'DONATION', planned: 1000000 }, { systemId: 's', year: 2026, kind: 'SPENDING', category: 'EVENT', planned: 5 }],
+    entries: [{ accountId: 'x', orgUnitId: 'u', kind: 'SPENDING', amount: 80000, occurredOn: '2026-03-09T10:00:00Z', category: 'EVENT', status: 'APPROVED', planId: 'a1' } as never],
+  });
+  it('yearly budget: forecast is the only typed figure; the rest comes from the plans and the money now', () => {
+    const b = buildSnapshot('YEARLY_BUDGET', '2026', 'Choir', s);
+    expect(b.summary.map((x) => [x.key, x.value])).toEqual([['forecast', 1000000], ['planned', 700000], ['spent', 230000], ['availableNow', 270000], ['unreservedForecast', 300000], ['amended', 0]]);
+    expect(b.tables.find((t) => t.key === 'activities')!.rows.map((r) => r[0])).toEqual(['Discipleship', 'Harvest concert']);
+    expect(b.tables.find((t) => t.key === 'byType')!.rows).toEqual([['PROGRAM', 1, 600000, 150000], ['EVENT', 1, 100000, 80000]]);
+    const months = b.tables.find((t) => t.key === 'months')!.rows;
+    expect(months[2]).toEqual(['2026-03', 100000, 80000]);
+    expect(buildSnapshot('YEARLY_BUDGET', '2026-03', 'Choir', s).tables.some((t) => t.key === 'months')).toBe(false);
+  });
+  it('action plan: the unit’s activities for the year, by month', () => {
+    const a = buildSnapshot('ACTION_PLAN', '2026', 'Choir', s);
+    expect(a.summary.map((x) => [x.key, x.value])).toEqual([['activities', 2], ['running', 1], ['ended', 1], ['planned', 700000]]);
+    expect(a.tables.find((t) => t.key === 'activities')!.rows[0]).toEqual(['Discipleship', 'PROGRAM', '2026-01-10', 'Bob', 'RUNNING', 600000]);
+    expect(a.tables.find((t) => t.key === 'byMonth')!.rows.filter((r) => r[1] === 1).map((r) => r[0])).toEqual(['2026-01', '2026-03']);
   });
 });

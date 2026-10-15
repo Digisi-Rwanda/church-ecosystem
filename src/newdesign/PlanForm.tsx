@@ -1,4 +1,5 @@
 import { useState, type FormEvent } from 'react';
+import { PendingFiles, uploadPending } from './PendingFiles';
 import { createPlan, editPlan, PLAN_TYPES, type DirectoryPerson, type PlanDetail, type PlanOptions, type PlanType, type WorkVisibility } from '../api/frontDoorApi';
 import { CheckboxField, SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
@@ -39,6 +40,7 @@ export function PlanForm({
   const [visibility, setVisibility] = useState<WorkVisibility>(existing?.visibility ?? 'SYSTEM');
   const [fundraising, setFundraising] = useState(existing?.fundraising ?? false);
   const [target, setTarget] = useState(existing?.fundTarget ? String(existing.fundTarget) : '');
+  const [files, setFiles] = useState<File[]>([]);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
 
@@ -66,7 +68,9 @@ export function PlanForm({
     setBusy(true);
     setError('');
     try {
-      onDone(existing ? await editPlan(existing.id, input) : await createPlan(unitId, input));
+      const saved = existing ? await editPlan(existing.id, input) : await createPlan(unitId, input);
+      if (!existing && files.length > 0) await uploadPending(saved.id, files);
+      onDone(saved);
     } catch (err) {
       setError(t(planErrorKey(errorCode(err)) as 'door.people.actionFailed'));
       setBusy(false);
@@ -118,6 +122,13 @@ export function PlanForm({
       <SelectField label={t('door.work.form.visibility')} name="p-vis" hint={t(`door.work.visibility.${visibility}.hint` as const)} value={visibility} onChange={(e) => setVisibility(e.target.value as WorkVisibility)}>
         {options.visibilities.map((v) => (<option key={v} value={v}>{t(`door.work.visibility.${v}` as const)}</option>))}
       </SelectField>
+      {!existing && (
+        <fieldset className="door-fieldset">
+          <legend>{t('door.plan.files.heading')}</legend>
+          <p className="muted">{t('door.plan.files.optional')}</p>
+          <PendingFiles files={files} onChange={setFiles} disabled={busy} />
+        </fieldset>
+      )}
       <p className="muted">{t('door.plan.form.approvalHint')}</p>
       {error && (<p className="door-error" role="alert">{error}</p>)}
       <div className="door-row">

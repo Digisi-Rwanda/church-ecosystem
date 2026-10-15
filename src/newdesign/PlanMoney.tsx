@@ -11,6 +11,7 @@ import { planErrorKey } from './plans';
 import { AmendForm, CyclePanel, PendingAmendment, SpendingVsPlan } from './PlanAmend';
 import { FundraisingLine, SettlementPanel } from './PlanSettle';
 import { StatusChip } from './kit';
+import { BurnPanel, PhasePick, PhaseTable } from './PlanViews';
 
 /** "Planned spending X · Money set aside Y · Gap Z": the live line that decides whether Submit is on. */
 export function GapLine({ m }: { m: ActivityMoney }) {
@@ -37,6 +38,9 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
   const [flagging, setFlagging] = useState(false);
   const [note, setNote] = useState('');
   const [amending, setAmending] = useState(false);
+  const [phase, setPhase] = useState('');
+  const [ePhase, setEPhase] = useState('');
+  const phases = p.milestones.map((x) => ({ id: x.id, title: x.title }));
 
   const go = async (job: () => Promise<ActivityMoney>, after?: () => void) => {
     setError('');
@@ -64,6 +68,8 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
         <button type="button" className="btn" onClick={() => setAmending(true)}>{t('door.pm.amend.request')}</button>
       )}
       {amending && <AmendForm p={p} m={m} go={go} onCancel={() => setAmending(false)} />}
+      <BurnPanel m={m} />
+      <PhaseTable m={m} />
       <SpendingVsPlan m={m} />
       <CyclePanel key={`${m.cycle.kind}|${m.cycle.explicit}|${m.status}`} p={p} m={m} onChange={onChange} />
       {!m.canEdit && m.open && <p className="muted">{t('door.pm.readOnly')}</p>}
@@ -82,8 +88,9 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
                 <div className="door-form">
                   <TextField label={t('door.pm.for')} name={`pm-t-${l.id}`} value={eTitle} onChange={(e) => setETitle(e.target.value)} />
                   <TextField label={t('door.pm.amount')} name={`pm-a-${l.id}`} inputMode="numeric" value={eAmount} onChange={(e) => setEAmount(e.target.value)} />
+                  <PhasePick m={m} name={`pm-p-${l.id}`} phases={phases} value={ePhase} onChange={setEPhase} />
                   <div className="door-row">
-                    <button type="button" className="btn sm" disabled={!eTitle.trim() || num(eAmount) < 1} onClick={() => void go(() => editMoneyLine(p.id, l.id, { title: eTitle.trim(), amount: num(eAmount) }), () => setEditing(null))}>
+                    <button type="button" className="btn sm" disabled={!eTitle.trim() || num(eAmount) < 1} onClick={() => void go(() => editMoneyLine(p.id, l.id, { title: eTitle.trim(), amount: num(eAmount), ...(m.planType === 'PROJECT' ? { milestoneId: ePhase || null } : {}) }), () => setEditing(null))}>
                       {t('door.pm.save')}
                     </button>
                     <button type="button" className="btn ghost sm" onClick={() => setEditing(null)}>{t('door.pm.cancel')}</button>
@@ -92,12 +99,13 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
               ) : (
                 <>
                   <strong>{l.title}</strong> · {formatRwf(l.amount)}{' '}
+                  {m.planType === 'PROJECT' && phases.length > 0 && <span className="muted">· {t('door.pm.phase.of', { phase: phases.find((x) => x.id === l.milestoneId)?.title ?? t('door.pm.phase.general') })}{' '}</span>}
                   {(m.status === 'PENDING_APPROVAL' || l.checkState) && (
                     <StatusChip tone={tone(l.checkState)}>{t(l.checkState ? (`door.pm.check.${l.checkState}` as 'door.pm.check.VERIFIED') : 'door.pm.check.none')}</StatusChip>
                   )}{' '}
                   {m.canEdit && (
                     <>
-                      <button type="button" className="btn ghost sm" onClick={() => { setEditing(l.id); setETitle(l.title); setEAmount(String(l.amount)); }}>{t('door.pm.edit')}</button>{' '}
+                      <button type="button" className="btn ghost sm" onClick={() => { setEditing(l.id); setETitle(l.title); setEAmount(String(l.amount)); setEPhase(l.milestoneId ?? ''); }}>{t('door.pm.edit')}</button>{' '}
                       <button type="button" className="btn ghost sm" onClick={() => void go(() => removeMoneyLine(p.id, l.id))}>{t('door.pm.remove')}</button>
                     </>
                   )}
@@ -116,7 +124,8 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
         <div className="door-form">
           <TextField label={t('door.pm.for')} name="pm-title" value={title} onChange={(e) => setTitle(e.target.value)} />
           <TextField label={t('door.pm.amount')} name="pm-amount" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
-          <button type="button" className="btn secondary sm" disabled={!title.trim() || num(amount) < 1} onClick={() => void go(() => addMoneyLine(p.id, { title: title.trim(), amount: num(amount) }), () => { setTitle(''); setAmount(''); })}>
+          <PhasePick m={m} name="pm-phase" phases={phases} value={phase} onChange={setPhase} />
+          <button type="button" className="btn secondary sm" disabled={!title.trim() || num(amount) < 1} onClick={() => void go(() => addMoneyLine(p.id, { title: title.trim(), amount: num(amount), ...(phase ? { milestoneId: phase } : {}) }), () => { setTitle(''); setAmount(''); setPhase(''); })}>
             {t('door.pm.add')}
           </button>
         </div>
