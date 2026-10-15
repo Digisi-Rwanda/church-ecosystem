@@ -8,14 +8,15 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { canSee } from '../work/rules.js';
-import { asWorkRow, canApprove, currentLevel } from '../work/plan.js';
+import { asWorkRow, canApprove, canDecideForChurch, currentLevel, levelsOf} from '../work/plan.js';
+import { fileCounts } from './planFiles.js';
 import { canApproveSpending, canReadMoney } from '../money/rules.js';
 import { amendTitle, chainOf, mayDecide, moneyDeciders, type Amend, type Plan } from './planMoney.js';
 
 export const approvalsRouter = Router();
 
-export type ApprovalKind = 'ACTIVITY' | 'AMENDMENT' | 'CONTRIBUTION_LIST' | 'DONATION' | 'SPENDING';
-interface Item { key: string; kind: ApprovalKind; id: string; systemId: string; title: string; amount: number | null; waitingFor: string; from: string; since: string; href: string; mine: boolean }
+export type ApprovalKind = 'ACTIVITY' | 'AMENDMENT' | 'CONTRIBUTION_LIST' | 'DONATION' | 'SPENDING' | 'INCOME';
+interface Item { key: string; kind: ApprovalKind; id: string; systemId: string; title: string; amount: number | null; waitingFor: string; from: string; since: string; href: string; mine: boolean; planType?: string; date?: string | null }
 
 const at = (v: Date | string | null | undefined) => (v ? new Date(v).toISOString() : new Date(0).toISOString());
 
@@ -80,6 +81,49 @@ approvalsRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     });
   }
 
+  for (const r of (await prisma.incomeRecord.findMany()) as Array<{ id: string; systemId: string; status: string; label: string; amount: number; recordedById: string; recordedAt?: Date | string | null }>) {
+    if (r.status !== 'AWAITING' || !inScope(r.systemId) || !canReadMoney(me, r.systemId, data)) continue;
+    items.push({
+      key: `income:${r.id}`, kind: 'INCOME', id: r.id, systemId: r.systemId, title: r.label, amount: r.amount, waitingFor: 'President', from: nameOf(r.recordedById),
+      since: at(r.recordedAt), href: `/s/${r.systemId}/money/funds?tab=income`, mine: canApproveSpending(me, r.systemId, data) && r.recordedById !== me,
+    });
+  }
+
   items.sort((a, b) => a.since.localeCompare(b.since));
   res.json({ items, counts: { all: items.length, mine: items.filter((i) => i.mine).length } });
+});
+
+/** What the Church Leader sees across every live activity: date, activity, description, amount, category, attachments, Catechist status and status. */
+approvalsRouter.get('/oversight', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const { data } = await loadAccessData(me);
+  if (!canDecideForChurch(me, data)) return res.json({ enabled: false, items: [] });
+  const files = await fileCounts();
+  const lines = new Map<string, { sum: number; cats: Set<string> }>();
+  for (const l of (await prisma.moneyPlanItem.findMany()) as Array<{ planId: string | null; amount: number; status: string; category?: string | null }>) {
+    if (!l.planId || l.status === 'DROPPED') continue;
+    const x = lines.get(l.planId) ?? { sum: 0, cats: new Set<string>() };
+    x.sum += l.amount;
+    if (l.category) x.cats.add(l.category);
+    lines.set(l.planId, x);
+  }
+  const only = req.query.systemId ? String(req.query.systemId) : '';
+  const plans = ((await prisma.workPlan.findMany()) as Array<Plan & { suspendedAt?: Date | string | null; aim?: string; startsOn?: Date | string | null }>)
+    .filter((p) => !p.deletedAt && ['PENDING_APPROVAL', 'SETUP', 'RUNNING', 'PAUSED', 'CLOSING'].includes(p.status) && (!only || p.systemId === only) && canSee(asWorkRow(p), me, data));
+  const order: Record<string, number> = { PENDING_APPROVAL: 0, SETUP: 1, RUNNING: 2, PAUSED: 3, CLOSING: 4 };
+  plans.sort((a, b) => (order[a.status] ?? 9) - (order[b.status] ?? 9));
+  res.json({
+    enabled: true,
+    items: plans.map((p) => {
+      const cat = levelsOf(p).find((l) => l.levelKey === 'CATECHIST');
+      const info = lines.get(p.id);
+      const level = p.status === 'PENDING_APPROVAL' ? currentLevel(p) : null;
+      return {
+        id: p.id, systemId: p.systemId, title: p.title, description: p.aim ?? '', planType: p.planType ?? 'PROJECT', date: p.startsOn ? new Date(p.startsOn).toISOString() : null,
+        amount: info?.sum ?? 0, categories: [...(info?.cats ?? [])], attachments: files.get(p.id) ?? 0,
+        catechist: cat ? (cat.status === 'APPROVED' ? 'APPROVED' : 'PENDING') : 'SKIPPED', status: p.suspendedAt ? 'SUSPENDED' : p.status, waitingFor: level?.label ?? null,
+        href: `/s/${p.systemId}/work/plans/${p.id}`, canDecide: p.status === 'PENDING_APPROVAL' && canApprove(p, me, data), canSuspend: !p.suspendedAt && ['SETUP', 'RUNNING', 'PAUSED', 'CLOSING'].includes(p.status),
+      };
+    }),
+  });
 });

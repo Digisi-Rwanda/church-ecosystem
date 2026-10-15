@@ -625,3 +625,56 @@ describe('type-specific money views', () => {
     expect(m.burn).toBeNull();
   });
 });
+
+describe('redesigned funds and approvals', () => {
+  it('donation money waits for the President; nobody approves their own entry; restricted money only serves what it applies to', async () => {
+    const r = await post('p-ctr', `${F}/income`, { systemId: 'sys-choir', sourceTag: 'DONATION', label: 'Supplies gift', amount: 80000, purpose: 'C:SUPPLIES', status: 'SECURED' });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.status).toBe('AWAITING');
+    const queue = (await get('p-choir-leader', '/api/approvals')).body.items as Array<{ kind: string; mine: boolean }>;
+    expect(queue.some((i) => i.kind === 'INCOME' && i.mine)).toBe(true);
+    expect((await post('p-ctr', `${F}/income/${r.body.id}/approve`)).status).toBe(403);
+    expect((await post('p-choir-leader', `${F}/income/${r.body.id}/approve`)).status).toBe(200);
+    const bucket = (await get('p-ctr', `${F}?systemId=sys-choir`)).body.pots.find((x: any) => x.id === 'DONATION:C:SUPPLIES');
+    expect(bucket.secured).toBe(80000);
+    // A plan whose lines are all in EVENT cannot use the SUPPLIES money; one with a SUPPLIES line can.
+    const id = await plan();
+    await post('p-vp', `${B}/${id}/lines`, { title: 'Hall', amount: 50000, category: 'EVENT' });
+    const pots = (await get('p-vp', `${B}/${id}/money`)).body.pots.map((x: any) => x.id);
+    expect(pots).not.toContain('DONATION:C:SUPPLIES');
+    await post('p-vp', `${B}/${id}/lines`, { title: 'Paper', amount: 30000, category: 'SUPPLIES' });
+    expect((await get('p-vp', `${B}/${id}/money`)).body.pots.map((x: any) => x.id)).toContain('DONATION:C:SUPPLIES');
+  });
+
+  it('the President changes the team of a live activity directly and the Church Leader is told', async () => {
+    const id = await approvedPlan();
+    expect((await put('p-ctr', `${B}/${id}/team`, { team: [{ personId: 'p-ctr', role: 'Cash' }] })).status).toBe(403);
+    const ok = await put('p-choir-leader', `${B}/${id}/team`, { team: [{ personId: 'p-ctr', role: 'Cash' }] });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.plan.team.map((m: any) => m.personId)).toEqual(['p-ctr']);
+    expect(notices('p-pastor').some((n) => n.startsWith('Team changed'))).toBe(true);
+  });
+
+  it('the Church Leader sees every live activity with its money, attachments and Catechist step', async () => {
+    const id = await approvedPlan();
+    const leader = (await get('p-pastor', '/api/approvals/oversight')).body;
+    expect(leader.enabled).toBe(true);
+    const row = leader.items.find((i: any) => i.id === id);
+    expect(row.amount).toBe(120000);
+    expect(['APPROVED', 'PENDING', 'SKIPPED']).toContain(row.catechist);
+    expect((await get('p-ctr', '/api/approvals/oversight')).body.enabled).toBe(false);
+  });
+
+  it('over-plan spending is recorded and flagged, and the Church Leader is told', async () => {
+    const id = await approvedPlan();
+    const m = await moneyOf(id);
+    const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Choir fund' })).body.id;
+    const tea = m.lines.find((l: any) => l.title === 'Sound hire').id;
+    const spend = await post('p-ctr', '/api/money/entries', { accountId: acc, kind: 'SPENDING', amount: 125000, occurredOn: '2026-11-09', category: 'OTHER', planId: id, lineId: tea });
+    expect(spend.body.status).toBe('APPROVED');
+    expect(notices('p-pastor').some((n) => n.startsWith('Over plan'))).toBe(true);
+    const live = await moneyOf(id);
+    expect(live.canLogExpense).toBe(false);
+    expect((await moneyOf(id, 'p-ctr')).canLogExpense).toBe(true);
+  });
+});

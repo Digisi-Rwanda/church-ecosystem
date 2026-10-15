@@ -6,6 +6,7 @@ import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { ApprovalsList } from './ApprovalsList';
+import { OversightList } from './OversightList';
 import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
 import { sortWork } from './work';
@@ -44,6 +45,7 @@ export function WorkPage() {
       />
       <>
       <ApprovalsList systemId={systemId} />
+      <OversightList />
       <div className="view-bar">
       <div className="door-filters">
         <SelectField label={t('door.work.view')} name="w-view" value={view} onChange={(e) => setView(e.target.value as View)}>

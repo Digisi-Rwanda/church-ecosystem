@@ -1874,9 +1874,14 @@ export type FundsView = {
   records: IncomeRecordView[];
 };
 export type IncomeInput = { systemId: string; sourceTag: SourceTag; label: string; amount: number; purpose?: string; status: 'PLEDGED' | 'SECURED'; expectedOn?: string; receivedOn?: string; note?: string };
-export type ApprovalKind = 'ACTIVITY' | 'AMENDMENT' | 'CONTRIBUTION_LIST' | 'DONATION' | 'SPENDING';
-export type ApprovalItem = { key: string; kind: ApprovalKind; id: string; systemId: string; title: string; amount: number | null; waitingFor: string; from: string; since: string; href: string; mine: boolean };
+export type ApprovalKind = 'ACTIVITY' | 'AMENDMENT' | 'CONTRIBUTION_LIST' | 'DONATION' | 'SPENDING' | 'INCOME';
+export type ApprovalItem = { key: string; kind: ApprovalKind; id: string; systemId: string; title: string; amount: number | null; waitingFor: string; from: string; since: string; href: string; mine: boolean; planType?: string; date?: string | null };
 export const fetchApprovals = (systemId?: string) => apiFetch<{ items: ApprovalItem[]; counts: { all: number; mine: number } }>(`/api/approvals${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+export type OversightItem = {
+  id: string; systemId: string; title: string; description: string; planType: string; date: string | null; amount: number; categories: string[]; attachments: number;
+  catechist: 'APPROVED' | 'PENDING' | 'SKIPPED'; status: string; waitingFor: string | null; href: string; canDecide: boolean; canSuspend: boolean;
+};
+export const fetchOversight = (systemId?: string) => apiFetch<{ enabled: boolean; items: OversightItem[] }>(`/api/approvals/oversight${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
 export const fetchFunds = (systemId: string) => apiFetch<FundsView>(`/api/funds?systemId=${encodeURIComponent(systemId)}`);
 export const recordIncome = (input: IncomeInput) => apiFetch('/api/funds/income', { method: 'POST', body: input });
 export const incomeReceived = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });

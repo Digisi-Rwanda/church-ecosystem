@@ -6,8 +6,9 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { formatRwf } from './money';
 import { useLoad } from './useLoad';
 import { StatusChip } from './kit';
+import { ApprovalReview } from './ApprovalReview';
 
-const KINDS: ApprovalKind[] = ['ACTIVITY', 'AMENDMENT', 'CONTRIBUTION_LIST', 'DONATION', 'SPENDING'];
+const KINDS: ApprovalKind[] = ['ACTIVITY', 'AMENDMENT', 'CONTRIBUTION_LIST', 'DONATION', 'INCOME', 'SPENDING'];
 
 /** Everything that waits for a decision, shown on the Work page. Open a row to decide it where it always was decided. Hidden when nothing waits. */
 export function ApprovalsList({ systemId }: { systemId: string }) {
@@ -15,6 +16,7 @@ export function ApprovalsList({ systemId }: { systemId: string }) {
   const { locale } = useI18n();
   const [who, setWho] = useState<'mine' | 'all'>('mine');
   const [kind, setKind] = useState<ApprovalKind | ''>('');
+  const [open, setOpen] = useState<ApprovalItem | null>(null);
   const list = useLoad(() => fetchApprovals(systemId), `approvals|${systemId}`);
   const all = list.data?.items ?? [];
   if (all.length === 0) return null;
@@ -22,13 +24,13 @@ export function ApprovalsList({ systemId }: { systemId: string }) {
   const rows = all.filter((i) => (who === 'all' || i.mine) && (!kind || i.kind === kind));
   const row = (i: ApprovalItem) => (
     <tr key={i.key} data-tone={i.mine ? 'warn' : undefined}>
-      <th scope="row"><Link to={i.href}>{i.title}</Link></th>
+      <th scope="row">{i.kind === 'ACTIVITY' ? <button type="button" className="linklike" onClick={() => setOpen(i)}>{i.title}</button> : <Link to={i.href}>{i.title}</Link>}</th>
       <td data-label={t('door.approvals.col.kind')}>{t(`door.approvals.kind.${i.kind}` as 'door.approvals.kind.ACTIVITY')}</td>
       <td className="num" data-label={t('door.approvals.col.amount')}>{i.amount === null ? '—' : formatRwf(i.amount)}</td>
       <td data-label={t('door.approvals.col.from')}>{i.from}</td>
       <td data-label={t('door.approvals.col.waitingFor')}>{i.waitingFor}</td>
       <td data-label={t('door.approvals.col.since')}>{day(i.since)}</td>
-      <td data-label={t('door.approvals.col.status')}>{i.mine ? <StatusChip tone="warn">{t('door.approvals.mine')}</StatusChip> : <span className="muted">{t('door.approvals.others')}</span>}</td>
+      <td data-label={t('door.approvals.col.status')}>{i.mine ? <StatusChip tone="warn">{t('door.approvals.mine')}</StatusChip> : <span className="muted">{t('door.approvals.others')}</span>}{i.kind === 'ACTIVITY' && <> <button type="button" className="btn ghost sm" onClick={() => setOpen(i)}>{t('door.rv.review')}</button></>}</td>
     </tr>
   );
   return (
@@ -65,6 +67,7 @@ export function ApprovalsList({ systemId }: { systemId: string }) {
           </table>
         </div>
       )}
+      {open && <ApprovalReview item={open} onClose={() => setOpen(null)} onDone={() => { setOpen(null); list.reload(); }} />}
     </section>
   );
 }
