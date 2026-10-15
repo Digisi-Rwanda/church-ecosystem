@@ -20,7 +20,7 @@ import { fundraisingProblem } from '../money/settle.js';
 import { SOURCE_INPUT_KINDS, earmarkProblem, normSource, potId, purposeApplies } from '../money/funds.js';
 import { adjustLevels, afterEdit, allVerified, checkNote, figures, liveLines, submitProblem, type MoneyCheck } from '../money/planMoney.js';
 import { burnOf, phasesOf } from '../money/burn.js';
-import { canReadMoney } from '../money/rules.js';
+import { canReadMoney, canRecord } from '../money/rules.js';
 import { potsOf } from './incomeFunds.js';
 import { settleView } from './planSettle.js';
 import { finalize, postSettlement, syncFundraising } from '../money/settlement.js';
@@ -174,6 +174,7 @@ async function view(p: Plan, me: string, data: Awaited<ReturnType<typeof loadAcc
   return {
     planId: p.id, status: p.status, planType: p.planType ?? 'EVENT', phases, burn, open: OPEN.includes(p.status), ...f,
     canEdit: manage && OPEN.includes(p.status),
+    canLogExpense: canRecord(me, p.systemId, data) && ['RUNNING', 'PAUSED', 'CLOSING'].includes(p.status) && !(p as { suspendedAt?: unknown }).suspendedAt,
     canVerify: atTreasurer && canApprove(p, me, data),
     canCheck: atTreasurer && canApprove(p, me, data),
     allVerified: allVerified(lines),
@@ -621,7 +622,7 @@ export async function flagOverspend(planId: string | null | undefined, spentBy: 
     let over = 0;
     if (cycle && p.timingKind === 'REPEAT') over = Math.max(0, ...overspendByCycle(days, allowance, cycle, occurrenceDays(p)).map((c) => c.over));
     else if (!isOngoing(p as never)) over = overBy(allowance * mult(p), actual.reduce((n, e) => n + e.amount, 0));
-    if (over > 0) await tellMany(unitWise.filter((id) => id !== spentBy), p, `Over plan by ${over.toLocaleString('en')}: ${p.title}`, null, `overspend:${p.id}:${over}`, true);
+    if (over > 0) await tellMany([...new Set([...unitWise, ...leaders])].filter((id) => id !== spentBy), p, `Over plan by ${over.toLocaleString('en')}: ${p.title}`, 'Recorded and flagged. It is covered from unrestricted funds when the activity is settled.', `overspend:${p.id}:${over}`, true);
   } catch {
     /* a notice that cannot be sent never blocks the entry */
   }

@@ -1,3 +1,4 @@
+import { PlanTeam } from './PlanTeam';
 import { useState } from 'react';
 import { addPlanCheck, addPlanNote, editPlanCheck, markAttended, removePlanCheck, saveReport, planStep, tickPlanCheck, type PlanDetail } from '../api/frontDoorApi';
 import { TextAreaField, TextField } from '../components/ui/Field';
@@ -131,16 +132,12 @@ function Report({ p, run }: { p: PlanDetail; run: Run }) {
   );
 }
 
-function Team({ p }: { p: PlanDetail }) {
-  const t = useT();
+function Team({ p, run }: { p: PlanDetail; run: Run }) {
   return (
-    <section className="panel">
-      <h3>{t('door.run.h.team')}</h3>
-      {p.team.length === 0 ? <p className="muted">{t('door.plan.team.none')}</p> : (
-        <RowList label={t('door.run.h.team')}>{p.team.map((m) => (<ListRow key={m.personId} avatarName={m.name} title={m.name} detail={m.role} />))}</RowList>
-      )}
+    <>
+      <PlanTeam p={p} onChange={(next) => void run(async () => next)} />
       {p.details?.responsibilities && <p className="muted">{p.details.responsibilities}</p>}
-    </section>
+    </>
   );
 }
 
@@ -175,7 +172,7 @@ export function WorkTab({ p, run, systemId }: { p: PlanDetail; run: Run; systemI
     return (
       <div className="run">
         {tasks}
-        <Team p={p} />
+        <Team p={p} run={run} />
         <PlanGuests p={p} run={run} />
         <Attendance p={p} run={run} />
         <Schedule p={p} />
@@ -187,7 +184,7 @@ export function WorkTab({ p, run, systemId }: { p: PlanDetail; run: Run; systemI
       <div className="run">
         <PlanMilestones p={p} run={run} />
         {tasks}
-        <Team p={p} />
+        <Team p={p} run={run} />
       </div>
     );
   }
@@ -197,7 +194,7 @@ export function WorkTab({ p, run, systemId }: { p: PlanDetail; run: Run; systemI
       <PlanGovernance p={p} run={run} />
       <PlanLinks p={p} systemId={systemId} run={run} />
       {tasks}
-      <Team p={p} />
+      <Team p={p} run={run} />
     </div>
   );
 }

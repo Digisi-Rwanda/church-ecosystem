@@ -137,6 +137,7 @@ moneyRouter.get('/entries', requireAuth, async (req: AuthedRequest, res) => {
     .filter((e) => !q('accountId') || e.accountId === q('accountId'))
     .filter((e) => !q('status') || e.status === q('status'))
     .filter((e) => !q('kind') || e.kind === q('kind'))
+    .filter((e) => !q('planId') || e.planId === q('planId'))
     .filter((e) => !q('month') || inMonth(e.occurredOn, q('month')))
     .sort((a, b) => new Date(b.occurredOn).getTime() - new Date(a.occurredOn).getTime() || new Date(b.recordedAt).getTime() - new Date(a.recordedAt).getTime())
     .slice(0, 300);
@@ -168,6 +169,7 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
   }
   const spending = b.kind === 'SPENDING';
   let inPlan = false;
+  let livePlanLine = false;
   if (spending && b.planId && b.lineId) {
     const plan = (await prisma.workPlan.findUnique({ where: { id: b.planId } })) as { status: string; timingKind?: string | null; budgetCycle?: string | null } | null;
     const line = (await prisma.moneyPlanItem.findUnique({ where: { id: b.lineId } })) as { planId: string; amount: number } | null;
@@ -176,16 +178,17 @@ moneyRouter.post('/entries', requireAuth, async (req: AuthedRequest, res) => {
       .filter((e) => e.kind === 'SPENDING' && e.status !== 'REJECTED' && e.status !== 'VOIDED')
       .reduce((n, e) => n + e.amount, 0);
     const allowed = line.amount * multiplierOf((plan ?? {}) as never);
+    livePlanLine = !!plan && ['RUNNING', 'PAUSED', 'CLOSING', 'ENDED'].includes(plan.status);
     inPlan = !!plan && ['RUNNING', 'PAUSED', 'CLOSING'].includes(plan.status) && spent + b.amount <= allowed;
   }
   const row = (await prisma.moneyEntry.create({
     data: {
       accountId: acc.id, orgUnitId: acc.orgUnitId, systemId: acc.systemId, kind: b.kind, amount: b.amount, occurredOn: new Date(`${b.occurredOn}T00:00:00Z`),
-      category: b.category, note: b.note || null, status: spending ? (inPlan ? 'APPROVED' : 'PENDING_APPROVAL') : 'RECORDED', recordedById: me, planId: b.planId || null, lineId: b.lineId || null,
-      ...(inPlan ? { decidedAt: new Date(), decisionNote: 'Within the plan' } : {}),
+      category: b.category, note: b.note || null, status: spending ? (livePlanLine ? 'APPROVED' : 'PENDING_APPROVAL') : 'RECORDED', recordedById: me, planId: b.planId || null, lineId: b.lineId || null,
+      ...(livePlanLine ? { decidedAt: new Date(), decisionNote: inPlan ? 'Within the plan' : 'Over the plan: flagged, not refused' } : {}),
     },
   })) as Entry;
-  if (spending && !inPlan) {
+  if (spending && !livePlanLine) {
     for (const id of await approversOf(acc.systemId, me, c)) {
       await notifySafely(prisma as never, {
         kind: 'WAITING_FOR_ME', toPersonId: id, systemId: acc.systemId, title: `Spending to approve: ${b.amount.toLocaleString('en')} RWF`, body: b.note ?? b.category,

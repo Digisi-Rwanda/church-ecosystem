@@ -23,6 +23,7 @@ export function PlansPage({ planType }: { planType: PlanType }) {
         id="door-plans-title"
         title={t(`door.plans.${planType}` as 'door.plans.PROGRAM')}
         purpose={t(`door.purpose.${planType}` as 'door.purpose.PROGRAM')}
+        actions={canCreate && planType === 'EVENT' ? <Link className="btn ghost" to={`/s/${systemId}/money/plan/new/fundraising`}>{t('door.ac.type.fundraising')}</Link> : undefined}
         primary={canCreate ? <Link className="btn" to={`/s/${systemId}/money/plan/new/${planType.toLowerCase()}`}>{t(`door.plan.new.${planType}` as 'door.plan.new.EVENT')}</Link> : undefined}
       />
       <PlansList systemId={systemId} planType={planType} />

@@ -76,8 +76,8 @@ const loadPublicCheckinPage = () => import('./PublicEventPage').then((m) => ({ d
 export const PublicCheckinPage = lazy(loadPublicCheckinPage);
 const loadActivityNew = () => import('./ActivityNew').then((m) => ({ default: m.ActivityNew }));
 export const ActivityNew = lazy(loadActivityNew);
-const loadActionPlanCreate = () => import('./ActionPlanCreate').then((m) => ({ default: m.ActionPlanCreate }));
-export const ActionPlanCreate = lazy(loadActionPlanCreate);
+const loadActivityCreate = () => import('./ActivityCreate').then((m) => ({ default: m.ActivityCreate }));
+export const ActivityCreate = lazy(loadActivityCreate);
 const loadPlansPage = () => import('./PlansPage').then((m) => ({ default: m.PlansPage }));
 export const PlansPage = lazy(loadPlansPage);
 const loadPortalPage = () => import('./PortalPage').then((m) => ({ default: m.PortalPage }));
@@ -168,7 +168,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   PlanPage: loadPlanPage,
   PublicEventPage: loadPublicEventPage,
   PublicCheckinPage: loadPublicCheckinPage,
-  ActionPlanCreate: loadActionPlanCreate,
+  ActivityCreate: loadActivityCreate,
   ActivityNew: loadActivityNew,
   PlansPage: loadPlansPage,
   PortalPage: loadPortalPage,

@@ -530,7 +530,7 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
 });
 
 describe('expenses by plan line', () => {
-  it('spending inside the line goes straight through; over the line waits for the President', async () => {
+  it('spending inside the line goes straight through; over the line is recorded and flagged, never refused', async () => {
     const id = await approvedPlan();
     const m = await moneyOf(id);
     const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Choir fund' })).body.id;
@@ -540,7 +540,7 @@ describe('expenses by plan line', () => {
     expect(a.status, JSON.stringify(a.body)).toBe(201);
     expect(a.body.status).toBe('APPROVED');
     const b = await spend(10000, tea);
-    expect(b.body.status).toBe('PENDING_APPROVAL');
+    expect(b.body.status).toBe('APPROVED');
     expect((await spend(1, 'nope')).body.code).toBe('BAD_LINE');
   });
 });

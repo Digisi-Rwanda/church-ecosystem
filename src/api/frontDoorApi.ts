@@ -1020,7 +1020,7 @@ export type DateChange = { fromStart: string | null; fromEnd: string | null; toS
 export type PlanFlags = {
   canSetTiming: boolean; canClearReview: boolean;
   canEdit: boolean; canSubmit: boolean; canWithdraw: boolean; canApprove: boolean; canReopen: boolean; canStart: boolean; canClose: boolean;
-  canPause: boolean; canResume: boolean; canRenew: boolean; canCheckMoney: boolean; canSuspend: boolean; canUnsuspend: boolean;
+  canPause: boolean; canResume: boolean; canRenew: boolean; canCheckMoney: boolean; canSuspend: boolean; canUnsuspend: boolean; canEditTeam: boolean;
   canCancel: boolean; canDelete: boolean; canNote: boolean; canCheck: boolean; canAddCheck: boolean; canCompose: boolean; canPublish: boolean;
   canManageRegistration: boolean; canMarkAttendance: boolean; canMilestone: boolean; canTickMilestone: boolean;
   canLink: boolean; canGovern: boolean; canReview: boolean; canMeasure: boolean;
@@ -1123,6 +1123,7 @@ export const planStep = (id: string, step: 'submit' | 'withdraw' | 'reopen' | 's
 export const setPlanTiming = (id: string, t: PlanTiming) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/timing`, { method: 'PATCH', body: t }));
 export const reviewSeen = (id: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/review-seen`, { method: 'POST', body: {} }));
 export const rejectPlan = (id: string, reason: string, target: 'CREATOR' | 'PREVIOUS' = 'CREATOR') => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason, target } }));
+export const setPlanTeam = (id: string, team: Array<{ personId: string; role: string }>) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/team`, { method: 'PUT', body: { team } }));
 export const suspendPlan = (id: string, note: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/suspend`, { method: 'POST', body: { note } }));
 export const unsuspendPlan = (id: string, note?: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/unsuspend`, { method: 'POST', body: note ? { note } : {} }));
 export const cancelPlan = (id: string, reason: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } }));
@@ -1185,14 +1186,14 @@ export type MoneyAccountItem = {
 export type MoneyAccounts = { canRecord: boolean; canApprove: boolean; accounts: MoneyAccountItem[] };
 export type MoneyEntryItem = {
   id: string; accountId: string; accountName: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note: string;
-  status: MoneyStatus; recordedByName: string; recordedAt: string | null; decidedByName: string | null; decisionNote: string | null; planId: string | null; planTitle: string | null;
+  status: MoneyStatus; recordedByName: string; recordedAt: string | null; decidedByName: string | null; decisionNote: string | null; planId: string | null; planTitle: string | null; lineId?: string | null;
   canDecide: boolean; canVoid: boolean;
 };
 export type MoneyEntryInput = { accountId: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note?: string | null; planId?: string | null; lineId?: string | null };
 const M = '/api/money';
 export const fetchMoneyOptions = (): Promise<MoneyOptions> => apiFetch(`${M}/options`);
 export const fetchMoneyAccounts = (systemId: string): Promise<MoneyAccounts> => apiFetch(`${M}/accounts?systemId=${encodeURIComponent(systemId)}`);
-export async function fetchMoneyEntries(opts: { systemId: string; accountId?: string; status?: string; kind?: string; month?: string }): Promise<MoneyEntryItem[]> {
+export async function fetchMoneyEntries(opts: { systemId: string; accountId?: string; status?: string; kind?: string; month?: string; planId?: string }): Promise<MoneyEntryItem[]> {
   const qs = new URLSearchParams();
   for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
   return (await apiFetch<{ entries: MoneyEntryItem[] }>(`${M}/entries?${qs}`)).entries;
@@ -1889,7 +1890,7 @@ export type BurnView = { months: number; elapsed: number; spent: number; planned
 export type ActivityMoney = {
   planId: string; status: string; planType: string; open: boolean; planned: number; earmarked: number; gap: number;
   phases: PhaseView[] | null; burn: BurnView | null;
-  canEdit: boolean; canVerify: boolean; canCheck: boolean; allVerified: boolean;
+  canEdit: boolean; canLogExpense: boolean; canVerify: boolean; canCheck: boolean; allVerified: boolean;
   lines: MoneyLineView[]; sources: Array<{ kind: string; code: string; amount: number; potId: string }>; pots: FundPot[];
   check: { result: 'CHECKED' | 'FLAGGED'; note: string | null; at: string; byName: string } | null;
   locked: boolean;
@@ -1904,6 +1905,7 @@ export type FundraisingView = {
   canLogRevenue: boolean; net: number | null; outcome: 'PROFIT' | 'DEFICIT' | 'EVEN' | null;
 };
 export type SettlementView = {
+  spent: number; earmarked: number; returns: Array<{ kind: string; code: string; amount: number }>; canLateInvoice: boolean;
   doneAt: string; due: string; days: number; settled: boolean; open: boolean; canFinalize: boolean; toRelease: number; closedWithLateAdjustment: boolean;
   result: { released: number; spent: number; earmarked: number; why: 'TREASURER' | 'PERIOD'; at: string } | null;
 };

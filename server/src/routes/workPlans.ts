@@ -157,6 +157,7 @@ function flags(p: Plan, c: Ctx, me: string) {
     canClose: manage && ['SETUP', 'RUNNING'].includes(p.status),
     canSuspend: !p.suspendedAt && !p.deletedAt && ['SETUP', 'RUNNING', 'PAUSED', 'CLOSING'].includes(p.status) && canDecideForChurch(me, c.data),
     canUnsuspend: !!p.suspendedAt && !p.deletedAt && canDecideForChurch(me, c.data),
+    canEditTeam: ['SETUP', 'RUNNING', 'PAUSED'].includes(p.status) && !p.suspendedAt && !p.deletedAt && (unitApproverIds(p.systemId, c.data).includes(me) || canDecideForChurch(me, c.data)),
     canPause: manage && p.status === 'RUNNING' && !typeProblem('pause', type),
     canResume: manage && p.status === 'PAUSED' && !typeProblem('resume', type),
     canRenew: manage && p.status === 'CLOSING' && !typeProblem('renew', type),

@@ -12,7 +12,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PlanDetailsView } from './PlanScreens';
 import { NotesTab, WorkTab } from './PlanWork';
-import { RevenueTab } from './PlanSettle';
+import { PlanMoneyLive } from './PlanMoneyLive';
 import { PlanForm } from './PlanForm';
 import { PlanLinks } from './PlanLinks';
 import { GapLine, PlanMoney } from './PlanMoney';
@@ -21,10 +21,10 @@ import { PlanFiles } from './PlanFiles';
 import { DateChangeBanner, ReviewPrompt, TimePanel } from './PlanTime';
 import { whenSummary } from './when';
 import { useLoad } from './useLoad';
-import { PageHeader, StatusChip, Tabs } from './kit';
+import { PageHeader, SidePanel, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | 'done' | 'approve' | 'suspend' | 'unsuspend' | null;
-type Tab = 'overview' | 'money' | 'revenue' | 'work' | 'notes' | 'files' | 'details' | 'history';
+type Tab = 'overview' | 'money' | 'work' | 'files' | 'history';
 
 /** One activity: its overview and, once approved, three working tabs (Checklist, Money, Notes) plus Revenue for a fundraiser; details and history. */
 export function PlanPage() {
@@ -93,19 +93,15 @@ export function PlanPage() {
               { key: 'overview', label: t('door.plan.tab.overview') },
               ...(live ? [{ key: 'work' as const, label: t(`door.plan.tab.work.${p.planType}` as 'door.plan.tab.work.EVENT') }] : []),
               ...(m ? [{ key: 'money' as const, label: t('door.plan.tab.money') }] : []),
-              ...(live && m?.fundraising ? [{ key: 'revenue' as const, label: t('door.plan.tab.revenue') }] : []),
-              ...(live ? [{ key: 'notes' as const, label: t('door.plan.tab.notes') }] : []),
               { key: 'files', label: t('door.plan.tab.files') },
-              { key: 'details', label: t('door.ap.details') },
               { key: 'history', label: t('door.plan.tab.history') },
             ]}
           />
-          {tab === 'details' && <PlanDetailsView p={p} />}
           {tab === 'files' && <PlanFiles planId={p.id} />}
           {tab === 'work' && live && <WorkTab p={p} run={run} systemId={systemId} />}
-          {tab === 'notes' && live && <NotesTab p={p} run={run} />}
-          {tab === 'revenue' && live && m && <RevenueTab p={p} m={m} onChange={() => { moneyLoad.reload(); load.reload(); }} />}
-          {tab === 'money' && m && <PlanMoney p={p} m={m} onChange={(next) => { if (next) setMoney(next); moneyLoad.reload(); load.reload(); }} />}
+          {tab === 'money' && m && (m.open
+            ? <PlanMoney p={p} m={m} onChange={(next) => { if (next) setMoney(next); moneyLoad.reload(); load.reload(); }} />
+            : <PlanMoneyLive p={p} m={m} onChange={(next) => { if (next) setMoney(next); moneyLoad.reload(); load.reload(); }} />)}
           {tab === 'overview' && (
             <>
           <DateChangeBanner p={p} />
@@ -196,9 +192,15 @@ export function PlanPage() {
               </div>
             </div>
           )}
-          {ask && ask !== 'delete' && ask !== 'done' && ask !== 'approve' && (
+          <SidePanel open={ask === 'suspend'} title={t('door.plan.suspendTitle')} purpose={t('door.plan.suspendPurpose')} onClose={() => setAsk(null)} saveLabel={t('door.plan.action.suspend')} canSave={!!reason.trim()} onSave={() => void run(() => suspendPlan(p.id, reason.trim()))}>
+            <div className="door-form">
+              <TextAreaField label={t('door.plan.suspendAsk')} name="p-suspend" rows={3} value={reason} onChange={(e) => setReason(e.target.value)} />
+              {error && <p className="door-error" role="alert">{error}</p>}
+            </div>
+          </SidePanel>
+          {ask && ask !== 'delete' && ask !== 'done' && ask !== 'approve' && ask !== 'suspend' && (
             <div className="panel door-form">
-              <TextAreaField label={ask === 'reject' ? t('door.plan.rejectAsk') : ask === 'suspend' ? t('door.plan.suspendAsk') : ask === 'unsuspend' ? t('door.plan.unsuspendAsk') : t('door.plan.cancelAsk')} name="p-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
+              <TextAreaField label={ask === 'reject' ? t('door.plan.rejectAsk') : ask === 'unsuspend' ? t('door.plan.unsuspendAsk') : t('door.plan.cancelAsk')} name="p-reason" rows={2} value={reason} onChange={(e) => setReason(e.target.value)} />
               {ask === 'reject' && p.levels.some((l) => l.status === 'APPROVED') && (
                 <SelectField label={t('door.plan.returnTo')} name="p-return" value={target} onChange={(e) => setTarget(e.target.value as 'CREATOR' | 'PREVIOUS')}>
                   <option value="CREATOR">{t('door.plan.returnTo.CREATOR')}</option>
@@ -206,8 +208,8 @@ export function PlanPage() {
                 </SelectField>
               )}
               <div className="door-row">
-                <button type="button" className="btn" disabled={ask !== 'unsuspend' && !reason.trim()} onClick={() => void run(() => (ask === 'reject' ? rejectPlan(p.id, reason.trim(), target) : ask === 'suspend' ? suspendPlan(p.id, reason.trim()) : ask === 'unsuspend' ? unsuspendPlan(p.id, reason.trim() || undefined) : cancelPlan(p.id, reason.trim())))}>
-                  {ask === 'reject' ? t('door.plan.action.reject') : ask === 'suspend' ? t('door.plan.action.suspend') : ask === 'unsuspend' ? t('door.plan.action.unsuspend') : t('door.plan.action.cancel')}
+                <button type="button" className="btn" disabled={ask !== 'unsuspend' && !reason.trim()} onClick={() => void run(() => (ask === 'reject' ? rejectPlan(p.id, reason.trim(), target) : ask === 'unsuspend' ? unsuspendPlan(p.id, reason.trim() || undefined) : cancelPlan(p.id, reason.trim())))}>
+                  {ask === 'reject' ? t('door.plan.action.reject') : ask === 'unsuspend' ? t('door.plan.action.unsuspend') : t('door.plan.action.cancel')}
                 </button>
                 <button type="button" className="btn ghost" onClick={() => setAsk(null)}>
                   {t('door.settings.cancel')}
@@ -242,6 +244,7 @@ export function PlanPage() {
               )}
             </div>
           )}
+          {Object.keys(p.details ?? {}).length > 0 && <PlanDetailsView p={p} />}
           {!editing && <TimePanel key={`${p.startsOn}|${p.endsOn}|${p.startTime}|${p.endTime}|${p.location}`} p={p} run={run} />}
             </>
           )}
@@ -263,6 +266,7 @@ export function PlanPage() {
             </div>
           )}
 
+          {live && <NotesTab p={p} run={run} />}
             </>
           )}
         </section>

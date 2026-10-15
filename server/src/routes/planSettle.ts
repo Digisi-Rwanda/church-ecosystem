@@ -11,6 +11,7 @@ import { NOTE_MAX, TITLE_MAX, canSee } from '../work/rules.js';
 import { asWorkRow, canApprove, canManagePlan, type PlanRow } from '../work/plan.js';
 import { canReadMoney, canRecord, isDay } from '../money/rules.js';
 import { SETTLE_DAYS, netOf, outcomeOf, projectedNet, revenueProblem, settleDue, settlementOpen, underBudget } from '../money/settle.js';
+import { reduceProportional } from '../money/cycles.js';
 import { churchLeaders, confirmedRevenue, finalize, revenueOf, spentOf, syncFundraising, tell, type SettlePlan } from '../money/settlement.js';
 
 export const planSettleRouter = Router();
@@ -60,7 +61,18 @@ export async function settleView(p: Plan, me: string, data: Data, planned: numbe
   if (p.doneAt) {
     let result: unknown = null;
     try { result = p.settlementJson ? JSON.parse(p.settlementJson) : null; } catch { result = null; }
+    const srcs = (await prisma.planSource.findMany({ where: { planId: p.id } })) as Array<{ id: string; planId: string; kind: string; code: string; amount: number }>;
+    const spentNow = await spentOf(p.id);
+    const release = settled ? 0 : underBudget(earmarked, spentNow);
+    const kept = reduceProportional(srcs.filter((x) => x.planId === p.id), release);
+    const stored = (result as { returned?: Array<{ kind: string; code: string; was: number; now: number }> } | null)?.returned;
+    const returns = (settled
+      ? (stored ?? []).map((r) => ({ kind: r.kind, code: r.code, amount: r.was - r.now }))
+      : srcs.map((x) => ({ kind: x.kind, code: x.code, amount: x.amount - (kept.find((n) => n.id === x.id)?.amount ?? 0) }))
+    ).filter((r) => r.amount > 0);
     settlement = {
+      spent: settled ? (result as { spent?: number } | null)?.spent ?? spentNow : spentNow, earmarked: settled ? (result as { earmarked?: number } | null)?.earmarked ?? earmarked : earmarked, returns,
+      canLateInvoice: write && p.status === 'ENDED',
       doneAt: new Date(p.doneAt).toISOString(), due: settleDue(p.doneAt).toISOString(), days: SETTLE_DAYS, settled, open: settlementOpen(p),
       closedWithLateAdjustment: Array.isArray((result as { late?: unknown[] } | null)?.late) && ((result as { late: unknown[] }).late.length > 0),
       canFinalize: write && p.status === 'ENDED' && !settled, toRelease: settled ? 0 : underBudget(earmarked, await spentOf(p.id)), result,
