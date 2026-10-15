@@ -3,6 +3,7 @@ import { useState, type FormEvent } from 'react';
 import { decideDonation, fetchDonations, fetchMoneyAccounts, recordDonation } from '../api/frontDoorApi';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
+import { PurposeField } from './PurposeField';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { formatRwf, moneyErrorKey, parseAmount } from './money';
@@ -24,6 +25,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
   const [day, setDay] = useState(new Date().toISOString().slice(0, 10));
   const [accountId, setAccountId] = useState('');
   const [typeCode, setTypeCode] = useState('');
+  const [purpose, setPurpose] = useState('');
   const [ask, setAsk] = useState<string | null>(null);
   const [reason, setReason] = useState('');
   const [error, setError] = useState('');
@@ -43,7 +45,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
     const n = parseAmount(amount);
     const acc = accountId || (open.length === 1 ? open[0].id : '');
     if (!donor.trim() || n === null || !acc) return setError(t('door.money.form.incomplete'));
-    void run(() => recordDonation({ systemId, accountId: acc, donorName: donor.trim(), amount: n, receivedOn: day, donorPersonId, typeCode: typeCode || null }));
+    void run(() => recordDonation({ systemId, accountId: acc, donorName: donor.trim(), amount: n, receivedOn: day, donorPersonId, typeCode: typeCode || null, purpose: purpose || undefined }));
   };
   return (
     <div className="door-form" style={{ maxWidth: 'none' }}>
@@ -75,6 +77,7 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
                 ))}
               </SelectField>
             )}
+            <PurposeField systemId={systemId} value={purpose} onChange={setPurpose} name="d-purpose" />
             {open.length > 1 && (
               <SelectField label={t('door.money.entry.account')} name="d-acc" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
                 <option value="">{t('door.gov.meeting.choose')}</option>

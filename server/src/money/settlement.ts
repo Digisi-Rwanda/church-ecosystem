@@ -1,13 +1,15 @@
 /**
  * Settlement and fundraising posting (slice 7). Database side of money/settle.ts.
- * One IncomeRecord (OTHER, POOL, SECURED, planId set) carries a fundraising event's net: a profit adds to the general pool,
- * a deficit is a negative amount that takes from it. A post-settlement invoice is its own negative record. Nothing here refuses.
+ * A fundraising event's profit is one income record in the Donation pot, Unrestricted. Money that has to be found (a fundraising deficit,
+ * an overspend at settlement, a late invoice) is taken from Unrestricted money that is still available, the pot that owes it first and then the
+ * other. No pot goes below zero: what nothing can cover is kept as Uncovered overspend and the Church Leaders are told. Nothing here refuses.
  */
 import { prisma } from '../lib/prisma.js';
 import { notifySafely } from '../lib/notify.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { holdersWith, canDecideForChurch, CHURCH_SYSTEM } from '../work/plan.js';
-import { POOL_CODE } from './funds.js';
+import { coverShortfall, shareByPot, UNRESTRICTED, type PotKind } from './funds.js';
+import { potsOf } from '../routes/incomeFunds.js';
 import { reduceProportional } from './cycles.js';
 import { netOf, outcomeOf, settlementLapsed, underBudget } from './settle.js';
 
@@ -38,32 +40,40 @@ export async function tell(ids: string[], p: SettlePlan, title: string, body: st
   for (const id of new Set(ids)) await notifySafely(prisma as never, { kind: important ? 'WAITING_FOR_ME' : 'FOR_INFORMATION', toPersonId: id, systemId: p.systemId, title, body, href: `/s/${p.systemId}/work/plans/${p.id}`, important, sourceKey: `${key}:${id}` });
 }
 
-/** Keep the fundraising event's single pool record equal to revenue minus spending. Only once the event is Done. */
+/** Take what is needed from Unrestricted money still available, and keep what nothing could cover. Returns what was covered and what was not. */
+export async function coverFromFunds(p: SettlePlan, need: Array<{ kind: PotKind; amount: number }>, reason: 'OVERSPEND' | 'LATE_INVOICE', by: string, note: string): Promise<{ covered: number; uncovered: number }> {
+  const total = need.reduce((n, x) => n + x.amount, 0);
+  if (total <= 0) return { covered: 0, uncovered: 0 };
+  const { cover, uncovered } = coverShortfall(await potsOf(p.systemId, undefined, false), need);
+  const now = new Date();
+  for (const c of cover) await prisma.fundAdjustment.create({ data: { systemId: p.systemId, planId: p.id, kind: c.kind, code: UNRESTRICTED, amount: -c.amount, reason, note, createdById: by, createdAt: now } });
+  if (uncovered > 0) await prisma.fundAdjustment.create({ data: { systemId: p.systemId, planId: p.id, kind: 'DONATION', code: UNRESTRICTED, amount: uncovered, reason: 'UNCOVERED', note, createdById: by, createdAt: now } });
+  return { covered: total - uncovered, uncovered };
+}
+
+async function tellUncovered(p: SettlePlan, by: string, uncovered: number, key: string): Promise<void> {
+  if (uncovered > 0) await tell(await churchLeaders(by), p, `Uncovered overspend: ${p.title}`, `${uncovered.toLocaleString('en')} RWF could not be covered from unrestricted funds`, key, true);
+}
+
+/** Keep the fundraising event's result equal to revenue minus spending, once the event is Done. A profit is Unrestricted Donation money; a deficit is found from unrestricted funds. */
 export async function syncFundraising(p: SettlePlan, by: string): Promise<number | null> {
   if (!p.fundraising || !p.doneAt || p.deletedAt) return null;
   const net = netOf((await confirmedRevenue(p.id)).reduce((n, r) => n + r.amount, 0), await spentOf(p.id));
-  const all = ((await prisma.incomeRecord.findMany({ where: { systemId: p.systemId } })) as Rec[]).filter((r) => r.planId === p.id && r.note === FUNDRAISING_TAG);
   const now = new Date();
-  const label = `${net < 0 ? 'Fundraising deficit' : 'Fundraising profit'}: ${p.title}`;
-  if (all[0]) await prisma.incomeRecord.update({ where: { id: all[0].id }, data: { amount: net, label, status: 'SECURED', receivedOn: now, updatedById: by, updatedAt: now } });
-  else await prisma.incomeRecord.create({ data: { systemId: p.systemId, kind: 'OTHER', code: POOL_CODE, label, amount: net, status: 'SECURED', note: FUNDRAISING_TAG, planId: p.id, receivedOn: now, recordedById: by, recordedAt: now, updatedAt: now } });
+  // Start from a clean slate: the earlier result of this event is taken back before it is posted again.
+  for (const r of ((await prisma.incomeRecord.findMany({ where: { systemId: p.systemId } })) as Rec[]).filter((r) => r.planId === p.id && r.note === FUNDRAISING_TAG)) await prisma.incomeRecord.delete({ where: { id: r.id } });
+  for (const a of ((await prisma.fundAdjustment.findMany({ where: { systemId: p.systemId } })) as Array<{ id: string; planId: string | null; note: string | null }>).filter((a) => a.planId === p.id && a.note === FUNDRAISING_TAG)) await prisma.fundAdjustment.delete({ where: { id: a.id } });
+  if (net > 0) {
+    await prisma.incomeRecord.create({ data: { systemId: p.systemId, kind: 'DONATION', code: UNRESTRICTED, sourceTag: 'OTHER', label: `Fundraising profit: ${p.title}`, amount: net, status: 'SECURED', note: FUNDRAISING_TAG, planId: p.id, receivedOn: now, recordedById: by, recordedAt: now, updatedAt: now } });
+  } else if (net < 0) {
+    const r = await coverFromFunds(p, [{ kind: 'DONATION', amount: -net }], 'OVERSPEND', by, FUNDRAISING_TAG);
+    await tellUncovered(p, by, r.uncovered, `fund-uncovered:${p.id}:${r.uncovered}`);
+  }
   return net;
 }
 
-/** The general pool's secured amount, summed from its records and nothing else (used to say when it has gone negative). */
-export async function poolNegative(systemId: string): Promise<number> {
-  const secured = ((await prisma.incomeRecord.findMany({ where: { systemId } })) as Rec[]).filter((r) => r.systemId === systemId && r.kind === 'OTHER' && r.code === POOL_CODE && r.status === 'SECURED').reduce((n, r) => n + r.amount, 0);
-  return secured < 0 ? secured : 0;
-}
-
-/** Tell the Church Leaders when a pool cannot cover what it carries. */
-export async function warnPool(p: SettlePlan, by: string): Promise<void> {
-  const short = await poolNegative(p.systemId);
-  if (short < 0) await tell(await churchLeaders(by), p, `The general pool is negative (${short.toLocaleString('en')} RWF)`, p.title, `pool-negative:${p.systemId}:${short}`, true);
-}
-
-/** Settle an activity: unspent money goes back to its sources, and the result is kept for the Church Leader. */
-export async function finalize(p: SettlePlan, by: string, why: 'TREASURER' | 'PERIOD', exceptEntryId?: string): Promise<{ released: number }> {
+/** Settle an activity: unspent money goes back to its sources in proportion, an overspend is found from unrestricted funds, and the result is kept for the Church Leader. */
+export async function finalize(p: SettlePlan, by: string, why: 'TREASURER' | 'PERIOD', exceptEntryId?: string): Promise<{ released: number; overspend: number; uncovered: number }> {
   const sources = await sourcesOf(p.id);
   const earmarked = sources.reduce((n, s) => n + s.amount, 0);
   const spent = await spentOf(p.id, exceptEntryId);
@@ -76,11 +86,20 @@ export async function finalize(p: SettlePlan, by: string, why: 'TREASURER' | 'PE
       else if (left.amount !== s.amount) await prisma.planSource.update({ where: { id: s.id }, data: { amount: left.amount } });
     }
   }
+  const overspend = Math.max(0, spent - earmarked);
+  let covered = 0, uncovered = 0;
+  if (overspend > 0) {
+    const need = shareByPot(sources, overspend);
+    ({ covered, uncovered } = await coverFromFunds(p, need.length > 0 ? need : [{ kind: 'DONATION', amount: overspend }], 'OVERSPEND', by, `Overspend: ${p.title}`));
+  }
   const now = new Date();
-  await prisma.workPlan.update({ where: { id: p.id }, data: { settledAt: now, settlementJson: JSON.stringify({ released, spent, earmarked, by, why, at: now.toISOString() }) } });
+  await prisma.workPlan.update({ where: { id: p.id }, data: { settledAt: now, settlementJson: JSON.stringify({ released, spent, earmarked, overspend, covered, uncovered, by, why, at: now.toISOString(), returned: sources.map((s) => ({ kind: s.kind, code: s.code, was: s.amount, now: reduceProportional(sources, released).find((n) => n.id === s.id)?.amount ?? 0 })) }) } });
   if (p.fundraising) await syncFundraising({ ...p, doneAt: p.doneAt ?? now }, by);
-  await tell(await churchLeaders(by), p, `Closed under budget: ${p.title}`, released > 0 ? `${released.toLocaleString('en')} RWF went back to its sources` : 'Nothing was left over', `settled:${p.id}`);
-  return { released };
+  const leaders = await churchLeaders(by);
+  await tell(leaders, p, overspend > 0 ? `Closed over budget: ${p.title}` : `Closed under budget: ${p.title}`,
+    overspend > 0 ? `${overspend.toLocaleString('en')} RWF over: ${covered.toLocaleString('en')} covered from unrestricted funds${uncovered > 0 ? `, ${uncovered.toLocaleString('en')} uncovered` : ''}` : released > 0 ? `${released.toLocaleString('en')} RWF went back to its sources` : 'Nothing was left over', `settled:${p.id}`);
+  await tellUncovered(p, by, uncovered, `uncovered:${p.id}`);
+  return { released, overspend, uncovered };
 }
 
 /** Settle whatever has run out of time. Called when a unit's pots are read, so no timer is needed. */
@@ -93,17 +112,17 @@ export async function sweepSettlements(systemId: string): Promise<void> {
   }
 }
 
-/** A spending entry on a settled activity: recorded, flagged, and charged to the general pool. */
+/** A spending entry on a settled activity: recorded, flagged, and taken from Unrestricted money (the Donation pot first). */
 export async function postSettlement(p: SettlePlan, entry: { id: string; amount: number }, by: string): Promise<void> {
   const now = new Date();
-  await prisma.incomeRecord.create({ data: { systemId: p.systemId, kind: 'OTHER', code: POOL_CODE, label: `Post-settlement invoice: ${p.title}`, amount: -entry.amount, status: 'SECURED', note: `${LATE_TAG}${entry.id}`, planId: p.id, receivedOn: now, recordedById: by, recordedAt: now, updatedAt: now } });
+  const r = await coverFromFunds(p, [{ kind: 'DONATION', amount: entry.amount }], 'LATE_INVOICE', by, `${LATE_TAG}${entry.id}`);
   let result: Record<string, unknown> = {};
   try { result = p.settlementJson ? JSON.parse(p.settlementJson) : {}; } catch { result = {}; }
   const late = Array.isArray(result.late) ? (result.late as unknown[]) : [];
-  late.push({ entryId: entry.id, amount: entry.amount, at: now.toISOString() });
+  late.push({ entryId: entry.id, amount: entry.amount, covered: r.covered, uncovered: r.uncovered, at: now.toISOString() });
   await prisma.workPlan.update({ where: { id: p.id }, data: { settlementJson: JSON.stringify({ ...result, late }) } });
-  await tell(await churchLeaders(by), p, `Post-settlement invoice: ${p.title}`, `${entry.amount.toLocaleString('en')} RWF was charged to the general pool`, `late-invoice:${entry.id}`, true);
-  await warnPool(p, by);
+  await tell(await churchLeaders(by), p, `Post-settlement invoice: ${p.title}`, `${entry.amount.toLocaleString('en')} RWF was taken from unrestricted funds${r.uncovered > 0 ? `; ${r.uncovered.toLocaleString('en')} could not be covered` : ''}`, `late-invoice:${entry.id}`, true);
+  await tellUncovered(p, by, r.uncovered, `late-uncovered:${entry.id}`);
 }
 
 export { outcomeOf };

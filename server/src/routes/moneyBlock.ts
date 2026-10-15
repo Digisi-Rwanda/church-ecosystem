@@ -17,6 +17,8 @@ import { CATEGORIES, KINDS, NOTE_MAX, amountProblem, canApproveSpending, canRead
 import {
   FUNDING_KINDS, PLAN_STATUS, accounting, budgetSnapshot, budgetUsage, combine, combineBudgets, moneyByPlan, counts, editable, goalGroups, isMonth, isYear, linesProblem, monthOf, total, yearOf, type Goal, type LineLike,
 } from '../money/block.js';
+import { cleanPurpose } from '../money/funds.js';
+import { purposeProblem } from './incomeFunds.js';
 import { moneySchema, parseStored, EMPTY_MONEY } from '../systemSettings/rules.js';
 import { peopleOfSystem } from '../lib/peopleScope.js';
 
@@ -31,12 +33,12 @@ interface UnitRow { id: string; name: string; systemId?: string | null; kind?: s
 interface Budget { id: string; systemId: string; year: number; status: string; approvedById?: string | null; approvedAt?: Date | string | null }
 interface BLine { id: string; systemId: string; year: number; kind: string; category: string; planned: number; note?: string | null }
 interface PlanItem { id: string; systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; status: string; note?: string | null; createdById: string; fundingKind?: string | null; fundingCode?: string | null; fundingNote?: string | null; planId?: string | null }
-interface CList {
+interface CList { purpose?: string;
   id: string; systemId: string; level: string; typeCode: string; typeName: string; month: string; teamUnitId?: string | null; teamName?: string | null; status: string;
   sourceListIds: string; createdById: string; submittedAt?: Date | string | null; decidedAt?: Date | string | null; decidedById?: string | null; decisionNote?: string | null;
 }
 interface CLine { id: string; listId: string; name: string; personId?: string | null; team?: string | null; amount: number }
-interface Don { typeCode?: string | null; typeName?: string | null; id: string; systemId: string; accountId: string; donorName: string; donorPersonId?: string | null; amount: number; receivedOn: Date | string; note?: string | null; status: string; recordedById: string; decidedById?: string | null; decisionNote?: string | null }
+interface Don { purpose?: string; typeCode?: string | null; typeName?: string | null; id: string; systemId: string; accountId: string; donorName: string; donorPersonId?: string | null; amount: number; receivedOn: Date | string; note?: string | null; status: string; recordedById: string; decidedById?: string | null; decisionNote?: string | null }
 interface Submission { id: string; systemId: string; year: number; snapshotJson: string; submittedById: string; submittedAt: Date | string; status?: string | null; decidedById?: string | null; decidedAt?: Date | string | null; decisionNote?: string | null }
 interface Entry { kind: string; amount: number; status: string; category: string; occurredOn: Date | string; planId?: string | null }
 interface PlanRow { id: string; title: string; systemId: string; planType?: string | null; status: string }
@@ -462,7 +464,7 @@ const shapeList = (l: CList, lines: CLine[], types: Array<{ code: string } & Goa
   const mine = l.level === 'TEAM' && s.teams.some((t) => t.id === l.teamUnitId);
   const goal: Goal = types.find((t) => t.code === l.typeCode) ?? {};
   return {
-    id: l.id, level: l.level, typeCode: l.typeCode, typeName: l.typeName, month: l.month, teamName: l.teamName ?? null, status: l.status,
+    id: l.id, level: l.level, purpose: l.purpose ?? '', typeCode: l.typeCode, typeName: l.typeName, month: l.month, teamName: l.teamName ?? null, status: l.status,
     fromTeams: (JSON.parse(l.sourceListIds || '[]') as string[]).length, createdByName: names.get(l.createdById) ?? '',
     decisionNote: l.decisionNote ?? null, total: total(lines),
     lines: lines.map((x) => ({ id: x.id, name: x.name, personId: x.personId ?? null, memberCode: x.personId ? codes.get(x.personId) ?? null : null, team: x.team ?? null, amount: x.amount })),
@@ -513,7 +515,7 @@ moneyBlockRouter.get('/lists', requireAuth, async (req: AuthedRequest, res) => {
   });
 });
 
-const createSchema = z.object({ systemId: z.string().min(1), level: z.enum(['TEAM', 'UNIT']), typeCode: z.string().min(1), month: z.string(), teamUnitId: z.string().nullish() });
+const createSchema = z.object({ systemId: z.string().min(1), level: z.enum(['TEAM', 'UNIT']), typeCode: z.string().min(1), month: z.string(), teamUnitId: z.string().nullish(), purpose: z.string().max(100).nullish() });
 
 moneyBlockRouter.post('/lists', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
@@ -532,14 +534,17 @@ moneyBlockRouter.post('/lists', requireAuth, async (req: AuthedRequest, res) => 
     if (!team) return fail(res, 400, 'UNKNOWN_TEAM', 'Choose a team of this unit');
     if (!s.teams.some((t) => t.id === team!.id) && !s.write) return fail(res, 403, 'FORBIDDEN', 'Only the team leader records the team list');
   }
+  // A unit list may be restricted to an activity or a category (a special collection). Team lists never are.
+  const purpose = p.data.level === 'UNIT' && p.data.purpose ? p.data.purpose : '';
+  if (cleanPurpose(purpose) !== purpose || (await purposeProblem(p.data.systemId, purpose))) return fail(res, 400, 'BAD_PURPOSE', 'Choose what this money is for');
   const dup = ((await prisma.contributionList.findMany({ where: { systemId: p.data.systemId, month: p.data.month, typeCode: type.code } })) as CList[]).find(
-    (l) => l.level === p.data.level && (l.teamUnitId ?? null) === (team?.id ?? null),
+    (l) => l.level === p.data.level && (l.teamUnitId ?? null) === (team?.id ?? null) && (l.purpose ?? '') === purpose,
   );
   if (dup) return fail(res, 409, 'LIST_EXISTS', 'There is already a list for this type and month');
   const row = (await prisma.contributionList.create({
     data: {
       systemId: p.data.systemId, level: p.data.level, typeCode: type.code, typeName: type.name, month: p.data.month, teamUnitId: team?.id ?? null, teamName: team?.name ?? null,
-      status: 'DRAFT', sourceListIds: '[]', createdById: me, createdAt: new Date(),
+      status: 'DRAFT', sourceListIds: '[]', createdById: me, createdAt: new Date(), purpose,
     },
   })) as CList;
   await audit(me, row.systemId, 'MONEY_LIST_STARTED', `${row.level} list ${row.typeName} ${row.month}`, { id: row.id });
@@ -681,7 +686,7 @@ moneyBlockRouter.post('/lists/combine', requireAuth, async (req: AuthedRequest, 
   const all = (await prisma.contributionList.findMany({ where: { systemId: g.systemId, month: p.data.month, typeCode: type.code } })) as CList[];
   const teams = all.filter((l) => l.level === 'TEAM' && l.status === 'SUBMITTED');
   if (teams.length === 0) return fail(res, 409, 'NOTHING_TO_COMBINE', 'No team list is waiting with the treasurer');
-  let unit = all.find((l) => l.level === 'UNIT');
+  let unit = all.find((l) => l.level === 'UNIT' && (l.purpose ?? '') === '');
   if (unit && !editable(unit.status)) return fail(res, 409, 'WRONG_STATE', 'The unit list for this month is already submitted');
   const merged = combine(await Promise.all(teams.map(async (t) => ({ id: t.id, teamName: t.teamName ?? null, lines: await linesOf(t.id) }))));
   if (!unit) {
@@ -702,7 +707,7 @@ moneyBlockRouter.post('/lists/combine', requireAuth, async (req: AuthedRequest, 
 
 const shapeDon = (d: Don, names: Map<string, string>, me: string, s: Standing) => ({
   id: d.id, donorName: d.donorName, amount: d.amount, receivedOn: day(d.receivedOn), note: d.note ?? '', status: d.status,
-  typeCode: d.typeCode ?? null, typeName: d.typeName ?? null,
+  typeCode: d.typeCode ?? null, typeName: d.typeName ?? null, purpose: d.purpose ?? '',
   recordedByName: names.get(d.recordedById) ?? '', decisionNote: d.decisionNote ?? null,
   canDecide: d.status === 'PENDING' && s.approve && d.recordedById !== me,
 });
@@ -718,19 +723,21 @@ moneyBlockRouter.get('/donations', requireAuth, async (req: AuthedRequest, res) 
 moneyBlockRouter.post('/donations', requireAuth, async (req: AuthedRequest, res) => {
   const g = await gate(req, res, 'write');
   if (!g) return;
-  const p = z.object({ systemId: z.string(), accountId: z.string().min(1), donorName: z.string().trim().min(1).max(80), donorPersonId: z.string().max(80).nullish(), amount: z.number(), receivedOn: z.string(), typeCode: z.string().max(24).nullish(), note: z.string().trim().max(NOTE_MAX).nullish() }).safeParse(req.body);
+  const p = z.object({ purpose: z.string().max(100).nullish(), systemId: z.string(), accountId: z.string().min(1), donorName: z.string().trim().min(1).max(80), donorPersonId: z.string().max(80).nullish(), amount: z.number(), receivedOn: z.string(), typeCode: z.string().max(24).nullish(), note: z.string().trim().max(NOTE_MAX).nullish() }).safeParse(req.body);
   if (!p.success) return fail(res, 400, 'BAD_INPUT', 'Check the donation');
   if (amountProblem(p.data.amount)) return fail(res, 400, 'AMOUNT', 'Enter a whole amount in francs, above zero');
   if (!isDay(p.data.receivedOn)) return fail(res, 400, 'BAD_DATE', 'Enter the day it was received');
   const acc = (await prisma.moneyAccount.findUnique({ where: { id: p.data.accountId } })) as { systemId: string; status: string } | null;
   if (!acc || acc.systemId !== g.systemId || acc.status !== 'ACTIVE') return fail(res, 400, 'ACCOUNT', 'Choose an open account of this unit');
   if (p.data.donorPersonId && !notInUnit(g.c, g.systemId, [p.data.donorPersonId])) return fail(res, 400, 'IN_UNIT', 'A member of this unit gives a contribution. Donations come from people outside the unit');
+  const donationPurpose = p.data.purpose ?? '';
+  if (cleanPurpose(donationPurpose) !== donationPurpose || (await purposeProblem(g.systemId, donationPurpose))) return fail(res, 400, 'BAD_PURPOSE', 'Choose what this money is for');
   const dType = p.data.typeCode ? (await moneyOptions(g.systemId)).donationTypes.find((t) => t.code === p.data.typeCode) : null;
   if (p.data.typeCode && !dType) return fail(res, 400, 'DONATION_TYPE', 'Choose one of the donation types of this unit');
   const donor = p.data.donorPersonId ? await prisma.person.findUnique({ where: { id: p.data.donorPersonId } }) : null;
   if (p.data.donorPersonId && !donor) return fail(res, 400, 'BAD_INPUT', 'Choose a member of the church');
   const row = (await prisma.donation.create({
-    data: { systemId: g.systemId, accountId: p.data.accountId, donorName: p.data.donorName, donorPersonId: donor ? p.data.donorPersonId : null, amount: p.data.amount, receivedOn: new Date(`${p.data.receivedOn}T00:00:00Z`), typeCode: dType?.code ?? null, typeName: dType?.name ?? null, note: p.data.note || null, status: 'PENDING', recordedById: g.me, recordedAt: new Date() },
+    data: { systemId: g.systemId, accountId: p.data.accountId, donorName: p.data.donorName, donorPersonId: donor ? p.data.donorPersonId : null, amount: p.data.amount, receivedOn: new Date(`${p.data.receivedOn}T00:00:00Z`), typeCode: dType?.code ?? null, typeName: dType?.name ?? null, purpose: donationPurpose, note: p.data.note || null, status: 'PENDING', recordedById: g.me, recordedAt: new Date() },
   })) as Don;
   await tell(await holdersOf(g.systemId, g.c, 'approve', g.me), g.systemId, `Donation to approve: ${row.amount.toLocaleString('en')} RWF`, row.donorName, `money-donation:${row.id}`);
   await audit(g.me, g.systemId, 'MONEY_DONATION_RECORDED', `${row.amount} RWF from ${row.donorName}`, { id: row.id });

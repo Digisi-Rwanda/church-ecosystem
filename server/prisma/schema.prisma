@@ -1661,6 +1661,8 @@ model ContributionList {
   decidedById    String?
   decidedAt      DateTime?
   decisionNote   String?
+  /// Restricted use of a unit list, such as a special collection: "" (unrestricted), A:<planId> or C:<category>
+  purpose        String    @default("")
 
   @@index([systemId, month])
 }
@@ -1701,6 +1703,8 @@ model Donation {
   @@index([donorPersonId])
   typeCode    String?
   typeName    String?
+  /// "" (unrestricted), A:<planId> or C:<category>
+  purpose     String   @default("")
 }
 
 /// A file kept on a person's profile (a certificate, a letter, an ID copy). Stored as base64 text; small files only.
@@ -1786,6 +1790,11 @@ model IncomeRecord {
 
   /// The fundraising event this record came from, if any
   planId       String?
+  /// DONATION | CONTRIBUTION | GRANT | SPONSOR | OTHER: what kind of source it is. kind is the pot, code is the purpose ("", A:<planId>, C:<category>).
+  sourceTag    String    @default("OTHER")
+  /// Who approved it into the secured balance, when a donation or contribution needed the President
+  approvedById String?
+  approvedAt   DateTime?
 
   @@index([systemId, status])
 }
@@ -1888,5 +1897,24 @@ model PlanFile {
   deletedAt    DateTime?
   deletedById  String?
 
+  @@index([planId])
+}
+
+/// A signed change to the secured money of one pot and purpose: overspend and late invoices taken from unrestricted money (negative).
+model FundAdjustment {
+  id          String   @id @default(cuid())
+  systemId    String
+  planId      String?
+  /// CONTRIBUTION | DONATION
+  kind        String
+  code        String   @default("")
+  amount      Int
+  /// OVERSPEND | LATE_INVOICE | UNCOVERED (UNCOVERED never changes a balance: it is the part nothing could cover)
+  reason      String
+  note        String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId])
   @@index([planId])
 }

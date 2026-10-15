@@ -1,3 +1,4 @@
+import { bucketName } from './fundLabels';
 import { useState } from 'react';
 import {
   addMoneyLine, answerMoneyCheck, editMoneyLine, removeMoneyLine, setMoneySources, verifyMoneyLine,
@@ -141,7 +142,7 @@ export function PlanMoney({ p, m, onChange }: { p: PlanDetail; m: ActivityMoney;
               if (!m.canEdit && !mine) return null;
               return (
                 <li key={pot.id}>
-                  <strong>{pot.name}</strong> · {t('door.pm.available')}: {formatRwf(pot.available + (m.canEdit ? 0 : 0))}
+                  <strong>{bucketName(t, pot)}</strong> · {t('door.pm.available')}: {formatRwf(pot.available + (m.canEdit ? 0 : 0))}
                   {pot.pledged > 0 && <span className="muted"> · {t('door.funds.pledged')}: {formatRwf(pot.pledged)}</span>}
                   {m.canEdit ? (
                     <TextField label={t('door.pm.setAside')} name={`pm-s-${pot.id}`} inputMode="numeric" value={asideOf(pot.id)} onChange={(e) => setAside({ ...aside, [pot.id]: e.target.value })} />

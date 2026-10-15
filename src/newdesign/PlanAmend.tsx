@@ -1,3 +1,4 @@
+import { bucketName } from './fundLabels';
 import { useState } from 'react';
 import {
   decideAmendment, requestAmendment, setBudgetCycle,
@@ -213,7 +214,7 @@ export function AmendForm({ p, m, go, onCancel }: { p: PlanDetail; m: ActivityMo
           const mine = m.sources.find((s) => s.potId === pot.id)?.amount ?? 0;
           return (
             <li key={pot.id}>
-              <strong>{pot.name}</strong> · {t('door.pm.available')}: {formatRwf(pot.available + mine)}
+              <strong>{bucketName(t, pot)}</strong> · {t('door.pm.available')}: {formatRwf(pot.available + mine)}
               <TextField label={t('door.pm.setAside')} name={`am-s-${pot.id}`} inputMode="numeric" value={aside[pot.id] ?? ''} onChange={(e) => setAside({ ...aside, [pot.id]: e.target.value })} />
             </li>
           );

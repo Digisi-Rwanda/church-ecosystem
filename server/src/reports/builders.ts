@@ -251,13 +251,23 @@ function peopleList(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables
 function workPlans(s: Sources, key: string): Pick<Snapshot, 'summary' | 'tables'> {
   const ended = s.plans.filter((p) => !p.deletedAt && p.orgUnitId === s.unitId && p.status === 'ENDED' && inPeriod(p.reportPublishedAt, key)).sort((a, b) => +new Date(a.reportPublishedAt!) - +new Date(b.reportPublishedAt!));
   const open = s.plans.filter((p) => !p.deletedAt && p.orgUnitId === s.unitId && ['SETUP', 'RUNNING', 'PAUSED', 'CLOSING'].includes(p.status));
+  // Every approved amendment of the period to this unit's activities: what changed in the schedule, mission, team or money.
+  const mineIds = new Map(s.plans.filter((p) => p.id && !p.deletedAt && p.orgUnitId === s.unitId).map((p) => [p.id!, p.title]));
+  const amended = (s.amendments ?? []).filter((a) => a.status === 'APPROVED' && mineIds.has(a.planId) && inPeriod(a.decidedAt, key)).sort((a, b) => +new Date(a.decidedAt!) - +new Date(b.decidedAt!));
+  const amendTable: Snapshot['tables'][number] = {
+    key: 'amendments',
+    columns: [{ key: 'date', type: 'date' }, { key: 'activity', type: 'text' }, { key: 'scope', type: 'code' }, { key: 'kind', type: 'code' }, { key: 'askedBy', type: 'text' }, { key: 'note', type: 'text' }],
+    rows: amended.map((a) => [day(a.decidedAt), mineIds.get(a.planId) ?? '', a.scope ?? 'MONEY', a.kind, s.names.get(a.requestedById) ?? '', a.justification]),
+  };
   return {
     summary: [
       { key: 'ended', value: ended.length, type: 'number' },
       { key: 'running', value: open.length, type: 'number' },
+      ...(amended.length > 0 ? [{ key: 'amended', value: amended.length, type: 'number' as const }] : []),
     ],
     tables: [
       { key: 'ended', columns: [{ key: 'title', type: 'text' }, { key: 'date', type: 'date' }, { key: 'leader', type: 'text' }, { key: 'outcome', type: 'text' }], rows: ended.map((p) => [p.title, day(p.reportPublishedAt), s.names.get(p.leaderPersonId) ?? '—', p.outcome ?? '']) },
+      ...(amended.length > 0 ? [amendTable] : []),
     ],
   };
 }

@@ -11,7 +11,7 @@ import { NOTE_MAX, TITLE_MAX, canSee } from '../work/rules.js';
 import { asWorkRow, canApprove, canManagePlan, type PlanRow } from '../work/plan.js';
 import { canReadMoney, canRecord, isDay } from '../money/rules.js';
 import { SETTLE_DAYS, netOf, outcomeOf, projectedNet, revenueProblem, settleDue, settlementOpen, underBudget } from '../money/settle.js';
-import { churchLeaders, confirmedRevenue, finalize, revenueOf, spentOf, syncFundraising, tell, warnPool, type SettlePlan } from '../money/settlement.js';
+import { churchLeaders, confirmedRevenue, finalize, revenueOf, spentOf, syncFundraising, tell, type SettlePlan } from '../money/settlement.js';
 
 export const planSettleRouter = Router();
 type Res = import('express').Response;
@@ -33,7 +33,6 @@ export async function onDone(planId: string, me: string): Promise<void> {
     if (!row.fundraising) return;
     const net = await syncFundraising(row, me);
     if (net !== null && net < 0) await tell(await churchLeaders(me), row, `Fundraising deficit: ${row.title}`, `${Math.abs(net).toLocaleString('en')} RWF was taken from the general pool`, `fund-deficit:${row.id}`, true);
-    await warnPool(row, me);
   } catch {
     /* closing an activity never fails because of the money notice */
   }
@@ -101,7 +100,7 @@ planSettleRouter.post('/:id/revenue', requireAuth, async (req: AuthedRequest, re
   const now = new Date();
   const row = (await prisma.planRevenue.create({ data: { planId: got.p.id, systemId: got.p.systemId, label: b.data.label, amount: b.data.amount, receivedOn: b.data.receivedOn ? new Date(`${b.data.receivedOn}T00:00:00Z`) : now, recordedById: got.me, recordedAt: now, ...(canRecord(got.me, got.p.systemId, got.data) ? { status: 'CONFIRMED', confirmedById: got.me, confirmedAt: now } : { status: 'PENDING' }) } })) as { id: string };
   await audit(got.me, got.p.systemId, 'MONEY_REVENUE_LOGGED', `Revenue ${b.data.amount} RWF: ${b.data.label}`, { planId: got.p.id, id: row.id });
-  if (got.p.doneAt) { await syncFundraising(got.p, got.me); await warnPool(got.p, got.me); }
+  if (got.p.doneAt) { await syncFundraising(got.p, got.me); }
   res.status(201).json({ id: row.id });
 });
 
@@ -113,7 +112,7 @@ planSettleRouter.delete('/:id/revenue/:rid', requireAuth, async (req: AuthedRequ
   if (!canRecord(got.me, got.p.systemId, got.data) && !(r.status === 'PENDING' && r.recordedById === got.me)) return fail(res, 403, 'FORBIDDEN', 'Only the treasurer removes revenue that is confirmed');
   await prisma.planRevenue.delete({ where: { id: r.id } });
   await audit(got.me, got.p.systemId, 'MONEY_REVENUE_REMOVED', `Removed revenue ${r.amount} RWF: ${r.label}`, { planId: got.p.id, id: r.id });
-  if (got.p.doneAt) { await syncFundraising(got.p, got.me); await warnPool(got.p, got.me); }
+  if (got.p.doneAt) { await syncFundraising(got.p, got.me); }
   res.json({ ok: true });
 });
 
@@ -127,7 +126,7 @@ planSettleRouter.post('/:id/revenue/:rid/confirm', requireAuth, async (req: Auth
   if ((r.status ?? 'CONFIRMED') !== 'PENDING') return fail(res, 409, 'WRONG_STATE', 'Already confirmed');
   await prisma.planRevenue.update({ where: { id: r.id }, data: { status: 'CONFIRMED', confirmedById: got.me, confirmedAt: new Date() } });
   await audit(got.me, got.p.systemId, 'MONEY_REVENUE_CONFIRMED', `Confirmed revenue ${r.amount} RWF: ${r.label}`, { planId: got.p.id, id: r.id });
-  if (got.p.doneAt) { await syncFundraising(got.p, got.me); await warnPool(got.p, got.me); }
+  if (got.p.doneAt) { await syncFundraising(got.p, got.me); }
   res.json({ ok: true });
 });
 

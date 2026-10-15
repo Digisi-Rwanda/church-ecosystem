@@ -256,6 +256,11 @@ describe('amendments in the money report', () => {
     expect(month.rows).toHaveLength(1);
     expect(month.rows[0]).toEqual(['2026-10-05', 'Harvest', 'MONEY', 'INCREASE', 100, 150, 'Vice President', 'Bigger hall']);
     expect(buildSnapshot('MONEY', '2026', 'Choir', s).tables.find((t) => t.key === 'amendments')!.rows).toHaveLength(2);
+    // The Work Plans report lists them too, without the money figures, and only for this unit's own activities.
+    const wp = buildSnapshot('WORK_PLANS', '2026-10', 'Choir', s);
+    expect(wp.tables.find((t) => t.key === 'amendments')!.rows).toEqual([['2026-10-05', 'Harvest', 'MONEY', 'INCREASE', 'Vice President', 'Bigger hall']]);
+    expect(wp.summary.find((x) => x.key === 'amended')?.value).toBe(1);
+    expect(buildSnapshot('WORK_PLANS', '2026-12', 'Choir', s).tables.some((t) => t.key === 'amendments')).toBe(false);
   });
 });
 

@@ -17,13 +17,13 @@ import { BUDGET_CYCLES, CYCLES_MAX, cycleKey, cycleProblem, cyclesOf, isOngoing,
 import { classify, overBy, reserveOf, totalOf, touchedLines } from '../money/amendments.js';
 import { CHANGE_KEYS, fieldDiff, moneySig, scopeOf, type ChangeKey, type StoredSet } from '../money/amendRoute.js';
 import { fundraisingProblem } from '../money/settle.js';
-import { SOURCE_KINDS, codeFor, earmarkProblem, potId } from '../money/funds.js';
+import { SOURCE_INPUT_KINDS, earmarkProblem, normSource, potId, purposeApplies } from '../money/funds.js';
 import { adjustLevels, afterEdit, allVerified, checkNote, figures, liveLines, submitProblem, type MoneyCheck } from '../money/planMoney.js';
 import { burnOf, phasesOf } from '../money/burn.js';
 import { canReadMoney } from '../money/rules.js';
 import { potsOf } from './incomeFunds.js';
 import { settleView } from './planSettle.js';
-import { finalize, postSettlement, syncFundraising, warnPool } from '../money/settlement.js';
+import { finalize, postSettlement, syncFundraising } from '../money/settlement.js';
 import { settlementLapsed } from '../money/settle.js';
 
 export const planMoneyRouter = Router();
@@ -158,7 +158,8 @@ async function view(p: Plan, me: string, data: Awaited<ReturnType<typeof loadAcc
   const f = figures(lines, sources, mult(p));
   const level = p.status === 'PENDING_APPROVAL' ? currentLevel(p) : null;
   const manage = canManagePlan(p, me, data);
-  const pots = await potsOf(p.systemId, OPEN.includes(p.status) ? p.id : undefined);
+  const ctx = { id: p.id, categories: live.map((l) => l.category) };
+  const pots = (await potsOf(p.systemId, OPEN.includes(p.status) ? p.id : undefined)).filter((x) => purposeApplies(x.code, ctx) || sources.some((s) => potId(s.kind, s.code) === x.id));
   const check = parseCheck(p.moneyCheckJson);
   const who = new Map(((await prisma.person.findMany({ where: { id: { in: [check?.byId ?? '-'] } } })) as Array<{ id: string; fullName: string }>).map((x) => [x.id, x.fullName]));
   const atTreasurer = level?.levelKey === 'TREASURER';
@@ -189,6 +190,9 @@ async function view(p: Plan, me: string, data: Awaited<ReturnType<typeof loadAcc
 }
 
 const phaseOk = async (planId: string, id: string | null | undefined) => !id || ((await prisma.workPlanMilestone.findMany({ where: { planId } })) as Array<{ id: string; planId: string }>).some((m) => m.id === id && m.planId === planId);
+
+/** What a restricted purpose is checked against: the activity and the categories of its cost lines. */
+export const planCtx = async (planId: string) => ({ id: planId, categories: liveLines(await linesOf(planId)).map((l) => l.category) });
 
 const planYear = (p: Plan) => (p.startsOn ? new Date(p.startsOn).getUTCFullYear() : new Date().getUTCFullYear());
 
@@ -281,15 +285,15 @@ planMoneyRouter.delete('/:id/lines/:lineId', requireAuth, async (req: AuthedRequ
 planMoneyRouter.put('/:id/sources', requireAuth, async (req: AuthedRequest, res) => {
   const got = await editable(req, res);
   if (!got) return;
-  const b = z.object({ sources: z.array(z.object({ kind: z.enum(SOURCE_KINDS), code: z.string().max(40).nullish(), amount: z.number().int().min(0).max(AMOUNT_MAX) })).max(40) }).safeParse(req.body);
+  const b = z.object({ sources: z.array(z.object({ kind: z.enum(SOURCE_INPUT_KINDS), code: z.string().max(40).nullish(), amount: z.number().int().min(0).max(AMOUNT_MAX) })).max(40) }).safeParse(req.body);
   if (!b.success) return fail(res, 400, 'BAD_INPUT', 'Invalid sources');
   const wanted: Array<{ kind: string; code: string; amount: number }> = [];
   for (const s of b.data.sources.filter((x) => x.amount > 0)) {
-    const code = codeFor(s.kind, s.code);
-    if (code === null) return fail(res, 400, 'BAD_SOURCE', 'Unknown source');
-    wanted.push({ kind: s.kind, code, amount: s.amount });
+    const n = normSource(s.kind, s.code);
+    if (!n) return fail(res, 400, 'BAD_SOURCE', 'Unknown source');
+    wanted.push({ kind: n.kind, code: n.code, amount: s.amount });
   }
-  const problem = earmarkProblem(await potsOf(got.p.systemId, got.p.id), wanted);
+  const problem = earmarkProblem(await potsOf(got.p.systemId, got.p.id), wanted, await planCtx(got.p.id));
   if (problem) return fail(res, problem.code === 'INSUFFICIENT_FUNDS' ? 409 : 400, problem.code, 'That is more than is available', problem);
   for (const old of await sourcesOf(got.p.id)) await prisma.planSource.delete({ where: { id: old.id } });
   for (const w of wanted) await prisma.planSource.create({ data: { planId: got.p.id, systemId: got.p.systemId, kind: w.kind, code: w.code, amount: w.amount, createdById: got.me } });
@@ -352,7 +356,7 @@ const changesIn = z
 const amendSchema = z.object({
   justification: z.string().trim().min(1).max(NOTE_MAX),
   lines: z.array(lineIn).max(80).optional(),
-  sources: z.array(z.object({ kind: z.enum(SOURCE_KINDS), code: z.string().max(40).nullish(), amount: z.number().int().min(1).max(AMOUNT_MAX) })).max(40).optional(),
+  sources: z.array(z.object({ kind: z.enum(SOURCE_INPUT_KINDS), code: z.string().max(40).nullish(), amount: z.number().int().min(1).max(AMOUNT_MAX) })).max(40).optional(),
   changes: changesIn.optional(),
 });
 
@@ -380,9 +384,9 @@ planMoneyRouter.post('/:id/amendments', requireAuth, async (req: AuthedRequest, 
   const have = await sourcesOf(p.id);
   const sources: Array<{ kind: string; code: string; amount: number }> = [];
   for (const s of b.data.sources ?? have.map((x) => ({ kind: x.kind as never, code: x.code, amount: x.amount }))) {
-    const code = codeFor(s.kind, s.code);
-    if (code === null) return fail(res, 400, 'BAD_SOURCE', 'Unknown source');
-    sources.push({ kind: s.kind, code, amount: s.amount });
+    const n = normSource(s.kind, s.code);
+    if (!n) return fail(res, 400, 'BAD_SOURCE', 'Unknown source');
+    sources.push({ kind: n.kind, code: n.code, amount: s.amount });
   }
   const m = mult(p);
   const t = touchedLines(current, lines);
@@ -407,7 +411,7 @@ planMoneyRouter.post('/:id/amendments', requireAuth, async (req: AuthedRequest, 
   const oldTotal = totalOf(current) * m;
   const newTotal = totalOf(lines) * m;
   const reserve = money ? reserveOf(have, sources) : [];
-  const short = earmarkProblem(await potsOf(p.systemId), reserve);
+  const short = earmarkProblem(await potsOf(p.systemId), reserve, await planCtx(p.id));
   if (short) return fail(res, short.code === 'INSUFFICIENT_FUNDS' ? 409 : 400, short.code, 'That is more than is available', short);
   const kind = money ? classify(oldTotal, newTotal) : 'CHANGE';
   const levels = scope === 'GENERAL'
@@ -448,7 +452,7 @@ async function applyAmendment(p: Plan, a: Amend): Promise<{ code: string; short?
   const money = t.changed.length > 0 || t.dropped.length > 0 || moneySig(sources) !== moneySig(have);
   if (money) {
     // The money must still be there: this plan's own earmark and reservation are set aside when checking.
-    const short = earmarkProblem(await potsOf(p.systemId, p.id), sources);
+    const short = earmarkProblem(await potsOf(p.systemId, p.id), sources, await planCtx(p.id));
     if (short) return { code: short.code, short };
     for (const id of t.dropped) await prisma.moneyPlanItem.update({ where: { id }, data: { status: 'DROPPED' } });
     const year = p.startsOn ? new Date(p.startsOn).getUTCFullYear() : new Date().getUTCFullYear();
@@ -605,7 +609,7 @@ export async function flagOverspend(planId: string | null | undefined, spentBy: 
     // The settlement period may have run out without anyone finalizing: settle first, leaving this entry out of it.
     if (p.status === 'ENDED' && settlementLapsed(p)) { await finalize(p, p.createdById, 'PERIOD', entry?.id); p = (await prisma.workPlan.findUnique({ where: { id: planId } })) as Plan; }
     if (p.status === 'ENDED' && p.settledAt) { if (entry) await postSettlement(p, entry, spentBy); return; }
-    if (p.status === 'ENDED' && p.fundraising && p.doneAt) { await syncFundraising(p, spentBy); await warnPool(p, spentBy); }
+    if (p.status === 'ENDED' && p.fundraising && p.doneAt) { await syncFundraising(p, spentBy); }
     const { data } = await loadAccessData(spentBy);
     const live = liveLines(await linesOf(p.id));
     const actual = await actualOf(p);

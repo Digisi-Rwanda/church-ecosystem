@@ -65,7 +65,9 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const thisMonth = months[months.length - 1]!;
   const lastMonth = months[months.length - 2]!;
   const kpis: Array<{ key: string; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok'; prev?: number | null; spark?: number[] }> = [];
-  const attention: Array<{ key: string; count: number; href: string }> = [];
+  const attention: Array<{ key: string; count: number; href: string; title: string }> = [];
+  /** One row for each thing that waits, so the person reads what it is instead of how many there are. */
+  const flag = (key: string, rows: Array<{ title: string; href: string }>) => { for (const r of rows.slice(0, 5)) attention.push({ key, count: 1, title: r.title, href: r.href }); };
   // null = this person's letters do not open that part, so the page leaves it out; [] = allowed, nothing yet.
   const lists: { events: unknown[]; members: unknown[] | null; work: unknown[]; reports: unknown[] | null } = { events: [], members: null, work: [], reports: null };
   const overview: Record<string, unknown> = {};
@@ -140,7 +142,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     const year = now.getUTCFullYear();
     const lines = ((await prisma.moneyBudgetLine.findMany({ where: { systemId } })) as Array<{ systemId: string; year: number; kind: string; planned: number }>).filter((l) => l.systemId === systemId && l.year === year && l.kind === 'SPENDING');
     const spentYear = entries.filter((e) => e.kind === 'SPENDING' && e.status === 'APPROVED' && new Date(e.occurredOn).getUTCFullYear() === year).reduce((a, e) => a + e.amount, 0);
-    if (pendingRows.length > 0) attention.push({ key: 'approvals', count: pendingRows.length, href: `/s/${systemId}/money?view=expense&show=PENDING_APPROVAL` });
+    flag('approvals', pendingRows.map((e) => ({ title: `${(e as { note?: string | null }).note || (e as { category?: string }).category || ''} · ${e.amount.toLocaleString('en-US')} RWF`.replace(/^ · /, ''), href: `/s/${systemId}/money?view=expense&show=PENDING_APPROVAL` })));
     overview.money = { balance: all.income - all.spent, incomeMonth: b.income, spentMonth: spent[spent.length - 1]!.value, pendingCount: pendingRows.length, pendingAmount: pendingRows.reduce((a, e) => a + e.amount, 0), plannedYear: lines.reduce((a, l) => a + l.planned, 0), spentYear };
   }
 
@@ -169,7 +171,8 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     .slice(0, 4);
   lists.work = tasks.map((w) => ({ id: w.id, title: w.title, status: w.status, at: iso(w.updatedAt ?? w.createdAt), href: `/s/${hs(w.systemId)}/work` }));
   const isOpen = (w: TaskRow) => w.status !== 'DONE' && w.status !== 'CANCELLED';
-  const overdue = visibleTasks.filter((w) => isOpen(w) && w.dueDate && new Date(w.dueDate).getTime() < now.getTime()).length;
+  const overdueRows = visibleTasks.filter((w) => isOpen(w) && w.dueDate && new Date(w.dueDate).getTime() < now.getTime());
+  const overdue = overdueRows.length;
   const doneAll = visibleTasks.filter((w) => w.status === 'DONE');
   workSeries = [
     { key: 'created', points: sumByMonth(visibleTasks, months, (w) => w.createdAt ?? now, () => 1) },
@@ -185,7 +188,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   // Activities that are approved and under way (an activity runs as soon as the Church Leader approves it).
   const activeActivities = visiblePlans.filter((p) => ['SETUP', 'RUNNING', 'PAUSED'].includes(p.status)).length;
   kpis.push({ key: 'activities', value: activeActivities, format: 'count', trend: null, href: `/s/${systemId}/money/plan` });
-  if (overdue > 0) attention.push({ key: 'overdue', count: overdue, href: `/s/${systemId}/work` });
+  flag('overdue', overdueRows.map((w) => ({ title: w.title, href: `/s/${hs(w.systemId)}/work` })));
   overview.work = {
     overdue,
     doneThisMonth: doneNow,
@@ -194,14 +197,15 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     plansWaiting: visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').length,
     plansDraft: visiblePlans.filter((p) => p.status === 'DRAFT').length,
   };
-  if (visiblePlans.some((p) => p.status === 'PENDING_APPROVAL')) attention.push({ key: 'plans', count: visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').length, href: `/s/${systemId}/work/plans` });
+  flag('plans', visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL').map((p) => ({ title: p.title, href: `/s/${hs(p.systemId)}/work/plans/${p.id}` })));
 
   // Money on activities: figures waiting for the Treasurer, months waiting for the Church Leader's release, and transfers waiting for review.
   const toCheck = visiblePlans.filter((p) => p.status === 'PENDING_APPROVAL' && currentLevel(p as never)?.levelKey === 'TREASURER' && canApprovePlan(p as never, me, data));
-  if (toCheck.length > 0) attention.push({ key: 'moneyCheck', count: toCheck.length, href: `/s/${systemId}/money/funds` });
+  flag('moneyCheck', toCheck.map((p) => ({ title: p.title, href: `/s/${hs(p.systemId)}/work/plans/${p.id}` })));
   if (canDecideForChurch(me, data)) {
-    const transfers = ((await prisma.budgetAmendment.findMany()) as Array<{ kind: string; status: string; reviewedAt: Date | string | null }>).filter((a) => a.kind === 'TRANSFER' && a.status === 'APPROVED' && !a.reviewedAt).length;
-    if (transfers > 0) attention.push({ key: 'transfers', count: transfers, href: `/s/${systemId}/money/funds` });
+    const titleOf = new Map(visiblePlans.map((p) => [p.id, p.title]));
+    const transfers = ((await prisma.budgetAmendment.findMany()) as Array<{ planId: string; kind: string; status: string; reviewedAt: Date | string | null }>).filter((a) => a.kind === 'TRANSFER' && a.status === 'APPROVED' && !a.reviewedAt);
+    flag('transfers', transfers.map((a) => ({ title: titleOf.get(a.planId) ?? '', href: `/s/${systemId}/money/funds` })));
   }
 
   // Schedule: what is coming up in this system.
@@ -219,9 +223,9 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     const meetings = mine((await prisma.meeting.findMany(central ? undefined : { where: { systemId } })) as Array<{ id: string; systemId: string; title: string; scheduledAt: Date | string; status: string }>)
       .filter((m) => m.status === 'PLANNED' && new Date(m.scheduledAt).getTime() >= now.getTime())
       .sort((a, b) => new Date(a.scheduledAt).getTime() - new Date(b.scheduledAt).getTime());
-    const decisions = mine((await prisma.decision.findMany(central ? undefined : { where: { systemId } })) as Array<{ systemId: string; status: string }>).filter((d) => d.status === 'DRAFT');
+    const decisions = mine((await prisma.decision.findMany(central ? undefined : { where: { systemId } })) as Array<{ systemId: string; status: string; title: string }>).filter((d) => d.status === 'DRAFT');
     const letters = mine((await prisma.letter.findMany(central ? undefined : { where: { systemId } })) as Array<{ systemId: string; status: string }>).filter((l) => l.status === 'DRAFT');
-    if (decisions.length > 0) attention.push({ key: 'decisions', count: decisions.length, href: `/s/${systemId}/governance` });
+    flag('decisions', decisions.map((d) => ({ title: d.title, href: `/s/${systemId}/governance` })));
     overview.governance = { nextMeeting: meetings[0] ? { id: meetings[0].id, title: meetings[0].title, at: iso(meetings[0].scheduledAt) } : null, decisionsWaiting: decisions.length, lettersOpen: letters.length };
   }
 
@@ -260,7 +264,7 @@ dashboardRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     const published = mine(got.reports);
     const thisPeriod = published.filter((r) => r.periodKey === thisMonth || r.periodKey === lastMonth).length;
     kpis.push({ key: 'reports', value: late.length > 0 ? late.length : thisPeriod, format: 'count', trend: null, href: `/s/${systemId}/reports`, tone: late.length > 0 ? 'late' : 'ok' });
-    if (late.length > 0) attention.push({ key: 'reportsLate', count: late.length, href: `/s/${systemId}/reports` });
+    flag('reportsLate', late.map((r) => ({ title: `${r.unitName} · ${r.periodKey}`, href: `/s/${systemId}/reports` })));
     lists.reports = [
       ...late.map((r) => ({ id: `late-${r.scheduleId}`, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: true, href: `/s/${hs(r.systemId)}/reports` })),
       ...published.map((r) => ({ id: r.id, title: r.unitName, kind: r.kind, periodKey: r.periodKey, late: false, href: `/s/${hs(r.systemId)}/reports/${r.id}` })),

@@ -53,13 +53,13 @@ const plan = async (o: object = {}) => (await post('p-vp', B, {
 })).body.plan.id as string;
 const line = (id: string, amount = 100000, as = 'p-vp') => post(as, `${B}/${id}/lines`, { title: 'Sound hire', amount });
 const aside = (id: string, sources: object[], as = 'p-vp') => put(as, `${B}/${id}/sources`, { sources });
-const pool = async () => (await get('p-ctr', `${F}?systemId=sys-choir`)).body.pool;
+const pool = async () => (await get('p-ctr', `${F}?systemId=sys-choir`)).body.pots.find((x: any) => x.id === 'DONATION:');
 const levels = async (id: string) => ((await get('p-vp', `${B}/${id}`)).body.plan.levels as Array<{ levelKey: string; status: string; note: string | null }>);
 const funded = async (amount = 100000) => {
   await income(amount * 2);
   const id = await plan();
   await line(id, amount);
-  await aside(id, [{ kind: 'OTHER', code: 'POOL', amount }]);
+  await aside(id, [{ kind: 'DONATION', code: '', amount }]);
   return id;
 };
 
@@ -71,7 +71,7 @@ const approvedPlan = async (o: object = {}, amount = 100000) => {
   await post('p-vp', `${B}/${id}/lines`, { title: 'Sound hire', amount });
   await post('p-vp', `${B}/${id}/lines`, { title: 'Tea', amount: 20000 });
   const m0 = (await get('p-vp', `${B}/${id}/money`)).body;
-  await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: m0.planned }]);
+  await aside(id, [{ kind: 'DONATION', code: '', amount: m0.planned }]);
   await post('p-vp', `${B}/${id}/submit`);
   const m = (await get('p-ctr', `${B}/${id}/money`)).body;
   for (const l of m.lines) await post('p-ctr', `${B}/${id}/lines/${l.id}/verify`, { verified: true });
@@ -87,7 +87,7 @@ const notices = (to: string) => (fake.__db.notification as any[]).filter((n) => 
 const done = async (id: string) => { return post('p-vp', `${B}/${id}/close`, { outcome: 'Went well' }); };
 const spend = (planId: string, amount: number, status = 'APPROVED') => { const e = { id: `e-${fake.__db.moneyEntry.length + 1}`, planId, kind: 'SPENDING', status, amount, occurredOn: new Date() }; fake.__db.moneyEntry.push(e); return e; };
 const fundraiser = (o: object = {}) => approvedPlan({ planType: 'EVENT', fundraising: true, fundTarget: 500000, ...o });
-const poolRecords = () => (fake.__db.incomeRecord as any[]).filter((r) => r.planId);
+const poolRecords = () => (fake.__db.incomeRecord as any[]).filter((r) => r.planId && r.note === 'fundraising-net');
 const revenue = (id: string, amount: number, as = 'p-ctr') => post(as, `${B}/${id}/revenue`, { label: 'Tickets', amount });
 
 describe('settlement rules', () => {
@@ -150,7 +150,7 @@ describe('fundraising (slice 7 gate)', () => {
     expect((await revenue(plain, 1000)).body.code).toBe('NOT_FUNDRAISING');
   });
 
-  it('net profit is added to the general pool when the event is Done', async () => {
+  it('net profit is added to the Donation pot, unrestricted, when the event is Done', async () => {
     const id = await fundraiser();
     await revenue(id, 300000);
     spend(id, 120000);
@@ -158,7 +158,7 @@ describe('fundraising (slice 7 gate)', () => {
     expect((await done(id)).status).toBe(200);
     const rec = poolRecords();
     expect(rec).toHaveLength(1);
-    expect(rec[0]).toMatchObject({ kind: 'OTHER', code: 'POOL', status: 'SECURED', amount: 180000 });
+    expect(rec[0]).toMatchObject({ kind: 'DONATION', code: '', sourceTag: 'OTHER', status: 'SECURED', amount: 180000 });
     expect(rec[0].label).toContain('Fundraising profit');
     expect((await pool()).secured).toBe(before + 180000);
     // revenue logged later while the period is open moves the net
@@ -166,24 +166,27 @@ describe('fundraising (slice 7 gate)', () => {
     expect(poolRecords()[0].amount).toBe(200000);
   });
 
-  it('a deficit is flagged and taken from the pool', async () => {
+  it('a deficit is taken from unrestricted funds and told to the Church Leader', async () => {
     const id = await fundraiser();
     await revenue(id, 50000);
     spend(id, 120000);
     const before = (await pool()).secured;
     await done(id);
-    expect(poolRecords()[0].amount).toBe(-70000);
-    expect(poolRecords()[0].label).toContain('Fundraising deficit');
+    expect(poolRecords()).toHaveLength(0);
+    const adj = (fake.__db.fundAdjustment as any[]).filter((a) => a.planId === id);
+    expect(adj.reduce((n, a) => n + (a.reason === 'OVERSPEND' ? a.amount : 0), 0)).toBe(-70000);
     expect((await pool()).secured).toBe(before - 70000);
     expect(notices('p-pastor').some((t) => t.startsWith('Fundraising deficit'))).toBe(true);
   });
 
-  it('a pool that cannot cover the loss shows negative and tells the Church Leader, never refusing', async () => {
+  it('what no unrestricted money can cover is kept as uncovered overspend, no pot goes below zero, and the Church Leader is told', async () => {
     const id = await fundraiser();
     spend(id, 900000);
     expect((await done(id)).status).toBe(200);
-    expect((await pool()).secured).toBeLessThan(0);
-    expect(notices('p-pastor').some((t) => t.startsWith('The general pool is negative'))).toBe(true);
+    const body = (await get('p-ctr', `${F}?systemId=sys-choir`)).body;
+    expect(body.pots.every((x: any) => x.secured >= 0)).toBe(true);
+    expect(body.uncovered).toBeGreaterThan(0);
+    expect(notices('p-pastor').some((t) => t.startsWith('Uncovered overspend'))).toBe(true);
   });
 
   it('spending recorded while the period is open keeps the net up to date', async () => {
@@ -233,7 +236,7 @@ describe('settlement (slice 7 gate)', () => {
     expect(sourcesTotal(id)).toBe(0);
   });
 
-  it('an invoice after settlement is recorded, flagged, charged to the pool and told to the Church Leader', async () => {
+  it('an invoice after settlement is recorded, flagged, taken from unrestricted funds and told to the Church Leader', async () => {
     const { flagOverspend } = await import('../src/routes/planMoney.js');
     const id = await approvedPlan();
     spend(id, 100000);
@@ -242,9 +245,9 @@ describe('settlement (slice 7 gate)', () => {
     const before = (await pool()).secured;
     const e = spend(id, 20000);
     await flagOverspend(id, 'p-ctr', e);
-    const rec = poolRecords().filter((r) => r.label.startsWith('Post-settlement invoice'));
-    expect(rec).toHaveLength(1);
-    expect(rec[0].amount).toBe(-20000);
+    const adj = (fake.__db.fundAdjustment as any[]).filter((r) => r.reason === 'LATE_INVOICE');
+    expect(adj).toHaveLength(1);
+    expect(adj[0].amount).toBe(-20000);
     expect((await pool()).secured).toBe(before - 20000);
     expect(notices('p-pastor').some((t) => t.startsWith('Post-settlement invoice'))).toBe(true);
     expect((await moneyOf(id, 'p-ctr')).settlement.closedWithLateAdjustment).toBe(true);

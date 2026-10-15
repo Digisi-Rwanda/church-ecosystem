@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { fetchFunds } from '../api/frontDoorApi';
 import { useT } from '../i18n/I18nContext';
 import { SegBar } from './DashViz';
+import { potTitle } from './fundLabels';
 import { formatRwf } from './money';
 import { useLoad } from './useLoad';
 
@@ -13,8 +14,7 @@ export function DashFunds({ systemId }: { systemId: string }) {
   const t = useT();
   const { data } = useLoad(() => fetchFunds(systemId), `dash-funds|${systemId}`);
   if (!data) return null;
-  const { totals, pots, pool } = data;
-  const negative = !!pool && pool.secured < 0;
+  const { totals, groups, uncovered } = data;
   const free = Math.max(0, totals.available);
   return (
     <section className="panel dash-panel" aria-label={t('door.dash.funds.title')}>
@@ -33,11 +33,11 @@ export function DashFunds({ systemId }: { systemId: string }) {
         <li><span className="dx-swatch dx-s2" aria-hidden="true" />{t('door.dash.funds.earmarked')}: {formatRwf(totals.earmarked)}</li>
         {totals.pledged > 0 && <li>{t('door.dash.funds.pledged')}: {formatRwf(totals.pledged)}</li>}
       </ul>
-      {negative && <p className="door-error" role="status">{t('door.dash.funds.negative', { amount: formatRwf(pool!.secured) })}</p>}
+      {uncovered > 0 && <p className="door-error" role="status">{t('door.funds.uncovered', { amount: formatRwf(uncovered) })}</p>}
       <ul className="dash-list">
-        {pots.filter((p) => p.secured !== 0 || p.earmarked !== 0).slice(0, 5).map((p) => (
-          <li key={p.id} className="dash-row">
-            <span className="dash-row-main"><strong>{p.name}</strong><span className="muted">{t('door.dash.funds.potLine', { free: formatRwf(p.available), set: formatRwf(p.earmarked) })}</span></span>
+        {groups.map((p) => (
+          <li key={p.kind} className="dash-row">
+            <span className="dash-row-main"><strong>{potTitle(t, p.kind)}</strong><span className="muted">{t('door.dash.funds.potLine', { free: formatRwf(p.available), set: formatRwf(p.earmarked) })}</span></span>
           </li>
         ))}
       </ul>

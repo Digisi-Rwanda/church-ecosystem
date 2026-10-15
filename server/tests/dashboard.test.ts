@@ -139,7 +139,7 @@ describe('range, work figures, attention and contributions by unit', () => {
     const r = await get('p-youth-leader', '/api/dashboard?systemId=sys-youth');
     expect(keys(r)).toContain('work');
     expect(r.body.overview.work).toMatchObject({ overdue: 1, doneThisMonth: 1, openTasks: 1 });
-    expect(r.body.attention).toContainEqual({ key: 'overdue', count: 1, href: '/s/sys-youth/work' });
+    expect(r.body.attention).toContainEqual({ key: 'overdue', count: 1, title: 'Late', href: '/s/sys-youth/work' });
     expect(r.body.workSeries.map((x: { key: string }) => x.key)).toEqual(['created', 'done']);
   });
   it('Central shows contributions and donations by unit on church-wide types; ministries do not', async () => {

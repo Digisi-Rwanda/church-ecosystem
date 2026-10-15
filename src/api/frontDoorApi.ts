@@ -1295,7 +1295,7 @@ export type ContributionListView = {
 };
 export type ContributionLists = { canWrite: boolean; canApprove: boolean; types: Array<{ code: string; name: string }>; teams: Array<{ id: string; name: string }>; lists: ContributionListView[] };
 export const fetchContributionLists = (systemId: string, month = ''): Promise<ContributionLists> => apiFetch(`${M}/lists?${qs({ systemId, ...(month ? { month } : {}) })}`);
-export async function startContributionList(b: { systemId: string; level: ListLevel; typeCode: string; month: string; teamUnitId?: string | null }): Promise<string> {
+export async function startContributionList(b: { systemId: string; level: ListLevel; typeCode: string; month: string; teamUnitId?: string | null; purpose?: string }): Promise<string> {
   return (await apiFetch<{ id: string }>(`${M}/lists`, { method: 'POST', body: b })).id;
 }
 export async function saveContributionLines(id: string, lines: Array<{ name: string; personId?: string | null; team?: string | null; amount: number }>): Promise<void> {
@@ -1315,7 +1315,7 @@ export async function combineContributionLists(systemId: string, typeCode: strin
 export type DonationView = { typeCode: string | null; typeName: string | null; id: string; donorName: string; amount: number; receivedOn: string; note: string; status: 'PENDING' | 'APPROVED' | 'REJECTED'; recordedByName: string; decisionNote: string | null; canDecide: boolean };
 export type DonationsView = { canRecord: boolean; canApprove: boolean; donationTypes: DonationType[]; donations: DonationView[] };
 export const fetchDonations = (systemId: string): Promise<DonationsView> => apiFetch(`${M}/donations?${qs({ systemId })}`);
-export async function recordDonation(b: { systemId: string; accountId: string; donorName: string; amount: number; receivedOn: string; note?: string | null; donorPersonId?: string | null; typeCode?: string | null }): Promise<void> {
+export async function recordDonation(b: { systemId: string; accountId: string; donorName: string; amount: number; receivedOn: string; note?: string | null; donorPersonId?: string | null; typeCode?: string | null; purpose?: string }): Promise<void> {
   await apiFetch(`${M}/donations`, { method: 'POST', body: b });
 }
 export async function decideDonation(id: string, approve: boolean, reason?: string): Promise<void> {
@@ -1700,7 +1700,7 @@ export type Dashboard = {
   central: boolean;
   range?: number;
   kpis: DashKpi[];
-  attention?: Array<{ key: string; count: number; href: string }>;
+  attention?: Array<{ key: string; count: number; href: string; title: string }>;
   workSeries?: Array<{ key: 'created' | 'done'; points: DashPoint[] }>;
   byUnit?: DashByUnit | null;
   attendance: DashPoint[] | null;
@@ -1854,20 +1854,33 @@ export const fetchPortalSummary = (): Promise<PortalSummary> => apiFetch('/api/p
 
 
 // ---- Funds and the money on an activity (slices 3 and 4) ----
-export type FundPot = { id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'OTHER'; code: string; name: string; secured: number; pledged: number; earmarked: number; available: number };
-export type IncomeRecordView = { id: string; kind: string; code: string; label: string; amount: number; status: 'PLEDGED' | 'SECURED' | 'FULFILLED' | 'CANCELLED'; note: string | null; expectedOn: string | null; receivedOn: string | null; recordedByName: string };
-export type FundsView = {
-  systemId: string; canRecord: boolean; pots: FundPot[]; pool: { secured: number; available: number } | null;
-  totals: { secured: number; pledged: number; earmarked: number; available: number; spent: number; reserved: number; awaiting: number };
-  ownTypes: Array<{ code: string; name: string }>; records: IncomeRecordView[];
+export type FundPot = {
+  id: string; kind: 'CONTRIBUTION' | 'DONATION'; code: string; purposeKind: 'UNRESTRICTED' | 'ACTIVITY' | 'CATEGORY'; label: string; name: string;
+  secured: number; awaiting: number; pledged: number; earmarked: number; spent: number; reserved: number; available: number;
 };
-export type IncomeInput = { systemId: string; kind: 'CONTRIBUTION' | 'DONATION' | 'OTHER'; code?: string; label: string; amount: number; status: 'PLEDGED' | 'SECURED'; expectedOn?: string; receivedOn?: string; note?: string };
+export type SourceTag = 'DONATION' | 'CONTRIBUTION' | 'GRANT' | 'SPONSOR' | 'OTHER';
+export type IncomeState = 'PLEDGED' | 'AWAITING' | 'SECURED' | 'FULFILLED' | 'CANCELLED';
+export type IncomeRecordView = {
+  id: string; kind: 'CONTRIBUTION' | 'DONATION'; sourceTag: SourceTag; purpose: string; purposeKind: 'UNRESTRICTED' | 'ACTIVITY' | 'CATEGORY'; purposeLabel: string;
+  label: string; amount: number; status: IncomeState; note: string | null; expectedOn: string | null; receivedOn: string | null; recordedByName: string; canApprove: boolean;
+};
+export type FundTotals = { secured: number; pledged: number; awaiting: number; earmarked: number; spent: number; reserved: number; available: number };
+export type FundsView = {
+  systemId: string; canRecord: boolean; canApprove: boolean; pots: FundPot[];
+  groups: Array<FundTotals & { kind: 'CONTRIBUTION' | 'DONATION'; buckets: FundPot[] }>;
+  totals: FundTotals; uncovered: number;
+  purposes: { activities: Array<{ id: string; title: string }>; categories: string[] };
+  records: IncomeRecordView[];
+};
+export type IncomeInput = { systemId: string; sourceTag: SourceTag; label: string; amount: number; purpose?: string; status: 'PLEDGED' | 'SECURED'; expectedOn?: string; receivedOn?: string; note?: string };
 export type ApprovalKind = 'ACTIVITY' | 'AMENDMENT' | 'CONTRIBUTION_LIST' | 'DONATION' | 'SPENDING';
 export type ApprovalItem = { key: string; kind: ApprovalKind; id: string; systemId: string; title: string; amount: number | null; waitingFor: string; from: string; since: string; href: string; mine: boolean };
 export const fetchApprovals = (systemId?: string) => apiFetch<{ items: ApprovalItem[]; counts: { all: number; mine: number } }>(`/api/approvals${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
 export const fetchFunds = (systemId: string) => apiFetch<FundsView>(`/api/funds?systemId=${encodeURIComponent(systemId)}`);
 export const recordIncome = (input: IncomeInput) => apiFetch('/api/funds/income', { method: 'POST', body: input });
 export const incomeReceived = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });
+export const incomeApprove = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/approve`, { method: 'POST', body: {} });
+export const incomeDecline = (id: string, reason: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/decline`, { method: 'POST', body: { reason } });
 export const incomeCancel = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
 
 export type MoneyLineView = { id: string; milestoneId: string | null; title: string; amount: number; category: string | null; note: string | null; checkState: 'VERIFIED' | 'MODIFIED' | null; spent: number; remaining: number };

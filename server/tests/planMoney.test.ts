@@ -61,13 +61,13 @@ const checked = async (id: string) => {
   for (const l of (await get('p-vp', `${B}/${id}/money`)).body.lines) await post('p-ctr', `${B}/${id}/lines/${l.id}/verify`);
   return post('p-ctr', `${B}/${id}/money-check`, { result: 'CHECKED' });
 };
-const pool = async () => (await get('p-ctr', `${F}?systemId=sys-choir`)).body.pool;
+const pool = async () => (await get('p-ctr', `${F}?systemId=sys-choir`)).body.pots.find((x: any) => x.id === 'DONATION:');
 const levels = async (id: string) => ((await get('p-vp', `${B}/${id}`)).body.plan.levels as Array<{ levelKey: string; status: string; note: string | null }>);
 const funded = async (amount = 100000) => {
   await income(amount * 2);
   const id = await plan();
   await line(id, amount);
-  await aside(id, [{ kind: 'OTHER', code: 'POOL', amount }]);
+  await aside(id, [{ kind: 'DONATION', code: '', amount }]);
   return id;
 };
 
@@ -81,9 +81,9 @@ describe('money rules', () => {
     expect(afterEdit(null)).toBeNull();
   });
   it('earmarks never exceed what is secured; pledged is not available', () => {
-    const pots = computePots({ own: [], donationsSecured: 0, records: [{ kind: 'OTHER', code: 'POOL', amount: 500, status: 'SECURED' }, { kind: 'OTHER', code: 'POOL', amount: 900, status: 'PLEDGED' }], earmarks: [] });
-    expect(earmarkProblem(pots, [{ kind: 'OTHER', code: 'POOL', amount: 500 }])).toBeNull();
-    expect(earmarkProblem(pots, [{ kind: 'OTHER', code: 'POOL', amount: 501 }])).toMatchObject({ code: 'INSUFFICIENT_FUNDS', available: 500, pledged: 900 });
+    const pots = computePots({ records: [{ kind: 'DONATION', code: '', amount: 500, status: 'SECURED' }, { kind: 'DONATION', code: '', amount: 900, status: 'PLEDGED' }], earmarks: [] });
+    expect(earmarkProblem(pots, [{ kind: 'DONATION', code: '', amount: 500 }])).toBeNull();
+    expect(earmarkProblem(pots, [{ kind: 'DONATION', code: '', amount: 501 }])).toMatchObject({ code: 'INSUFFICIENT_FUNDS', available: 500, pledged: 900 });
   });
   it('treasurer step is added when spending appears, removed when it goes, and reset by a change', () => {
     const base = [{ levelKey: 'UNIT' as const, label: 'President', systemId: 's', status: 'APPROVED' as const, byId: 'x', at: 'y', note: null }, { levelKey: 'CHURCH' as const, label: 'Church Leader', systemId: 's', status: 'PENDING' as const, byId: null, at: null, note: null }];
@@ -101,20 +101,20 @@ describe('funds (slice 3 gate)', () => {
     expect(pledged.record?.status ?? 'PLEDGED').toBe('PLEDGED');
     const id = await plan();
     await line(id, 50000);
-    expect((await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).body.code).toBe('INSUFFICIENT_FUNDS'); // pledged only
+    expect((await aside(id, [{ kind: 'DONATION', code: '', amount: 50000 }])).body.code).toBe('INSUFFICIENT_FUNDS'); // pledged only
     await income(80000);
     expect((await pool()).available).toBe(80000);
-    const over = await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 80001 }]);
+    const over = await aside(id, [{ kind: 'DONATION', code: '', amount: 80001 }]);
     expect(over.status).toBe(409);
     expect(over.body.code).toBe('INSUFFICIENT_FUNDS');
     expect(over.body.available).toBe(80000);
-    expect((await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
+    expect((await aside(id, [{ kind: 'DONATION', code: '', amount: 50000 }])).status).toBe(200);
     // a draft holds nothing: the money is held from Submit
     expect((await pool()).available).toBe(80000);
     expect((await post('p-vp', `${B}/${id}/submit`)).status).toBe(200);
     expect((await pool()).available).toBe(30000);
     // saving the same list again does not double count
-    expect((await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
+    expect((await aside(id, [{ kind: 'DONATION', code: '', amount: 50000 }])).status).toBe(200);
     expect((await pool()).available).toBe(30000);
     // sending it back to its creator frees the money at once
     expect((await checked(id)).status).toBe(200);
@@ -127,8 +127,8 @@ describe('funds (slice 3 gate)', () => {
     const b = await plan();
     await line(a, 50000);
     await line(b, 50000);
-    expect((await aside(a, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
-    expect((await aside(b, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
+    expect((await aside(a, [{ kind: 'DONATION', code: '', amount: 50000 }])).status).toBe(200);
+    expect((await aside(b, [{ kind: 'DONATION', code: '', amount: 50000 }])).status).toBe(200);
     expect((await post('p-vp', `${B}/${a}/submit`)).status).toBe(200);
     const second = await post('p-vp', `${B}/${b}/submit`);
     expect(second.status).toBe(409);
@@ -138,7 +138,7 @@ describe('funds (slice 3 gate)', () => {
     await income(200000);
     const id = await plan();
     await line(id, 50000);
-    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }]);
+    await aside(id, [{ kind: 'DONATION', code: '', amount: 50000 }]);
     await post('p-vp', `${B}/${id}/submit`);
     await checked(id);
     await post('p-choir-leader', `${B}/${id}/reject`, { reason: 'Fix the wording' });
@@ -150,7 +150,7 @@ describe('funds (slice 3 gate)', () => {
     await post('p-choir-leader', `${B}/${id}/reject`, { reason: 'Cut the cost' });
     const lid = (await get('p-vp', `${B}/${id}/money`)).body.lines[0].id;
     await request(app).patch(`${B}/${id}/lines/${lid}`).set(bearer('p-vp')).send({ amount: 40000 });
-    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 40000 }]);
+    await aside(id, [{ kind: 'DONATION', code: '', amount: 40000 }]);
     expect((await post('p-vp', `${B}/${id}/submit`)).status).toBe(200);
     expect((await get('p-vp', `${B}/${id}`)).body.plan.levels[0]).toMatchObject({ levelKey: 'TREASURER', status: 'PENDING' });
   });
@@ -158,7 +158,7 @@ describe('funds (slice 3 gate)', () => {
     await income(100000);
     const id = await plan();
     await line(id, 50000);
-    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }]);
+    await aside(id, [{ kind: 'DONATION', code: '', amount: 50000 }]);
     await post('p-vp', `${B}/${id}/submit`);
     await checked(id);
     await post('p-choir-leader', `${B}/${id}/approve`);
@@ -191,7 +191,7 @@ describe('money on the page (slice 4 gates)', () => {
     const gap = await post('p-vp', `${B}/${id}/submit`);
     expect(gap.status).toBe(409);
     expect(gap.body.code).toBe('FUNDING_GAP');
-    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 100000 }]);
+    await aside(id, [{ kind: 'DONATION', code: '', amount: 100000 }]);
     expect((await post('p-vp', `${B}/${id}/submit`)).status).toBe(200);
     expect((await levels(id)).map((l) => l.levelKey)).toEqual(['TREASURER', 'UNIT', 'CHURCH']);
   });
@@ -262,7 +262,7 @@ const approvedPlan = async (o: object = {}, amount = 100000) => {
   await post('p-vp', `${B}/${id}/lines`, { title: 'Sound hire', amount });
   await post('p-vp', `${B}/${id}/lines`, { title: 'Tea', amount: 20000 });
   const m0 = (await get('p-vp', `${B}/${id}/money`)).body;
-  await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: m0.planned }]);
+  await aside(id, [{ kind: 'DONATION', code: '', amount: m0.planned }]);
   await post('p-vp', `${B}/${id}/submit`);
   const m = (await get('p-ctr', `${B}/${id}/money`)).body;
   for (const l of m.lines) await post('p-ctr', `${B}/${id}/lines/${l.id}/verify`, { verified: true });
@@ -279,14 +279,14 @@ describe('amendment rules', () => {
     expect(classify(100, 100)).toBe('TRANSFER');
     expect(classify(100, 90)).toBe('TRANSFER');
     expect(classify(100, 101)).toBe('INCREASE');
-    expect(reserveOf([{ kind: 'OTHER', code: 'POOL', amount: 100 }], [{ kind: 'OTHER', code: 'POOL', amount: 150 }])).toEqual([{ kind: 'OTHER', code: 'POOL', amount: 50 }]);
-    expect(reserveOf([{ kind: 'OTHER', code: 'POOL', amount: 100 }], [{ kind: 'OTHER', code: 'POOL', amount: 80 }])).toEqual([]);
+    expect(reserveOf([{ kind: 'DONATION', code: '', amount: 100 }], [{ kind: 'DONATION', code: '', amount: 150 }])).toEqual([{ kind: 'DONATION', code: '', amount: 50 }]);
+    expect(reserveOf([{ kind: 'DONATION', code: '', amount: 100 }], [{ kind: 'DONATION', code: '', amount: 80 }])).toEqual([]);
     const old = [{ id: 'a', title: 'Venue', amount: 500 }, { id: 'b', title: 'Catering', amount: 500 }];
     const t = touchedLines(old, [{ id: 'a', title: 'Venue', amount: 0 + 1 }, { id: 'b', title: 'Catering', amount: 500 }, { title: 'New', amount: 5 }]);
     expect(t.keep).toEqual(['b']);
     expect(t.changed.length).toBe(2);
-    expect(amendProblem(old, old, [{ kind: 'OTHER', code: 'POOL', amount: 1000 }])).toBe('NO_CHANGE');
-    expect(amendProblem(old, [{ id: 'a', title: 'Venue', amount: 400 }, { id: 'b', title: 'Catering', amount: 600 }], [{ kind: 'OTHER', code: 'POOL', amount: 900 }])).toBe('GAP');
+    expect(amendProblem(old, old, [{ kind: 'DONATION', code: '', amount: 1000 }])).toBe('NO_CHANGE');
+    expect(amendProblem(old, [{ id: 'a', title: 'Venue', amount: 400 }, { id: 'b', title: 'Catering', amount: 600 }], [{ kind: 'DONATION', code: '', amount: 900 }])).toBe('GAP');
   });
 });
 
@@ -326,8 +326,8 @@ describe('lock and amendments (slice 5 gate)', () => {
     const m = await moneyOf(id);
     const before = (await pool()).available;
     const lines = [{ id: m.lines[0].id, title: 'Sound hire', amount: 150000 }, { id: m.lines[1].id, title: 'Tea', amount: 20000 }];
-    const sources = [{ kind: 'OTHER', code: 'POOL', amount: 170000 }];
-    expect((await post('p-vp', `${B}/${id}/amendments`, { lines, sources: [{ kind: 'OTHER', code: 'POOL', amount: 120000 }], justification: 'More' })).body.code).toBe('FUNDING_GAP');
+    const sources = [{ kind: 'DONATION', code: '', amount: 170000 }];
+    expect((await post('p-vp', `${B}/${id}/amendments`, { lines, sources: [{ kind: 'DONATION', code: '', amount: 120000 }], justification: 'More' })).body.code).toBe('FUNDING_GAP');
     const asked = await post('p-vp', `${B}/${id}/amendments`, { lines, sources, justification: 'Bigger hall' });
     expect(asked.body.pendingAmendment.kind).toBe('INCREASE');
     expect(asked.body.pendingAmendment.scope).toBe('MONEY');
@@ -384,7 +384,7 @@ describe('lock and amendments (slice 5 gate)', () => {
     const other = await approvedPlan({ title: 'Second' });
     const free = (await pool()).available;
     const m = await moneyOf(id);
-    const mk = (extra: number, mm: any) => ({ lines: [{ id: mm.lines[0].id, title: 'Sound hire', amount: 100000 + extra }, { id: mm.lines[1].id, title: 'Tea', amount: 20000 }], sources: [{ kind: 'OTHER', code: 'POOL', amount: 120000 + extra }], justification: 'More' });
+    const mk = (extra: number, mm: any) => ({ lines: [{ id: mm.lines[0].id, title: 'Sound hire', amount: 100000 + extra }, { id: mm.lines[1].id, title: 'Tea', amount: 20000 }], sources: [{ kind: 'DONATION', code: '', amount: 120000 + extra }], justification: 'More' });
     expect((await post('p-vp', `${B}/${id}/amendments`, mk(free - 1000, m))).status).toBe(201);
     const m2 = await moneyOf(other);
     const second = await post('p-vp', `${B}/${other}/amendments`, mk(5000, m2));
@@ -460,7 +460,7 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     expect(m.cycle.cycles).toBe(4);
     expect(m.planned).toBe(40000);
     expect((await post('p-vp', `${B}/${id}/submit`)).body.code).toBe('FUNDING_GAP');
-    expect((await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 40000 }])).status).toBe(200);
+    expect((await aside(id, [{ kind: 'DONATION', code: '', amount: 40000 }])).status).toBe(200);
     expect((await post('p-vp', `${B}/${id}/submit`)).status).toBe(200);
   });
 
@@ -469,7 +469,7 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     const id = await plan(repeatBody());
     await put('p-vp', `${B}/${id}/cycle`, { cycle: 'PER_OCCURRENCE' });
     await line(id, 10000);
-    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 40000 }]);
+    await aside(id, [{ kind: 'DONATION', code: '', amount: 40000 }]);
     await post('p-vp', `${B}/${id}/submit`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
@@ -490,7 +490,7 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     const id = await plan(repeatBody());
     await put('p-vp', `${B}/${id}/cycle`, { cycle: 'PER_OCCURRENCE', cycles: 4 });
     await line(id, 10000);
-    await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 40000 }]);
+    await aside(id, [{ kind: 'DONATION', code: '', amount: 40000 }]);
     await post('p-vp', `${B}/${id}/submit`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });
@@ -514,7 +514,7 @@ describe('repeats and ongoing programs (slice 6 gate)', () => {
     expect((await put('p-vp', `${B}/${id}/cycle`, { cycle: 'MONTHLY' })).status).toBe(200);
     await line(id, 50000);
     expect((await moneyOf(id)).cycle.ongoing).toBe(true);
-    expect((await aside(id, [{ kind: 'OTHER', code: 'POOL', amount: 50000 }])).status).toBe(200);
+    expect((await aside(id, [{ kind: 'DONATION', code: '', amount: 50000 }])).status).toBe(200);
     await post('p-vp', `${B}/${id}/submit`);
     const m = await moneyOf(id, 'p-ctr');
     await post('p-ctr', `${B}/${id}/lines/${m.lines[0].id}/verify`, { verified: true });

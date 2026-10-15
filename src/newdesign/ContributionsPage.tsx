@@ -13,6 +13,7 @@ import { useLoad } from './useLoad';
 import { DonationsPage } from './DonationsPage';
 import { PageHeader, Tabs } from './kit';
 import { TypeQuickAdd } from './TypeQuickAdd';
+import { PurposeField } from './PurposeField';
 import { ContributionsTable } from './ContributionsTable';
 
 /**
@@ -20,7 +21,7 @@ import { ContributionsTable } from './ContributionsTable';
  * combines the team lists (with a Team column) and submits the unit list to the president. A unit with no
  * teams: the treasurer records and submits.
  */
-export function ContributionsPage() {
+export function ContributionsPage({ embedded = false }: { embedded?: boolean } = {}) {
   const t = useT();
   const { systemId = '' } = useParams();
   const [params, setParams] = useSearchParams();
@@ -29,6 +30,7 @@ export function ContributionsPage() {
   const { loading, failed, data, reload } = useLoad(() => fetchContributionLists(systemId, month), `clists|${systemId}|${month}`);
   const [typeCode, setTypeCode] = useState('');
   const [teamId, setTeamId] = useState('');
+  const [purpose, setPurpose] = useState('');
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const code = typeCode || data?.types[0]?.code || '';
@@ -46,10 +48,14 @@ export function ContributionsPage() {
   const team = teamId || (data?.teams.length === 1 ? data.teams[0].id : '');
   return (
     <section className="door-block" aria-labelledby="door-clists-title">
-      <div>
-        <PageHeader id="door-clists-title" title={t('door.money.contributions')} />
+      {embedded ? (
         <p className="muted">{t('door.money.contributions.intro')}</p>
-      </div>
+      ) : (
+        <div>
+          <PageHeader id="door-clists-title" title={t('door.money.contributions')} />
+          <p className="muted">{t('door.money.contributions.intro')}</p>
+        </div>
+      )}
       <Tabs
         label={t('door.money.contributions')}
         value={donations ? 'donations' : 'contribution'}
@@ -91,9 +97,10 @@ export function ContributionsPage() {
                 </button>
               </div>
             )}
+            {data.canWrite && <PurposeField systemId={systemId} value={purpose} onChange={setPurpose} name="cl-purpose" />}
             {data.canWrite && (
               <div className="door-row">
-                <button type="button" className="btn secondary" onClick={() => void run(async () => void (await startContributionList({ systemId, level: 'UNIT', typeCode: code, month })))}>
+                <button type="button" className="btn secondary" onClick={() => void run(async () => void (await startContributionList({ systemId, level: 'UNIT', typeCode: code, month, purpose: purpose || undefined })))}>
                   {t('door.money.contributions.startUnit')}
                 </button>
                 <button type="button" className="btn secondary" onClick={() => void run(async () => t('door.money.contributions.combined', { n: String(await combineContributionLists(systemId, code, month)) }))}>

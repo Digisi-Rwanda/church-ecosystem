@@ -24,7 +24,7 @@ export function UrgentTile({ systemId }: { systemId: string }) {
   const total = waiting.length + urgent.length;
   const more = Math.max(0, total - LIMIT);
   const rows: Array<{ key: string; icon: ReturnType<typeof rowIcon>; href: string | null; node: ReactNode }> = [
-    ...waiting.map((a) => ({ key: a.key, icon: rowIcon(a.key, a.href), href: a.href as string | null, node: <><strong>{a.count}</strong> {t(`door.dash.att.${a.key}` as 'door.dash.att.approvals', { count: String(a.count) }).replace(/^\d+\s*/, '')}</> })),
+    ...waiting.map((a, n) => ({ key: `${a.key}:${n}`, icon: rowIcon(a.key, a.href), href: a.href as string | null, node: <>{t(`door.dash.att.${a.key}` as 'door.dash.att.approvals', { title: a.title })}</> })),
     ...urgent.map((n) => ({ key: n.key, icon: rowIcon(null, safeHref(n.href)), href: safeHref(n.href), node: <><span>{n.title}</span>{n.body && <small className="feed-sub"> · {n.body}</small>}</> })),
   ].slice(0, LIMIT);
   return (

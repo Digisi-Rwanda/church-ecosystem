@@ -15,7 +15,7 @@ import { NOTE_MAX, TEXT_MAX, TITLE_MAX, VISIBILITIES, canSee } from '../work/rul
 import {
   CHECKS_MAX, ROLE_MAX, TEAM_MAX, approversOf, asWorkRow, buildLevels, catechistStepApplies, canApprove, canComposeReport, canManagePlan, canPublishReport,
   canWritePlan, canDecideForChurch, currentLevel, treasurerExists, descendantsOf, indicatorPercent, isOnTeam, levelsOf, parentProblem, parseJson, publishProblem, skipUnitLevel, stateOf, stateProblem, teamOf, typeProblem, type Action, type Level, type PlanRow,
-  unitApproverIds, holdersWith,
+  unitApproverIds, holdersWith, CHURCH_SYSTEM,
 } from '../work/plan.js';
 import { figures, submitProblem } from '../money/planMoney.js';
 import { fundraisingProblem } from '../money/settle.js';
@@ -545,7 +545,7 @@ const managers: Step['allow'] = (p, me, c) => canManagePlan(p, me, c.data);
 workPlansRouter.post('/:id/submit', requireAuth, (req: AuthedRequest, res) =>
   move(req, res, { action: 'submit', allow: managers }, async (p, me, c) => {
     // The Church Leader approves every activity. The President goes first, unless the President wrote it or nobody holds that office.
-    const lines = (await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as Array<{ planId: string | null; amount: number; status: string }>;
+    const lines = (await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as Array<{ planId: string | null; amount: number; status: string; category?: string | null }>;
     const sources = (await prisma.planSource.findMany({ where: { planId: p.id } })) as Array<{ planId: string; kind: string; code: string; amount: number }>;
     const f = figures(lines.filter((l) => l.planId === p.id) as never, sources.filter((s) => s.planId === p.id), multiplierOf(p as never));
     // A repeat with spending says how its allowance is counted and for how long.
@@ -553,7 +553,7 @@ workPlansRouter.post('/:id/submit', requireAuth, (req: AuthedRequest, res) =>
     if (cp) throw new SubmitStop(409, cp, 'Say how the allowance is counted and for how long');
     // Spending needs money set aside to the franc, and the pots must still hold it. No spending, no money step.
     if (submitProblem(f.planned, f.earmarked)) throw new SubmitStop(409, 'FUNDING_GAP', 'The money set aside must match the planned spending');
-    const held = earmarkProblem(await potsOf(p.systemId, p.id), sources.filter((s) => s.planId === p.id));
+    const held = earmarkProblem(await potsOf(p.systemId, p.id), sources.filter((s) => s.planId === p.id), { id: p.id, categories: lines.filter((l) => l.planId === p.id && l.status !== 'DROPPED').map((l) => l.category ?? null) });
     if (held) throw new SubmitStop(409, 'INSUFFICIENT_FUNDS', 'The money set aside is no longer available');
     const fresh = buildLevels(p.systemId, skipUnitLevel(p.createdById, p.systemId, c.data), f.planned > 0 && treasurerExists(p.createdById, p.systemId, c.data), catechistStepApplies(p.createdById, p.systemId, c.data));
     // Sent back and fixed: with the same money, the approvals before the step that returned it still stand; changed money starts again from the Treasurer.
@@ -1077,6 +1077,24 @@ workPlansRouter.patch('/:id/parent', requireAuth, async (req: AuthedRequest, res
   }
   const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { parentId: parsed.data.parentId } })) as Plan;
   await audit(me, p.systemId, 'WORKPLAN_LINKED', `${parsed.data.parentId ? 'Linked' : 'Unlinked'} “${p.title}”`, { planId: p.id, parentId: parsed.data.parentId });
+  res.json({ plan: await shape(row, c, me, true) });
+});
+
+/* The President (or Vice President) edits the team of a live activity directly; the Church Leader is told. */
+workPlansRouter.put('/:id/team', requireAuth, async (req: AuthedRequest, res) => {
+  const got = await visible(req, res);
+  if (!got) return;
+  const { me, c, p } = got;
+  if (!['SETUP', 'RUNNING', 'PAUSED'].includes(p.status) || p.suspendedAt) return fail(res, 409, 'WRONG_STATE', 'The team is changed while the activity is live');
+  if (!unitApproverIds(p.systemId, c.data).includes(me) && !canDecideForChurch(me, c.data)) return fail(res, 403, 'FORBIDDEN', 'Only the President changes the team of a live activity');
+  const parsed = z.object({ team: z.array(z.object({ personId: z.string().min(1), role: z.string().trim().min(1).max(ROLE_MAX) })).max(TEAM_MAX) }).safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid team');
+  if (await peopleProblem(parsed.data.team.map((m) => m.personId))) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose people who are active members');
+  const row = (await prisma.workPlan.update({ where: { id: p.id }, data: { teamJson: JSON.stringify(parsed.data.team) } })) as Plan;
+  const leaders = holdersWith(CHURCH_SYSTEM, 'MISSION', 'A', c.data).filter((id) => canDecideForChurch(id, c.data));
+  for (const id of new Set([...leaders, p.leaderPersonId]))
+    if (id !== me) await notifySafely(prisma as never, { kind: 'WAITING_FOR_ME', toPersonId: id, systemId: p.systemId, title: `Team changed: ${p.title}`, body: 'The President updated the team of this activity.', href: `/s/${p.systemId}/work/plans/${p.id}` });
+  await audit(me, p.systemId, 'WORKPLAN_TEAM_SET', `Changed the team of “${p.title}”`, { planId: p.id });
   res.json({ plan: await shape(row, c, me, true) });
 });
 
