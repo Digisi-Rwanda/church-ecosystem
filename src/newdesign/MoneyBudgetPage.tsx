@@ -7,7 +7,7 @@ import { useFormat, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { categoryKey, formatRwf, moneyErrorKey } from './money';
-import { fundingLabel } from './ActivityForm';
+import { fundingLabel } from './fundLabels';
 import { YearSelect } from './MoneyBlockParts';
 import { SystemLink } from './SystemLink';
 import { useLoad } from './useLoad';

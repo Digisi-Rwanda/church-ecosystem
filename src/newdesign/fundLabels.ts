@@ -14,3 +14,11 @@ export function purposeName(t: unknown, p: { purposeKind: string; label: string 
 
 /** The full name of a bucket, as the set-aside lists show it. */
 export const bucketName = (t: unknown, p: FundPot): string => `${potTitle(t, p.kind)} · ${purposeName(t, p)}`;
+
+/** "Contribution · Building fund", "Donation", "Other: sale of cakes", or nothing yet. */
+export function fundingLabel(t: (k: never, v?: Record<string, string | number>) => string, kind: string | null | undefined, name: string | null | undefined, note?: string | null): string {
+  if (!kind) return t('door.money.activity.fundingNone' as never);
+  const base = t(`door.money.funding.${kind}` as never);
+  const extra = kind === 'CONTRIBUTION' ? name : note;
+  return extra ? `${base} · ${extra}` : base;
+}
