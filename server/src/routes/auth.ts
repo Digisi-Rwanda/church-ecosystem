@@ -25,6 +25,15 @@ function noteFail(key: string) {
   else f.n += 1;
 }
 
+/** Usernames that are locked out right now (for the Administrator console). */
+export function lockedUsers(): string[] {
+  return [...fails.keys()].filter((k) => throttled(k));
+}
+/** Let a username try again at once. */
+export function clearFails(username: string) {
+  fails.delete(username.toLowerCase());
+}
+
 const loginSchema = z.object({
   username: z.string().min(1),
   password: z.string().min(1),
@@ -38,20 +47,29 @@ authRouter.post('/login', async (req, res) => {
     res.status(400).json({ error: 'Invalid body', details: parsed.error.flatten() });
     return;
   }
-  const { username, password, systemId } = parsed.data;
-  const throttleKey = username.toLowerCase();
+  const { password, systemId } = parsed.data;
+  // Saved-password prompts and phone keyboards add capitals and stray spaces.
+  const typed = parsed.data.username.trim();
+  const throttleKey = typed.toLowerCase();
   if (throttled(throttleKey)) {
     res.status(429).json({ error: 'Too many failed attempts — try again later' });
     return;
   }
-  const account = await prisma.account.findUnique({
-    where: { username },
+  let account = await prisma.account.findUnique({
+    where: { username: typed },
     include: { person: true },
   });
+  if (!account && typed !== throttleKey) {
+    account = await prisma.account.findUnique({
+      where: { username: throttleKey },
+      include: { person: true },
+    });
+  }
   if (
     !account ||
     !(await verifyPassword(password, account.passwordHash)) ||
-    account.person.status === 'INACTIVE'
+    account.person.status === 'INACTIVE' ||
+    account.person.archivedAt
   ) {
     noteFail(throttleKey);
     res.status(401).json({ error: 'Invalid username or password' });
@@ -91,9 +109,10 @@ authRouter.post('/login', async (req, res) => {
   });
 });
 
-authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
+/** Who is signed in: the account, the person and their active memberships and offices. Null when the account is gone. */
+export async function loadMe(accountId: string) {
   const account = await prisma.account.findUnique({
-    where: { id: req.auth!.sub },
+    where: { id: accountId },
     include: {
       person: {
         include: {
@@ -103,11 +122,8 @@ authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
       },
     },
   });
-  if (!account) {
-    res.status(404).json({ error: 'Account not found' });
-    return;
-  }
-  res.json({
+  if (!account) return null;
+  return {
     account: {
       id: account.id,
       username: account.username,
@@ -116,7 +132,16 @@ authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
     person: account.person,
     memberships: account.person.memberships,
     positions: account.person.positions,
-  });
+  };
+}
+
+authRouter.get('/me', requireAuth, async (req: AuthedRequest, res) => {
+  const me = await loadMe(req.auth!.sub);
+  if (!me) {
+    res.status(404).json({ error: 'Account not found' });
+    return;
+  }
+  res.json(me);
 });
 
 const changePasswordSchema = z.object({

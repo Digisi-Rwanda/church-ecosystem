@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import { config } from '../config.js';
 import { prisma } from '../lib/prisma.js';
 
 export const healthRouter = Router();
@@ -14,6 +15,7 @@ healthRouter.get('/', async (_req, res) => {
     status: db === 'ok' ? 'ok' : 'degraded',
     service: 'kacyiru-api',
     db,
+    env: config.appEnv ?? 'unspecified',
     time: new Date().toISOString(),
   });
 });

@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from 'express';
 import { verifyAccessToken, type JwtPayload } from '../lib/auth.js';
 import { errorFields, log } from '../lib/logger.js';
 import { prisma } from '../lib/prisma.js';
+import { remember } from '../lib/shortCache.js';
 
 export type AuthedRequest = Request & { auth?: JwtPayload };
 
@@ -35,7 +36,7 @@ export async function requireAuth(
   }
   // A valid signature is not enough: the person must still exist and be active,
   // so deactivating someone takes effect immediately, not after 12 hours.
-  const person = await prisma.person.findUnique({ where: { id: payload.personId } });
+  const person = await remember(`person|${payload.personId}`, () => prisma.person.findUnique({ where: { id: payload.personId } }));
   if (!person || person.status === 'INACTIVE') {
     res.status(401).json({ error: 'Account is no longer active' });
     return;

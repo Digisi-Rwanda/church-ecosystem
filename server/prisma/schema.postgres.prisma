@@ -12,11 +12,24 @@ datasource db {
 
 model Person {
   id              String   @id
+  /// Church-wide member code M-00123: issued once from a counter, never reused, never changed.
+  memberCode      String?  @unique
+  /// Archived people keep their code and history but leave the directory and cannot sign in.
+  archivedAt      DateTime?
+  archivedReason  String?
   fullName        String
   preferredName   String?
   phone           String?
   email           String?
   status          String   @default("ACTIVE") // ACTIVE | INACTIVE | VISITOR
+  // Identity details — visible only to FULL viewers (Church Leader) and the person themself.
+  dateOfBirth     String?  // YYYY-MM-DD
+  gender          String?
+  address         String?
+  nationalId      String?
+  joinedChurchOn  String?  // YYYY-MM-DD
+  pastoralNotes   String?
+  photoUrl        String?  // small thumbnail data URL only (<= ~30 KB)
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
 
@@ -60,9 +73,14 @@ model ChurchSystem {
 
 model OrgUnit {
   id             String  @id
+  /// Unit code like KAC-MUS-IJWI: set once, never changes when the unit moves.
+  code           String? @unique
+  /// CENTRAL | MINISTRY | ORGANISATION | TEAM (the older `type` column stays for the old app).
+  kind           String?
   name           String
   type           String // MINISTRY | TEAM | ORGANISATION | OFFICE | COMMITTEE
   parentId       String?
+  description    String?
   systemId       String? // owning system when ministry-scoped
   leaderPersonId String?
 
@@ -77,7 +95,7 @@ model OrgUnit {
 model Membership {
   id        String    @id @default(cuid())
   personId  String
-  systemId  String
+  systemId  String? // when set, active membership entitles entry to this system
   orgUnitId String?
   type      String // CHURCH_MEMBER | CHOIR_MEMBER | …
   label     String?
@@ -86,7 +104,7 @@ model Membership {
   endDate   DateTime?
 
   person  Person       @relation(fields: [personId], references: [id], onDelete: Cascade)
-  system  ChurchSystem @relation(fields: [systemId], references: [id])
+  system  ChurchSystem? @relation(fields: [systemId], references: [id])
   orgUnit OrgUnit?     @relation(fields: [orgUnitId], references: [id])
 
   @@index([personId, systemId])
@@ -98,9 +116,13 @@ model Position {
   systemId       String?
   orgUnitId      String?
   title          String
+  /// The one office record (see OFFICE_CODES); the older office columns stay for the old app.
+  office         String?
   systemRole     String? // CHURCH_LEADER | CHURCH_TREASURER | …
   ministryOffice String? // PRESIDENT | VP | TREASURER | SECRETARY
   choirOffice    String?
+  choirAdvisorRole String?
+  systemAdmin    Boolean   @default(false)
   worshipOffice  String?
   protocolOffice String?
   deaconOffice   String?
@@ -365,6 +387,10 @@ model WorkTask {
   startDate          DateTime  @default(now())
   endDate            DateTime?
   outcomeNote        String?
+  /// Slice 3.2: the unit that owns the work, and a soft delete only an Administrator can undo.
+  orgUnitId          String?
+  deletedAt          DateTime?
+  deletedById        String?
   createdAt          DateTime  @default(now())
   updatedAt          DateTime  @updatedAt
 
@@ -473,4 +499,1483 @@ model ScheduleDocumentRevision {
   savedByPersonId    String?
 
   @@index([key, version])
+}
+
+/// Named counters (member codes). A counter only goes up, so a code is never handed out twice.
+model Counter {
+  key   String @id
+  value Int    @default(0)
+}
+
+/// Slice 1.3: an office holder lends some of their letters to someone else for a short time.
+/// It lives only while the lender still holds the office; ending the office ends it at once.
+model Delegation {
+  id           String    @id @default(cuid())
+  positionId   String
+  fromPersonId String
+  toPersonId   String
+  /// {"MONEY":["R","W"]}: the letters lent, by module.
+  lettersJson  String
+  note         String?
+  status       String    @default("ACTIVE") // ACTIVE | REVOKED
+  startDate    DateTime  @default(now())
+  endDate      DateTime
+  createdAt    DateTime  @default(now())
+  revokedAt    DateTime?
+  revokedById  String?
+
+  @@index([toPersonId, status])
+  @@index([positionId])
+}
+
+/// Slice 1.4: a notice for a person, or for whoever holds an office. WAITING_FOR_ME needs the person
+/// to act; FOR_INFORMATION only tells them. Read state is per person (NotificationRead).
+model Notification {
+  id         String   @id @default(cuid())
+  kind       String // WAITING_FOR_ME | FOR_INFORMATION
+  toPersonId String?
+  /// An office code: every live holder of the office receives it.
+  toOffice   String?
+  /// Narrows an office address to the holders in one system.
+  toSystemId String?
+  /// The system the notice belongs to; the main church when empty.
+  systemId   String?
+  title      String
+  body       String?
+  href       String?
+  /// Stops the same event notifying the same person twice.
+  sourceKey  String?
+  /// Important notices ignore a person's muted systems.
+  important  Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  @@index([toPersonId, createdAt])
+  @@index([toOffice, createdAt])
+}
+
+/// Which notifications (or attention items, keyed attn:<id>) a person has read.
+model NotificationRead {
+  id       String   @id @default(cuid())
+  personId String
+  key      String
+  readAt   DateTime @default(now())
+
+  @@unique([personId, key])
+}
+
+/// A person's preferences, kept on the server so they follow them to every device.
+model Preference {
+  personId          String   @id
+  language          String?
+  theme             String?
+  /// Systems whose "For information" notices the person has muted: ["sys-youth"].
+  mutedSystemsJson  String   @default("[]")
+  /// How the daily digest of unread notices reaches the person: OFF | EMAIL | SMS | WHATSAPP.
+  digestChannel     String   @default("OFF")
+  updatedAt         DateTime @updatedAt
+}
+
+/// One digest per person per day (slice 4.4): the unique day stops a second send, whatever calls the job.
+model DigestLog {
+  id        String   @id @default(cuid())
+  personId  String
+  /// YYYY-MM-DD in Kigali time.
+  day       String
+  channel   String
+  /// SENT | NO_CONTACT | FAILED | EMPTY
+  status    String
+  count     Int      @default(0)
+  createdAt DateTime @default(now())
+
+  @@unique([personId, day])
+}
+
+/// An announcement (slice 1.5). Who sees it is worked out on read from its audience and the
+/// letters engine, so nothing is copied per person and a leaver stops seeing it at once.
+model Announcement {
+  id               String    @id @default(cuid())
+  title            String
+  body             String
+  /// WHOLE_CHURCH | SYSTEM (everyone with a place in one system) | OFFICE (every live holder of one office)
+  audienceKind     String
+  audienceSystemId String?
+  audienceOffice   String?
+  /// The system whose Send letter allowed the post (the main church for WHOLE_CHURCH and OFFICE).
+  systemId         String
+  authorId         String
+  /// PUBLISHED | WITHDRAWN
+  status           String    @default("PUBLISHED")
+  publishedAt      DateTime  @default(now())
+  /// Last day shown, inclusive; empty means until withdrawn.
+  expiresAt        DateTime?
+  withdrawnAt      DateTime?
+  withdrawnById    String?
+  withdrawnReason  String?
+  editedAt         DateTime?
+
+  @@index([publishedAt])
+}
+
+/// Central Administration's settings (slice 2.1): one row per setting that differs from its default.
+model Setting {
+  key         String   @id
+  valueJson   String
+  updatedAt   DateTime @default(now())
+  updatedById String?
+}
+
+/// A meeting of one unit (slice 2.2); the Board is a Central Administration meeting of type BOARD.
+model Meeting {
+  id              String    @id @default(cuid())
+  orgUnitId       String
+  systemId        String
+  /// A code from the meeting types setting.
+  typeCode        String
+  title           String
+  scheduledAt     DateTime
+  location        String?
+  agenda          String?
+  minutes         String?
+  /// JSON array of person ids who attended, recorded when the meeting is marked held.
+  attendeesJson   String    @default("[]")
+  /// PLANNED | HELD | CANCELLED
+  status          String    @default("PLANNED")
+  createdById     String
+  createdAt       DateTime  @default(now())
+  heldAt          DateTime?
+  heldById        String?
+  cancelledReason String?
+
+  @@index([systemId, scheduledAt])
+}
+
+/// A decision in the register (slice 2.2). A decision about work carries its owner and date and becomes a task when approved.
+model Decision {
+  id              String    @id @default(cuid())
+  meetingId       String?
+  orgUnitId       String
+  systemId        String
+  title           String
+  detail          String?
+  /// DRAFT | APPROVED | REJECTED | WITHDRAWN
+  status          String    @default("DRAFT")
+  createdById     String
+  createdAt       DateTime  @default(now())
+  decidedAt       DateTime?
+  decidedById     String?
+  rejectReason    String?
+  withdrawnReason String?
+  ownerPersonId   String?
+  dueDate         DateTime?
+  taskId          String?
+
+  @@index([systemId, createdAt])
+}
+
+model Letter {
+  id              String    @id @default(cuid())
+  reference       String
+  orgUnitId       String
+  systemId        String
+  typeCode        String
+  subject         String
+  body            String
+  recipientName   String
+  recipientNote   String?
+  /// DRAFT | DELIVERED | WITHDRAWN
+  status          String    @default("DRAFT")
+  createdById     String
+  createdAt       DateTime  @default(now())
+  printedAt       DateTime?
+  printedById     String?
+  deliveredAt     DateTime?
+  deliveredById   String?
+  deliveryMethod  String?
+  deliveredOn     DateTime?
+  deliveryNote    String?
+  withdrawnReason String?
+
+  @@index([systemId, createdAt])
+}
+
+model MonthPlan {
+  id            String    @id @default(cuid())
+  orgUnitId     String
+  systemId      String
+  /// YYYY-MM in church time (Kigali, UTC+2)
+  month         String
+  /// DRAFT | CONFIRMED | PUBLISHED
+  status        String    @default("DRAFT")
+  createdById   String
+  createdAt     DateTime  @default(now())
+  confirmedById String?
+  confirmedAt   DateTime?
+  publishedById String?
+  publishedAt   DateTime?
+
+  @@index([systemId, month])
+}
+
+model ScheduleSlot {
+  id          String    @id @default(cuid())
+  planId      String
+  orgUnitId   String
+  systemId    String
+  title       String
+  /// SERVICE | REHEARSAL | MEETING | OTHER
+  kind        String    @default("OTHER")
+  startsAt    DateTime
+  endsAt      DateTime?
+  location    String?
+  notes       String?
+  churchWide  Boolean   @default(false)
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([planId])
+  @@index([systemId, startsAt])
+}
+
+model SlotAssignment {
+  id            String    @id @default(cuid())
+  slotId        String
+  personId      String
+  role          String
+  /// ASSIGNED | DECLINED
+  status        String    @default("ASSIGNED")
+  declineReason String?
+  respondedAt   DateTime?
+  createdById   String
+  createdAt     DateTime  @default(now())
+
+  @@index([slotId])
+  @@index([personId])
+}
+
+model WorkPlan {
+  id                   String    @id @default(cuid())
+  orgUnitId            String
+  systemId             String
+  title                String
+  aim                  String    @default("")
+  needs                String?
+  location             String?
+  startsOn             DateTime?
+  endsOn               DateTime?
+  leaderPersonId       String
+  /// JSON array of { personId, role }
+  teamJson             String    @default("[]")
+  /// CHURCH wide reach adds a Church Leader approval on top of the unit's own
+  beyondUnit           Boolean   @default(false)
+  visibility           String    @default("SYSTEM")
+  /// PROGRAM | EVENT | PROJECT
+  planType             String    @default("PROJECT")
+  /// DRAFT | PENDING_APPROVAL | SETUP | RUNNING | CLOSING | ENDED | CANCELLED
+  status               String    @default("DRAFT")
+  /// JSON array of { levelKey, label, systemId, status, byId, at, note }
+  approvalsJson        String    @default("[]")
+  rejectedReason       String?
+  /// Where a plan was sent back to its creator: the level that returned it, the approvals before it, and the money as it stood: {atKey, levels, sig}
+  returnJson           String?
+  /// The Church Leader's suspension of a running activity: a flag with a note, not a block on recording costs already incurred
+  suspendedAt          DateTime?
+  suspendedById        String?
+  suspendNote          String?
+  cancelReason         String?
+  planningSummary      String?
+  executionSummary     String?
+  outcome              String?
+  reportComposedById   String?
+  reportComposedAt     DateTime?
+  reportPublishedById  String?
+  reportPublishedAt    DateTime?
+  /// The frozen report, written once when it is published
+  reportJson           String?
+  /// Events: people may register while this is on (set once the event is set up)
+  registrationOpen     Boolean   @default(false)
+  capacity             Int?
+  /// Events: a secret link anyone can use to register, only when the team turns it on
+  publicToken          String?
+  /// An outside form (Google Forms) that guests are sent to instead of the built-in name-and-phone form.
+  registrationUrl      String?
+  /// Optional: the program (or project) this belongs to. Items may stand alone.
+  parentId             String?
+  /// Programs: JSON array of { personId, role } on the steering committee
+  steeringJson         String    @default("[]")
+  /// JSON object of the named screens' answers (Define the event, Plan the event, ...): text values by key
+  detailsJson          String    @default("{}")
+  /// DATE | RANGE | REPEAT: the one way "when" is said
+  timingKind           String    @default("RANGE")
+  /// Optional clock times, "HH:MM", church time
+  startTime            String?
+  endTime              String?
+  /// REPEAT: JSON { kind: "WEEKLY", days: [0..6] } or { kind: "MONTHLY", nth: 1..5, day: 0..6 }
+  repeatJson           String?
+  /// The last change of date after approval: JSON { fromStart, fromEnd, toStart, toEnd, at, byId }
+  dateChangeJson       String?
+  /// Postponed by more than six months: the Church Leader is asked whether the money stays reserved
+  reviewDue            Boolean   @default(false)
+  /// The Treasurer's check of the spending lines: JSON { result: CHECKED | FLAGGED, note, byId, at }. Empty when there is no spending.
+  moneyCheckJson       String?
+  /// How a repeat's allowance is counted: PER_OCCURRENCE | MONTHLY | QUARTERLY, and for how many cycles (empty for an ongoing program)
+  budgetCycle          String?
+  budgetCycles         Int?
+  /// Programs: ONGOING | FIXED_TERM | COHORT | SEASONAL (shapes the schedule fields and the Overview, never the money or the approvals)
+  programKind          String?
+  /// Programs: MINISTRY | CAPACITY | COMMUNITY | OPERATIONS (only pre-fills indicators and filters)
+  purposeTag           String?
+  /// No: the Money tab is hidden and the Treasurer step is skipped
+  hasMoney             Boolean   @default(true)
+  /// JSON: { startYear, endYear, schedule, cohort: { frequency, duration, schedule, target }, annualMonth }
+  kindJson             String    @default("{}")
+  createdById          String
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+  deletedAt            DateTime?
+  deletedById          String?
+
+  @@index([systemId, status])
+  @@index([leaderPersonId])
+  fundraising          Boolean   @default(false)
+  fundTarget           Int?
+  doneAt               DateTime?
+  settledAt            DateTime?
+  settlementJson       String?
+}
+
+model WorkPlanNote {
+  id        String   @id @default(cuid())
+  planId    String
+  authorId  String
+  text      String
+  createdAt DateTime @default(now())
+
+  @@index([planId])
+}
+
+model WorkPlanCheck {
+  id          String    @id @default(cuid())
+  planId      String
+  label       String
+  done        Boolean   @default(false)
+  doneById    String?
+  doneAt      DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([planId])
+}
+
+/// A project's milestone: a dated step with a done mark.
+model WorkPlanMilestone {
+  id        String    @id @default(cuid())
+  planId    String
+  title     String
+  dueOn     DateTime?
+  done      Boolean   @default(false)
+  doneById  String?
+  doneAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  @@index([planId])
+}
+
+/// An event's registration. A member (personId), a guest added by staff, or a guest from the public link. Attendance is marked on the day.
+model WorkPlanRegistration {
+  id           String    @id @default(cuid())
+  planId       String
+  personId     String?
+  name         String
+  phone        String?
+  /// MEMBER | STAFF | PUBLIC
+  source       String
+  attended     Boolean   @default(false)
+  attendedAt   DateTime?
+  cancelledAt  DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@index([planId])
+}
+
+/// A program's review: when it met, what it found, what it decided.
+model WorkPlanReview {
+  id          String   @id @default(cuid())
+  planId      String
+  heldOn      DateTime
+  summary     String
+  /// CONTINUE | ADJUST | CONCLUDE
+  decision    String
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([planId])
+}
+
+/// A program indicator: what is measured, its target and unit. Readings are kept, the latest is current.
+model WorkPlanIndicator {
+  id          String   @id @default(cuid())
+  planId      String
+  name        String
+  unit        String   @default("")
+  target      Float
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([planId])
+}
+
+model WorkPlanMeasure {
+  id          String   @id @default(cuid())
+  indicatorId String
+  planId      String
+  value       Float
+  note        String?
+  byId        String
+  at          DateTime @default(now())
+
+  @@index([indicatorId])
+}
+
+model MoneyAccount {
+  id          String   @id @default(cuid())
+  orgUnitId   String
+  systemId    String
+  name        String
+  /// ACTIVE | CLOSED
+  status      String   @default("ACTIVE")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId, status])
+}
+
+/// Money is never deleted. Income is recorded; spending waits for approval; either can be voided with a reason (spending only before it is approved).
+model MoneyEntry {
+  id           String    @id @default(cuid())
+  accountId    String
+  orgUnitId    String
+  systemId     String
+  /// INCOME | SPENDING
+  kind         String
+  /// Whole Rwandan francs
+  amount       Int
+  occurredOn   DateTime
+  category     String
+  note         String?
+  /// RECORDED (income) | PENDING_APPROVAL | APPROVED | REJECTED (spending) | VOIDED
+  status       String
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+
+  /// Optional link to the program, project or event (WorkPlan) this entry belongs to
+  planId       String?
+  /// The plan line this spending belongs to; inside the line's remaining amount it needs no second approval
+  lineId       String?
+
+  @@index([accountId, status])
+  @@index([systemId, occurredOn])
+  @@index([planId])
+}
+
+/// Offerings counted at a service. A count record only: it carries no link to any MoneyEntry,
+/// because the treasurer records what was handed over in Money on their own.
+model OfferingCount {
+  id            String    @id @default(cuid())
+  orgUnitId     String
+  systemId      String
+  serviceOn     DateTime
+  label         String
+  /// OFFERING | THANKSGIVING | SPECIAL
+  kind          String    @default("OFFERING")
+  amount        Int
+  /// JSON array of person ids who counted
+  countersJson  String    @default("[]")
+  note          String?
+  /// RECORDED | CONFIRMED | VOIDED
+  status        String    @default("RECORDED")
+  recordedById  String
+  recordedAt    DateTime  @default(now())
+  confirmedById String?
+  confirmedAt   DateTime?
+  handedToId    String?
+  handedAt      DateTime?
+  voidReason    String?
+
+  @@index([systemId, serviceOn])
+}
+
+/// A report composed from live records, then frozen when it is published (slice 3.5).
+model Report {
+  id            String    @id @default(cuid())
+  systemId      String
+  orgUnitId     String
+  /// MEETINGS | ATTENDANCE | MONEY | COLLECTIONS | PEOPLE_LIST | WORK_PLANS
+  kind          String
+  /// YYYY-MM (a month) or YYYY (a year)
+  periodKey     String
+  title         String
+  /// DRAFT | PUBLISHED
+  status        String    @default("DRAFT")
+  /// The figures. Rewritten while DRAFT; never again once PUBLISHED.
+  snapshotJson  String    @default("{}")
+  composedById  String
+  composedAt    DateTime  @default(now())
+  publishedById String?
+  publishedAt   DateTime?
+  deletedAt     DateTime?
+  deletedById   String?
+
+  @@index([systemId, status])
+  @@index([orgUnitId, kind, periodKey])
+}
+
+/// A report a unit owes every month, due on a day of the following month.
+model ReportSchedule {
+  id          String   @id @default(cuid())
+  systemId    String
+  orgUnitId   String
+  kind        String
+  /// Day of the following month (1-28)
+  dueDay      Int
+  active      Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId, active])
+}
+
+/// Person 360: one history-keeping record per fact about a person (slice 3.6). Edits add a new record and
+/// mark the old one SUPERSEDED; mistakes are VOIDED with a reason. Nothing is overwritten or deleted.
+model PersonRecord {
+  id           String    @id @default(cuid())
+  personId     String
+  /// CONTACT | EMPLOYMENT | EDUCATION | GIFT | SKILL | CALLING | FAMILY | BAPTISM | MARRIAGE
+  section      String
+  dataJson     String    @default("{}")
+  /// CURRENT | SUPERSEDED | VOIDED
+  status       String    @default("CURRENT")
+  supersedesId String?
+  /// A baptism recorded from a programme cohort carries the programme
+  programId    String?
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  voidReason   String?
+  voidedById   String?
+  voidedAt     DateTime?
+
+  @@index([personId, section, status])
+  @@index([programId])
+}
+
+/// A fellowship group, Sunday School class or age group inside a unit (slice 3.8).
+model UnitGroup {
+  id             String   @id @default(cuid())
+  orgUnitId      String
+  systemId       String
+  /// FELLOWSHIP | CLASS | AGE_GROUP
+  kind           String
+  name           String
+  leaderPersonId String?
+  ageFrom        Int?
+  ageTo          Int?
+  meetsOn        String?
+  /// ACTIVE | CLOSED
+  status         String   @default("ACTIVE")
+  createdById    String
+  createdAt      DateTime @default(now())
+
+  @@index([systemId, status])
+}
+
+model GroupMember {
+  id        String    @id @default(cuid())
+  groupId   String
+  personId  String
+  joinedOn  DateTime  @default(now())
+  leftOn    DateTime?
+  /// ACTIVE | LEFT
+  status    String    @default("ACTIVE")
+
+  @@index([groupId, status])
+  @@index([personId])
+}
+
+/// One meeting of a group with who was present.
+model GroupSession {
+  id           String   @id @default(cuid())
+  groupId      String
+  heldOn       DateTime
+  /// JSON array of person ids who were present
+  presentJson  String   @default("[]")
+  note         String?
+  recordedById String
+  recordedAt   DateTime @default(now())
+
+  @@index([groupId, heldOn])
+}
+
+/// Two people shown as a pair in the Couples ministry.
+model CouplePair {
+  id          String    @id @default(cuid())
+  systemId    String
+  personAId   String
+  personBId   String
+  marriedOn   DateTime?
+  /// ACTIVE | ENDED
+  status      String    @default("ACTIVE")
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([systemId, status])
+}
+
+/// A visit to an elderly person; private to those who may change People records in Elderly.
+model VisitLog {
+  id            String   @id @default(cuid())
+  systemId      String
+  elderPersonId String
+  visitedOn     DateTime
+  /// JSON array of visitor person ids
+  visitorsJson  String   @default("[]")
+  note          String?
+  recordedById  String
+  recordedAt    DateTime @default(now())
+
+  @@index([systemId, visitedOn])
+  @@index([elderPersonId])
+}
+
+/// A weekly prayer watch of the Intercessors.
+model PrayerWatch {
+  id          String   @id @default(cuid())
+  systemId    String
+  name        String
+  /// 0 = Sunday … 6 = Saturday
+  weekday     Int
+  startTime   String
+  endTime     String
+  /// ACTIVE | CLOSED
+  status      String   @default("ACTIVE")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId, status])
+}
+
+model PrayerWatchMember {
+  id       String @id @default(cuid())
+  watchId  String
+  personId String
+  /// ACTIVE | LEFT
+  status   String @default("ACTIVE")
+
+  @@index([watchId, status])
+}
+
+/// A person met through evangelism, followed up until they join or the contact is closed.
+model EvangelismContact {
+  id           String   @id @default(cuid())
+  fullName     String
+  phone        String?
+  howMet       String?
+  metOn        DateTime @default(now())
+  assignedToId String?
+  /// NEW | FOLLOWING | JOINED | CLOSED
+  status       String   @default("NEW")
+  note         String?
+  createdById  String
+  createdAt    DateTime @default(now())
+
+  @@index([status])
+}
+
+model ContactFollowUp {
+  id           String    @id @default(cuid())
+  contactId    String
+  doneOn       DateTime
+  note         String
+  nextOn       DateTime?
+  recordedById String
+  recordedAt   DateTime  @default(now())
+
+  @@index([contactId])
+}
+
+model GuestPreacher {
+  id          String   @id @default(cuid())
+  name        String
+  church      String?
+  phone       String?
+  note        String?
+  /// ACTIVE | ARCHIVED
+  status      String   @default("ACTIVE")
+  createdById String
+  createdAt   DateTime @default(now())
+}
+
+/// One service in the preaching plan: a member or a guest preaches.
+model PulpitSlot {
+  id               String   @id @default(cuid())
+  serviceOn        DateTime
+  preacherPersonId String?
+  guestId          String?
+  theme            String?
+  bibleText        String?
+  /// PLANNED | DONE | CANCELLED
+  status           String   @default("PLANNED")
+  createdById      String
+  createdAt        DateTime @default(now())
+
+  @@index([serviceOn])
+}
+
+/// A choir or worship team of the Music ministry (the register of who sings is MusicChoirMember).
+model MusicChoir {
+  id          String   @id @default(cuid())
+  name        String
+  /// PRIMARY | SECONDARY | CHILDREN | WORSHIP
+  role        String
+  /// The choir's own system (sys-choir or sys-worship), whose leaders may manage its register
+  systemId    String?
+  orgUnitId   String?
+  active      Boolean  @default(true)
+  createdById String
+  createdAt   DateTime @default(now())
+}
+
+model MusicChoirMember {
+  id       String   @id @default(cuid())
+  choirId  String
+  personId String
+  /// ACTIVE | LEFT
+  status   String   @default("ACTIVE")
+  joinedOn DateTime @default(now())
+
+  @@index([choirId, status])
+  @@index([personId])
+}
+
+/// The month plan: one per month, DRAFT until published.
+model MusicPlan {
+  id          String    @id @default(cuid())
+  /// YYYY-MM
+  periodKey   String    @unique
+  /// DRAFT | PUBLISHED
+  status      String    @default("DRAFT")
+  publishedAt DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+}
+
+model MusicService {
+  id        String   @id @default(cuid())
+  planId    String
+  serviceOn DateTime
+  /// SS1 | SS2 | TUESDAY | FRIDAY | IGABURO
+  kind      String
+  label     String?
+  /// ACTIVE | REMOVED
+  status    String   @default("ACTIVE")
+
+  @@index([planId])
+}
+
+model MusicAssignment {
+  id        String @id @default(cuid())
+  serviceId String
+  choirId   String
+  /// ACTIVE | REMOVED
+  status    String @default("ACTIVE")
+
+  @@index([serviceId])
+}
+
+/// One rehearsal of a choir with who came.
+model ChoirRehearsal {
+  id           String   @id @default(cuid())
+  choirId      String
+  heldOn       DateTime
+  /// JSON array of person ids who were present
+  presentJson  String   @default("[]")
+  note         String?
+  recordedById String
+  recordedAt   DateTime @default(now())
+
+  @@index([choirId, heldOn])
+}
+
+model ChoirSong {
+  id          String    @id @default(cuid())
+  choirId     String
+  title       String
+  composer    String?
+  songKey     String?
+  lastSungOn  DateTime?
+  /// ACTIVE | RETIRED
+  status      String    @default("ACTIVE")
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([choirId])
+}
+
+/// A sponsor of a choir. Pledges here are kept apart from Money, like Collections.
+model ChoirSponsor {
+  id          String   @id @default(cuid())
+  choirId     String
+  name        String
+  /// PERSON | ORGANISATION
+  kind        String   @default("PERSON")
+  contact     String?
+  /// The member, when the sponsor is a person of the church (optional)
+  personId    String?
+  /// ACTIVE | ENDED
+  status      String   @default("ACTIVE")
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([choirId])
+  @@index([personId])
+}
+
+model SponsorPledge {
+  id           String    @id @default(cuid())
+  sponsorId    String
+  amount       Int
+  pledgedOn    DateTime
+  receivedOn   DateTime?
+  note         String?
+  /// PLEDGED | RECEIVED | CANCELLED
+  status       String    @default("PLEDGED")
+  recordedById String
+  recordedAt   DateTime  @default(now())
+
+  @@index([sponsorId])
+}
+
+/* ─── Protocol: the old team engine (slice 3.16) ─── */
+
+/// A person on the Protocol roster: office, which days they can serve and the limits their leader set.
+model ProtocolRoster {
+  id               String   @id @default(cuid())
+  personId         String   @unique
+  /// PRESIDENT | VP | SECRETARY | TREASURER | COORDINATOR | MEMBER
+  office           String   @default("MEMBER")
+  /// SUNDAY | TUESDAY | BOTH
+  serveDays        String   @default("BOTH")
+  /// ACTIVE | INACTIVE | LEAVE
+  status           String   @default("ACTIVE")
+  unavailableJson  String   @default("[]")
+  allowedKindsJson String   @default("[]")
+  onlyServicesJson String   @default("[]")
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @default(now())
+}
+
+/// One month of teams. Status OPEN, DRAFT, REVIEW, PUBLISHED; the version rises with each publish.
+model ProtocolPlan {
+  id                String    @id @default(cuid())
+  monthKey          String    @unique
+  status            String    @default("OPEN")
+  version           Int       @default(0)
+  notesJson         String    @default("[]")
+  generatedAt       DateTime?
+  submittedAt       DateTime?
+  submittedById     String?
+  reviewedAt        DateTime?
+  reviewedById      String?
+  publishedAt       DateTime?
+  publishedById     String?
+  musicVersionBuiltOn Int?
+  musicSnapshotJson String?
+  musicStaleNotified Boolean  @default(false)
+  overridesJson     String    @default("[]")
+  relaxTuesday      Boolean   @default(false)
+  relaxReason       String?
+  relaxedById       String?
+  relaxedAt         DateTime?
+  updatedAt         DateTime  @default(now())
+}
+
+/// A person on a service's team. Removed rows are deleted from the working plan; published versions keep a snapshot.
+model ProtocolSlot {
+  id               String @id @default(cuid())
+  monthKey         String
+  serviceId        String
+  personId         String
+  /// ENGINE | MANUAL | FILL_IN | SWAP
+  source           String @default("MANUAL")
+  /// MEMBER | TEAM_LEADER | VICE_LEADER
+  role             String @default("MEMBER")
+  recommendedRole  String?
+  roleStatus       String?
+  /// REGULAR | EXTRA | FILL_IN
+  slotKind         String @default("REGULAR")
+  replacedPersonId String?
+
+  @@index([monthKey])
+  @@index([serviceId])
+}
+
+/// An immutable snapshot of a month each time it is published.
+model ProtocolHistory {
+  id            String   @id @default(cuid())
+  monthKey      String
+  version       Int
+  publishedAt   DateTime @default(now())
+  publishedById String
+  slotsJson     String
+  notesJson     String   @default("[]")
+
+  @@unique([monthKey, version])
+}
+
+/// Present, half present, excused or absent: one row per person per service.
+model ProtocolAttendance {
+  id           String   @id @default(cuid())
+  serviceId    String
+  personId     String
+  status       String
+  slotKind     String?
+  notes        String?
+  recordedById String
+  recordedAt   DateTime @default(now())
+
+  @@unique([serviceId, personId])
+}
+
+/// A member asks their team leader to excuse them.
+model ProtocolAbsence {
+  id          String    @id @default(cuid())
+  serviceId   String
+  personId    String
+  reason      String
+  /// PENDING | EXCUSED | DENIED
+  status      String    @default("PENDING")
+  createdAt   DateTime  @default(now())
+  decidedById String?
+  decidedAt   DateTime?
+
+  @@index([serviceId])
+}
+
+/// A leader offers an excused person's place to someone; the candidate accepts or declines.
+model ProtocolFillIn {
+  id               String    @id @default(cuid())
+  serviceId        String
+  excusedPersonId  String
+  candidatePersonId String
+  offeredById      String
+  /// PENDING | ACCEPTED | DECLINED | CANCELLED
+  status           String    @default("PENDING")
+  createdAt        DateTime  @default(now())
+  respondedAt      DateTime?
+
+  @@index([serviceId])
+}
+
+/// A member proposes to swap into another member's service; the other accepts or declines.
+model ProtocolSwapProposal {
+  id            String    @id @default(cuid())
+  serviceId     String
+  proposerId    String
+  targetId      String
+  /// PENDING | ACCEPTED | DECLINED | CANCELLED
+  status        String    @default("PENDING")
+  createdAt     DateTime  @default(now())
+  respondedAt   DateTime?
+
+  @@index([serviceId])
+}
+
+/// What the team leader writes after a service; Deacon reads these. One per service.
+model ProtocolServiceReport {
+  id              String   @id @default(cuid())
+  serviceId       String   @unique
+  monthKey        String
+  authorId        String
+  challenges      String   @default("")
+  solutions       String   @default("")
+  issues          String   @default("")
+  recommendations String   @default("")
+  submittedAt     DateTime @default(now())
+
+  @@index([monthKey])
+}
+
+/* ─── Music schedule engine (slice 3.16) ─── */
+
+/// A generated or hand-edited choir schedule for one or more months, not yet confirmed. Documents, as in the old system.
+model MusicDraft {
+  id             String   @id @default(cuid())
+  label          String
+  /// MONTH | QUARTER | HALF | YEAR
+  horizon        String
+  startMonth     String
+  servicesJson   String
+  assignmentsJson String
+  warningsJson   String   @default("[]")
+  createdById    String
+  createdAt      DateTime @default(now())
+}
+
+/// A month the Music team has confirmed (Protocol may plan against it) or published (the choirs see it).
+model MusicMonth {
+  id              String    @id @default(cuid())
+  periodKey       String    @unique
+  /// CONFIRMED | PUBLISHED
+  state           String
+  version         Int       @default(1)
+  batchId         String?
+  batchHorizon    String?
+  servicesJson    String
+  assignmentsJson String
+  warningsJson    String    @default("[]")
+  confirmedAt     DateTime
+  confirmedById   String
+  publishedAt     DateTime?
+  publishedById   String?
+  updatedAt       DateTime
+  updatedById     String?
+}
+
+/// Every confirm, publish and edit of a month, kept for good.
+model MusicLog {
+  id          String   @id @default(cuid())
+  at          DateTime @default(now())
+  periodKey   String
+  /// CONFIRMED | PUBLISHED
+  stage       String
+  /// CONFIRMED | RECONFIRMED | PUBLISHED | EDITED
+  action      String
+  version     Int
+  byId        String
+  summary     String
+  changesJson String   @default("[]")
+
+  @@index([periodKey])
+}
+
+/// The preferences of one system: unit details and money options, as JSON (slice 3.18).
+model SystemSetting {
+  id          String   @id @default(cuid())
+  systemId    String   @unique
+  detailsJson String   @default("{}")
+  moneyJson   String   @default("{}")
+  updatedById String?
+  updatedAt   DateTime @default(now())
+}
+
+/// Money block, Module 5 (slice 3.19). One planned amount per category per year; actuals come from MoneyEntry.
+model MoneyBudget {
+  id           String    @id @default(cuid())
+  systemId     String
+  year         Int
+  /// DRAFT | SUBMITTED | APPROVED
+  status       String    @default("DRAFT")
+  approvedById String?
+  approvedAt   DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([systemId, year])
+}
+
+model MoneyBudgetLine {
+  id          String   @id @default(cuid())
+  systemId    String
+  year        Int
+  /// INCOME | SPENDING
+  kind        String
+  category    String
+  planned     Int
+  note        String?
+  updatedById String
+  updatedAt   DateTime @default(now())
+
+  @@unique([systemId, year, kind, category])
+}
+
+/// A unit's approved budget sent to Central as a frozen report. Append-only; the newest per system and year counts.
+model MoneyBudgetSubmission {
+  id            String   @id @default(cuid())
+  systemId      String
+  year          Int
+  snapshotJson  String
+  submittedById String
+  submittedAt   DateTime @default(now())
+  /// SUBMITTED | APPROVED | RETURNED | WITHDRAWN
+  status        String   @default("SUBMITTED")
+  decidedById   String?
+  decidedAt     DateTime?
+  decisionNote  String?
+
+  @@index([systemId, year])
+}
+
+/// The money action plan: planned activities with an estimated cost.
+model MoneyPlanItem {
+  id          String   @id @default(cuid())
+  systemId    String
+  year        Int
+  title       String
+  amount      Int
+  /// YYYY-MM, optional
+  dueMonth    String?
+  category    String?
+  /// PLANNED | DONE | DROPPED
+  status      String   @default("PLANNED")
+  note        String?
+  createdById String
+  createdAt   DateTime @default(now())
+  /// Optional link to the program, project or event (WorkPlan) this activity belongs to
+  planId      String?
+  /// Where the money for this activity comes from: CONTRIBUTION (a contribution type of the unit) | DONATION | OTHER
+  fundingKind String?
+  /// The contribution type code, when the funding is a contribution
+  fundingCode String?
+  fundingNote String?
+  /// The Treasurer's check of this line while its activity is being approved: VERIFIED | MODIFIED (changed after it was verified)
+  checkState  String?
+  checkedById String?
+  checkedAt   DateTime?
+  /// A project's cost line belongs to one of its milestones (its phase); empty means the automatic General phase
+  milestoneId String?
+
+  @@index([systemId, year])
+  @@index([planId])
+}
+
+/// A contribution list: a team's list for a month, or the unit's (combined or recorded directly).
+model ContributionList {
+  id             String    @id @default(cuid())
+  systemId       String
+  /// TEAM | UNIT
+  level          String
+  typeCode       String
+  typeName       String
+  /// YYYY-MM
+  month          String
+  teamUnitId     String?
+  teamName       String?
+  /// DRAFT | SUBMITTED | COMBINED | APPROVED | RETURNED
+  status         String    @default("DRAFT")
+  /// JSON array of the team list ids a unit list was combined from
+  sourceListIds  String    @default("[]")
+  createdById    String
+  createdAt      DateTime  @default(now())
+  submittedAt    DateTime?
+  decidedById    String?
+  decidedAt      DateTime?
+  decisionNote   String?
+  /// Restricted use of a unit list, such as a special collection: "" (unrestricted), A:<planId> or C:<category>
+  purpose        String    @default("")
+
+  @@index([systemId, month])
+}
+
+model ContributionLine {
+  id        String  @id @default(cuid())
+  listId    String
+  name      String
+  personId  String?
+  team      String?
+  amount    Int
+
+  @@index([listId])
+  @@index([personId])
+}
+
+/// A donation: recorded by the treasurer or vice president, approved by the president, then it is income.
+model Donation {
+  id           String    @id @default(cuid())
+  systemId     String
+  accountId    String
+  donorName    String
+  /// The member who gave, when the treasurer picked one (optional)
+  donorPersonId String?
+  amount       Int
+  receivedOn   DateTime
+  note         String?
+  /// PENDING | APPROVED | REJECTED
+  status       String    @default("PENDING")
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  decidedById  String?
+  decidedAt    DateTime?
+  decisionNote String?
+  entryId      String?
+
+  @@index([systemId, status])
+  @@index([donorPersonId])
+  typeCode    String?
+  typeName    String?
+  /// "" (unrestricted), A:<planId> or C:<category>
+  purpose     String   @default("")
+}
+
+/// A file kept on a person's profile (a certificate, a letter, an ID copy). Stored as base64 text; small files only.
+model PersonDocument {
+  id           String    @id @default(cuid())
+  personId     String
+  name         String
+  mime         String
+  size         Int
+  dataBase64   String
+  note         String?
+  uploadedById String
+  uploadedAt   DateTime  @default(now())
+  deletedAt    DateTime?
+  deletedById  String?
+
+  @@index([personId])
+}
+
+/// A good deed of a member, recorded by a Unit Secretary (or the Church Secretary, Pastor, Church Leader).
+model PersonDeed {
+  id           String    @id @default(cuid())
+  personId     String
+  note         String
+  day          String
+  recordedById String
+  unitId       String?
+  recordedAt   DateTime  @default(now())
+  deletedAt    DateTime?
+  deletedById  String?
+
+  @@index([personId])
+}
+
+/// What was given at one church service or event: recorded by the Church Treasurer, read by the Church Leader.
+/// Kept apart from Money and from activities on purpose.
+model ServiceCollection {
+  id           String    @id @default(cuid())
+  systemId     String    @default("sys-main")
+  /// SERVICE | EVENT
+  kind         String    @default("SERVICE")
+  title        String
+  heldOn       DateTime
+  /// HH:MM, optional
+  startsAt     String?
+  /// Whole Rwandan francs
+  tithe        Int       @default(0)
+  offering     Int       @default(0)
+  /// Thanksgiving and any other giving
+  other        Int       @default(0)
+  note         String?
+  /// ACTIVE | VOIDED
+  status       String    @default("ACTIVE")
+  voidReason   String?
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  updatedById  String?
+  updatedAt    DateTime  @updatedAt
+
+  @@index([systemId, heldOn])
+}
+
+/// Income the treasurer records as promised (PLEDGED) or received (SECURED). Only SECURED income counts toward what can be set aside.
+/// A CONTRIBUTION or DONATION pledge is FULFILLED when the money arrives through a contribution list or a donation; OTHER income is SECURED here.
+model IncomeRecord {
+  id           String    @id @default(cuid())
+  systemId     String
+  /// CONTRIBUTION | DONATION | OTHER
+  kind         String
+  /// CONTRIBUTION: the unit's own contribution type. OTHER: the pot it sits in (POOL is the general pool). DONATION: empty.
+  code         String    @default("")
+  label        String
+  amount       Int
+  /// PLEDGED | SECURED | FULFILLED | CANCELLED
+  status       String
+  expectedOn   DateTime?
+  receivedOn   DateTime?
+  note         String?
+  recordedById String
+  recordedAt   DateTime  @default(now())
+  updatedById  String?
+  updatedAt    DateTime  @default(now())
+
+  /// The fundraising event this record came from, if any
+  planId       String?
+  /// DONATION | CONTRIBUTION | GRANT | SPONSOR | OTHER: what kind of source it is. kind is the pot, code is the purpose ("", A:<planId>, C:<category>).
+  sourceTag    String    @default("OTHER")
+  /// Who approved it into the secured balance, when a donation or contribution needed the President
+  approvedById String?
+  approvedAt   DateTime?
+
+  @@index([systemId, status])
+}
+
+/// Money set aside for an activity from one pot of its unit. A pot is a kind of source and its code.
+model PlanSource {
+  id          String   @id @default(cuid())
+  planId      String
+  systemId    String
+  /// CONTRIBUTION | DONATION | OTHER
+  kind        String
+  code        String   @default("")
+  amount      Int
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@unique([planId, kind, code])
+  @@index([planId])
+  @@index([systemId])
+}
+
+/// A request to change an approved activity's money. TRANSFER keeps or lowers the total (the President decides; the Church Leader reviews it monthly);
+/// INCREASE raises it (the Church Leader decides). While PENDING, an increase reserves its extra amount against the sources.
+model BudgetAmendment {
+  id            String    @id @default(cuid())
+  planId        String
+  systemId      String
+  /// TRANSFER | INCREASE
+  kind          String
+  /// PENDING | APPROVED | REJECTED | WITHDRAWN
+  status        String    @default("PENDING")
+  oldTotal      Int
+  newTotal      Int
+  justification String
+  /// The proposed full list of spending lines: [{id?, title, amount}]
+  linesJson     String
+  /// The proposed full list of sources: [{kind, code, amount}]
+  sourcesJson   String
+  /// What the amendment holds back while open: [{kind, code, amount}]
+  reserveJson   String    @default("[]")
+  requestedById String
+  requestedAt   DateTime  @default(now())
+  decidedById   String?
+  decidedAt     DateTime?
+  decisionNote  String?
+  reviewedById  String?
+  reviewedAt    DateTime?
+  /// MONEY (cost lines, set-aside sources) | GENERAL (schedule, mission, category or a combined change) | TEAM (leader, team)
+  scope         String    @default("MONEY")
+  /// The proposed changes to the activity's own fields: { keys: [...], set: {...} }
+  changesJson   String?
+  /// GENERAL: the chain of approvals: [{ levelKey, label, systemId, status, byId, at, note }]
+  levelsJson    String?
+
+  @@index([planId])
+  @@index([systemId, status])
+}
+
+/// The Church Leader's monthly release of an ongoing program's money. A month with no row here is "Not released".
+model PlanRenewal {
+  id          String   @id @default(cuid())
+  planId      String
+  /// YYYY-MM
+  month       String
+  renewedById String
+  renewedAt   DateTime @default(now())
+
+  @@unique([planId, month])
+  @@index([planId])
+}
+
+/// Money received by a fundraising event: ticket sales, auction proceeds, direct donations.
+model PlanRevenue {
+  id           String   @id @default(cuid())
+  planId       String
+  systemId     String
+  label        String
+  amount       Int
+  receivedOn   DateTime
+  recordedById String
+  recordedAt   DateTime @default(now())
+  /// PENDING (logged by the leader, waiting for the Treasurer) | CONFIRMED (counts toward the fundraiser)
+  status       String   @default("CONFIRMED")
+  confirmedById String?
+  confirmedAt  DateTime?
+
+  @@index([planId])
+}
+
+/// A file attached to an activity (a proposal, a letter, a budget sheet, a picture). Stored as base64 text; small files only.
+model PlanFile {
+  id           String    @id @default(cuid())
+  planId       String
+  name         String
+  mime         String
+  size         Int
+  dataBase64   String
+  uploadedById String
+  uploadedAt   DateTime  @default(now())
+  deletedAt    DateTime?
+  deletedById  String?
+
+  @@index([planId])
+}
+
+/// A signed change to the secured money of one pot and purpose: overspend and late invoices taken from unrestricted money (negative).
+model FundAdjustment {
+  id          String   @id @default(cuid())
+  systemId    String
+  planId      String?
+  /// CONTRIBUTION | DONATION
+  kind        String
+  code        String   @default("")
+  amount      Int
+  /// OVERSPEND | LATE_INVOICE | UNCOVERED (UNCOVERED never changes a balance: it is the part nothing could cover)
+  reason      String
+  note        String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  @@index([systemId])
+  @@index([planId])
+}
+
+/// One budget year of a program that goes on past its first: the Church Leader's yearly decision, what the year cost, and what went back.
+model ProgramYear {
+  id           String    @id @default(cuid())
+  planId       String
+  systemId     String
+  year         Int
+  /// PLANNED (needs funding) | ACTIVE | CLOSED | SKIPPED
+  status       String
+  /// The budget of the year: the Church Leader's Next Year Budget, then what the President set aside
+  amount       Int       @default(0)
+  spent        Int?
+  returned     Int?
+  attendance   Int?
+  /// CONTINUE | CLOSE | END_EARLY | PREPARE | SKIP
+  decision     String?
+  note         String?
+  decidedById  String?
+  decidedAt    DateTime?
+  fundedById   String?
+  fundedAt     DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([planId, year])
+  @@index([planId])
+  @@index([systemId])
+}
+
+/// A cohort of a cohort-based program (a baptism class, a training round): one runs at a time, then it is closed into the history.
+model ProgramCohort {
+  id          String    @id @default(cuid())
+  planId      String
+  systemId    String
+  name        String
+  startsOn    DateTime
+  endsOn      DateTime
+  target      Int?
+  enrolled    Int       @default(0)
+  graduated   Int?
+  /// The part of the program's yearly allowance given to this cohort; what it does not spend goes back to the program when it closes
+  budget      Int       @default(0)
+  spent       Int?
+  /// ACTIVE | CLOSED
+  status      String    @default("ACTIVE")
+  notes       String?
+  closedAt    DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([planId])
+  @@index([systemId])
 }
