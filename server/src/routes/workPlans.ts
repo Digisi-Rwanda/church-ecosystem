@@ -43,6 +43,8 @@ const kindSchema = z.object({
   schedule: short,
   cohort: z.object({ frequency: short, duration: short, schedule: short, target: z.number().int().min(0).max(100000).nullish() }).nullish(),
   annualMonth: z.number().int().min(1).max(12).nullish(),
+  /** Seasonal: the year the team last prepared for (set by Prepare for next cycle, never by the form) */
+  preparedYear: z.number().int().min(2000).max(2200).nullish(),
 });
 /** Starting indicators by purpose: easy to edit or remove, they only save the first typing. */
 const DEFAULT_INDICATORS: Record<(typeof PURPOSE_TAGS)[number], Array<{ name: string; unit: string; target: number }>> = {
@@ -64,7 +66,7 @@ const kindView = (p: Plan) => {
     startYear: k.startYear ?? null, endYear: k.endYear ?? null, schedule: k.schedule ?? '',
     yearsRemaining: p.programKind === 'FIXED_TERM' && k.endYear ? Math.max(0, k.endYear - year) : null,
     cohort: k.cohort ? { frequency: k.cohort.frequency, duration: k.cohort.duration, schedule: k.cohort.schedule, target: k.cohort.target ?? null } : null,
-    annualMonth: k.annualMonth ?? null,
+    annualMonth: k.annualMonth ?? null, preparedYear: k.preparedYear ?? null,
   };
 };
 /** The dates a kind implies: a fixed term runs from 1 January of its first year to 31 December of its last. */

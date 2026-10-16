@@ -1927,3 +1927,55 @@ model FundAdjustment {
   @@index([systemId])
   @@index([planId])
 }
+
+/// One budget year of a program that goes on past its first: the Church Leader's yearly decision, what the year cost, and what went back.
+model ProgramYear {
+  id           String    @id @default(cuid())
+  planId       String
+  systemId     String
+  year         Int
+  /// PLANNED (needs funding) | ACTIVE | CLOSED | SKIPPED
+  status       String
+  /// The budget of the year: the Church Leader's Next Year Budget, then what the President set aside
+  amount       Int       @default(0)
+  spent        Int?
+  returned     Int?
+  attendance   Int?
+  /// CONTINUE | CLOSE | END_EARLY | PREPARE | SKIP
+  decision     String?
+  note         String?
+  decidedById  String?
+  decidedAt    DateTime?
+  fundedById   String?
+  fundedAt     DateTime?
+  createdAt    DateTime  @default(now())
+
+  @@unique([planId, year])
+  @@index([planId])
+  @@index([systemId])
+}
+
+/// A cohort of a cohort-based program (a baptism class, a training round): one runs at a time, then it is closed into the history.
+model ProgramCohort {
+  id          String    @id @default(cuid())
+  planId      String
+  systemId    String
+  name        String
+  startsOn    DateTime
+  endsOn      DateTime
+  target      Int?
+  enrolled    Int       @default(0)
+  graduated   Int?
+  /// The part of the program's yearly allowance given to this cohort; what it does not spend goes back to the program when it closes
+  budget      Int       @default(0)
+  spent       Int?
+  /// ACTIVE | CLOSED
+  status      String    @default("ACTIVE")
+  notes       String?
+  closedAt    DateTime?
+  createdById String
+  createdAt   DateTime  @default(now())
+
+  @@index([planId])
+  @@index([systemId])
+}

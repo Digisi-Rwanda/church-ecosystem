@@ -21,7 +21,7 @@ beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
   seedWorld(db);
-  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'workPlan', 'workPlanNote', 'workPlanCheck', 'workPlanMilestone', 'workPlanRegistration', 'workPlanReview', 'workPlanIndicator', 'workPlanMeasure', 'incomeRecord', 'planSource', 'moneyPlanItem', 'contributionList', 'contributionLine', 'donation', 'systemSetting', 'budgetAmendment', 'planRenewal', 'moneyAccount', 'moneyEntry']) db[k] ??= [];
+  for (const k of ['orgUnit', 'delegation', 'auditEvent', 'setting', 'notification', 'notificationRead', 'preference', 'workPlan', 'workPlanNote', 'workPlanCheck', 'workPlanMilestone', 'workPlanRegistration', 'workPlanReview', 'workPlanIndicator', 'workPlanMeasure', 'programYear', 'programCohort', 'incomeRecord', 'planSource', 'moneyPlanItem', 'contributionList', 'contributionLine', 'donation', 'systemSetting', 'budgetAmendment', 'planRenewal', 'moneyAccount', 'moneyEntry']) db[k] ??= [];
   for (const s of db.churchSystem) {
     s.code = s.id.replace('sys-', '').toUpperCase();
     s.name = s.id;
@@ -707,5 +707,134 @@ describe('program kinds (slice A)', () => {
     const sub = await post('p-vp', `${B}/${c.body.plan.id}/submit`);
     expect(sub.status, JSON.stringify(sub.body)).toBe(200);
     expect(sub.body.plan.levels.map((l: any) => l.levelKey)).not.toContain('TREASURER');
+  });
+});
+
+const Y = new Date().getUTCFullYear();
+
+describe('annual review (slice B)', () => {
+  const AR = (id: string) => `${B}/${id}/annual-review`;
+  const program = (o: object = {}) => approvedPlan({ planType: 'PROGRAM', programKind: 'ONGOING', startsOn: `${Y}-01-01T00:00:00Z`, endsOn: `${Y}-12-31T00:00:00Z`, ...o });
+  const spendOn = async (id: string, amount: number) => {
+    const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Choir fund' })).body.id;
+    const sound = (await moneyOf(id)).lines.find((l: any) => l.title === 'Sound hire').id;
+    const r = await post('p-ctr', ENTRIES, { accountId: acc, kind: 'SPENDING', amount, occurredOn: `${Y}-05-09`, category: 'OTHER', planId: id, lineId: sound });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+  };
+
+  it('unspent goes back, the Church Leader sets the next budget, it needs funding until the President sets money aside, then the year begins', async () => {
+    const id = await program();
+    await spendOn(id, 50000);
+    const v = (await get('p-pastor', AR(id))).body;
+    expect(v.actuals).toMatchObject({ budget: 120000, spent: 50000, unspent: 70000 });
+    expect(v.canReview).toBe(true);
+    expect((await get('p-vp', AR(id))).body.canReview).toBe(false);
+    expect((await post('p-choir-leader', AR(id), { decision: 'CONTINUE', nextBudget: 90000 })).status).toBe(403);
+    expect((await post('p-pastor', AR(id), { decision: 'CONTINUE' })).body.code).toBe('BUDGET_NEEDED');
+    const done = await post('p-pastor', AR(id), { decision: 'CONTINUE', nextBudget: 90000 });
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    expect(done.body.needsFunding).toEqual({ year: Y + 1, amount: 90000 });
+    expect(done.body.canReview).toBe(false);
+    const m1 = await moneyOf(id);
+    expect([m1.planned, m1.earmarked]).toEqual([50000, 50000]);
+    expect(notices('p-choir-leader').some((t) => t.includes('Needs funding'))).toBe(true);
+    expect((await put('p-ctr', `${AR(id)}/funding`, { sources: [{ kind: 'DONATION', code: '', amount: 90000 }] })).status).toBe(403);
+    const gap = await put('p-choir-leader', `${AR(id)}/funding`, { sources: [{ kind: 'DONATION', code: '', amount: 80000 }] });
+    expect(gap.body.code).toBe('FUNDING_GAP');
+    const ok = await put('p-choir-leader', `${AR(id)}/funding`, { sources: [{ kind: 'DONATION', code: '', amount: 90000 }] });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.year).toBe(Y + 1);
+    expect(ok.body.needsFunding).toBeNull();
+    expect(ok.body.years[0]).toMatchObject({ year: Y, status: 'CLOSED', spent: 50000, returned: 70000 });
+    const m2 = await moneyOf(id);
+    expect([m2.planned, m2.earmarked]).toEqual([140000, 140000]);
+    expect((await get('p-vp', `${B}/${id}`)).body.plan.startsOn.slice(0, 10)).toBe(`${Y + 1}-01-01`);
+  });
+
+  it('closing at the review ends the program; a fixed term in its last year can only close', async () => {
+    const id = await program();
+    expect((await post('p-pastor', AR(id), { decision: 'CLOSE', note: 'Finished' })).status).toBe(200);
+    expect((await get('p-vp', `${B}/${id}`)).body.plan.status).toBe('ENDED');
+    const fixed = await program({ programKind: 'FIXED_TERM', kind: { startYear: Y, endYear: Y, schedule: '' } });
+    expect((await get('p-pastor', AR(fixed))).body.options).toEqual(['CLOSE']);
+    expect((await post('p-pastor', AR(fixed), { decision: 'CONTINUE', nextBudget: 1000 })).body.code).toBe('NOT_AVAILABLE');
+  });
+
+  it('a seasonal program can skip a year; a program with no money carries on without funding', async () => {
+    const s = await program({ programKind: 'SEASONAL', kind: { schedule: '', annualMonth: 12 } });
+    const skipped = await post('p-pastor', AR(s), { decision: 'SKIP' });
+    expect(skipped.status, JSON.stringify(skipped.body)).toBe(200);
+    expect(skipped.body.year).toBe(Y + 1);
+    expect(skipped.body.years.map((y: any) => [y.year, y.status])).toEqual([[Y, 'CLOSED'], [Y + 1, 'SKIPPED']]);
+    const bare = (await post('p-vp', B, { unitId: 'ou-choir', title: 'Prayer', planType: 'PROGRAM', programKind: 'ONGOING', hasMoney: false, startsOn: `${Y}-01-01T00:00:00Z`, endsOn: `${Y}-12-31T00:00:00Z` })).body.plan.id as string;
+    await post('p-vp', `${B}/${bare}/submit`);
+    await post('p-choir-leader', `${B}/${bare}/approve`);
+    await post('p-pastor', `${B}/${bare}/approve`);
+    const c = await post('p-pastor', AR(bare), { decision: 'CONTINUE' });
+    expect(c.status, JSON.stringify(c.body)).toBe(200);
+    expect(c.body.year).toBe(Y + 1);
+    expect(c.body.needsFunding).toBeNull();
+  });
+});
+
+describe('cohorts (slice C)', () => {
+  const CO = (id: string) => `${B}/${id}/cohorts`;
+  const cohortProgram = () => approvedPlan({ planType: 'PROGRAM', programKind: 'COHORT', startsOn: `${Y}-01-01T00:00:00Z`, endsOn: `${Y}-12-31T00:00:00Z`, kind: { schedule: '', cohort: { frequency: 'Quarterly', duration: '12 weeks', schedule: 'Sundays', target: 20 } } });
+
+  it('one cohort runs at a time, its budget comes out of the yearly allowance, and closing it gives the rest back', async () => {
+    const id = await cohortProgram();
+    const v0 = (await get('p-vp', CO(id))).body;
+    expect(v0).toMatchObject({ canStart: true, unallocated: 120000, pattern: { frequency: 'Quarterly', target: 20 } });
+    const mk = (o: object = {}) => post('p-vp', CO(id), { name: 'Spring class', startsOn: `${Y}-10-01`, endsOn: `${Y}-12-20`, target: 20, budget: 40000, ...o });
+    expect((await mk({ budget: 130000 })).body.code).toBe('OVER_ALLOCATION');
+    const a = await mk();
+    expect(a.status, JSON.stringify(a.body)).toBe(201);
+    expect(a.body.current).toMatchObject({ name: 'Spring class', budget: 40000, enrolled: 0 });
+    expect(a.body.unallocated).toBe(80000);
+    expect((await mk()).body.code).toBe('COHORT_ACTIVE');
+    const cid = a.body.current.id;
+    expect((await fetchPatch(id, cid, 22)).body.current.enrolled).toBe(22);
+    expect((await post('p-vp', `${CO(id)}/${cid}/close`, { graduated: 25 })).body.code).toBe('MORE_THAN_ENROLLED');
+    const closed = await post('p-vp', `${CO(id)}/${cid}/close`, { graduated: 18, notes: 'Good group' });
+    expect(closed.status, JSON.stringify(closed.body)).toBe(200);
+    expect(closed.body.current).toBeNull();
+    expect(closed.body.past[0]).toMatchObject({ name: 'Spring class', enrolled: 22, graduated: 18, notes: 'Good group' });
+    expect(closed.body.unallocated).toBe(120000);
+    expect(closed.body.canStart).toBe(true);
+  });
+
+  it('only a cohort-based program has cohorts, and a cohort that has ended must be closed before the annual review continues', async () => {
+    const other = await approvedPlan({ planType: 'PROGRAM', programKind: 'ONGOING', startsOn: `${Y}-01-01T00:00:00Z`, endsOn: `${Y}-12-31T00:00:00Z` });
+    expect((await get('p-vp', CO(other))).status).toBe(409);
+    const id = await cohortProgram();
+    await post('p-vp', CO(id), { name: 'Winter class', startsOn: `${Y - 1}-12-01`, endsOn: `${Y - 1}-12-31`, budget: 0 });
+    expect((await get('p-vp', CO(id))).body.current.ended).toBe(true);
+    const blocked = await post('p-pastor', `${B}/${id}/annual-review`, { decision: 'CONTINUE', nextBudget: 50000 });
+    expect(blocked.body.code).toBe('COHORT_OPEN');
+  });
+});
+const fetchPatch = (id: string, cid: string, enrolled: number) => request(app).patch(`${B}/${id}/cohorts/${cid}`).set(bearer('p-vp')).send({ enrolled });
+
+describe('seasonal cycle (slice D)', () => {
+  const SE = (id: string) => `${B}/${id}/season`;
+  const season = () => approvedPlan({ planType: 'PROGRAM', programKind: 'SEASONAL', startsOn: `${Y}-01-01T00:00:00Z`, endsOn: `${Y}-12-31T00:00:00Z`, kind: { schedule: '', annualMonth: 12 } });
+
+  it('preparing until the team prepares for the cycle, then active with the cycle’s tasks', async () => {
+    const id = await season();
+    const v = (await get('p-vp', SE(id))).body;
+    expect(v).toMatchObject({ phase: 'PREPARING', year: Y, canPrepare: true });
+    expect((await get('p-ctr', SE(id))).body.canPrepare).toBe(false);
+    const done = await post('p-vp', `${SE(id)}/prepare`, {});
+    expect(done.status, JSON.stringify(done.body)).toBe(200);
+    expect(done.body.phase).toBe('ACTIVE');
+    const checks = fake.__db.workPlanCheck.filter((c: any) => c.planId === id).map((c: any) => c.label);
+    expect(checks[0]).toBe(`${Y}: Confirm the date and the venue`);
+    expect((await post('p-vp', `${SE(id)}/prepare`, {})).status).toBe(409);
+    expect((await get('p-vp', `${B}/${id}`)).body.plan.kind.preparedYear).toBe(Y);
+  });
+
+  it('is refused for a program that is not seasonal', async () => {
+    const id = await approvedPlan({ planType: 'PROGRAM', programKind: 'ONGOING', startsOn: `${Y}-01-01T00:00:00Z`, endsOn: `${Y}-12-31T00:00:00Z` });
+    expect((await get('p-vp', SE(id))).status).toBe(409);
   });
 });

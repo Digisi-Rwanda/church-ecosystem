@@ -1,8 +1,11 @@
 import type { PlanDetail } from '../api/frontDoorApi';
 import { useI18n, useT } from '../i18n/I18nContext';
+import { AnnualReview } from './AnnualReview';
+import { ProgramCohorts } from './ProgramCohorts';
+import { SeasonPanel } from './SeasonPanel';
 
 /** A program's own overview, shaped by its kind: what it is, how long it runs, who is on it and how it is doing. */
-export function ProgramOverview({ p }: { p: PlanDetail }) {
+export function ProgramOverview({ p, onChange }: { p: PlanDetail; onChange: () => void }) {
   const t = useT();
   const { locale } = useI18n();
   const k = p.kind;
@@ -24,6 +27,7 @@ export function ProgramOverview({ p }: { p: PlanDetail }) {
   if (p.programKind === 'SEASONAL' && k.annualMonth) facts.push([t('door.pk.nextOccurrence'), `${month(k.annualMonth)} ${new Date().getFullYear()}`]);
   const indicators = p.program?.indicators ?? [];
   return (
+    <>
     <div className="panel" aria-label={t('door.pk.overview')}>
       <h3>{t('door.pk.overview')}</h3>
       <dl className="door-facts">
@@ -43,5 +47,9 @@ export function ProgramOverview({ p }: { p: PlanDetail }) {
         </>
       )}
     </div>
+      {p.programKind === 'COHORT' && (p.state === 'APPROVED' || p.state === 'DONE') && <ProgramCohorts p={p} onChange={onChange} />}
+      {p.programKind === 'SEASONAL' && p.state === 'APPROVED' && <SeasonPanel p={p} onChange={onChange} />}
+      {(p.state === 'APPROVED' || p.state === 'DONE') && <AnnualReview p={p} onChange={onChange} />}
+    </>
   );
 }

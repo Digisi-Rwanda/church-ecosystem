@@ -1038,7 +1038,7 @@ export type KindInput = {
   startYear?: number | null; endYear?: number | null; schedule: string;
   cohort?: { frequency: string; duration: string; schedule: string; target: number | null } | null; annualMonth?: number | null;
 };
-export type KindView = KindInput & { yearsRemaining: number | null };
+export type KindView = KindInput & { yearsRemaining: number | null; preparedYear?: number | null };
 
 export type PlanItem = PlanFlags & {
   planType: PlanType;
@@ -1962,3 +1962,36 @@ export const finalizeSettlement = (id: string) => apiFetch<{ ok: true; released:
 
 export const checkinPublic = (token: string, body: { phone: string; name?: string; website?: string }) =>
   apiFetch<{ ok: true; name: string; walkIn: boolean }>(`/api/public/events/${pid(token)}/checkin`, { method: 'POST', body, auth: false });
+
+/** The yearly life of a program: the Church Leader's review and the President's funding of the next year. */
+export type ReviewDecision2 = 'CONTINUE' | 'PREPARE' | 'CLOSE' | 'END_EARLY' | 'SKIP';
+export type AnnualReviewView = {
+  year: number; kind: ProgramKind; hasMoney: boolean; endYear: number | null; yearsRemaining: number | null;
+  canReview: boolean; canFund: boolean; options: ReviewDecision2[];
+  actuals: { budget: number; spent: number; unspent: number; overspent: number };
+  needsFunding: { year: number; amount: number } | null;
+  years: Array<{ year: number; status: 'ACTIVE' | 'CLOSED' | 'SKIPPED'; budget: number; spent: number | null; returned: number | null; attendance: number | null; decision: string | null; note: string | null }>;
+};
+export const fetchAnnualReview = (planId: string): Promise<AnnualReviewView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/annual-review`);
+export const doAnnualReview = (planId: string, body: { decision: ReviewDecision2; nextBudget?: number | null; note?: string | null; attendance?: number | null }): Promise<AnnualReviewView> =>
+  apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/annual-review`, { method: 'POST', body });
+export const fundNextYear = (planId: string, sources: Array<{ kind: string; code: string; amount: number }>): Promise<AnnualReviewView> =>
+  apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/annual-review/funding`, { method: 'PUT', body: { sources } });
+
+/** Cohorts of a cohort-based program. */
+export type CohortItem = { id: string; name: string; startsOn: string; endsOn: string; target: number | null; enrolled: number; graduated: number | null; budget: number; spent: number; notes: string; closedAt: string | null };
+export type CohortsView = {
+  hasMoney: boolean; canManage: boolean; canStart: boolean; unallocated: number;
+  pattern: { frequency: string; duration: string; schedule: string; target: number | null };
+  current: (CohortItem & { progress: number; ended: boolean }) | null; past: CohortItem[];
+};
+const CP = (id: string) => `/api/work-plans/${encodeURIComponent(id)}/cohorts`;
+export const fetchCohorts = (planId: string): Promise<CohortsView> => apiFetch(CP(planId));
+export const startCohort = (planId: string, b: { name: string; startsOn: string; endsOn: string; target: number | null; budget: number }): Promise<CohortsView> => apiFetch(CP(planId), { method: 'POST', body: b });
+export const setCohortEnrolled = (planId: string, cohortId: string, enrolled: number): Promise<CohortsView> => apiFetch(`${CP(planId)}/${encodeURIComponent(cohortId)}`, { method: 'PATCH', body: { enrolled } });
+export const closeCohort = (planId: string, cohortId: string, b: { graduated: number; notes: string | null }): Promise<CohortsView> => apiFetch(`${CP(planId)}/${encodeURIComponent(cohortId)}/close`, { method: 'POST', body: b });
+
+/** The seasonal cycle of a seasonal program. */
+export type SeasonView = { phase: 'PREPARING' | 'ACTIVE'; year: number; month: number; nextYear: number; preparedYear: number | null; canPrepare: boolean; closedYearWaiting: boolean; tasks: string[] };
+export const fetchSeason = (planId: string): Promise<SeasonView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/season`);
+export const prepareSeason = (planId: string, tasks?: string[]): Promise<SeasonView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/season/prepare`, { method: 'POST', body: tasks ? { tasks } : {} });

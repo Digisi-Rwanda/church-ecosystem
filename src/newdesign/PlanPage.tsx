@@ -105,7 +105,7 @@ export function PlanPage() {
             : <PlanMoneyLive p={p} m={m} onChange={(next) => { if (next) setMoney(next); moneyLoad.reload(); load.reload(); }} />)}
           {tab === 'overview' && (
             <>
-          <ProgramOverview p={p} />
+          <ProgramOverview p={p} onChange={() => { load.reload(); moneyLoad.reload(); }} />
           <DateChangeBanner p={p} />
           <ReviewPrompt p={p} run={run} />
           <PlanLinks p={p} systemId={systemId} run={run} />

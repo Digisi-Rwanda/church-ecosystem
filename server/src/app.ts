@@ -24,6 +24,8 @@ import { workRouter } from './routes/work.js';
 import { workPlansRouter } from './routes/workPlans.js';
 import { planMoneyRouter } from './routes/planMoney.js';
 import { planSettleRouter } from './routes/planSettle.js';
+import { programYearsRouter } from './routes/programYears.js';
+import { programCohortsRouter } from './routes/programCohorts.js';
 import { planFilesRouter } from './routes/planFiles.js';
 import { publicEventsRouter } from './routes/publicEvents.js';
 import { moneyRouter } from './routes/money.js';
@@ -126,6 +128,8 @@ export function createApp() {
   app.use('/api/schedule', scheduleRouter);
   app.use('/api/work', workRouter);
   app.use('/api/work-plans', planSettleRouter);
+  app.use('/api/work-plans', programYearsRouter);
+  app.use('/api/work-plans', programCohortsRouter);
   app.use('/api/work-plans', planFilesRouter);
   app.use('/api/work-plans', planMoneyRouter);
   app.use('/api/work-plans', workPlansRouter);
