@@ -100,7 +100,8 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
   const some = (list: Array<NavPlace | null>) => list.filter((x): x is NavPlace => x !== null);
 
   const spec: Record<ModuleId, NavPlace[]> = {
-    home: shared.has('home') ? [place('home', '', 'door.block.home', true)] : [],
+    // My contribution is a member's own view, so it sits with Home.
+    home: [...(shared.has('home') ? [place('home', '', 'door.block.home', true)] : []), place('mine', 'money/mine', 'door.money.mine')],
     notifications: [place('notifications', `notifications?system=${encodeURIComponent(systemId)}`, MODULE_LABEL.notifications, true)],
     announcements: [place('announcements', 'announcements', MODULE_LABEL.announcements, true)],
     units: central && shared.has('people') ? [place('units', 'people/units', 'door.people.tab.units')] : [],
@@ -126,7 +127,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
       ...some(['monthplan', 'teams', 'mine', 'watches', 'pulpit'].map(ownPlace)),
     ],
     ministry: some(['choirs', 'rehearsals', 'repertoire', 'sponsorship', 'roster'].map(ownPlace)),
-    // The money screens in the order of the design; My contribution is for every member of the system.
+    // Funds (with its Contributions tab), Budget and Accounting. The contribution lists are a tab of Funds, not a menu item.
     money: [
       ...(shared.has('money')
         ? [
@@ -134,10 +135,8 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
             place('budget', 'money/budget', 'door.money.budget'),
             place('funds', 'money/funds', 'door.money.funds'),
             place('accounting', 'money', 'door.money.accounting', true),
-            place('contributions', 'money/contributions', 'door.money.contributions'),
           ]
         : []),
-      place('mine', 'money/mine', 'door.money.mine'),
     ],
     // The year overview of the money is a report, so it sits in Reports (it still needs the Money letter to open).
     reports: [
@@ -158,7 +157,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
 }
 
 /** Pages that belong to a module without being a menu entry of their own, by the first part of their address. */
-const EXTRA_PAGES: Record<string, ModuleId> = { 'deleted-work': 'work', collections: 'governance', 'money/contributions': 'money' };
+const EXTRA_PAGES: Record<string, ModuleId[]> = { 'deleted-work': ['work'], collections: ['governance'], 'money/contributions': ['money', 'home'] };
 
 /** The spreadsheet import page (`/s/<system>/import/<what>`) sits in the module of what it imports. */
 const IMPORT_MODULE: Record<string, ModuleId> = {
@@ -180,8 +179,8 @@ export function resolveActive(modules: NavModule[], pathname: string): { module:
   }
   if (best) return best;
   const parts = pathname.split('/');
-  const id = parts[3] === 'import' ? IMPORT_MODULE[parts[4] ?? ''] : (EXTRA_PAGES[`${parts[3] ?? ''}/${parts[4] ?? ''}`] ?? EXTRA_PAGES[parts[3] ?? '']);
-  const m = id ? modules.find((x) => x.id === id) : undefined;
+  const ids = parts[3] === 'import' ? [IMPORT_MODULE[parts[4] ?? '']].filter((x): x is ModuleId => !!x) : (EXTRA_PAGES[`${parts[3] ?? ''}/${parts[4] ?? ''}`] ?? EXTRA_PAGES[parts[3] ?? ''] ?? []);
+  const m = ids.map((id) => modules.find((x) => x.id === id)).find((x) => !!x);
   return m ? { module: m, place: null } : null;
 }
 

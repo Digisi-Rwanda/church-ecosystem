@@ -65,7 +65,7 @@ describe('buildModules', () => {
     const { buildModules, canSeePath } = await import('./menu');
     const caps = mk(sys('sys-a', { home: ['R'], work: ['R'], schedule: ['R'] }, [{ key: 'roster', letters: ['R'] }, { key: 'groups', letters: [] }]));
     const mods = buildModules(caps, 'sys-a');
-    expect(mods.map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'work', 'schedule', 'ministry', 'money', 'settings']);
+    expect(mods.map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'work', 'schedule', 'ministry', 'settings']);
     expect(mods.find((m) => m.id === 'work')!.places.map((p) => p.key)).toEqual(['tasks', 'programs', 'events', 'projects']);
     expect(mods.flatMap((m) => m.places.map((p) => p.key))).not.toContain('groups');
     expect(canSeePath(mods, '/s/sys-a/money')).toBe(false);
@@ -101,7 +101,7 @@ describe('buildModules', () => {
     const { buildModules } = await import('./menu');
     const caps = mk(sys('sys-main', { home: ['R'], people: ['R'], work: ['R'] }, [{ key: 'settings', letters: ['R'] }]), sys('sys-a', { people: ['R'] }));
     const portal = buildModules(caps, 'sys-main').map((m) => m.id);
-    expect(portal).toEqual(['home', 'notifications', 'announcements', 'units', 'people', 'work', 'money', 'settings']);
+    expect(portal).toEqual(['home', 'notifications', 'announcements', 'units', 'people', 'work', 'settings']);
     expect(buildModules(caps, 'sys-main').find((m) => m.id === 'people')!.places.map((p) => p.key)).toEqual(['directory', 'appointments']);
     const admin = { ...caps, offices: [{ id: 'o1', systemId: 'sys-media', title: 'Administrator', code: 'ADMINISTRATOR' as const }] };
     expect(buildModules(admin, 'sys-main').find((m) => m.id === 'people')!.places.map((p) => p.key)).toEqual(['directory', 'appointments', 'access', 'admin']);
@@ -114,7 +114,7 @@ describe('buildModules', () => {
 
   it('keeps notifications and announcements even with no letters at all', async () => {
     const { buildModules } = await import('./menu');
-    expect(buildModules(null, 'sys-a').map((m) => m.id)).toEqual(['notifications', 'announcements', 'money', 'settings']);
+    expect(buildModules(null, 'sys-a').map((m) => m.id)).toEqual(['home', 'notifications', 'announcements', 'settings']);
   });
 });
 
@@ -140,21 +140,22 @@ describe('buildPortalModules', () => {
     const central = buildModules(mk(sys('sys-main', { people: ['R'] }, [{ key: 'settings', letters: ['R'] }])), 'sys-main').find((m) => m.id === 'settings');
     expect(central?.places.map((p) => p.to)).toEqual(['/s/sys-main/settings', '/s/sys-main/preferences']);
   });
-  it('Money: five screens for those who hold money letters, and My contribution for every member', async () => {
+  it('Money: Funds, Budget and Accounting for those who hold money letters; My contribution sits with Home', async () => {
     const { buildModules, resolveActive } = await import('./menu');
     const none = { home: [], people: [], work: [], schedule: [], money: [], reports: [] };
     const mk = (blocks: object) => ({ blockOrder: ['home', 'people', 'work', 'schedule', 'money', 'reports'], systems: [{ id: 'sys-a', blocks: { ...none, ...blocks }, own: [] }] }) as unknown as Capabilities;
-    const keys = (caps: Capabilities) => buildModules(caps, 'sys-a').find((m) => m.id === 'money')!.places.map((p) => p.key);
-    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'funds', 'accounting', 'contributions', 'mine']);
-    expect(keys(mk({ people: ['R'] }))).toEqual(['mine']);
+    const keys = (caps: Capabilities) => buildModules(caps, 'sys-a').find((m) => m.id === 'money')?.places.map((p) => p.key) ?? [];
+    expect(keys(mk({ money: ['R'] }))).toEqual(['plan', 'budget', 'funds', 'accounting']);
+    expect(keys(mk({ people: ['R'] }))).toEqual([]);
+    expect(buildModules(mk({ people: ['R'] }), 'sys-a').find((m) => m.id === 'home')?.places.map((p) => p.key)).toContain('mine');
     // the year overview is a report, so it is listed under Reports, not Money
     expect(buildModules(mk({ money: ['R'], reports: ['R'] }), 'sys-a').find((m) => m.id === 'reports')!.places.map((p) => p.key)).toEqual(['reports']);
     const mods = buildModules(mk({ money: ['R'] }), 'sys-a');
     expect(resolveActive(mods, '/s/sys-a/money')?.place?.key).toBe('accounting');
     expect(resolveActive(mods, '/s/sys-a/money/budget')?.place?.key).toBe('budget');
-    // a team leader without money letters may still open the contribution lists, under Money
+    // a team leader without money letters may still open the contribution lists, from Home
     const lead = buildModules(mk({ people: ['R'] }), 'sys-a');
-    expect(resolveActive(lead, '/s/sys-a/money/contributions')).toMatchObject({ module: { id: 'money' }, place: null });
+    expect(resolveActive(lead, '/s/sys-a/money/contributions')).toMatchObject({ module: { id: 'home' }, place: null });
   });
   it('Collections is a Governance sub-block of Central Administration, for those who hold it', async () => {
     const { buildModules } = await import('./menu');
