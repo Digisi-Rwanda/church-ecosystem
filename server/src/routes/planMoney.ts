@@ -246,6 +246,7 @@ planMoneyRouter.post('/:id/lines', requireAuth, async (req: AuthedRequest, res) 
   if (!got) return;
   const b = lineSchema.safeParse(req.body);
   if (!b.success) return fail(res, 400, 'BAD_INPUT', 'Please give what it is for and an amount');
+  if ((got.p as { hasMoney?: boolean | null }).hasMoney === false) return fail(res, 409, 'NO_MONEY', 'This program does not involve money');
   // A repeat cannot hold spending until it says how its allowance is counted and how long it runs.
   const cp = cycleProblem(got.p as never);
   if (cp) return fail(res, 409, cp, 'Say how the allowance is counted and for how long');

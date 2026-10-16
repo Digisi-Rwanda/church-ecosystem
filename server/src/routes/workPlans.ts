@@ -34,6 +34,48 @@ const fail = (res: Res, status: number, code: string, error: string) => res.stat
 const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v : new Date(v)).toISOString() : null);
 
 const PLAN_TYPES = ['PROGRAM', 'EVENT', 'PROJECT'] as const;
+export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL'] as const;
+export const PURPOSE_TAGS = ['MINISTRY', 'CAPACITY', 'COMMUNITY', 'OPERATIONS'] as const;
+const short = z.string().trim().max(120).default('');
+const kindSchema = z.object({
+  startYear: z.number().int().min(2000).max(2200).nullish(),
+  endYear: z.number().int().min(2000).max(2200).nullish(),
+  schedule: short,
+  cohort: z.object({ frequency: short, duration: short, schedule: short, target: z.number().int().min(0).max(100000).nullish() }).nullish(),
+  annualMonth: z.number().int().min(1).max(12).nullish(),
+});
+/** Starting indicators by purpose: easy to edit or remove, they only save the first typing. */
+const DEFAULT_INDICATORS: Record<(typeof PURPOSE_TAGS)[number], Array<{ name: string; unit: string; target: number }>> = {
+  MINISTRY: [{ name: 'Attendance rate', unit: '%', target: 80 }, { name: 'Member participation', unit: '%', target: 60 }],
+  CAPACITY: [{ name: 'Completion rate', unit: '%', target: 80 }, { name: 'Pass rate', unit: '%', target: 70 }],
+  COMMUNITY: [{ name: 'People served', unit: 'people', target: 100 }, { name: 'Follow-up rate', unit: '%', target: 80 }],
+  OPERATIONS: [{ name: 'Tasks done on time', unit: '%', target: 90 }, { name: 'Spending within plan', unit: '%', target: 100 }],
+};
+type KindInfo = z.infer<typeof kindSchema>;
+const kindOf = (p: { kindJson?: string | null }): KindInfo => {
+  const r = kindSchema.safeParse(parseJson<unknown>(p.kindJson, {}));
+  return r.success ? r.data : { schedule: '' };
+};
+/** The kind's own facts for the page header: years remaining for a fixed term, the next occurrence for a season. */
+const kindView = (p: Plan) => {
+  const k = kindOf(p);
+  const year = new Date().getFullYear();
+  return {
+    startYear: k.startYear ?? null, endYear: k.endYear ?? null, schedule: k.schedule ?? '',
+    yearsRemaining: p.programKind === 'FIXED_TERM' && k.endYear ? Math.max(0, k.endYear - year) : null,
+    cohort: k.cohort ? { frequency: k.cohort.frequency, duration: k.cohort.duration, schedule: k.cohort.schedule, target: k.cohort.target ?? null } : null,
+    annualMonth: k.annualMonth ?? null,
+  };
+};
+/** The dates a kind implies: a fixed term runs from 1 January of its first year to 31 December of its last. */
+const kindDates = (kind: string | null | undefined, k: KindInfo | null | undefined) =>
+  kind === 'FIXED_TERM' && k?.startYear && k.endYear ? { startsOn: new Date(Date.UTC(k.startYear, 0, 1)), endsOn: new Date(Date.UTC(k.endYear, 11, 31)) } : null;
+const kindProblem = (type: string, kind: string | null | undefined, k: KindInfo | null | undefined): string | null => {
+  if (!kind) return null;
+  if (type !== 'PROGRAM') return 'KIND_FOR_PROGRAM_ONLY';
+  if (kind === 'FIXED_TERM' && (!k?.startYear || !k.endYear || k.endYear < k.startYear)) return 'BAD_YEARS';
+  return null;
+};
 
 /** The answers the named screens may hold, by key. Anything else is refused, so the column cannot become a dumping ground. */
 const DETAIL_KEYS = ['activities',  'agenda',  'allocate',  'authority',  'benefits',  'budgetTag',  'constraints',  'costs',  'deliverables',  'eligibility',  'exclusions',  'impact',  'indicators',  'milestones',  'mission',  'need',  'objectives',  'operatingModel',  'operatingPlan',  'outcomes',  'oversight',  'people',  'policies',  'population',  'problem',  'purpose',  'recruit',  'reporting',  'requirements',  'responsibilities',  'risks',  'services',  'sponsor',  'successCriteria',  'tasks',  'time',  'type'] as const;
@@ -51,6 +93,7 @@ interface Plan extends PlanRow {
   outcome?: string | null; reportComposedAt?: Date | string | null; reportPublishedAt?: Date | string | null; deletedById?: string | null;
   timingKind?: string | null; startTime?: string | null; endTime?: string | null; repeatJson?: string | null; dateChangeJson?: string | null; reviewDue?: boolean | null;
   fundraising?: boolean | null; fundTarget?: number | null; doneAt?: Date | string | null; settledAt?: Date | string | null;
+  programKind?: string | null; purposeTag?: string | null; hasMoney?: boolean | null; kindJson?: string | null;
 }
 interface NoteRow { id: string; planId: string; authorId: string; text: string; createdAt: Date | string }
 interface CheckRow { id: string; planId: string; label: string; done: boolean; doneById?: string | null; doneAt?: Date | string | null }
@@ -253,6 +296,7 @@ async function shape(p: Plan, c: Ctx, me: string, detail: boolean) {
     leaderId: p.leaderPersonId, leaderName: who.get(p.leaderPersonId) ?? '',
     startsOn: iso(p.startsOn), endsOn: iso(p.endsOn), visibility: p.visibility, beyondUnit: p.beyondUnit, planType: p.planType ?? 'PROJECT',
     state: stateOf(p.status),
+    programKind: p.programKind ?? null, purposeTag: p.purposeTag ?? null, hasMoney: p.hasMoney !== false, kind: type === 'PROGRAM' ? kindView(p) : null,
     fundraising: !!p.fundraising, fundTarget: p.fundTarget ?? null, doneAt: p.doneAt ? new Date(p.doneAt).toISOString() : null, settledAt: p.settledAt ? new Date(p.settledAt).toISOString() : null,
     timingKind: p.timingKind ?? 'RANGE', startTime: p.startTime ?? null, endTime: p.endTime ?? null, repeat: repeatOf(p.repeatJson), reviewDue: !!p.reviewDue,
     mine: isOnTeam(p, me), waitingLevel: currentLevel(p)?.label ?? null, ...fl,
@@ -297,6 +341,10 @@ const fields = {
   repeat: repeatSchema.nullish(),
   fundraising: z.boolean().optional(),
   fundTarget: z.number().int().min(0).max(2_000_000_000).nullish(),
+  programKind: z.enum(PROGRAM_KINDS).nullish(),
+  purposeTag: z.enum(PURPOSE_TAGS).nullish(),
+  hasMoney: z.boolean().optional(),
+  kind: kindSchema.nullish(),
 };
 const timingOf = (b: { timingKind: string; startsOn?: string | null; endsOn?: string | null; startTime?: string | null; endTime?: string | null; repeat?: unknown }) =>
   normalizeTiming({ timingKind: b.timingKind, startsOn: b.startsOn ?? null, endsOn: b.endsOn ?? null, startTime: b.startTime ?? null, endTime: b.endTime ?? null, repeatJson: b.repeat ? JSON.stringify(b.repeat) : null });
@@ -445,14 +493,20 @@ workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   const fraise = b.fundraising ?? false;
   const fbad = fundraisingProblem(fraise, b.fundTarget, b.planType);
   if (fbad) return fail(res, 400, fbad, fbad === 'TARGET_NEEDED' ? 'Set a target above zero for a fundraising event' : 'Only an event can be a fundraiser');
+  const kbad = kindProblem(b.planType, b.programKind, b.kind);
+  if (kbad) return fail(res, 400, kbad, 'Check the program kind and its years');
   const row = (await prisma.workPlan.create({
     data: {
+      programKind: b.planType === 'PROGRAM' ? b.programKind ?? 'ONGOING' : null, purposeTag: b.planType === 'PROGRAM' ? b.purposeTag ?? null : null, hasMoney: b.hasMoney ?? true, kindJson: JSON.stringify(b.kind ?? {}),
       fundraising: fraise, fundTarget: fraise ? b.fundTarget ?? null : null,
       parentId: b.parentId || null, orgUnitId: unit.id, systemId: unit.systemId, title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null,
-      ...timingData(b), leaderPersonId: b.leaderId,
+      ...timingData(b), ...(kindDates(b.programKind, b.kind) ?? {}), leaderPersonId: b.leaderId,
       teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility, planType: b.planType, status: 'DRAFT', approvalsJson: '[]', createdById: me,
     },
   })) as Plan;
+  if (row.planType === 'PROGRAM' && b.purposeTag) {
+    for (const d of DEFAULT_INDICATORS[b.purposeTag]) await prisma.workPlanIndicator.create({ data: { planId: row.id, ...d, createdById: me } });
+  }
   await audit(me, unit.systemId, 'WORKPLAN_CREATED', `Drafted “${row.title}”`, { planId: row.id });
   res.status(201).json({ plan: await shape(row, c, me, true) });
 });
@@ -474,11 +528,17 @@ workPlansRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
   const target = b.fundTarget === undefined ? p.fundTarget ?? null : b.fundTarget;
   const fbad = fundraisingProblem(fraise, target, b.planType ?? p.planType ?? 'PROJECT');
   if (fbad) return fail(res, 400, fbad, fbad === 'TARGET_NEEDED' ? 'Set a target above zero for a fundraising event' : 'Only an event can be a fundraiser');
+  const ptype = b.planType ?? p.planType ?? 'PROJECT';
+  const nextKind = b.programKind === undefined ? p.programKind : b.programKind;
+  const nextInfo = b.kind === undefined ? kindOf(p) : b.kind;
+  const kbad = kindProblem(ptype, nextKind, nextInfo);
+  if (kbad) return fail(res, 400, kbad, 'Check the program kind and its years');
   const row = (await prisma.workPlan.update({
     where: { id: p.id },
     data: {
+      ...(b.programKind !== undefined ? { programKind: ptype === 'PROGRAM' ? b.programKind : null } : {}), ...(b.purposeTag !== undefined ? { purposeTag: b.purposeTag } : {}), ...(b.hasMoney !== undefined ? { hasMoney: b.hasMoney } : {}), ...(b.kind !== undefined ? { kindJson: JSON.stringify(b.kind ?? {}) } : {}),
       fundraising: fraise, fundTarget: fraise ? target : null,
-      title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null, ...timingData(b), leaderPersonId: b.leaderId, teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility,
+      title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null, ...timingData(b), ...(kindDates(nextKind, nextInfo) ?? {}), leaderPersonId: b.leaderId, teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility,
       planType: b.planType ?? p.planType ?? 'PROJECT',
     },
   })) as Plan;

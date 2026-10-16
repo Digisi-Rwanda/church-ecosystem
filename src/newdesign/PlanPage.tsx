@@ -11,6 +11,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PlanDetailsView } from './PlanScreens';
+import { ProgramOverview } from './ProgramOverview';
 import { NotesTab, WorkTab } from './PlanWork';
 import { PlanMoneyLive } from './PlanMoneyLive';
 import { PlanForm } from './PlanForm';
@@ -92,22 +93,23 @@ export function PlanPage() {
             items={[
               { key: 'overview', label: t('door.plan.tab.overview') },
               ...(live ? [{ key: 'work' as const, label: t(`door.plan.tab.work.${p.planType}` as 'door.plan.tab.work.EVENT') }] : []),
-              ...(m ? [{ key: 'money' as const, label: t('door.plan.tab.money') }] : []),
+              ...(m && p.hasMoney ? [{ key: 'money' as const, label: t('door.plan.tab.money') }] : []),
               { key: 'files', label: t('door.plan.tab.files') },
               { key: 'history', label: t('door.plan.tab.history') },
             ]}
           />
           {tab === 'files' && <PlanFiles planId={p.id} />}
           {tab === 'work' && live && <WorkTab p={p} run={run} systemId={systemId} />}
-          {tab === 'money' && m && (m.open
+          {tab === 'money' && m && p.hasMoney && (m.open
             ? <PlanMoney p={p} m={m} onChange={(next) => { if (next) setMoney(next); moneyLoad.reload(); load.reload(); }} />
             : <PlanMoneyLive p={p} m={m} onChange={(next) => { if (next) setMoney(next); moneyLoad.reload(); load.reload(); }} />)}
           {tab === 'overview' && (
             <>
+          <ProgramOverview p={p} />
           <DateChangeBanner p={p} />
           <ReviewPrompt p={p} run={run} />
           <PlanLinks p={p} systemId={systemId} run={run} />
-          {m && (m.planned > 0 || m.earmarked > 0) && <GapLine m={m} />}
+          {m && p.hasMoney && (m.planned > 0 || m.earmarked > 0) && <GapLine m={m} />}
 
           {p.rejectedReason && (p.status === 'DRAFT' || p.status === 'PENDING_APPROVAL') && <p className="door-error">{t('door.plan.sentBack', { reason: p.rejectedReason })}</p>}
           {p.suspension && <p className="door-error" role="status">{t('door.plan.suspended', { name: p.suspension.byName, note: p.suspension.note })}</p>}
@@ -120,7 +122,7 @@ export function PlanPage() {
 
           <div className="door-row">
             {planActions(p).filter((a) => a !== 'close').map((a) => (
-              <button key={a} type="button" disabled={a === 'submit' && !!m && m.gap !== 0} className={a === 'withdraw' || a === 'reopen' || a === 'pause' ? 'btn ghost' : 'btn'} onClick={() => void run(() => planStep(p.id, a))}>
+              <button key={a} type="button" disabled={a === 'submit' && p.hasMoney && !!m && m.gap !== 0} className={a === 'withdraw' || a === 'reopen' || a === 'pause' ? 'btn ghost' : 'btn'} onClick={() => void run(() => planStep(p.id, a))}>
                 {t(actionKey(a, p.planType, p.beyondUnit) as 'door.plan.action.submit')}
               </button>
             ))}

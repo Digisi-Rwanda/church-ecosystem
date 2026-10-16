@@ -678,3 +678,34 @@ describe('redesigned funds and approvals', () => {
     expect((await moneyOf(id, 'p-ctr')).canLogExpense).toBe(true);
   });
 });
+
+describe('program kinds (slice A)', () => {
+  const prog = (o: object = {}) => post('p-vp', B, { unitId: 'ou-choir', title: 'Health initiative', aim: 'Care', planType: 'PROGRAM', ...o });
+
+  it('a fixed term keeps its years, shows years remaining and runs 1 January to 31 December', async () => {
+    const thisYear = new Date().getFullYear();
+    const r = await prog({ programKind: 'FIXED_TERM', purposeTag: 'COMMUNITY', kind: { startYear: thisYear, endYear: thisYear + 2, schedule: '' } });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.plan.programKind).toBe('FIXED_TERM');
+    expect(r.body.plan.purposeTag).toBe('COMMUNITY');
+    expect(r.body.plan.kind.yearsRemaining).toBe(2);
+    expect(r.body.plan.program.indicators.map((i: any) => i.name)).toEqual(['People served', 'Follow-up rate']);
+    expect(r.body.plan.startsOn.slice(0, 10)).toBe(`${thisYear}-01-01`);
+    expect(r.body.plan.endsOn.slice(0, 10)).toBe(`${thisYear + 2}-12-31`);
+    expect((await prog({ programKind: 'FIXED_TERM', kind: { startYear: 2027, endYear: 2026, schedule: '' } })).status).toBe(400);
+  });
+
+  it('only a program has a kind, and a program that involves no money takes no cost lines', async () => {
+    expect((await post('p-vp', B, { unitId: 'ou-choir', title: 'Concert', planType: 'EVENT', programKind: 'ONGOING' })).status).toBe(400);
+    const c = await prog({ programKind: 'COHORT', hasMoney: false, kind: { schedule: '', cohort: { frequency: 'Quarterly', duration: '12 weeks', schedule: 'Sundays', target: 20 } } });
+    expect(c.status, JSON.stringify(c.body)).toBe(201);
+    expect(c.body.plan.hasMoney).toBe(false);
+    expect(c.body.plan.kind.cohort.target).toBe(20);
+    const line = await post('p-vp', `${B}/${c.body.plan.id}/lines`, { title: 'Chairs', amount: 1000 });
+    expect(line.status).toBe(409);
+    expect(line.body.code).toBe('NO_MONEY');
+    const sub = await post('p-vp', `${B}/${c.body.plan.id}/submit`);
+    expect(sub.status, JSON.stringify(sub.body)).toBe(200);
+    expect(sub.body.plan.levels.map((l: any) => l.levelKey)).not.toContain('TREASURER');
+  });
+});

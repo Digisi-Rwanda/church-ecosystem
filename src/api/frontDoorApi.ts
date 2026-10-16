@@ -1029,8 +1029,20 @@ export type PlanFlags = {
 export type PlanType = 'PROGRAM' | 'EVENT' | 'PROJECT';
 export const PLAN_TYPES: readonly PlanType[] = ['PROGRAM', 'EVENT', 'PROJECT'];
 
+export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL'] as const;
+export type ProgramKind = (typeof PROGRAM_KINDS)[number];
+export const PURPOSE_TAGS = ['MINISTRY', 'CAPACITY', 'COMMUNITY', 'OPERATIONS'] as const;
+export type PurposeTag = (typeof PURPOSE_TAGS)[number];
+/** What a program kind adds to the schedule: years, a recurring schedule, a cohort pattern or an annual month. */
+export type KindInput = {
+  startYear?: number | null; endYear?: number | null; schedule: string;
+  cohort?: { frequency: string; duration: string; schedule: string; target: number | null } | null; annualMonth?: number | null;
+};
+export type KindView = KindInput & { yearsRemaining: number | null };
+
 export type PlanItem = PlanFlags & {
   planType: PlanType;
+  programKind: ProgramKind | null; purposeTag: PurposeTag | null; hasMoney: boolean; kind: KindView | null;
   id: string; title: string; status: WorkPlanStatus; systemId: string; orgUnitId: string; unitName: string; leaderId: string; leaderName: string;
   startsOn: string | null; endsOn: string | null; visibility: WorkVisibility; beyondUnit: boolean; mine: boolean; waitingLevel: string | null;
   state: ActivityState; timingKind: TimingKind; startTime: string | null; endTime: string | null; repeat: RepeatRule | null; reviewDue: boolean;
@@ -1073,6 +1085,7 @@ export type PlanInput = {
   leaderId?: string; team: Array<{ personId: string; role: string }>; beyondUnit: boolean; visibility: WorkVisibility; planType?: PlanType;
   timingKind?: TimingKind; startTime?: string | null; endTime?: string | null; repeat?: RepeatRule | null;
   fundraising?: boolean; fundTarget?: number | null;
+  programKind?: ProgramKind | null; purposeTag?: PurposeTag | null; hasMoney?: boolean; kind?: KindInput | null;
 };
 export type PlanTiming = { timingKind: TimingKind; startsOn: string | null; endsOn: string | null; startTime: string | null; endTime: string | null; repeat: RepeatRule | null; location?: string | null };
 export type PlanOptions = {

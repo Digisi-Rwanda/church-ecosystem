@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { addMilestone, createPlan, editPlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, type ActivityMoney, type PlanDetail, type PlanInput } from '../api/frontDoorApi';
+import { addMilestone, createPlan, editPlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, type ActivityMoney, type KindInput, type PlanDetail, type PlanInput, type ProgramKind, type PurposeTag } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
@@ -13,12 +13,14 @@ import { formatRwf } from './money';
 import { PendingFiles, uploadPending } from './PendingFiles';
 import { PersonPicker } from './PersonPicker';
 import { planErrorKey } from './plans';
+import { ProgramFields } from './ProgramFields';
 import { useLoad } from './useLoad';
 import { dueToInput, inputToDue } from './work';
 
 export const ACTIVITY_KINDS = ['event', 'project', 'program', 'fundraising'] as const;
 export type ActivityKind = (typeof ACTIVITY_KINDS)[number];
 const STEPS = ['details', 'money', 'review'] as const;
+const NO_MONEY_STEPS = ['details', 'review'] as const;
 const kindOfPlan = (p: PlanDetail): ActivityKind => (p.fundraising ? 'fundraising' : p.planType === 'PROJECT' ? 'project' : p.planType === 'PROGRAM' ? 'program' : 'event');
 const year = new Date().getFullYear();
 
@@ -54,6 +56,17 @@ export function ActivityCreate() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
+  const [pkind, setPkind] = useState<ProgramKind>('ONGOING');
+  const [purpose, setPurpose] = useState<PurposeTag | ''>('');
+  const [hasMoney, setHasMoney] = useState(true);
+  const [startYear, setStartYear] = useState(String(year));
+  const [endYear, setEndYear] = useState(String(year + 2));
+  const [schedule, setSchedule] = useState('');
+  const [cFreq, setCFreq] = useState('');
+  const [cDuration, setCDuration] = useState('');
+  const [cSchedule, setCSchedule] = useState('');
+  const [cTarget, setCTarget] = useState('');
+  const [month, setMonth] = useState('12');
 
   useEffect(() => {
     const p = resume.data;
@@ -68,13 +81,37 @@ export function ActivityCreate() {
     setEnd(dueToInput(p.endsOn));
     setTarget(p.fundTarget ? String(p.fundTarget) : '');
     setLeader({ id: p.leaderId, name: p.leaderName });
+    if (p.programKind) setPkind(p.programKind);
+    setPurpose(p.purposeTag ?? '');
+    setHasMoney(p.hasMoney);
+    const k = p.kind;
+    if (k) {
+      if (k.startYear) setStartYear(String(k.startYear));
+      if (k.endYear) setEndYear(String(k.endYear));
+      setSchedule(k.schedule);
+      setCFreq(k.cohort?.frequency ?? '');
+      setCDuration(k.cohort?.duration ?? '');
+      setCSchedule(k.cohort?.schedule ?? '');
+      setCTarget(k.cohort?.target ? String(k.cohort.target) : '');
+      if (k.annualMonth) setMonth(String(k.annualMonth));
+    }
   }, [resume.data, plan]);
 
   const units = (options.data?.units ?? []).filter((u) => u.systemId === systemId);
   const unit = unitId || (units.length === 1 ? units[0].id : '');
   const targetN = Math.floor(Number(target) || 0);
-  const defaults = kind === 'program' ? { start: start || `${year}-01-01`, end: end || `${year}-12-31` } : { start, end: end || start };
-  const detailsOk = !!title.trim() && (!plan ? !!unit : true) && !!defaults.start && (kind !== 'fundraising' || targetN > 0);
+  const sy = Math.floor(Number(startYear) || 0);
+  const ey = Math.floor(Number(endYear) || 0);
+  const defaults = kind === 'program' ? { start: `${sy}-01-01`, end: `${pkind === 'FIXED_TERM' ? ey : sy}-12-31` } : { start, end: end || start };
+  const yearsOk = kind !== 'program' || (sy >= 2000 && (pkind !== 'FIXED_TERM' || ey >= sy));
+  const detailsOk = !!title.trim() && (!plan ? !!unit : true) && !!defaults.start && yearsOk && (kind !== 'fundraising' || targetN > 0);
+  const steps = kind === 'program' && !hasMoney ? NO_MONEY_STEPS : STEPS;
+  const stepName = steps[step];
+  const kindInput = (): KindInput => ({
+    startYear: sy, endYear: pkind === 'FIXED_TERM' ? ey : null, schedule: pkind === 'ONGOING' ? schedule.trim() : '',
+    cohort: pkind === 'COHORT' ? { frequency: cFreq.trim(), duration: cDuration.trim(), schedule: cSchedule.trim(), target: Math.floor(Number(cTarget) || 0) || null } : null,
+    annualMonth: pkind === 'SEASONAL' ? Math.floor(Number(month) || 12) : null,
+  });
   const back = `/s/${systemId}/work/${kind === 'program' ? 'programs' : kind === 'project' ? 'projects' : 'events'}`;
 
   const fail = (err: unknown) => setError(t(planErrorKey(errorCode(err)) as 'door.people.actionFailed'));
@@ -100,6 +137,7 @@ export function ActivityCreate() {
       beyondUnit: plan?.beyondUnit ?? false, visibility: plan?.visibility ?? 'SYSTEM',
       planType: kind === 'project' ? 'PROJECT' : kind === 'program' ? 'PROGRAM' : 'EVENT',
       fundraising: kind === 'fundraising', fundTarget: kind === 'fundraising' ? targetN : null,
+      ...(kind === 'program' ? { programKind: pkind, purposeTag: purpose || null, hasMoney, kind: kindInput() } : {}),
     };
     let saved = plan ? await editPlan(plan.id, input) : await createPlan(unit, input);
     if (kind === 'project') {
@@ -113,13 +151,13 @@ export function ActivityCreate() {
 
   const nextFromDetails = () => void guard(async () => {
     const saved = await saveDetails();
-    await loadMoney(saved.id);
+    if (kind !== 'program' || hasMoney) await loadMoney(saved.id);
     setStep(1);
     window.scrollTo?.({ top: 0 });
   });
   const draft = () => void guard(async () => {
     const saved = await saveDetails();
-    if (step > 0) await loadMoney(saved.id);
+    if (stepName === 'money' || (stepName === 'review' && (kind !== 'program' || hasMoney))) await loadMoney(saved.id);
     setNote(t('door.ap.draftSaved'));
   });
   const submit = () => void guard(async () => {
@@ -134,7 +172,8 @@ export function ActivityCreate() {
   });
 
   if (resumeId && resume.failed) return <EmptyState variant="error" title={t('door.work.err.gone')} />;
-  const cannotSubmit = !money || money.planned <= 0 || money.gap !== 0;
+  const noMoney = kind === 'program' && !hasMoney;
+  const cannotSubmit = noMoney ? false : !money || money.planned <= 0 || money.gap !== 0;
   const lines = money?.lines ?? [];
 
   return (
@@ -144,17 +183,17 @@ export function ActivityCreate() {
         <div className="panel ap-card">
           <div className="ap-top">
             <ol className="ap-steps" aria-label={t('door.ac.title')}>
-              {STEPS.map((s, i) => (
+              {steps.map((s, i) => (
                 <li key={s} className={i < step ? 'done' : i === step ? 'now' : ''} aria-current={i === step ? 'step' : undefined}>
                   <span className="ap-dot">{i < step ? '✓' : i + 1}</span>
                   <span className="ap-step-name">{t(`door.ac.step.${s}` as 'door.ac.step.details')}</span>
                 </li>
               ))}
             </ol>
-            <span className="muted ap-count">{t('door.ap.step', { n: step + 1, total: STEPS.length })}</span>
+            <span className="muted ap-count">{t('door.ap.step', { n: step + 1, total: steps.length })}</span>
           </div>
 
-          {step === 0 && (
+          {stepName === 'details' && (
             <div className="ap-grid">
               <div className="ap-full">
                 <Segmented
@@ -174,9 +213,18 @@ export function ActivityCreate() {
                 </div>
               )}
               <div className="ap-full"><TextField label={`${t('door.ac.name')} *`} name="ac-name" value={title} onChange={(e) => setTitle(e.target.value)} /></div>
-              <div className="ap-full"><TextAreaField label={t('door.ac.aim')} name="ac-aim" rows={3} value={aim} onChange={(e) => setAim(e.target.value)} /></div>
-              <div className="ap-half"><TextField label={`${t(kind === 'program' ? 'door.ac.budgetStart' : 'door.ac.start')} *`} name="ac-start" type="date" value={defaults.start} onChange={(e) => setStart(e.target.value)} /></div>
-              <div className="ap-half"><TextField label={t(kind === 'program' ? 'door.ac.budgetEnd' : 'door.ac.end')} name="ac-end" type="date" value={kind === 'program' ? defaults.end : end} onChange={(e) => setEnd(e.target.value)} /></div>
+              <div className="ap-full"><TextAreaField label={t(kind === 'program' ? 'door.ac.mission' : 'door.ac.aim')} name="ac-aim" rows={3} value={aim} onChange={(e) => setAim(e.target.value)} /></div>
+              {kind === 'program' ? (
+                <ProgramFields
+                  v={{ pkind, purpose, hasMoney, startYear, endYear, schedule, cFreq, cDuration, cSchedule, cTarget, month }}
+                  set={{ pkind: setPkind, purpose: setPurpose, hasMoney: setHasMoney, startYear: setStartYear, endYear: setEndYear, schedule: setSchedule, cFreq: setCFreq, cDuration: setCDuration, cSchedule: setCSchedule, cTarget: setCTarget, month: setMonth }}
+                />
+              ) : (
+                <>
+                  <div className="ap-half"><TextField label={`${t('door.ac.start')} *`} name="ac-start" type="date" value={defaults.start} onChange={(e) => setStart(e.target.value)} /></div>
+                  <div className="ap-half"><TextField label={t('door.ac.end')} name="ac-end" type="date" value={end} onChange={(e) => setEnd(e.target.value)} /></div>
+                </>
+              )}
               {(kind === 'event' || kind === 'fundraising') && <div className="ap-full"><TextField label={t('door.ac.venue')} name="ac-venue" value={venue} onChange={(e) => setVenue(e.target.value)} /></div>}
               {kind === 'fundraising' && <div className="ap-full"><TextField label={`${t('door.ac.target')} *`} name="ac-target" inputMode="numeric" value={target} onChange={(e) => setTarget(e.target.value)} /></div>}
               <div className="ap-full">
@@ -204,16 +252,16 @@ export function ActivityCreate() {
             </div>
           )}
 
-          {step === 1 && plan && money && <CreateMoney p={plan} m={money} kind={kind} onChange={(next) => { setMoney(next); void fetchPlan(plan.id).then(setPlan); }} />}
+          {stepName === 'money' && plan && money && <CreateMoney p={plan} m={money} kind={kind} onChange={(next) => { setMoney(next); void fetchPlan(plan.id).then(setPlan); }} />}
 
-          {step === 2 && plan && (
+          {stepName === 'review' && plan && (
             <div className="ap-grid">
               <div className="ap-full panel-inset">
                 <h4>{plan.title}</h4>
                 <p className="muted">{t(`door.ac.type.${kind}` as 'door.ac.type.event')} · {dueToInput(plan.startsOn)}{plan.endsOn && plan.endsOn !== plan.startsOn ? ` → ${dueToInput(plan.endsOn)}` : ''} · {plan.leaderName}</p>
                 {plan.aim && <p>{plan.aim}</p>}
                 {kind === 'fundraising' && <p>{t('door.ac.target')}: <strong>{formatRwf(plan.fundTarget ?? 0)}</strong> · {t('door.ac.net')}: <strong>{formatRwf((plan.fundTarget ?? 0) - (money?.planned ?? 0))}</strong></p>}
-                <p>{t('door.ac.totalCost')}: <strong>{formatRwf(money?.planned ?? 0)}</strong> · {t('door.ac.totalAside')}: <strong>{formatRwf(money?.earmarked ?? 0)}</strong></p>
+                {noMoney ? <p className="muted">{t('door.ac.noMoneyNote')}</p> : <p>{t('door.ac.totalCost')}: <strong>{formatRwf(money?.planned ?? 0)}</strong> · {t('door.ac.totalAside')}: <strong>{formatRwf(money?.earmarked ?? 0)}</strong></p>}
                 <ul className="door-list">
                   {lines.map((l) => <li key={l.id}>{l.title} · {formatRwf(l.amount)}</li>)}
                 </ul>
@@ -226,28 +274,28 @@ export function ActivityCreate() {
               <div className="ap-full panel-inset">
                 <h4>{t('door.ac.chain')}</h4>
                 <ol className="door-list">
-                  {(['TREASURER', 'UNIT', 'CATECHIST', 'CHURCH'] as const).map((k) => <li key={k}><strong>{t(`door.ac.chain.${k}` as 'door.ac.chain.UNIT')}</strong> <span className="muted">— {t(`door.ac.chain.${k}.note` as 'door.ac.chain.UNIT.note')}</span></li>)}
+                  {(noMoney ? (['UNIT', 'CATECHIST', 'CHURCH'] as const) : (['TREASURER', 'UNIT', 'CATECHIST', 'CHURCH'] as const)).map((k) => <li key={k}><strong>{t(`door.ac.chain.${k}` as 'door.ac.chain.UNIT')}</strong> <span className="muted">— {t(`door.ac.chain.${k}.note` as 'door.ac.chain.UNIT.note')}</span></li>)}
                 </ol>
-                <p className="muted">{t('door.ac.reserveNote')}</p>
+                {!noMoney && <p className="muted">{t('door.ac.reserveNote')}</p>}
               </div>
               <div className="ap-full">
                 <h4>{t('door.plan.files.heading')}</h4>
                 <p className="muted">{t('door.plan.files.optional')}</p>
                 <PendingFiles files={files} onChange={setFiles} disabled={busy} />
               </div>
-              {cannotSubmit && <p className="door-error ap-full" role="status">{t('door.ac.blocked')}</p>}
+              {!noMoney && cannotSubmit && <p className="door-error ap-full" role="status">{t('door.ac.blocked')}</p>}
             </div>
           )}
 
           {error && <p className="door-error" role="alert">{error}</p>}
           {note && <p className="muted" role="status">{note}</p>}
           <div className="ap-actions">
-            {step === 0 ? <Link className="btn ghost" to={back}>{t('door.settings.cancel')}</Link> : <button type="button" className="btn ghost" onClick={() => { setError(''); setStep(step - 1); }}>← {t('door.ap.back')}</button>}
+            {stepName === 'details' ? <Link className="btn ghost" to={back}>{t('door.settings.cancel')}</Link> : <button type="button" className="btn ghost" onClick={() => { setError(''); setStep(step - 1); }}>← {t('door.ap.back')}</button>}
             <span className="ap-spacer" />
             <button type="button" className="btn ghost" disabled={busy || !detailsOk} onClick={draft}>{t('door.ap.draft')}</button>
-            {step === 0 && <button type="button" className="btn" disabled={busy || !detailsOk} onClick={nextFromDetails}>{t('door.ap.next')} →</button>}
-            {step === 1 && <button type="button" className="btn" disabled={busy} onClick={() => { setStep(2); window.scrollTo?.({ top: 0 }); }}>{t('door.ap.next')} →</button>}
-            {step === 2 && <button type="button" className="btn" disabled={busy || cannotSubmit} onClick={submit}>{t('door.ac.submit')}</button>}
+            {stepName === 'details' && <button type="button" className="btn" disabled={busy || !detailsOk} onClick={nextFromDetails}>{t('door.ap.next')} →</button>}
+            {stepName === 'money' && <button type="button" className="btn" disabled={busy} onClick={() => { setStep(2); window.scrollTo?.({ top: 0 }); }}>{t('door.ap.next')} →</button>}
+            {stepName === 'review' && <button type="button" className="btn" disabled={busy || cannotSubmit} onClick={submit}>{t('door.ac.submit')}</button>}
           </div>
         </div>
       </LoadState>
