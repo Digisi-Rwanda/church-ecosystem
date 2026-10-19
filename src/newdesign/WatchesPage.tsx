@@ -40,7 +40,6 @@ export function WatchesPage() {
     <section className="door-block" aria-labelledby="door-watches-title">
       <div>
         <PageHeader id="door-watches-title" title={t('door.own.watches')} />
-        <p className="muted">{t('door.caring.watches.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}
       {canWrite && !form && (

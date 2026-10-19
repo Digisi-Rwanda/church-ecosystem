@@ -35,7 +35,6 @@ export function MovesPage() {
     <section className="door-block" aria-labelledby="door-moves-title">
       <div>
         <PageHeader id="door-moves-title" title={t('door.own.moves')} />
-        <p className="muted">{t('door.moves.intro')}</p>
       </div>
       {done && <p className="door-ok" role="status">{done}</p>}
       {error && <p className="door-error" role="alert">{error}</p>}

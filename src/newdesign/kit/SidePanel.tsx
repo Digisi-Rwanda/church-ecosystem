@@ -27,7 +27,8 @@ export function SidePanel({
   saving?: boolean;
   canSave?: boolean;
   children: ReactNode;
-  wide?: boolean;
+  /** `true` for a roomier panel; `'xl'` for one that holds tables. */
+  wide?: boolean | 'xl';
 }) {
   const t = useT();
   return (

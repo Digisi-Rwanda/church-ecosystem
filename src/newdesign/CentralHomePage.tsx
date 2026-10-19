@@ -31,7 +31,6 @@ export function CentralHomePage() {
     <section className="door-block" aria-labelledby="door-central-title">
       <div>
         <PageHeader id="door-central-title" title={t('door.central.title')} />
-        <p className="muted">{t('door.central.intro')}</p>
       </div>
       <LeaderDashboard systemId={systemId} systemName={t('door.central.title')} />
       <LoadState loading={loading} failed={failed} retry={reload}>

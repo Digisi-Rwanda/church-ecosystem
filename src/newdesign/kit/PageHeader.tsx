@@ -1,13 +1,11 @@
 import type { ReactNode } from 'react';
 
 /**
- * The one header every page starts with: a title, a single line saying what the page is for,
- * and at most one primary action (plus quieter ones). Pages never style their own title.
+ * The one header every page starts with: a title and at most one primary action (plus quieter ones). Pages never style their own title.
  */
 export function PageHeader({
   title,
   id,
-  purpose,
   primary,
   actions,
   back,
@@ -16,7 +14,7 @@ export function PageHeader({
   title: ReactNode;
   /** The title's id, so the page section can point at it with aria-labelledby. */
   id?: string;
-  /** One line: what this page is for. */
+  /** Kept so existing pages still compile; the descriptive line under a title is no longer shown. */
   purpose?: ReactNode;
   /** The page's single filled button. */
   primary?: ReactNode;
@@ -33,13 +31,12 @@ export function PageHeader({
       <div className="page-head-row">
         <div className="page-head-text">
           <h2 id={id}>{title}</h2>
-          {purpose ? <p className="page-purpose">{purpose}</p> : null}
           {meta ? <div className="page-meta">{meta}</div> : null}
         </div>
         {primary || actions ? (
           <div className="page-actions">
             {actions}
-            {primary}
+            {primary ? <div className="page-primary">{primary}</div> : null}
           </div>
         ) : null}
       </div>

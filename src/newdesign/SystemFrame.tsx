@@ -41,6 +41,7 @@ export function SystemFrame() {
         <EmptyState
           variant="error"
           title={t('door.frame.notYours')}
+          detail={t('door.frame.notYoursDetail')}
           action={
             <Link className="btn" to="/portal">
               {t('door.frame.allSystems')}

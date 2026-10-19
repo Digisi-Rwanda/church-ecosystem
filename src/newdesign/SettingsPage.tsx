@@ -26,7 +26,6 @@ export function SettingsPage() {
     <section className="door-block" aria-labelledby="door-settings-title">
       <div>
         <PageHeader id="door-settings-title" title={t('door.settings.title')} purpose={t('door.purpose.settings')} />
-        <p className="muted">{t('door.settings.intro')}</p>
         {data && !canChange && <p className="muted">{t('door.settings.readOnly')}</p>}
       </div>
       {message && (

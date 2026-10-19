@@ -13,21 +13,19 @@ type Db = PrismaClient;
 const monthKey = (d: Date) => `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`;
 const ymd = (d: Date) => d.toISOString().slice(0, 10);
 
+/** Every id the seed keeps. Anything else that starts with `demo-` is an old demo row and is removed. */
+export const demoKeep = new Set<string>();
+
 async function ensure(model: { findUnique: (a: never) => Promise<unknown>; create: (a: never) => Promise<unknown> }, id: string, data: Record<string, unknown>): Promise<boolean> {
+  demoKeep.add(id);
   if (await model.findUnique({ where: { id } } as never)) return false;
   await model.create({ data: { id, ...data } } as never);
   return true;
 }
 
-/** The units that get demo content: system, org unit, short name. */
+/** The one unit that gets demo content: system, org unit, short name. */
 const UNITS = [
   { code: 'main', systemId: 'sys-main', orgUnitId: 'ou-church', name: 'ADEPR Kacyiru' },
-  { code: 'youth', systemId: 'sys-youth', orgUnitId: 'ou-youth', name: 'Youth' },
-  { code: 'children', systemId: 'sys-children', orgUnitId: 'ou-children', name: 'Children' },
-  { code: 'men', systemId: 'sys-men', orgUnitId: 'ou-men', name: 'Men' },
-  { code: 'women', systemId: 'sys-women', orgUnitId: 'ou-women', name: 'Women' },
-  { code: 'couples', systemId: 'sys-couples', orgUnitId: 'ou-couples', name: 'Family' },
-  { code: 'elderly', systemId: 'sys-elderly', orgUnitId: 'ou-elderly', name: 'Elderly' },
 ] as const;
 
 export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<string, number>> {
@@ -115,7 +113,8 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       donations: [['Building fund', 300_000, -90], ['Harvest thanksgiving', 150_000, -18]],
     },
   ] as const;
-  for (const pr of profiles) {
+  // One demo member only.
+  for (const pr of profiles.slice(0, 1)) {
     if (!people.has(pr.id)) continue;
     const row = (await db.person.findUnique({ where: { id: pr.id } })) as { gender?: string | null; dateOfBirth?: string | null; address?: string | null; nationalId?: string | null; joinedChurchOn?: string | null } | null;
     if (row) {
@@ -130,9 +129,9 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
     let n = 0;
     for (const [section, data] of pr.records) bump('profile records', await ensure(db.personRecord as never, `demo-rec-${pr.id}-${n++}`, { personId: pr.id, section, dataJson: JSON.stringify(data), status: 'CURRENT', recordedById: secretary, recordedAt: at(-300 + n * 7) }));
     n = 0;
-    for (const [note, days] of pr.deeds) bump('good deeds', await ensure(db.personDeed as never, `demo-deed-${pr.id}-${n++}`, { personId: pr.id, note, day: ymd(at(days)), recordedById: pastor, unitId: 'sys-main' }));
+    for (const [note, days] of pr.deeds.slice(0, 1)) bump('good deeds', await ensure(db.personDeed as never, `demo-deed-${pr.id}-${n++}`, { personId: pr.id, note, day: ymd(at(days)), recordedById: pastor, unitId: 'sys-main' }));
     n = 0;
-    for (const [level, systemId, typeName, amount] of pr.gifts) {
+    for (const [level, systemId, typeName, amount] of pr.gifts.slice(0, 1)) {
       const month = monthKey(at(-30 * (n + 1)));
       const listId = `demo-cl-${pr.id}-${n}`;
       bump('contribution lists', await ensure(db.contributionList as never, listId, { systemId, level, typeCode: 'UMUSANZU', typeName, month, status: 'APPROVED', createdById: pastor, submittedAt: at(-30 * (n + 1)), decidedById: pastor, decidedAt: at(-30 * (n + 1) + 2) }));
@@ -145,7 +144,7 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
     await ensure(db.moneyAccount as never, account, { orgUnitId: pr.org, systemId: pr.sys, name: 'Main account', status: 'ACTIVE', createdById: pastor });
     {
       const person = (await db.person.findUnique({ where: { id: pr.id } })) as { fullName: string };
-      for (const [typeName, amount, days] of pr.donations) bump('donations', await ensure(db.donation as never, `demo-don-${pr.id}-${n++}`, { systemId: pr.sys, accountId: account, donorName: person.fullName, donorPersonId: pr.id, amount, receivedOn: at(days), note: typeName, status: 'APPROVED', recordedById: pastor, decidedById: pastor, decidedAt: at(days + 1), typeCode: 'GIFT', typeName }));
+      for (const [typeName, amount, days] of pr.donations.slice(0, 1)) bump('donations', await ensure(db.donation as never, `demo-don-${pr.id}-${n++}`, { systemId: pr.sys, accountId: account, donorName: person.fullName, donorPersonId: pr.id, amount, receivedOn: at(days), note: typeName, status: 'APPROVED', recordedById: pastor, decidedById: pastor, decidedAt: at(days + 1), typeCode: 'GIFT', typeName }));
     }
   }
 
@@ -155,7 +154,7 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
     const leader = who(u, 'PRESIDENT', pastor);
     const sec = who(u, 'SECRETARY', secretary);
     const gs = [{ k: 'a', kind: 'FELLOWSHIP', name: `${u.name} fellowship`, meets: 'Saturday' }, { k: 'b', kind: 'PRAYER', name: `${u.name} prayer cell`, meets: 'Wednesday' }];
-    for (const g of gs) {
+    for (const g of gs.slice(0, 1)) {
       const id = `demo-ug-${u.code}-${g.k}`;
       bump('groups', await ensure(db.unitGroup as never, id, { orgUnitId: u.orgUnitId, systemId: u.systemId, kind: g.kind, name: g.name, leaderPersonId: leader, meetsOn: g.meets, status: 'ACTIVE', createdById: leader }));
       for (const [i, pid] of [leader, sec, ...positions.filter((p) => p.systemId === u.systemId).map((p) => p.personId)].filter((x, i, a) => people.has(x) && a.indexOf(x) === i).slice(0, 5).entries()) {
@@ -164,17 +163,17 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
     }
   }
   const couples: Array<[string, string, string]> = [['p-choir-treas', 'p-choir-vp', '2015-06-20'], ['p-deacon-vp', 'p-deacon-sec', '2012-12-15'], ['p-worship-treas', 'p-worship-vp', '2019-09-07']];
-  for (const [i, [a, b, on]] of couples.entries()) {
+  for (const [i, [a, b, on]] of couples.slice(0, 1).entries()) {
     if (people.has(a) && people.has(b)) bump('couples', await ensure(db.couplePair as never, `demo-couple-${i}`, { systemId: 'sys-couples', personAId: a, personBId: b, marriedOn: new Date(on), status: 'ACTIVE', createdById: pastor }));
   }
   const elders = ['p-pastor-2', 'p-deacon-coord', 'p-catechist'].filter((x) => people.has(x));
   const visits: Array<[string, string, number]> = [['Visited a member recovering at home and prayed with the family.', 'a', -12], ['Brought food and encouragement to an elderly widow.', 'b', -25], ['Followed up with a family that missed three services.', 'c', -40]];
-  for (const [i, [note, , days]] of visits.entries()) {
+  for (const [i, [note, , days]] of visits.slice(0, 1).entries()) {
     const elder = elders[i % Math.max(elders.length, 1)];
     if (elder) bump('visits', await ensure(db.visitLog as never, `demo-visit-${i}`, { systemId: 'sys-main', elderPersonId: elder, visitedOn: at(days), visitorsJson: JSON.stringify([elder, secretary].filter((x, j, a) => a.indexOf(x) === j)), note, recordedById: elder }));
   }
   const contacts: Array<[string, string, string, string]> = [['Alphonse Hakizimana', '+250788111222', 'Met at the market outreach', 'NEW'], ['Beatrice Mukamana', '+250788333444', 'Invited by a neighbour who is a member', 'FOLLOWING_UP'], ['Claude Ndayisaba', '+250788555666', 'Came to the youth concert', 'NEW']];
-  for (const [i, [fullName, phone, howMet, status]] of contacts.entries()) {
+  for (const [i, [fullName, phone, howMet, status]] of contacts.slice(0, 1).entries()) {
     bump('contacts', await ensure(db.evangelismContact as never, `demo-contact-${i}`, { fullName, phone, howMet, metOn: at(-10 - i * 6), assignedToId: people.has('p-pastor-2') ? 'p-pastor-2' : pastor, status, note: null, createdById: pastor }));
   }
 
@@ -186,19 +185,9 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
     const base = { orgUnitId: u.orgUnitId, systemId: u.systemId };
     const approved = JSON.stringify([{ levelKey: 'UNIT', label: u.name, systemId: u.systemId, status: 'APPROVED', byId: leader, at: at(-60).toISOString(), note: null }]);
     const tasks: Array<[string, string, string, number]> = [[`Prepare the ${u.name} monthly report`, 'IN_PROGRESS', leader, 6], [`Update the ${u.name} members list`, 'TODO', sec(u, secretary, who), 14], [`Thank the volunteers of ${u.name}`, 'DONE', treas, -5]];
-    for (const [i, [title, status, owner, due]] of tasks.entries()) {
+    for (const [i, [title, status, owner, due]] of tasks.slice(0, 1).entries()) {
       bump('tasks', await ensure(db.workTask as never, `demo-task-${u.code}-${i}`, { title, description: 'Demo task.', ownerPersonId: owner, createdByPersonId: leader, contextType: 'GENERAL', systemId: u.systemId, orgUnitId: u.orgUnitId, visibility: 'MINISTRY', status, dueDate: at(due), startDate: at(-20) }));
     }
-    const plan = (suffix: string, title: string, planType: string, status: string, a: number, b: number) => ({
-      id: `demo-plan-${u.code}-${suffix}`, ...base, title, aim: `${title}: what we want to achieve and for whom.`, location: 'ADEPR Kacyiru', startsOn: at(a), endsOn: at(b),
-      leaderPersonId: leader, teamJson: JSON.stringify([{ personId: treas, role: 'Treasurer' }]), planType, status, approvalsJson: status === 'DRAFT' ? '[]' : approved, createdById: leader,
-    });
-    const plans = [
-      plan('p1', `${u.name} weekly teaching`, 'PROGRAM', 'RUNNING', -150, 120), plan('p2', `${u.name} mentoring circle`, 'PROGRAM', 'RUNNING', -90, 200),
-      plan('e1', `${u.name} fellowship day`, 'EVENT', 'SETUP', 12, 12), plan('e2', `${u.name} thanksgiving evening`, 'EVENT', 'SETUP', 26, 26),
-      plan('j1', `${u.name} hall renovation`, 'PROJECT', 'RUNNING', -40, 60), plan('j2', `${u.name} welfare fund drive`, 'PROJECT', 'DRAFT', 40, 100),
-    ];
-    for (const p of plans) bump('plans', await ensure(db.workPlan as never, p.id, p));
   }
 
   // ── Reports ───────────────────────────────────────────────────────────────────────────────
@@ -208,7 +197,7 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
     if (!orgs.has(u.orgUnitId)) continue;
     const author = u.code === 'main' ? secretary : who(u, 'SECRETARY', secretary);
     const kinds: Array<[string, string, string, string]> = [['MEETINGS', lastMonth, 'PUBLISHED', 'Meetings'], ['ATTENDANCE', lastMonth, 'PUBLISHED', 'Attendance'], ['WORK_PLANS', prevMonth, 'PUBLISHED', 'Work plans']];
-    for (const [kind, periodKey, status, label] of kinds) {
+    for (const [kind, periodKey, status, label] of kinds.slice(0, 1)) {
       bump('reports', await ensure(db.report as never, `demo-rep-${u.code}-${kind}`, { systemId: u.systemId, orgUnitId: u.orgUnitId, kind, periodKey, title: `${u.name} · ${label} · ${periodKey}`, status, snapshotJson: '{}', composedById: author, composedAt: at(-20), publishedById: author, publishedAt: at(-19) }));
     }
   }
@@ -226,7 +215,7 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       activePeople: new Set(people.filter((p) => !p.archivedAt && (!p.status || p.status === 'ACTIVE')).map((p) => p.id)),
     };
     for (const u of UNITS) {
-      for (const kind of ['MEETINGS', 'ATTENDANCE', 'WORK_PLANS']) {
+      for (const kind of ['MEETINGS']) {
         const id = `demo-rep-${u.code}-${kind}`;
         const row = (await db.report.findUnique({ where: { id } })) as { snapshotJson: string; periodKey: string } | null;
         if (!row || row.snapshotJson !== '{}') continue;
@@ -246,19 +235,19 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       ['m1', 'BOARD', `${u.name} board meeting`, -21, 'HELD', 'Reviewed the quarter, approved the budget plan and agreed the next steps.'],
       ['m2', 'PLANNING', `${u.name} planning meeting`, 5, 'PLANNED', null], ['m3', 'COMMITTEE', `${u.name} committee meeting`, 19, 'PLANNED', null],
     ];
-    for (const [k, typeCode, title, days, status, minutes] of meetings) {
+    for (const [k, typeCode, title, days, status, minutes] of meetings.slice(0, 1)) {
       bump('meetings', await ensure(db.meeting as never, `demo-meet-${u.code}-${k}`, { ...base, typeCode, title, scheduledAt: at(days), location: 'Church hall', agenda: 'Opening prayer, reports, plans, any other business.', minutes, attendeesJson: JSON.stringify([leader]), status, createdById: leader, heldAt: status === 'HELD' ? at(days) : null, heldById: status === 'HELD' ? leader : null }));
     }
     const decisions: Array<[string, string, string, string]> = [['d1', 'Approve the annual calendar', 'APPROVED', 'The calendar of activities for the year is approved.'], ['d2', 'Buy new chairs for the hall', 'DRAFT', 'Quotes are being collected.'], ['d3', 'Start a welfare fund', 'APPROVED', 'Members give monthly to support families in need.']];
-    for (const [k, title, status, detail] of decisions) {
+    for (const [k, title, status, detail] of decisions.slice(0, 1)) {
       bump('decisions', await ensure(db.decision as never, `demo-dec-${u.code}-${k}`, { meetingId: `demo-meet-${u.code}-m1`, ...base, title, detail, status, createdById: leader, decidedAt: status === 'APPROVED' ? at(-20) : null, decidedById: status === 'APPROVED' ? leader : null, ownerPersonId: leader, dueDate: at(30) }));
     }
     const letters: Array<[string, string, string, string, string]> = [['l1', 'INTRODUCTION', 'Introduction of a member', 'Pastor of the receiving church', 'DELIVERED'], ['l2', 'REQUEST', 'Request to use the hall', 'The Sector Office', 'DRAFT'], ['l3', 'THANKS', 'Thank you for your support', 'Friends of the church', 'PRINTED']];
-    for (const [k, typeCode, subject, recipientName, status] of letters) {
+    for (const [k, typeCode, subject, recipientName, status] of letters.slice(0, 1)) {
       bump('letters', await ensure(db.letter as never, `demo-let-${u.code}-${k}`, { reference: `DEMO-${u.code.toUpperCase()}-${k.toUpperCase()}`, ...base, typeCode, subject, body: 'Dear Sir or Madam,\n\nThis letter is part of the demo data.\n\nIn Christ,', recipientName, status, createdById: leader, printedAt: status !== 'DRAFT' ? at(-8) : null, printedById: status !== 'DRAFT' ? leader : null, deliveredAt: status === 'DELIVERED' ? at(-6) : null, deliveredById: status === 'DELIVERED' ? leader : null, deliveryMethod: status === 'DELIVERED' ? 'HAND' : null }));
     }
   }
-  const sundays = [-7, -14, -21, -28];
+  const sundays = [-7];
   for (const [i, d] of sundays.entries()) {
     bump('collections', await ensure(db.serviceCollection as never, `demo-coll-${i}`, { systemId: 'sys-main', kind: 'SERVICE', title: `Sunday service ${ymd(at(d))}`, heldOn: at(d), startsAt: '09:00', tithe: 420_000 + i * 15_000, offering: 260_000 + i * 10_000, other: 40_000, status: 'ACTIVE', recordedById: people.has('p-church-treas') ? 'p-church-treas' : pastor }));
   }
@@ -274,7 +263,7 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       ['s1', 'Sunday worship service', 'SERVICE', 3, 9, true], ['s2', `${u.name} rehearsal`, 'REHEARSAL', 6, 17, false], ['s3', `${u.name} committee`, 'MEETING', 10, 15, false],
       ['s4', 'Sunday worship service', 'SERVICE', 10, 9, true], ['s5', `${u.name} fellowship`, 'OTHER', 13, 14, false],
     ];
-    for (const [k, title, kind, d, hour, churchWide] of slots) {
+    for (const [k, title, kind, d, hour, churchWide] of slots.slice(0, 1)) {
       const start = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate() + d, hour - 2, 0));
       bump('slots', await ensure(db.scheduleSlot as never, `demo-slot-${u.code}-${k}`, { planId, orgUnitId: u.orgUnitId, systemId: u.systemId, title, kind, startsAt: start, endsAt: new Date(start.getTime() + 2 * 3600 * 1000), location: 'Main church hall', notes: null, churchWide: churchWide && u.code === 'main', createdById: leader }));
     }

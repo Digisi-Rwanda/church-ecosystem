@@ -34,7 +34,6 @@ export function MoneyBudgetPage() {
     <section className="door-block" aria-labelledby="door-budget-title">
       <div>
         <PageHeader id="door-budget-title" title={t('door.money.budget')} purpose={t('door.purpose.budget')} />
-        <p className="muted">{t('door.money.budget.intro')}</p>
       </div>
       <YearSelect year={year} onChange={setYear} />
       {data?.canWrite && <div className="door-row"><ImportLink systemId={systemId} target="budgetLines" /></div>}
@@ -287,7 +286,6 @@ function ChurchBudgets({ year, refreshKey }: { year: number; refreshKey: string 
   return (
     <div className="panel door-form" style={{ maxWidth: 'none' }}>
       <h3>{t('door.money.budget.church.title')}</h3>
-      <p className="muted">{t('door.money.budget.church.intro')}</p>
       {data.systems.length === 0 ? (
         <p className="muted">{t('door.money.budget.church.none')}</p>
       ) : (

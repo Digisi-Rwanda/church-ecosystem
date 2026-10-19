@@ -9,7 +9,7 @@ import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { LoadState } from './LoadState';
 import { lettersFor } from './menu';
-import { currentMonth, entriesToCsv, queueFirst } from './money';
+import { currentMonth, queueFirst } from './money';
 import { PlanVsActual, YearSelect } from './MoneyBlockParts';
 import { AccountCard, AccountForm, EntryForm, EntryRow } from './MoneyParts';
 import { useLoad } from './useLoad';
@@ -53,15 +53,6 @@ export function MoneyPage() {
   const canRecord = !!accounts.data?.canRecord && !!options.data;
   const ofSide = (rows: MoneyEntryItem[] | null | undefined) => (rows ?? []).filter((e) => e.kind === side);
   const list = queueFirst(ofSide(entries.data));
-  const exportCsv = () => {
-    const head = ['date', 'account', 'kind', 'category', 'amount', 'status', 'note', 'plan', 'recordedBy', 'decidedBy', 'reason'];
-    const blob = new Blob(['\ufeff', entriesToCsv(list, head)], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = `${side === 'INCOME' ? 'income' : 'expense'}-${show === 'all' ? month : 'waiting'}.csv`;
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
   return (
     <section className="door-block" aria-labelledby="door-money-title">
       <div>
@@ -78,15 +69,9 @@ export function MoneyPage() {
                   {t('door.money.account.new')}
                 </button>
               )}
-              <button type="button" className="btn ghost" onClick={exportCsv} disabled={list.length === 0}>
-                {t('door.money.export')}
-              </button>
             </>
           }
         />
-        <p className="muted">{accounts.data?.canRecord ? t('door.money.intro.treasurer') : t('door.money.intro.view')}</p>
-        <p className="muted">{t('door.money.apart')}</p>
-        {accounts.data && !accounts.data.canRecord && <p className="muted">{t('door.money.hint.notTreasurer')}</p>}
       </div>
       <Tabs
         label={t('door.money.accounting')}

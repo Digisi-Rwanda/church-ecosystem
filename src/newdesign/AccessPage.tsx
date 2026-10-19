@@ -46,7 +46,6 @@ function AccessBody() {
   return (
     <div className="door-block">
       <PageHeader title={t('door.access.title')} purpose={t('door.purpose.access')} />
-      <p className="muted">{t('door.access.intro')}</p>
       <nav className="door-menu" aria-label={t('door.access.tabs')}>
         {tabs.map((k) => (
           <button

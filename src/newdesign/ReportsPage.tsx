@@ -297,7 +297,6 @@ export function ReportsPage() {
       )}
       {tab === 'schedules' && (
         <>
-          <p className="muted">{t('door.reports.schedule.intro')}</p>
           <ReportBoard items={schedules.data?.schedules ?? []} />
           <LoadState loading={schedules.loading} failed={schedules.failed} retry={schedules.reload}>
             {(schedules.data?.schedules ?? []).length === 0 ? (

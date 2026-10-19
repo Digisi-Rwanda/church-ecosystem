@@ -128,7 +128,6 @@ export function ProtocolMinePage() {
     <section className="door-block" aria-labelledby="door-mine-title">
       <div>
         <PageHeader id="door-mine-title" title={t('door.own.mine')} />
-        <p className="muted">{t('door.protocol.mine.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}
       <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>

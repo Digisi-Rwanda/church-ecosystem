@@ -75,7 +75,6 @@ export function AnnouncementsPage() {
       <div className="door-row">
         <div>
           <PageHeader id="door-announce-title" title={t('door.announce.title')} purpose={t('door.purpose.announce')} />
-          <p className="muted">{t('door.announce.intro')}</p>
         </div>
         <div className="door-row">
           <button type="button" className="btn secondary" disabled={unread.length === 0} onClick={() => void readAll()}>

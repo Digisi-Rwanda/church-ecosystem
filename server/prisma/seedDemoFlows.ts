@@ -10,7 +10,7 @@
  *     waiting for approval), report schedules, and group attendance for the dashboard.
  */
 import type { PrismaClient } from '@prisma/client';
-import { seedDemoContent } from './seedDemoContent.js';
+import { seedDemoContent, demoKeep } from './seedDemoContent.js';
 import { choirSystemId } from '../src/lib/ministryOrgs.js';
 
 const DAY = 24 * 3600 * 1000;
@@ -28,13 +28,12 @@ const CHOIRS: Array<{ orgId: string; name: string; role: 'PRIMARY' | 'SECONDARY'
 
 const MINISTRIES = [
   { code: 'youth', systemId: 'sys-youth', orgUnitId: 'ou-youth', name: 'Youth', leader: 'p-youth-leader', treasurer: 'p-youth-treas', secretary: 'p-youth-sec', group: 'Youth fellowship' },
-  { code: 'music', systemId: 'sys-music', orgUnitId: 'ou-music', name: 'Music', leader: 'p-music-leader', treasurer: 'p-music-treas', secretary: 'p-music-sec', group: null },
-  { code: 'women', systemId: 'sys-women', orgUnitId: 'ou-women', name: 'Women', leader: 'p-women-leader', treasurer: 'p-women-treas', secretary: 'p-women-sec', group: 'Women fellowship' },
 ] as const;
 
 type Db = PrismaClient;
 
 async function ensure(model: { findUnique: (a: never) => Promise<unknown>; create: (a: never) => Promise<unknown> }, id: string, data: Record<string, unknown>) {
+  demoKeep.add(id);
   if (await model.findUnique({ where: { id } } as never)) return false;
   await model.create({ data: { id, ...data } } as never);
   return true;
@@ -97,8 +96,8 @@ export async function seedMoneyWorkDemo(db: Db, now = new Date()): Promise<{ min
     await ensure(db.moneyAccount as never, accountId, { ...base, name: `${m.name} main account`, status: 'ACTIVE', createdById: m.treasurer });
     await ensure(db.moneyBudget as never, `demo-bud-${k}-${year}`, { systemId: sys, year, status: 'APPROVED', approvedById: m.leader, approvedAt: at(-90) });
     const lines: Array<['INCOME' | 'SPENDING', string, number]> = [
-      ['INCOME', 'DONATION', 1_200_000], ['INCOME', 'OTHER', 300_000],
-      ['SPENDING', 'EVENT', 900_000], ['SPENDING', 'SUPPLIES', 700_000], ['SPENDING', 'TRANSPORT', 150_000], ['SPENDING', 'SERVICES', 250_000], ['SPENDING', 'AID', 100_000],
+      ['INCOME', 'DONATION', 1_200_000],
+      ['SPENDING', 'EVENT', 900_000], ['SPENDING', 'SUPPLIES', 700_000],
     ];
     for (const [kind, category, planned] of lines) {
       await ensure(db.moneyBudgetLine as never, `demo-bl-${k}-${kind}-${category}`, { systemId: sys, year, kind, category, planned, updatedById: m.treasurer });
@@ -119,16 +118,14 @@ export async function seedMoneyWorkDemo(db: Db, now = new Date()): Promise<{ min
         planningSummary: 'Replace worn equipment before the busy season.', executionSummary: 'Bought and installed everything on time and within budget.', outcome: 'The team now works with reliable equipment.',
         reportComposedById: m.secretary, reportComposedAt: at(-25),
       }),
-      plan('outreach', `${m.name} community outreach day`, 'EVENT', 'PENDING_APPROVAL', 60, 60),
-      plan('retreat', `${m.name} training retreat`, 'PROJECT', 'DRAFT', 120, 122),
     ];
     for (const p of plans) {
       if (await ensure(db.workPlan as never, p.id, p)) out.plans++;
     }
     const checks: Array<[string, string, boolean]> = [
-      ['program', 'Monthly session held', true], ['program', 'Attendance recorded', true], ['program', 'Quarter review with the president', false],
-      ['event', 'Venue booked', true], ['event', 'Speakers confirmed', false], ['event', 'Budget approved', false],
-      ['project', 'Quotes compared', true], ['project', 'Items delivered', true], ['project', 'Receipts handed to the treasurer', true],
+      ['program', 'Monthly session held', true],
+      ['event', 'Venue booked', true],
+      ['project', 'Quotes compared', true],
     ];
     for (const [suffix, label, done] of checks) {
       await ensure(db.workPlanCheck as never, `demo-chk-${k}-${suffix}-${label.length}`, { planId: `demo-plan-${k}-${suffix}`, label, done, doneById: done ? m.secretary : null, doneAt: done ? at(-40) : null });
@@ -139,11 +136,7 @@ export async function seedMoneyWorkDemo(db: Db, now = new Date()): Promise<{ min
     const items: Array<[string, string, number, string | null, string, string | null, string]> = [
       ['mat', 'Mentoring materials', 240_000, monthKey(at(-60)), 'SUPPLIES', 'program', 'PLANNED'],
       ['venue', 'Conference venue and sound', 500_000, monthKey(at(30)), 'EVENT', 'event', 'PLANNED'],
-      ['meals', 'Meals for guests', 300_000, monthKey(at(30)), 'EVENT', 'event', 'PLANNED'],
       ['mic', 'Microphones and mixer', 450_000, monthKey(at(-90)), 'SUPPLIES', 'project', 'DONE'],
-      ['trans', 'Transport and tools for outreach', 150_000, monthKey(at(60)), 'TRANSPORT', 'outreach', 'PLANNED'],
-      ['fac', 'Retreat facilitator', 200_000, monthKey(at(120)), 'SERVICES', 'retreat', 'PLANNED'],
-      ['audit', 'Annual books check', 80_000, monthKey(at(150)), 'SERVICES', null, 'PLANNED'],
     ];
     for (const [id, title, amount, dueMonth, category, suffix, status] of items) {
       await ensure(db.moneyPlanItem as never, `demo-mpi-${k}-${id}`, { systemId: sys, year, title, amount, dueMonth, category, status, createdById: m.treasurer, planId: suffix ? `demo-plan-${k}-${suffix}` : null });
@@ -155,16 +148,9 @@ export async function seedMoneyWorkDemo(db: Db, now = new Date()): Promise<{ min
       decidedById: status === 'APPROVED' ? m.leader : null, decidedAt: status === 'APPROVED' ? at(-daysAgo + 1) : null, planId: suffix ? `demo-plan-${k}-${suffix}` : null,
     });
     const rows = [
-      ...[5, 35, 65, 95, 125, 155].map((d, i) => entry(`inc${i}`, 'INCOME', 180_000 + i * 30_000, d, 'DONATION', 'Members and friends gave toward the ministry', 'RECORDED', null)),
-      entry('inc-other', 'INCOME', 120_000, 20, 'OTHER', 'Fellowship fundraising', 'RECORDED', null),
+      entry('inc0', 'INCOME', 180_000, 5, 'DONATION', 'Members and friends gave toward the ministry', 'RECORDED', null),
       entry('s-mic', 'SPENDING', 420_000, 80, 'SUPPLIES', 'Microphones and mixer', 'APPROVED', 'project'),
-      entry('s-cable', 'SPENDING', 55_000, 70, 'SUPPLIES', 'Cables and stands', 'APPROVED', 'project'),
-      entry('s-trans', 'SPENDING', 30_000, 60, 'TRANSPORT', 'Delivery of equipment', 'APPROVED', 'project'),
-      entry('s-mat1', 'SPENDING', 40_000, 95, 'SUPPLIES', 'Mentoring booklets', 'APPROVED', 'program'),
-      entry('s-mat2', 'SPENDING', 40_000, 65, 'SUPPLIES', 'Mentoring booklets', 'APPROVED', 'program'),
-      entry('s-mat3', 'SPENDING', 40_000, 35, 'SUPPLIES', 'Mentoring booklets', 'APPROVED', 'program'),
       entry('s-venue', 'SPENDING', 150_000, 3, 'EVENT', 'Deposit for the conference venue', 'PENDING_APPROVAL', 'event'),
-      entry('s-aud', 'SPENDING', 50_000, 15, 'SERVICES', 'Accountant visit', 'APPROVED', null),
     ];
     for (const r of rows) {
       if (await ensure(db.moneyEntry as never, r.id, r)) out.entries++;
@@ -180,7 +166,7 @@ export async function seedMoneyWorkDemo(db: Db, now = new Date()): Promise<{ min
       const groupId = `demo-grp-${k}`;
       await ensure(db.unitGroup as never, groupId, { ...base, kind: 'FELLOWSHIP', name: m.group, leaderPersonId: m.leader, meetsOn: 'Saturday', status: 'ACTIVE', createdById: m.leader });
       const present = [m.leader, m.treasurer, m.secretary];
-      for (let i = 0; i < 6; i++) {
+      for (let i = 0; i < 3; i++) {
         const when = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - i, 8));
         const here = JSON.stringify(present.slice(0, Math.max(1, 3 - (i % 3 === 2 ? 1 : 0))).concat(i < 3 ? ['p-patrick'].filter((x) => people.has(x)) : []));
         await ensure(db.groupSession as never, `demo-gs-${k}-${i}`, { groupId, heldOn: when, presentJson: here, recordedById: m.secretary });
@@ -194,5 +180,30 @@ export async function seedDemoFlows(db: Db) {
   const scheduling = await seedSchedulingDemo(db);
   const money = await seedMoneyWorkDemo(db);
   const content = await seedDemoContent(db);
+  await pruneOldDemo(db);
   return { scheduling, money, content };
+}
+
+/** Models with demo rows, children before parents, so removing a parent never meets a child. */
+const PRUNE = [
+  'workPlanCheck', 'workPlanNote', 'moneyEntry', 'moneyPlanItem', 'groupSession', 'groupMember', 'contributionLine', 'decision', 'scheduleSlot',
+  'personRecord', 'personDeed', 'donation', 'workPlan', 'unitGroup', 'contributionList', 'meeting', 'monthPlan', 'letter', 'report', 'reportSchedule',
+  'moneyBudgetLine', 'moneyBudget', 'workTask', 'serviceCollection', 'couplePair', 'visitLog', 'evangelismContact', 'moneyAccount',
+] as const;
+
+/** Older runs made several demo rows per screen. Only one example per screen is kept; the rest (ids starting `demo-`) go. */
+export async function pruneOldDemo(db: Db): Promise<number> {
+  let removed = 0;
+  for (const name of PRUNE) {
+    const model = (db as unknown as Record<string, { findMany: (a?: unknown) => Promise<Array<{ id: string }>>; delete: (a: unknown) => Promise<unknown> }>)[name];
+    if (!model) continue;
+    try {
+      const rows = await model.findMany({ select: { id: true } });
+      for (const r of rows) {
+        if (!r.id.startsWith('demo-') || demoKeep.has(r.id)) continue;
+        try { await model.delete({ where: { id: r.id } }); removed++; } catch { /* still in use by something else: leave it */ }
+      }
+    } catch { /* model not present in this database */ }
+  }
+  return removed;
 }

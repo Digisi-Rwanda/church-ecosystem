@@ -177,7 +177,6 @@ export function PulpitPage() {
     <section className="door-block" aria-labelledby="door-pulpit-title">
       <div>
         <PageHeader id="door-pulpit-title" title={t('door.own.pulpit')} />
-        <p className="muted">{t('door.evang.pulpit.intro')}</p>
       </div>
       {canWrite && !form && (
         <div className="door-row">

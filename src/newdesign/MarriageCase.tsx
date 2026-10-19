@@ -175,7 +175,7 @@ export function MarriageDetail({ p, caseId, onClose, onChange }: { p: PlanDetail
     try { saveBase64(await fetchPlanFile(p.id, m.certificateFileId)); } catch { setError(t('door.people.actionFailed')); }
   };
   return (
-    <SidePanel open title={c?.name ?? t('door.cs.view')} purpose={m ? `${m.p1Unit} · ${m.date}${m.time ? ` ${m.time}` : ''}` : ''} onClose={onClose} saveLabel={t('door.cs.close')} canSave={false} onSave={() => undefined}>
+    <SidePanel open title={c?.name ?? t('door.cs.view')} purpose={m ? `${m.p1Unit} · ${m.date}${m.time ? ` ${m.time}` : ''}` : ''} onClose={onClose} wide="xl">
       <LoadState loading={load.loading && !c} failed={load.failed} retry={load.reload}>
         {c && m && (
           <div className="door-form">

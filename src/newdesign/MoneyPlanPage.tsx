@@ -16,7 +16,6 @@ export function MoneyPlanPage() {
           purpose={t('door.purpose.moneyPlan')}
           primary={<Link className="btn" to={`/s/${systemId}/money/plan/new/event`}>{t('door.ac.new')}</Link>}
         />
-        <p className="muted">{t('door.money.plan.intro')}</p>
       </div>
       <ActivitiesView systemId={systemId} />
     </section>

@@ -13,7 +13,7 @@ const render = (node: Parameters<typeof renderToStaticMarkup>[0]) =>
   renderToStaticMarkup(h(I18nProvider, null, h(MemoryRouter, null, node)));
 
 describe('PageHeader', () => {
-  it('shows the title with its id, the purpose line, and puts the primary button last', () => {
+  it('shows the title with its id, leaves out the purpose line, and puts the primary button last', () => {
     const html = render(
       h(PageHeader, {
         id: 'x-title',
@@ -24,7 +24,8 @@ describe('PageHeader', () => {
       }),
     );
     expect(html).toContain('<h2 id="x-title">Programs</h2>');
-    expect(html).toContain('page-purpose');
+    expect(html).not.toContain('page-purpose');
+    expect(html).not.toContain('What the ministry plans to do');
     expect(html.indexOf('Export')).toBeLessThan(html.indexOf('New program'));
   });
   it('draws no empty parts when there is only a title', () => {

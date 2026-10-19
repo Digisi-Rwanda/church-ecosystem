@@ -94,8 +94,8 @@ export function ProgramCases({ p, onChange }: { p: PlanDetail; onChange: () => v
           <p key={b.batchId} role="status"><strong>{t('door.cs.toPay', { unit: b.unitName, amount: formatRwf(b.amount) })}</strong>{' '}
             <button type="button" className="btn sm" onClick={() => { setPay(b); setAccountId(''); setLineId(''); setError(''); }}>{t('door.cs.logPaid')}</button></p>
         ))}
-        <div className="door-row">
-          {v.canRegister && <button type="button" className="btn" onClick={() => { if (v.caseType === 'MARRIAGE') { setPanel('marriage'); return; } setUnitId(v.myUnits.length === 1 ? v.myUnits[0]!.id : ''); setName(''); setContact(''); setIssue(''); setCapacity(''); setNeed(''); setError(''); setPanel('register'); }}>{t('door.cs.register')}</button>}
+        <div className="door-row case-actions">
+          {v.canRegister && <button type="button" className="btn" onClick={() => { if (v.caseType === 'MARRIAGE') { setPanel('marriage'); return; } setUnitId(v.myUnits.length === 1 ? v.myUnits[0]!.id : ''); setName(''); setContact(''); setIssue(''); setCapacity(''); setNeed(''); setError(''); setPanel('register'); }}>{t(v.caseType === 'MARRIAGE' ? 'door.mr.register' : 'door.cs.register')}</button>}
           {v.canReview && <button type="button" className="btn secondary" onClick={() => { setMode('PER_CASE'); setAmounts({}); setBlockAmount(''); setBlockUnit(''); setError(''); setPanel('review'); }}>{t('door.cs.review')}</button>}
         </div>
         {error && !panel && !alloc && !pay && <p className="door-error" role="alert">{error}</p>}
@@ -122,7 +122,7 @@ export function ProgramCases({ p, onChange }: { p: PlanDetail; onChange: () => v
                     <tr key={r.id}>
                       <th scope="row">{r.name}</th>
                       <td data-label={t('door.cs.col.unit')}>{r.unitName}</td>
-                      <td data-label={t('door.cs.col.issue')}>{r.issue || '—'}</td>
+                      <td data-label={t(v.caseType === 'MARRIAGE' ? 'door.mr.col.date' : 'door.cs.col.issue')}>{r.issue || '—'}</td>
                       {p.hasMoney && <><td data-label={t('door.cs.col.gap')}>{formatRwf(r.gap)}</td>
                       <td data-label={t('door.cs.col.support')}>{r.approved > 0 ? `${formatRwf(r.approved)}${r.disbursed > 0 ? ` ✓` : ''}` : '—'}</td></>}
                       <td data-label={t('door.cs.col.status')}><StatusChip tone={TONE[r.status] ?? 'neutral'}>{status(r)}</StatusChip>{r.awaiting && <span className="muted"> {t(`door.mr.awaiting.${r.awaiting}` as 'door.mr.awaiting.CATECHIST')}</span>}</td>

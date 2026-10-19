@@ -949,10 +949,13 @@ describe('marriage cases', () => {
     const cid = await caseId(id);
     let c = await one(id, cid);
     expect(c.marriage).toMatchObject({ p1Name: 'John', p2Name: 'Mary', p2Church: 'Grace Chapel (Huye)', date: wedding, awaiting: 'CATECHIST', canVerify: true, p1Unit: 'Youth' });
+    // The summary tiles agree with the rows: registered and verified marriages are both still waiting for a decision; only an approved one is active.
+    expect((await get('p-catechist', CS(id))).body.counts).toMatchObject({ total: 1, pending: 1, active: 0, closed: 0 });
     expect((await post('p-pastor', `${CS(id)}/${cid}/verify`)).status).toBe(403);
     expect((await post('p-catechist', `${CS(id)}/${cid}/items`, { kind: 'ANNOUNCEMENT', onDate: `${Y + 1}-02-01`, place: 'Main Church' })).status).toBe(409);
     expect((await post('p-catechist', `${CS(id)}/${cid}/verify`)).status).toBe(200);
     expect(notices('p-pastor').some((t) => t.includes('Marriage to approve'))).toBe(true);
+    expect((await get('p-catechist', CS(id))).body.counts).toMatchObject({ total: 1, pending: 1, active: 0, closed: 0 });
     expect((await post('p-catechist', `${CS(id)}/${cid}/approve`, {})).status).toBe(403);
     expect((await post('p-pastor', `${CS(id)}/${cid}/approve`, { support: 40000 })).body.code).toBe('MORE_THAN_GAP');
     const ok = await post('p-pastor', `${CS(id)}/${cid}/approve`, { support: 30000 });
@@ -962,6 +965,7 @@ describe('marriage cases', () => {
     expect((await get('p-ctr', CS(id))).body.budget.committed).toBe(30000);
     c = await one(id, cid);
     expect(c.marriage.awaiting).toBeNull();
+    expect((await get('p-catechist', CS(id))).body.counts).toMatchObject({ total: 1, pending: 0, active: 1, closed: 0 });
   });
 
   it('the Catechist schedules announcements, the Secretary may arrange meetings; dates move without approval', async () => {

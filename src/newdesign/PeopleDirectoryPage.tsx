@@ -3,7 +3,7 @@ import { Link, useParams } from 'react-router-dom';
 import { fetchPeople, fetchUpcoming } from '../api/frontDoorApi';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
-import { loadViews, peopleToCsv, shortDay, storeViews, type SavedView } from './peopleTools';
+import { loadViews, shortDay, storeViews, type SavedView } from './peopleTools';
 import { useCanWritePeople } from './usePeopleAccess';
 import { useLoad } from './useLoad';
 import { EmptyState, ListRow, PageHeader, PrintButton, RowList, StatusChip } from './kit';
@@ -37,15 +37,6 @@ export function PeopleDirectoryPage() {
     setViews(next);
     storeViews(next);
   };
-  const exportCsv = () => {
-    const head = [t('door.people.col.code'), t('door.people.col.name'), t('door.people.col.status'), t('door.people.col.phone'), 'email'];
-    const blob = new Blob(['﻿', peopleToCsv(list, head)], { type: 'text/csv;charset=utf-8' });
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'people.csv';
-    a.click();
-    URL.revokeObjectURL(a.href);
-  };
 
   return (
     <div className="door-block">
@@ -57,9 +48,6 @@ export function PeopleDirectoryPage() {
         actions={
           <>
             <PrintButton />
-            <button type="button" className="btn ghost no-print" onClick={exportCsv} disabled={list.length === 0}>
-              {t('door.people.export')}
-            </button>
             {canWrite && (
               <Link className="btn ghost no-print" to={`${base}/import`}>
                 {t('door.people.import')}

@@ -28,7 +28,7 @@ export function OrgTreePage() {
       {(plans.data?.length ?? 0) > 0 && (
         <section className="panel org-activity" aria-label={t('door.units.activity')}>
           <div className="org-activity-head">
-            <h3 className="door-kind-title">{t('door.units.activity')}</h3>
+            <h3>{t('door.units.activity')}</h3>
             <Link className="btn ghost sm" to={`/s/${systemId}/work`}>{t('door.units.activity.open')}</Link>
           </div>
           <ActivityByStatus plans={plans.data ?? []} systemId={systemId} />

@@ -20,7 +20,6 @@ export function MyContributionPage() {
     <section className="door-block" aria-labelledby="door-mine-title">
       <div>
         <PageHeader id="door-mine-title" title={t('door.money.mine')} />
-        <p className="muted">{t('door.money.mine.intro')}</p>
       </div>
       <YearSelect year={year} onChange={setYear} />
       <LoadState loading={loading} failed={failed} retry={reload}>

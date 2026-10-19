@@ -41,7 +41,6 @@ export function VisitsPage() {
     <section className="door-block" aria-labelledby="door-visits-title">
       <div>
         <PageHeader id="door-visits-title" title={t('door.own.visits')} />
-        <p className="muted">{t('door.caring.visits.intro')}</p>
       </div>
       {!form && (
         <div className="door-row">

@@ -141,7 +141,6 @@ export function SponsorshipPage() {
     <section className="door-block" aria-labelledby="door-sp-title">
       <div>
         <PageHeader id="door-sp-title" title={t('door.own.sponsorship')} />
-        <p className="muted">{t('door.choirwork.sp.intro')}</p>
       </div>
       <ChoirSelect value={choir} onChange={setChoir}>{(id) => <Sponsors key={id} choirId={id} />}</ChoirSelect>
     </section>

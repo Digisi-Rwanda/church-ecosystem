@@ -14,7 +14,7 @@ const ERROR_KEYS: Record<string, string> = {
 export const groupErrorKey = (code: string | undefined): string => (code && ERROR_KEYS[code]) || 'door.people.actionFailed';
 
 /** The wording of a group changes by system: fellowship groups, classes or age groups. */
-export const kindKey = (kind: GroupKind, word: 'title' | 'intro' | 'new' | 'none' | 'noneDetail' | 'name') => `door.groups.${kind}.${word}` as const;
+export const kindKey = (kind: GroupKind, word: 'title' | 'new' | 'none' | 'noneDetail' | 'name') => `door.groups.${kind}.${word}` as const;
 
 /** "13 to 17", "from 13", "up to 17", or empty. */
 export function agesLabel(from: number | null, to: number | null, t: (k: 'door.groups.ages.range' | 'door.groups.ages.from' | 'door.groups.ages.to', v: Record<string, string>) => string): string {

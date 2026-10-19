@@ -108,7 +108,7 @@ export async function listView(p: PlanRow, me: string, data: Data, units: Units)
   const batchCases = (b: BatchRow) => all.filter((c) => c.batchId === b.id).map((c) => ({ id: c.id, name: c.name, gap: c.gap, approved: c.approved }));
   return {
     caseType: caseTypeOf(p), live, manager, budget: await budgetOf(p),
-    counts: { total: all.length, active: all.filter((c) => c.status === 'APPROVED' || c.status === 'FOLLOW_UP').length, pending: pending.length, closed: all.filter((c) => c.status === 'CLOSED').length },
+    counts: { total: all.length, active: all.filter((c) => c.status === 'APPROVED' || c.status === 'FOLLOW_UP').length, pending: caseTypeOf(p) === 'MARRIAGE' ? all.filter((c) => c.status === 'PENDING' || c.status === 'VERIFIED').length : pending.length, closed: all.filter((c) => c.status === 'CLOSED').length },
     canRegister: live && myUnits.length > 0, myUnits: myUnits.map((u) => ({ id: u.id, name: u.name })),
     canReview: live && manager && pending.length > 0, pendingByUnit: manager ? group(pending) : [],
     toAllocate: batches.filter((b) => b.status === 'AWAITING_ALLOCATION' && (manager || leadersOf(b.unitId, units, data).includes(me))).filter((b) => leadersOf(b.unitId, units, data).includes(me)).map((b) => ({ batchId: b.id, unitName: unitName(b.unitId, units), amount: b.amount, cases: batchCases(b) })),

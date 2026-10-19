@@ -94,7 +94,6 @@ export function ProtocolRosterPage() {
     <section className="door-block" aria-labelledby="door-roster-title">
       <div>
         <PageHeader id="door-roster-title" title={t('door.own.roster')} purpose={t('door.purpose.roster')} actions={<PrintButton />} />
-        <p className="muted">{t('door.protocol.roster.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}
       <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>

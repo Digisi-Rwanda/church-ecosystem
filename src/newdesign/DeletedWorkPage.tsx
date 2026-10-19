@@ -21,7 +21,6 @@ export function DeletedWorkPage() {
     <section className="door-block" aria-labelledby="door-deleted-title">
       <div>
         <PageHeader id="door-deleted-title" title={t('door.work.deleted.title')} />
-        <p className="muted">{t('door.work.deleted.intro')}</p>
       </div>
       {error && (
         <p className="door-error" role="alert">

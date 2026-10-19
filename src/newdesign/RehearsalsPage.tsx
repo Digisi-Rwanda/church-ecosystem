@@ -110,7 +110,6 @@ export function RehearsalsPage() {
     <section className="door-block" aria-labelledby="door-reh-title">
       <div>
         <PageHeader id="door-reh-title" title={t('door.own.rehearsals')} />
-        <p className="muted">{t('door.choirwork.reh.intro')}</p>
       </div>
       <ChoirSelect value={choir} onChange={setChoir}>{(id) => <Rehearsals key={id} choirId={id} />}</ChoirSelect>
     </section>

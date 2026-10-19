@@ -50,7 +50,6 @@ export function DonationsPanel({ systemId }: { systemId: string }) {
   return (
     <div className="door-form" style={{ maxWidth: 'none' }}>
       <h3>{t('door.money.donations')}</h3>
-      <p className="muted">{t('door.money.donations.intro')}</p>
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && <TypeQuickAdd systemId={systemId} kind="donation" onAdded={reload} />}
         {data?.canRecord && !form && (

@@ -17,7 +17,6 @@ export function GovernanceLayout() {
     <section className="door-block" aria-labelledby="door-gov-title">
       <div>
         <PageHeader id="door-gov-title" title={t('door.gov.title')} purpose={t('door.purpose.gov')} />
-        <p className="muted">{t('door.gov.intro')}</p>
       </div>
       <RouteSuspense>
         <Outlet />

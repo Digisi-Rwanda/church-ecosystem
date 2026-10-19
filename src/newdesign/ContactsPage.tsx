@@ -42,7 +42,6 @@ export function ContactsPage() {
     <section className="door-block" aria-labelledby="door-contacts-title">
       <div>
         <PageHeader id="door-contacts-title" title={t('door.own.contacts')} />
-        <p className="muted">{t('door.evang.contacts.intro')}</p>
       </div>
       <ul className="door-filters">
         {CONTACT_FILTERS.map((f) => (

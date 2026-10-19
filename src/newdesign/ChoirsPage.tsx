@@ -43,7 +43,6 @@ export function ChoirsPage() {
     <section className="door-block" aria-labelledby="door-choirs-title">
       <div>
         <PageHeader id="door-choirs-title" title={t(isMusic ? 'door.own.choirs' : 'door.own.choirsOwn')} purpose={t(isMusic ? 'door.purpose.choirs' : 'door.purpose.choirsOwn')} />
-        <p className="muted">{t(isMusic ? 'door.music.choirs.intro' : 'door.music.choirs.introOwn')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}
       {!isMusic && (

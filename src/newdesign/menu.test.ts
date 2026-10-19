@@ -87,6 +87,20 @@ describe('buildModules', () => {
     expect(resolveActive(mods, '/s/sys-a/collections')?.module.id).toBe('governance');
   });
 
+  it('lights the place of the kind of plan being viewed, not always Tasks', async () => {
+    const { buildModules, resolveActive } = await import('./menu');
+    const { placeOfPlanType } = await import('./activePlace');
+    const mods = buildModules(mk(sys('sys-a', { home: ['R'], work: ['R', 'W'] })), 'sys-a');
+    const path = '/s/sys-a/work/plans/p-1';
+    expect(resolveActive(mods, path)?.place?.key).toBe('tasks');
+    expect(resolveActive(mods, path, placeOfPlanType('PROGRAM'))?.place?.key).toBe('programs');
+    expect(resolveActive(mods, path, placeOfPlanType('EVENT'))?.place?.key).toBe('events');
+    expect(resolveActive(mods, path, placeOfPlanType('PROJECT'))?.place?.key).toBe('projects');
+    // A hint never moves a page that is not a plan page.
+    expect(resolveActive(mods, '/s/sys-a/work', 'programs')?.place?.key).toBe('tasks');
+    expect(placeOfPlanType(null)).toBeNull();
+  });
+
   it('puts the import page in the module of what it imports, and only for people who have that module', async () => {
     const { buildModules, resolveActive } = await import('./menu');
     const caps = mk(sys('sys-a', { home: ['R'], work: ['R', 'W'], schedule: ['R'] }));

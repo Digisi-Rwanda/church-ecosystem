@@ -5,6 +5,7 @@ import { Icon, type IconName } from '../components/ui/Icon';
 import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
+import { usePlaceHint } from './activePlace';
 import { resolveActive, type NavModule } from './menu';
 import { badge } from './notices';
 import { useAnnouncementSummary } from './useAnnouncementSummary';
@@ -75,7 +76,8 @@ export function Shell({
   // A module with several places opens like a tree in the sidebar. The one you are in is open by itself; a click on its arrow overrides that.
   const [override, setOverride] = useState<Record<string, boolean>>({});
 
-  const active = resolveActive(modules, location.pathname);
+  const placeHint = usePlaceHint();
+  const active = resolveActive(modules, location.pathname, placeHint);
   const current = active?.module;
   const allowed = capabilities === null || active !== null;
 
@@ -267,7 +269,7 @@ export function Shell({
         <OfflineBanner />
         <div className="print-head" aria-hidden>ADEPR Kacyiru · {where} · {fmt.date(new Date())}</div>
         <main id="door-main" className="content door-content" tabIndex={-1}>
-          {allowed ? children : <EmptyState variant="no-results" title={t('door.frame.notFound')} />}
+          {allowed ? children : <EmptyState variant="no-results" title={t('door.frame.notFound')} detail={t('door.frame.notFoundDetail')} />}
         </main>
         <nav className="bottom-nav no-print" aria-label={t('door.frame.bottomNav')}>
           {bottom.map((m) => {

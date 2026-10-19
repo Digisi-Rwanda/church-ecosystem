@@ -46,7 +46,6 @@ export function SystemHome({ systemId, systemName }: { systemId: string; systemN
           <>
             <div>
               <PageHeader id="door-home-title" title={systemName} />
-              <p className="muted">{t('door.tile.intro')}</p>
             </div>
         <ul className="door-tiles">
           {tiles.map((x) => (

@@ -21,7 +21,6 @@ export function ProtocolReportsPage() {
     <section className="door-block" aria-labelledby="door-preports-title">
       <div>
         <PageHeader id="door-preports-title" title={t('door.own.deaconreports')} />
-        <p className="muted">{t('door.protocol.reports.deaconIntro')}</p>
       </div>
       <div className="door-row">
         <button type="button" className="btn ghost" onClick={() => setMonth(shiftMonth(month, -1))} aria-label={t('door.music.plan.prev')}>‹</button>

@@ -41,7 +41,6 @@ export function CouplesPage() {
     <section className="door-block" aria-labelledby="door-couples-title">
       <div>
         <PageHeader id="door-couples-title" title={t('door.own.couples')} />
-        <p className="muted">{t('door.caring.couples.intro')}</p>
       </div>
       {error && <p className="door-error" role="alert">{error}</p>}
       {list.data?.canWrite && !form && (

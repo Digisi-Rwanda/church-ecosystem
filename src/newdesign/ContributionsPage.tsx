@@ -48,12 +48,9 @@ export function ContributionsPage({ embedded = false }: { embedded?: boolean } =
   const team = teamId || (data?.teams.length === 1 ? data.teams[0].id : '');
   return (
     <section className="door-block" aria-labelledby="door-clists-title">
-      {embedded ? (
-        <p className="muted">{t('door.money.contributions.intro')}</p>
-      ) : (
+      {embedded ? null : (
         <div>
           <PageHeader id="door-clists-title" title={t('door.money.contributions')} />
-          <p className="muted">{t('door.money.contributions.intro')}</p>
         </div>
       )}
       <Tabs

@@ -113,7 +113,6 @@ export function GroupsPage() {
     <section className="door-block" aria-labelledby="door-groups-title">
       <div>
         <PageHeader id="door-groups-title" title={t(kindKey(kind, 'title'))} />
-        <p className="muted">{t(kindKey(kind, 'intro'))}</p>
       </div>
       {list.data?.canWrite && options.data && !form && (
         <div className="door-row">

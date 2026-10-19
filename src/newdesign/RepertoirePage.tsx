@@ -91,7 +91,6 @@ export function RepertoirePage() {
     <section className="door-block" aria-labelledby="door-rep-title">
       <div>
         <PageHeader id="door-rep-title" title={t('door.own.repertoire')} />
-        <p className="muted">{t('door.choirwork.song.intro')}</p>
       </div>
       <ChoirSelect value={choir} onChange={setChoir} forRepertoire>{(id) => <Songs key={id} choirId={id} />}</ChoirSelect>
     </section>

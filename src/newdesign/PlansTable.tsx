@@ -27,14 +27,14 @@ export function PlansTable({ items, systemId }: { items: BoardItem[]; systemId: 
         <thead>
           <tr>
             <th scope="col">{t('door.plan.tbl.title')}</th>
-            <th scope="col">{t('door.plan.tbl.about')}</th>
+            <th scope="col" className="col-low">{t('door.plan.tbl.about')}</th>
             <th scope="col">{t('door.plan.tbl.unit')}</th>
-            <th scope="col">{t('door.plan.type')}</th>
+            <th scope="col" className="col-low">{t('door.plan.type')}</th>
             <th scope="col">{t('door.plan.tbl.date')}</th>
             <th scope="col" className="num">{t('door.plan.tbl.amount')}</th>
-            <th scope="col">{t('door.plan.tbl.submittedBy')}</th>
-            <th scope="col">{t('door.plan.tbl.verifiedBy')}</th>
-            <th scope="col" className="num">{t('door.plan.tbl.files')}</th>
+            <th scope="col" className="col-mid">{t('door.plan.tbl.submittedBy')}</th>
+            <th scope="col" className="col-mid">{t('door.plan.tbl.verifiedBy')}</th>
+            <th scope="col" className="num col-low">{t('door.plan.tbl.files')}</th>
             <th scope="col">{t('door.plan.tbl.status')}</th>
           </tr>
         </thead>
@@ -42,14 +42,14 @@ export function PlansTable({ items, systemId }: { items: BoardItem[]; systemId: 
           {items.map((p) => (
             <tr key={p.id} data-tone={planTone(p.state, p.status)}>
               <th scope="row"><Link to={`/s/${systemId}/work/plans/${p.id}`}>{p.title}</Link></th>
-              <td className="about" data-label={t('door.plan.tbl.about')}>{p.aim ? <span className="about-text" title={p.aim}>{p.aim}</span> : '—'}</td>
+              <td className="about col-low" data-label={t('door.plan.tbl.about')}>{p.aim ? <span className="about-text" title={p.aim}>{p.aim}</span> : '—'}</td>
               <td data-label={t('door.plan.tbl.unit')}>{p.unitName}</td>
-              <td data-label={t('door.plan.type')}>{t(`door.plan.type.${p.planType}` as 'door.plan.type.EVENT')}</td>
+              <td className="col-low" data-label={t('door.plan.type')}>{t(`door.plan.type.${p.planType}` as 'door.plan.type.EVENT')}</td>
               <td data-label={t('door.plan.tbl.date')}>{whenSummary(p, t, locale)}</td>
               <td className="num" data-label={t('door.plan.tbl.amount')}>{p.amount > 0 ? `${formatRwf(p.amount)}${p.perMonth ? ` ${t('door.plan.tbl.perMonth')}` : ''}` : '—'}</td>
-              <td data-label={t('door.plan.tbl.submittedBy')}>{submittedBy(p)}</td>
-              <td data-label={t('door.plan.tbl.verifiedBy')}>{verifiedBy(p)}</td>
-              <td className="num" data-label={t('door.plan.tbl.files')}>
+              <td className="col-mid" data-label={t('door.plan.tbl.submittedBy')}>{submittedBy(p)}</td>
+              <td className="col-mid" data-label={t('door.plan.tbl.verifiedBy')}>{verifiedBy(p)}</td>
+              <td className="num col-low" data-label={t('door.plan.tbl.files')}>
                 {p.files > 0 ? (
                   <Link className="file-count" to={`/s/${systemId}/work/plans/${p.id}`} state={{ tab: 'files' }} aria-label={t('door.plan.tbl.filesCount', { count: p.files })}>
                     <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true"><path d="m21 11-8.6 8.6a5 5 0 0 1-7-7l8.6-8.6a3.3 3.3 0 0 1 4.7 4.7l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4L15 6.5" /></svg>

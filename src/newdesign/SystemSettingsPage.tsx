@@ -34,7 +34,6 @@ export function SystemSettingsPage() {
     <section className="door-block" aria-labelledby="door-sset-title">
       <div>
         <PageHeader id="door-sset-title" title={t('door.sset.title')} />
-        <p className="muted">{t('door.sset.intro')}</p>
       </div>
       <LoadState loading={sys.loading} failed={sys.failed} retry={sys.reload}>
         {sys.data && (

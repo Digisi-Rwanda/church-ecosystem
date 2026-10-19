@@ -48,7 +48,6 @@ export function BaptismCohortPage() {
         {t('door.people.back')}
       </Link>
       <PageHeader title={t('door.p360.cohort.title')} />
-      <p className="muted">{t('door.p360.cohort.intro')}</p>
       <LoadState loading={load.loading} failed={load.failed} retry={load.reload}>
         {(load.data ?? []).length === 0 ? (
           <EmptyState title={t('door.p360.cohort.none')} detail={t('door.p360.cohort.noneDetail')} />

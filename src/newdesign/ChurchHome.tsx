@@ -14,7 +14,6 @@ export function ChurchHome({ systemId }: { systemId: string }) {
     <section className="door-block" aria-labelledby="door-church-title">
       <div>
         <PageHeader id="door-church-title" title={t('door.home.title')} />
-        <p className="muted">{t('door.home.subtitle')}</p>
       </div>
       <div className="feed-pair">
         <AnnouncementsStrip systemId={systemId} />
