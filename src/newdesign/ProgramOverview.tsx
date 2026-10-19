@@ -1,6 +1,7 @@
 import type { PlanDetail } from '../api/frontDoorApi';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { AnnualReview } from './AnnualReview';
+import { ProgramCases } from './ProgramCases';
 import { ProgramCohorts } from './ProgramCohorts';
 import { SeasonPanel } from './SeasonPanel';
 
@@ -13,6 +14,7 @@ export function ProgramOverview({ p, onChange }: { p: PlanDetail; onChange: () =
   const month = (m: number) => new Intl.DateTimeFormat(locale, { month: 'long', timeZone: 'UTC' }).format(new Date(Date.UTC(2026, m - 1, 1)));
   const facts: Array<[string, string]> = [[t('door.ac.programKind'), t(`door.ac.kind.${p.programKind}` as 'door.ac.kind.ONGOING')]];
   if (p.purposeTag) facts.push([t('door.ac.purposeTag'), t(`door.ac.purpose.${p.purposeTag}` as 'door.ac.purpose.MINISTRY')]);
+  if (p.programKind === 'CASE' && k.caseType) facts.push([t('door.ac.caseType'), t(`door.ac.caseType.${k.caseType}` as 'door.ac.caseType.SICK_CARE')]);
   if (p.programKind === 'ONGOING' && k.schedule) facts.push([t('door.ac.recurring'), k.schedule]);
   if (p.programKind === 'FIXED_TERM') {
     facts.push([t('door.pk.years'), `${k.startYear} – ${k.endYear}`]);
@@ -47,6 +49,7 @@ export function ProgramOverview({ p, onChange }: { p: PlanDetail; onChange: () =
         </>
       )}
     </div>
+      {p.programKind === 'CASE' && (p.state === 'APPROVED' || p.state === 'DONE') && <ProgramCases p={p} onChange={onChange} />}
       {p.programKind === 'COHORT' && (p.state === 'APPROVED' || p.state === 'DONE') && <ProgramCohorts p={p} onChange={onChange} />}
       {p.programKind === 'SEASONAL' && p.state === 'APPROVED' && <SeasonPanel p={p} onChange={onChange} />}
       {(p.state === 'APPROVED' || p.state === 'DONE') && <AnnualReview p={p} onChange={onChange} />}

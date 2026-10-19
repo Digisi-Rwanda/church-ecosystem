@@ -838,3 +838,86 @@ describe('seasonal cycle (slice D)', () => {
     expect((await get('p-vp', SE(id))).status).toBe(409);
   });
 });
+
+describe('case-based programs (sick care)', () => {
+  const CS = (id: string) => `${B}/${id}/cases`;
+  const caseProgram = async () => {
+    fake.__db.orgUnit.push({ id: 'ou-youth', name: 'Youth', code: 'KAC-YTH', kind: 'MINISTRY', type: 'MINISTRY', parentId: 'ou-church', systemId: 'sys-youth' });
+    return approvedPlan({ planType: 'PROGRAM', programKind: 'CASE', kind: { schedule: '', caseType: 'SICK_CARE' }, visibility: 'CHURCH', startsOn: `${Y}-01-01T00:00:00Z`, endsOn: `${Y}-12-31T00:00:00Z` });
+  };
+  const register = (id: string, body: object = {}, as = 'p-youth-leader') => post(as, CS(id), { unitId: 'ou-youth', name: 'John Doe', issue: 'Malaria', need: 100000, capacity: 20000, ...body });
+  const payment = async (id: string, amount: number) => {
+    const acc = (await post('p-ctr', '/api/money/accounts', { unitId: 'ou-choir', name: 'Choir fund' })).body.id;
+    const line = (await moneyOf(id)).lines[0].id;
+    return (await post('p-ctr', ENTRIES, { accountId: acc, kind: 'SPENDING', amount, occurredOn: `${Y}-06-01`, category: 'OTHER', planId: id, lineId: line })).body.id as string;
+  };
+
+  it('a case program needs a case type; the unit leader registers, the manager decides per case within the gap and the program budget, the Treasurer pays', async () => {
+    expect((await post('p-vp', B, { unitId: 'ou-choir', title: 'Sick care', planType: 'PROGRAM', programKind: 'CASE', kind: { schedule: '' } })).status).toBe(400);
+    const id = await caseProgram();
+    expect((await register(id, {}, 'p-choir-member')).status).toBe(403);
+    const a = await register(id);
+    expect(a.status, JSON.stringify(a.body)).toBe(201);
+    expect(a.body.rows[0]).toMatchObject({ name: 'John Doe', gap: 80000, status: 'PENDING', unitName: 'Youth' });
+    await register(id, { name: 'Mary Smith', need: 50000, capacity: 0 });
+    const list = (await get('p-youth-leader', CS(id))).body;
+    expect(list.counts).toMatchObject({ total: 2, pending: 2 });
+    expect(list.budget).toMatchObject({ cap: 120000, spent: 0, remaining: 120000 });
+    expect(list.canReview).toBe(false);
+    const mgr = (await get('p-choir-leader', CS(id))).body;
+    expect(mgr.canReview).toBe(true);
+    const [john, mary] = mgr.pendingByUnit[0].cases;
+    expect((await post('p-youth-leader', `${CS(id)}/review`, { mode: 'PER_CASE', items: [{ caseId: john.id, amount: 1 }] })).status).toBe(403);
+    expect((await post('p-choir-leader', `${CS(id)}/review`, { mode: 'PER_CASE', items: [{ caseId: john.id, amount: 90000 }] })).body.code).toBe('MORE_THAN_GAP');
+    const over = await post('p-choir-leader', `${CS(id)}/review`, { mode: 'PER_CASE', items: [{ caseId: john.id, amount: 80000 }, { caseId: mary.id, amount: 50000 }] });
+    expect(over.body.code).toBe('INSUFFICIENT_PROGRAM_BUDGET');
+    expect(over.body.remaining).toBe(120000);
+    const ok = await post('p-choir-leader', `${CS(id)}/review`, { mode: 'PER_CASE', items: [{ caseId: john.id, amount: 80000 }, { caseId: mary.id, amount: 30000 }] });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.budget.remaining).toBe(10000);
+    expect(notices('p-ctr').some((t) => t.includes('Support approved'))).toBe(true);
+    expect((await post('p-youth-leader', `${CS(id)}/${john.id}/close`, { outcome: 'RECOVERED' })).body.code).toBe('SUPPORT_PENDING');
+    const toPay = (await get('p-ctr', CS(id))).body.toPay;
+    expect(toPay[0]).toMatchObject({ amount: 110000 });
+    const wrong = await payment(id, 100000);
+    expect((await post('p-ctr', `${CS(id)}/batches/${toPay[0].batchId}/disbursed`, { entryId: wrong })).body.code).toBe('ENTRY_AMOUNT');
+    expect((await post('p-vp', `${CS(id)}/batches/${toPay[0].batchId}/disbursed`, { entryId: wrong })).status).toBe(403);
+    const entry = await payment(id, 110000);
+    const paid = await post('p-ctr', `${CS(id)}/batches/${toPay[0].batchId}/disbursed`, { entryId: entry });
+    expect(paid.status, JSON.stringify(paid.body)).toBe(200);
+    expect(paid.body.rows.every((r: any) => r.status === 'FOLLOW_UP' && r.disbursed === r.approved)).toBe(true);
+    expect(notices('p-youth-leader').some((t) => t.includes('disbursed'))).toBe(true);
+    const prog = await post('p-youth-leader', `${CS(id)}/${john.id}/progress`, { text: 'Out of hospital', condition: 'Recovering' });
+    expect(prog.status, JSON.stringify(prog.body)).toBe(200);
+    expect(prog.body.condition).toBe('Recovering');
+    const closed = await post('p-youth-leader', `${CS(id)}/${john.id}/close`, { outcome: 'RECOVERED', note: 'Back at work' });
+    expect(closed.body.status).toBe('CLOSED');
+    expect(closed.body.events.map((e: any) => e.kind)).toEqual(['REGISTERED', 'REVIEWED', 'PAID', 'PROGRESS', 'CLOSED']);
+    expect(notices('p-pastor').some((t) => t.includes('Case closed'))).toBe(true);
+  });
+
+  it('a block is approved for the unit and the unit leader must divide exactly that amount; a decline keeps the case open', async () => {
+    const id = await caseProgram();
+    await register(id);
+    await register(id, { name: 'Mary Smith', need: 50000, capacity: 0 });
+    await register(id, { name: 'Peter K', need: 30000, capacity: 0 });
+    const cases = (await get('p-choir-leader', CS(id))).body.pendingByUnit[0].cases as Array<{ id: string; name: string }>;
+    const [john, mary, peter] = cases;
+    const blk = await post('p-choir-leader', `${CS(id)}/review`, { mode: 'BLOCK', unitId: 'ou-youth', caseIds: [john.id, mary.id], amount: 90000 });
+    expect(blk.status, JSON.stringify(blk.body)).toBe(200);
+    const mine = (await get('p-youth-leader', CS(id))).body;
+    expect(mine.toAllocate[0]).toMatchObject({ amount: 90000, unitName: 'Youth' });
+    const bid = mine.toAllocate[0].batchId;
+    expect((await post('p-choir-leader', `${CS(id)}/batches/${bid}/allocate`, { allocations: [{ caseId: john.id, amount: 90000 }, { caseId: mary.id, amount: 0 }] })).status).toBe(403);
+    const bad = await post('p-youth-leader', `${CS(id)}/batches/${bid}/allocate`, { allocations: [{ caseId: john.id, amount: 60000 }, { caseId: mary.id, amount: 20000 }] });
+    expect(bad.body.code).toBe('ALLOCATION_TOTAL');
+    const good = await post('p-youth-leader', `${CS(id)}/batches/${bid}/allocate`, { allocations: [{ caseId: john.id, amount: 60000 }, { caseId: mary.id, amount: 30000 }] });
+    expect(good.status, JSON.stringify(good.body)).toBe(200);
+    expect(good.body.toAllocate).toEqual([]);
+    expect((await get('p-ctr', CS(id))).body.toPay[0].amount).toBe(90000);
+    const no = await post('p-choir-leader', `${CS(id)}/review`, { mode: 'PER_CASE', items: [{ caseId: peter.id, amount: 0 }] });
+    expect(no.status, JSON.stringify(no.body)).toBe(200);
+    expect(no.body.rows.find((r: any) => r.name === 'Peter K')).toMatchObject({ status: 'FOLLOW_UP', approved: 0 });
+    expect(notices('p-youth-leader').some((t) => t.includes('Support declined'))).toBe(true);
+  });
+});

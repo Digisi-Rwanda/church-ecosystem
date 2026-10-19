@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
-import { addMilestone, createPlan, editPlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, type ActivityMoney, type KindInput, type PlanDetail, type PlanInput, type ProgramKind, type PurposeTag } from '../api/frontDoorApi';
+import { addMilestone, createPlan, editPlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, type ActivityMoney, type KindInput, type PlanDetail, type PlanInput, type CaseType, type ProgramKind, type PurposeTag } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
@@ -67,6 +67,7 @@ export function ActivityCreate() {
   const [cSchedule, setCSchedule] = useState('');
   const [cTarget, setCTarget] = useState('');
   const [month, setMonth] = useState('12');
+  const [caseType, setCaseType] = useState<CaseType>('SICK_CARE');
 
   useEffect(() => {
     const p = resume.data;
@@ -94,6 +95,7 @@ export function ActivityCreate() {
       setCSchedule(k.cohort?.schedule ?? '');
       setCTarget(k.cohort?.target ? String(k.cohort.target) : '');
       if (k.annualMonth) setMonth(String(k.annualMonth));
+      if (k.caseType) setCaseType(k.caseType);
     }
   }, [resume.data, plan]);
 
@@ -105,12 +107,13 @@ export function ActivityCreate() {
   const defaults = kind === 'program' ? { start: `${sy}-01-01`, end: `${pkind === 'FIXED_TERM' ? ey : sy}-12-31` } : { start, end: end || start };
   const yearsOk = kind !== 'program' || (sy >= 2000 && (pkind !== 'FIXED_TERM' || ey >= sy));
   const detailsOk = !!title.trim() && (!plan ? !!unit : true) && !!defaults.start && yearsOk && (kind !== 'fundraising' || targetN > 0);
-  const steps = kind === 'program' && !hasMoney ? NO_MONEY_STEPS : STEPS;
+  const steps = kind === 'program' && !hasMoney && pkind !== 'CASE' ? NO_MONEY_STEPS : STEPS;
   const stepName = steps[step];
   const kindInput = (): KindInput => ({
     startYear: sy, endYear: pkind === 'FIXED_TERM' ? ey : null, schedule: pkind === 'ONGOING' ? schedule.trim() : '',
     cohort: pkind === 'COHORT' ? { frequency: cFreq.trim(), duration: cDuration.trim(), schedule: cSchedule.trim(), target: Math.floor(Number(cTarget) || 0) || null } : null,
     annualMonth: pkind === 'SEASONAL' ? Math.floor(Number(month) || 12) : null,
+    caseType: pkind === 'CASE' ? caseType : null,
   });
   const back = `/s/${systemId}/work/${kind === 'program' ? 'programs' : kind === 'project' ? 'projects' : 'events'}`;
 
@@ -137,7 +140,7 @@ export function ActivityCreate() {
       beyondUnit: plan?.beyondUnit ?? false, visibility: plan?.visibility ?? 'SYSTEM',
       planType: kind === 'project' ? 'PROJECT' : kind === 'program' ? 'PROGRAM' : 'EVENT',
       fundraising: kind === 'fundraising', fundTarget: kind === 'fundraising' ? targetN : null,
-      ...(kind === 'program' ? { programKind: pkind, purposeTag: purpose || null, hasMoney, kind: kindInput() } : {}),
+      ...(kind === 'program' ? { programKind: pkind, purposeTag: purpose || null, hasMoney: pkind === 'CASE' ? true : hasMoney, kind: kindInput() } : {}),
     };
     let saved = plan ? await editPlan(plan.id, input) : await createPlan(unit, input);
     if (kind === 'project') {
@@ -172,7 +175,7 @@ export function ActivityCreate() {
   });
 
   if (resumeId && resume.failed) return <EmptyState variant="error" title={t('door.work.err.gone')} />;
-  const noMoney = kind === 'program' && !hasMoney;
+  const noMoney = kind === 'program' && !hasMoney && pkind !== 'CASE';
   const cannotSubmit = noMoney ? false : !money || money.planned <= 0 || money.gap !== 0;
   const lines = money?.lines ?? [];
 
@@ -216,8 +219,8 @@ export function ActivityCreate() {
               <div className="ap-full"><TextAreaField label={t(kind === 'program' ? 'door.ac.mission' : 'door.ac.aim')} name="ac-aim" rows={3} value={aim} onChange={(e) => setAim(e.target.value)} /></div>
               {kind === 'program' ? (
                 <ProgramFields
-                  v={{ pkind, purpose, hasMoney, startYear, endYear, schedule, cFreq, cDuration, cSchedule, cTarget, month }}
-                  set={{ pkind: setPkind, purpose: setPurpose, hasMoney: setHasMoney, startYear: setStartYear, endYear: setEndYear, schedule: setSchedule, cFreq: setCFreq, cDuration: setCDuration, cSchedule: setCSchedule, cTarget: setCTarget, month: setMonth }}
+                  v={{ pkind, purpose, hasMoney, startYear, endYear, schedule, cFreq, cDuration, cSchedule, cTarget, month, caseType }}
+                  set={{ pkind: (k) => { setPkind(k); if (k === 'CASE') setHasMoney(true); }, purpose: setPurpose, hasMoney: setHasMoney, startYear: setStartYear, endYear: setEndYear, schedule: setSchedule, cFreq: setCFreq, cDuration: setCDuration, cSchedule: setCSchedule, cTarget: setCTarget, month: setMonth, caseType: setCaseType }}
                 />
               ) : (
                 <>

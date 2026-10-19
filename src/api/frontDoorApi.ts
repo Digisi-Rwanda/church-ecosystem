@@ -1029,14 +1029,16 @@ export type PlanFlags = {
 export type PlanType = 'PROGRAM' | 'EVENT' | 'PROJECT';
 export const PLAN_TYPES: readonly PlanType[] = ['PROGRAM', 'EVENT', 'PROJECT'];
 
-export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL'] as const;
+export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL', 'CASE'] as const;
+export const CASE_TYPES = ['SICK_CARE', 'NEEDY'] as const;
+export type CaseType = (typeof CASE_TYPES)[number];
 export type ProgramKind = (typeof PROGRAM_KINDS)[number];
 export const PURPOSE_TAGS = ['MINISTRY', 'CAPACITY', 'COMMUNITY', 'OPERATIONS'] as const;
 export type PurposeTag = (typeof PURPOSE_TAGS)[number];
 /** What a program kind adds to the schedule: years, a recurring schedule, a cohort pattern or an annual month. */
 export type KindInput = {
   startYear?: number | null; endYear?: number | null; schedule: string;
-  cohort?: { frequency: string; duration: string; schedule: string; target: number | null } | null; annualMonth?: number | null;
+  cohort?: { frequency: string; duration: string; schedule: string; target: number | null } | null; annualMonth?: number | null; caseType?: CaseType | null;
 };
 export type KindView = KindInput & { yearsRemaining: number | null; preparedYear?: number | null };
 
@@ -1995,3 +1997,37 @@ export const closeCohort = (planId: string, cohortId: string, b: { graduated: nu
 export type SeasonView = { phase: 'PREPARING' | 'ACTIVE'; year: number; month: number; nextYear: number; preparedYear: number | null; canPrepare: boolean; closedYearWaiting: boolean; tasks: string[] };
 export const fetchSeason = (planId: string): Promise<SeasonView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/season`);
 export const prepareSeason = (planId: string, tasks?: string[]): Promise<SeasonView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/season/prepare`, { method: 'POST', body: tasks ? { tasks } : {} });
+
+/** Cases of a case-based program (Sick Care, Needy Support). */
+export type CaseStatus = 'PENDING' | 'APPROVED' | 'FOLLOW_UP' | 'CLOSED';
+export type CaseRowView = { id: string; name: string; unitId: string; unitName: string; issue: string; gap: number; approved: number; disbursed: number; status: CaseStatus; condition: string | null; outcome: string | null; at: string | null };
+export type CaseBatchCase = { id: string; name: string; gap: number; approved: number };
+export type CasesView = {
+  caseType: CaseType; live: boolean; manager: boolean;
+  budget: { cap: number; spent: number; committed: number; remaining: number };
+  counts: { total: number; active: number; pending: number; closed: number };
+  canRegister: boolean; myUnits: Array<{ id: string; name: string }>;
+  canReview: boolean; pendingByUnit: Array<{ unitId: string; unitName: string; cases: Array<{ id: string; name: string; gap: number }> }>;
+  toAllocate: Array<{ batchId: string; unitName: string; amount: number; cases: CaseBatchCase[] }>;
+  toPay: Array<{ batchId: string; unitName: string; mode: 'PER_CASE' | 'BLOCK'; amount: number; cases: CaseBatchCase[] }>;
+  rows: CaseRowView[];
+};
+export type CaseDetail = {
+  id: string; name: string; contact: string; issue: string; unitId: string; unitName: string; caseType: CaseType;
+  capacity: number; need: number; gap: number; approved: number; disbursed: number; status: CaseStatus; condition: string | null; outcome: string | null; closeNote: string | null;
+  canProgress: boolean; canClose: boolean; events: Array<{ id: string; kind: string; text: string; at: string | null; byId: string }>;
+};
+export type CaseOutcome = 'RESOLVED' | 'RECOVERED' | 'PASSED' | 'CANCELLED';
+const CS = (id: string) => `/api/work-plans/${encodeURIComponent(id)}/cases`;
+export const fetchCases = (planId: string): Promise<CasesView> => apiFetch(CS(planId));
+export const registerCase = (planId: string, b: { unitId: string; name: string; contact: string; issue: string; capacity: number; need: number }): Promise<CasesView> => apiFetch(CS(planId), { method: 'POST', body: b });
+export const reviewCases = (planId: string, b: { mode: 'PER_CASE'; items: Array<{ caseId: string; amount: number }> } | { mode: 'BLOCK'; unitId: string; caseIds: string[]; amount: number }): Promise<CasesView> => apiFetch(`${CS(planId)}/review`, { method: 'POST', body: b });
+export const allocateBlock = (planId: string, batchId: string, allocations: Array<{ caseId: string; amount: number }>): Promise<CasesView> => apiFetch(`${CS(planId)}/batches/${encodeURIComponent(batchId)}/allocate`, { method: 'POST', body: { allocations } });
+export const markBatchPaid = (planId: string, batchId: string, entryId: string): Promise<CasesView> => apiFetch(`${CS(planId)}/batches/${encodeURIComponent(batchId)}/disbursed`, { method: 'POST', body: { entryId } });
+export const fetchCase = (planId: string, caseId: string): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}`);
+export const reportCaseProgress = (planId: string, caseId: string, b: { text: string; condition: string | null }): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}/progress`, { method: 'POST', body: b });
+export const closeCase = (planId: string, caseId: string, b: { outcome: CaseOutcome; note: string | null }): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}/close`, { method: 'POST', body: b });
+/** Records an expense and says which entry it made, so the Treasurer can tie it to approved support. */
+export async function recordMoneyEntryId(input: MoneyEntryInput): Promise<string> {
+  return (await apiFetch<{ id: string }>(`${M}/entries`, { method: 'POST', body: input })).id;
+}

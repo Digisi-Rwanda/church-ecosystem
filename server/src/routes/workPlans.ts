@@ -34,7 +34,8 @@ const fail = (res: Res, status: number, code: string, error: string) => res.stat
 const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v : new Date(v)).toISOString() : null);
 
 const PLAN_TYPES = ['PROGRAM', 'EVENT', 'PROJECT'] as const;
-export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL'] as const;
+export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL', 'CASE'] as const;
+export const CASE_TYPES = ['SICK_CARE', 'NEEDY'] as const;
 export const PURPOSE_TAGS = ['MINISTRY', 'CAPACITY', 'COMMUNITY', 'OPERATIONS'] as const;
 const short = z.string().trim().max(120).default('');
 const kindSchema = z.object({
@@ -45,6 +46,8 @@ const kindSchema = z.object({
   annualMonth: z.number().int().min(1).max(12).nullish(),
   /** Seasonal: the year the team last prepared for (set by Prepare for next cycle, never by the form) */
   preparedYear: z.number().int().min(2000).max(2200).nullish(),
+  /** Case-based: the template that sets the form, the money model and the workflow */
+  caseType: z.enum(CASE_TYPES).nullish(),
 });
 /** Starting indicators by purpose: easy to edit or remove, they only save the first typing. */
 const DEFAULT_INDICATORS: Record<(typeof PURPOSE_TAGS)[number], Array<{ name: string; unit: string; target: number }>> = {
@@ -66,7 +69,7 @@ const kindView = (p: Plan) => {
     startYear: k.startYear ?? null, endYear: k.endYear ?? null, schedule: k.schedule ?? '',
     yearsRemaining: p.programKind === 'FIXED_TERM' && k.endYear ? Math.max(0, k.endYear - year) : null,
     cohort: k.cohort ? { frequency: k.cohort.frequency, duration: k.cohort.duration, schedule: k.cohort.schedule, target: k.cohort.target ?? null } : null,
-    annualMonth: k.annualMonth ?? null, preparedYear: k.preparedYear ?? null,
+    annualMonth: k.annualMonth ?? null, preparedYear: k.preparedYear ?? null, caseType: k.caseType ?? null,
   };
 };
 /** The dates a kind implies: a fixed term runs from 1 January of its first year to 31 December of its last. */
@@ -76,6 +79,7 @@ const kindProblem = (type: string, kind: string | null | undefined, k: KindInfo 
   if (!kind) return null;
   if (type !== 'PROGRAM') return 'KIND_FOR_PROGRAM_ONLY';
   if (kind === 'FIXED_TERM' && (!k?.startYear || !k.endYear || k.endYear < k.startYear)) return 'BAD_YEARS';
+  if (kind === 'CASE' && !k?.caseType) return 'CASE_TYPE_NEEDED';
   return null;
 };
 
@@ -499,7 +503,7 @@ workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   if (kbad) return fail(res, 400, kbad, 'Check the program kind and its years');
   const row = (await prisma.workPlan.create({
     data: {
-      programKind: b.planType === 'PROGRAM' ? b.programKind ?? 'ONGOING' : null, purposeTag: b.planType === 'PROGRAM' ? b.purposeTag ?? null : null, hasMoney: b.hasMoney ?? true, kindJson: JSON.stringify(b.kind ?? {}),
+      programKind: b.planType === 'PROGRAM' ? b.programKind ?? 'ONGOING' : null, purposeTag: b.planType === 'PROGRAM' ? b.purposeTag ?? null : null, hasMoney: b.programKind === 'CASE' ? true : b.hasMoney ?? true, kindJson: JSON.stringify(b.kind ?? {}),
       fundraising: fraise, fundTarget: fraise ? b.fundTarget ?? null : null,
       parentId: b.parentId || null, orgUnitId: unit.id, systemId: unit.systemId, title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null,
       ...timingData(b), ...(kindDates(b.programKind, b.kind) ?? {}), leaderPersonId: b.leaderId,
@@ -538,7 +542,7 @@ workPlansRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
   const row = (await prisma.workPlan.update({
     where: { id: p.id },
     data: {
-      ...(b.programKind !== undefined ? { programKind: ptype === 'PROGRAM' ? b.programKind : null } : {}), ...(b.purposeTag !== undefined ? { purposeTag: b.purposeTag } : {}), ...(b.hasMoney !== undefined ? { hasMoney: b.hasMoney } : {}), ...(b.kind !== undefined ? { kindJson: JSON.stringify(b.kind ?? {}) } : {}),
+      ...(b.programKind !== undefined ? { programKind: ptype === 'PROGRAM' ? b.programKind : null } : {}), ...(b.purposeTag !== undefined ? { purposeTag: b.purposeTag } : {}), ...(b.hasMoney !== undefined ? { hasMoney: nextKind === 'CASE' ? true : b.hasMoney } : {}), ...(b.kind !== undefined ? { kindJson: JSON.stringify(b.kind ?? {}) } : {}),
       fundraising: fraise, fundTarget: fraise ? target : null,
       title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null, ...timingData(b), ...(kindDates(nextKind, nextInfo) ?? {}), leaderPersonId: b.leaderId, teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility,
       planType: b.planType ?? p.planType ?? 'PROJECT',

@@ -1979,3 +1979,73 @@ model ProgramCohort {
   @@index([planId])
   @@index([systemId])
 }
+
+/// A case of a case-based program (Sick Care, Needy Support): one person's need, registered by their unit leader.
+model ProgramCase {
+  id             String    @id @default(cuid())
+  planId         String
+  systemId       String
+  /// SICK_CARE | NEEDY
+  caseType       String
+  unitId         String
+  name           String
+  contact        String    @default("")
+  /// The sickness, or the narration of the need
+  issue          String    @default("")
+  /// What the person's unit can raise, what would make the difference, and the gap between them (never below zero)
+  capacity       Int       @default(0)
+  need           Int       @default(0)
+  gap            Int       @default(0)
+  /// What the church approved for this person and what the Treasurer has paid out
+  approved       Int       @default(0)
+  disbursed      Int       @default(0)
+  /// PENDING | APPROVED | FOLLOW_UP | CLOSED
+  status         String    @default("PENDING")
+  /// The latest healing or resolution status written by the unit leader
+  condition      String?
+  batchId        String?
+  /// RESOLVED | RECOVERED | PASSED | CANCELLED
+  outcome        String?
+  closeNote      String?
+  registeredById String
+  createdAt      DateTime  @default(now())
+  closedAt       DateTime?
+
+  @@index([planId])
+  @@index([systemId])
+}
+
+/// A decision of the case manager on cases of one unit: PER_CASE (amounts named) or BLOCK (a lump sum the unit leader divides).
+model ProgramCaseBatch {
+  id          String    @id @default(cuid())
+  planId      String
+  systemId    String
+  unitId      String
+  /// PER_CASE | BLOCK
+  mode        String
+  amount      Int
+  /// AWAITING_ALLOCATION | READY | PAID
+  status      String
+  decidedById String
+  decidedAt   DateTime  @default(now())
+  paidEntryId String?
+  paidById    String?
+  paidAt      DateTime?
+
+  @@index([planId])
+}
+
+/// One line of a case's timeline.
+model ProgramCaseEvent {
+  id     String   @id @default(cuid())
+  caseId String
+  planId String
+  /// REGISTERED | REVIEWED | ALLOCATED | PAID | PROGRESS | CLOSED
+  kind   String
+  text   String
+  byId   String
+  at     DateTime @default(now())
+
+  @@index([caseId])
+  @@index([planId])
+}

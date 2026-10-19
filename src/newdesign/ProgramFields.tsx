@@ -1,11 +1,11 @@
-import { PROGRAM_KINDS, PURPOSE_TAGS, type ProgramKind, type PurposeTag } from '../api/frontDoorApi';
+import { CASE_TYPES, PROGRAM_KINDS, PURPOSE_TAGS, type CaseType, type ProgramKind, type PurposeTag } from '../api/frontDoorApi';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { Segmented } from './kit';
 
 export type ProgramValues = {
   pkind: ProgramKind; purpose: PurposeTag | ''; hasMoney: boolean; startYear: string; endYear: string; schedule: string;
-  cFreq: string; cDuration: string; cSchedule: string; cTarget: string; month: string;
+  cFreq: string; cDuration: string; cSchedule: string; cTarget: string; month: string; caseType: CaseType;
 };
 export type ProgramSetters = { [K in keyof ProgramValues]: (v: ProgramValues[K]) => void };
 
@@ -46,6 +46,14 @@ export function ProgramFields({ v, set }: { v: ProgramValues; set: ProgramSetter
           <div className="ap-half"><TextField label={t('door.ac.cohort.target')} name="ac-c-target" inputMode="numeric" value={v.cTarget} onChange={(e) => set.cTarget(e.target.value)} /></div>
         </>
       )}
+      {v.pkind === 'CASE' && (
+        <div className="ap-full">
+          <SelectField label={`${t('door.ac.caseType')} *`} name="ac-case-type" value={v.caseType} onChange={(e) => set.caseType(e.target.value as CaseType)}>
+            {CASE_TYPES.map((c) => <option key={c} value={c}>{t(`door.ac.caseType.${c}` as 'door.ac.caseType.SICK_CARE')}</option>)}
+          </SelectField>
+          <p className="muted">{t(`door.ac.caseType.${v.caseType}.hint` as 'door.ac.caseType.SICK_CARE.hint')}</p>
+        </div>
+      )}
       {v.pkind === 'SEASONAL' && (
         <div className="ap-full">
           <SelectField label={t('door.ac.annualMonth')} name="ac-month" value={v.month} onChange={(e) => set.month(e.target.value)}>
@@ -53,7 +61,7 @@ export function ProgramFields({ v, set }: { v: ProgramValues; set: ProgramSetter
           </SelectField>
         </div>
       )}
-      <div className="ap-full">
+      {v.pkind !== 'CASE' && <div className="ap-full">
         <Segmented
           label={t('door.ac.hasMoney')}
           value={v.hasMoney ? 'yes' : 'no'}
@@ -61,7 +69,7 @@ export function ProgramFields({ v, set }: { v: ProgramValues; set: ProgramSetter
           items={[{ key: 'yes', label: t('door.ac.yes') }, { key: 'no', label: t('door.ac.no') }]}
         />
         <p className="muted">{t(v.hasMoney ? 'door.ac.hasMoney.yesHint' : 'door.ac.hasMoney.noHint')}</p>
-      </div>
+      </div>}
     </>
   );
 }
