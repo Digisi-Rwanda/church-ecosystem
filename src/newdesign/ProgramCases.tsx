@@ -8,14 +8,15 @@ import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { Segmented, SidePanel, StatusChip, type ChipTone } from './kit';
 import { LoadState } from './LoadState';
+import { MarriageDetail, MarriageRegister } from './MarriageCase';
 import { formatRwf } from './money';
 import { planErrorKey } from './plans';
 import { useLoad } from './useLoad';
 
 const num = (v: string) => Math.max(0, Math.floor(Number(v) || 0));
-const TONE: Record<string, ChipTone> = { PENDING: 'warn', APPROVED: 'info', FOLLOW_UP: 'info', CLOSED: 'done' };
+const TONE: Record<string, ChipTone> = { PENDING: 'warn', VERIFIED: 'info', APPROVED: 'info', FOLLOW_UP: 'info', CLOSED: 'done' };
 const OUTCOMES: CaseOutcome[] = ['RESOLVED', 'RECOVERED', 'PASSED', 'CANCELLED'];
-type Panel = 'register' | 'review' | null;
+type Panel = 'register' | 'review' | 'marriage' | null;
 
 /** The case list of a case-based program: the budget left, the cases, and what each role does next. */
 export function ProgramCases({ p, onChange }: { p: PlanDetail; onChange: () => void }) {
@@ -79,9 +80,9 @@ export function ProgramCases({ p, onChange }: { p: PlanDetail; onChange: () => v
           <div className="stat-tile"><span className="muted">{t('door.cs.total')}</span><strong>{v.counts.total}</strong></div>
           <div className="stat-tile"><span className="muted">{t('door.cs.active')}</span><strong>{v.counts.active}</strong></div>
           <div className="stat-tile"><span className="muted">{t('door.cs.pending')}</span><strong>{v.counts.pending}</strong></div>
-          <div className="stat-tile"><span className="muted">{t('door.cs.cap')}</span><strong>{formatRwf(v.budget.cap)}</strong></div>
+          {p.hasMoney && <><div className="stat-tile"><span className="muted">{t('door.cs.cap')}</span><strong>{formatRwf(v.budget.cap)}</strong></div>
           <div className="stat-tile"><span className="muted">{t('door.cs.spent')}</span><strong>{formatRwf(v.budget.spent)}</strong></div>
-          <div className="stat-tile"><span className="muted">{t('door.cs.remaining')}</span><strong>{formatRwf(v.budget.remaining)}</strong></div>
+          <div className="stat-tile"><span className="muted">{t('door.cs.remaining')}</span><strong>{formatRwf(v.budget.remaining)}</strong></div></>}
         </div>
         {v.budget.committed > 0 && <p className="muted">{t('door.cs.committed', { amount: formatRwf(v.budget.committed) })}</p>}
 
@@ -94,7 +95,7 @@ export function ProgramCases({ p, onChange }: { p: PlanDetail; onChange: () => v
             <button type="button" className="btn sm" onClick={() => { setPay(b); setAccountId(''); setLineId(''); setError(''); }}>{t('door.cs.logPaid')}</button></p>
         ))}
         <div className="door-row">
-          {v.canRegister && <button type="button" className="btn" onClick={() => { setUnitId(v.myUnits.length === 1 ? v.myUnits[0]!.id : ''); setName(''); setContact(''); setIssue(''); setCapacity(''); setNeed(''); setError(''); setPanel('register'); }}>{t('door.cs.register')}</button>}
+          {v.canRegister && <button type="button" className="btn" onClick={() => { if (v.caseType === 'MARRIAGE') { setPanel('marriage'); return; } setUnitId(v.myUnits.length === 1 ? v.myUnits[0]!.id : ''); setName(''); setContact(''); setIssue(''); setCapacity(''); setNeed(''); setError(''); setPanel('register'); }}>{t('door.cs.register')}</button>}
           {v.canReview && <button type="button" className="btn secondary" onClick={() => { setMode('PER_CASE'); setAmounts({}); setBlockAmount(''); setBlockUnit(''); setError(''); setPanel('review'); }}>{t('door.cs.review')}</button>}
         </div>
         {error && !panel && !alloc && !pay && <p className="door-error" role="alert">{error}</p>}
@@ -104,7 +105,7 @@ export function ProgramCases({ p, onChange }: { p: PlanDetail; onChange: () => v
             <div className="door-row">
               <SelectField label={t('door.cs.filter.status')} name="cs-f-status" value={statusF} onChange={(e) => setStatusF(e.target.value)}>
                 <option value="">{t('door.cs.filter.all')}</option>
-                {(['PENDING', 'APPROVED', 'FOLLOW_UP', 'CLOSED'] as const).map((s) => <option key={s} value={s}>{t(`door.cs.status.${s}` as 'door.cs.status.PENDING')}</option>)}
+                {(v.caseType === 'MARRIAGE' ? ['PENDING', 'VERIFIED', 'APPROVED', 'CLOSED'] as const : ['PENDING', 'APPROVED', 'FOLLOW_UP', 'CLOSED'] as const).map((s) => <option key={s} value={s}>{t(`door.cs.status.${s}` as 'door.cs.status.PENDING')}</option>)}
               </SelectField>
               {units.length > 1 && (
                 <SelectField label={t('door.cs.filter.unit')} name="cs-f-unit" value={unitF} onChange={(e) => setUnitF(e.target.value)}>
@@ -115,16 +116,16 @@ export function ProgramCases({ p, onChange }: { p: PlanDetail; onChange: () => v
             </div>
             <div className="door-table-wrap">
               <table className="door-table door-stack">
-                <thead><tr><th scope="col">{t('door.cs.col.person')}</th><th scope="col">{t('door.cs.col.unit')}</th><th scope="col">{t('door.cs.col.issue')}</th><th scope="col">{t('door.cs.col.gap')}</th><th scope="col">{t('door.cs.col.support')}</th><th scope="col">{t('door.cs.col.status')}</th><th scope="col"><span className="visually-hidden">{t('door.cs.col.action')}</span></th></tr></thead>
+                <thead><tr><th scope="col">{t('door.cs.col.person')}</th><th scope="col">{t('door.cs.col.unit')}</th><th scope="col">{t(v.caseType === 'MARRIAGE' ? 'door.mr.col.date' : 'door.cs.col.issue')}</th>{p.hasMoney && <><th scope="col">{t('door.cs.col.gap')}</th><th scope="col">{t('door.cs.col.support')}</th></>}<th scope="col">{t('door.cs.col.status')}</th><th scope="col"><span className="visually-hidden">{t('door.cs.col.action')}</span></th></tr></thead>
                 <tbody>
                   {rows.map((r) => (
                     <tr key={r.id}>
                       <th scope="row">{r.name}</th>
                       <td data-label={t('door.cs.col.unit')}>{r.unitName}</td>
                       <td data-label={t('door.cs.col.issue')}>{r.issue || '—'}</td>
-                      <td data-label={t('door.cs.col.gap')}>{formatRwf(r.gap)}</td>
-                      <td data-label={t('door.cs.col.support')}>{r.approved > 0 ? `${formatRwf(r.approved)}${r.disbursed > 0 ? ` ✓` : ''}` : '—'}</td>
-                      <td data-label={t('door.cs.col.status')}><StatusChip tone={TONE[r.status] ?? 'neutral'}>{status(r)}</StatusChip></td>
+                      {p.hasMoney && <><td data-label={t('door.cs.col.gap')}>{formatRwf(r.gap)}</td>
+                      <td data-label={t('door.cs.col.support')}>{r.approved > 0 ? `${formatRwf(r.approved)}${r.disbursed > 0 ? ` ✓` : ''}` : '—'}</td></>}
+                      <td data-label={t('door.cs.col.status')}><StatusChip tone={TONE[r.status] ?? 'neutral'}>{status(r)}</StatusChip>{r.awaiting && <span className="muted"> {t(`door.mr.awaiting.${r.awaiting}` as 'door.mr.awaiting.CATECHIST')}</span>}</td>
                       <td><button type="button" className="btn ghost sm" onClick={() => setOpen(r.id)}>{t('door.cs.view')}</button></td>
                     </tr>
                   ))}
@@ -223,7 +224,9 @@ export function ProgramCases({ p, onChange }: { p: PlanDetail; onChange: () => v
         </div>
       </SidePanel>
 
-      {open && <CaseDetailPanel p={p} caseId={open} onClose={() => setOpen(null)} onChange={() => { load.reload(); onChange(); }} />}
+      {panel === 'marriage' && <MarriageRegister p={p} units={v.myUnits} money={p.hasMoney} onClose={() => setPanel(null)} onDone={() => { load.reload(); onChange(); }} />}
+      {open && v.caseType === 'MARRIAGE' && <MarriageDetail p={p} caseId={open} onClose={() => setOpen(null)} onChange={() => { load.reload(); onChange(); }} />}
+      {open && v.caseType !== 'MARRIAGE' && <CaseDetailPanel p={p} caseId={open} onClose={() => setOpen(null)} onChange={() => { load.reload(); onChange(); }} />}
     </>
   );
 }

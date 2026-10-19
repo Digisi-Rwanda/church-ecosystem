@@ -1030,7 +1030,7 @@ export type PlanType = 'PROGRAM' | 'EVENT' | 'PROJECT';
 export const PLAN_TYPES: readonly PlanType[] = ['PROGRAM', 'EVENT', 'PROJECT'];
 
 export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL', 'CASE'] as const;
-export const CASE_TYPES = ['SICK_CARE', 'NEEDY'] as const;
+export const CASE_TYPES = ['SICK_CARE', 'NEEDY', 'MARRIAGE'] as const;
 export type CaseType = (typeof CASE_TYPES)[number];
 export type ProgramKind = (typeof PROGRAM_KINDS)[number];
 export const PURPOSE_TAGS = ['MINISTRY', 'CAPACITY', 'COMMUNITY', 'OPERATIONS'] as const;
@@ -1999,8 +1999,8 @@ export const fetchSeason = (planId: string): Promise<SeasonView> => apiFetch(`/a
 export const prepareSeason = (planId: string, tasks?: string[]): Promise<SeasonView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/season/prepare`, { method: 'POST', body: tasks ? { tasks } : {} });
 
 /** Cases of a case-based program (Sick Care, Needy Support). */
-export type CaseStatus = 'PENDING' | 'APPROVED' | 'FOLLOW_UP' | 'CLOSED';
-export type CaseRowView = { id: string; name: string; unitId: string; unitName: string; issue: string; gap: number; approved: number; disbursed: number; status: CaseStatus; condition: string | null; outcome: string | null; at: string | null };
+export type CaseStatus = 'PENDING' | 'VERIFIED' | 'APPROVED' | 'FOLLOW_UP' | 'CLOSED';
+export type CaseRowView = { id: string; name: string; unitId: string; unitName: string; issue: string; gap: number; approved: number; disbursed: number; status: CaseStatus; condition: string | null; outcome: string | null; at: string | null; awaiting?: 'CATECHIST' | 'CHURCH_LEADER' | null };
 export type CaseBatchCase = { id: string; name: string; gap: number; approved: number };
 export type CasesView = {
   caseType: CaseType; live: boolean; manager: boolean;
@@ -2015,9 +2015,22 @@ export type CasesView = {
 export type CaseDetail = {
   id: string; name: string; contact: string; issue: string; unitId: string; unitName: string; caseType: CaseType;
   capacity: number; need: number; gap: number; approved: number; disbursed: number; status: CaseStatus; condition: string | null; outcome: string | null; closeNote: string | null;
-  canProgress: boolean; canClose: boolean; events: Array<{ id: string; kind: string; text: string; at: string | null; byId: string }>;
+  canProgress: boolean; canClose: boolean; marriage?: MarriageBlock | null; events: Array<{ id: string; kind: string; text: string; at: string | null; byId: string }>;
 };
-export type CaseOutcome = 'RESOLVED' | 'RECOVERED' | 'PASSED' | 'CANCELLED';
+export type CaseOutcome = 'RESOLVED' | 'RECOVERED' | 'PASSED' | 'CANCELLED' | 'MARRIED';
+export type MarriageItem = { id: string; place: string; date: string; time: string; status: 'SCHEDULED' | 'DONE' | 'CANCELLED' };
+export type MarriageChange = { kind: 'POSTPONE' | 'CANCEL'; reason: string; newDate: string | null; newTime: string | null; status: 'REQUESTED' | 'CONFIRMED' };
+export type MarriageBlock = {
+  p1Unit: string; p1Name: string; p1Contact: string; p2Name: string; p2Church: string; p2Contact: string; date: string; time: string; place: string; certificateFileId: string | null;
+  status: CaseStatus; awaiting: 'CATECHIST' | 'CHURCH_LEADER' | null; hasMoney: boolean;
+  announcements: MarriageItem[]; meetings: MarriageItem[]; change: MarriageChange | null;
+  canVerify: boolean; canApprove: boolean; canSendBack: boolean; canArrangeAnnouncements: boolean; canArrangeMeetings: boolean;
+  canRequestChange: boolean; canConfirmChange: boolean; canDecideChange: boolean; maxSupport: number; remaining: number;
+};
+export type MarriageInput = {
+  unitId: string; p1Name: string; p1Contact: string; p2Name: string; p2Church: string; p2Contact: string; date: string; time: string | null; place: string;
+  capacity: number; need: number; certificate: { name: string; mime: string; data: string } | null;
+};
 const CS = (id: string) => `/api/work-plans/${encodeURIComponent(id)}/cases`;
 export const fetchCases = (planId: string): Promise<CasesView> => apiFetch(CS(planId));
 export const registerCase = (planId: string, b: { unitId: string; name: string; contact: string; issue: string; capacity: number; need: number }): Promise<CasesView> => apiFetch(CS(planId), { method: 'POST', body: b });
@@ -2027,6 +2040,16 @@ export const markBatchPaid = (planId: string, batchId: string, entryId: string):
 export const fetchCase = (planId: string, caseId: string): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}`);
 export const reportCaseProgress = (planId: string, caseId: string, b: { text: string; condition: string | null }): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}/progress`, { method: 'POST', body: b });
 export const closeCase = (planId: string, caseId: string, b: { outcome: CaseOutcome; note: string | null }): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}/close`, { method: 'POST', body: b });
+const CASE = (planId: string, caseId: string) => `${CS(planId)}/${encodeURIComponent(caseId)}`;
+export const registerMarriage = (planId: string, b: MarriageInput): Promise<{ id: string }> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/marriages`, { method: 'POST', body: b });
+export const verifyMarriage = (planId: string, caseId: string): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/verify`, { method: 'POST', body: {} });
+export const sendMarriageBack = (planId: string, caseId: string, reason: string): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/send-back`, { method: 'POST', body: { reason } });
+export const approveMarriage = (planId: string, caseId: string, support: number): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/approve`, { method: 'POST', body: { support } });
+export const addMarriageItem = (planId: string, caseId: string, b: { kind: 'ANNOUNCEMENT' | 'MEETING'; onDate: string; atTime: string | null; place: string }): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/items`, { method: 'POST', body: b });
+export const changeMarriageItem = (planId: string, caseId: string, itemId: string, b: { onDate?: string; atTime?: string | null; place?: string; status?: 'SCHEDULED' | 'DONE' | 'CANCELLED' }): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: b });
+export const requestMarriageChange = (planId: string, caseId: string, b: { kind: 'POSTPONE' | 'CANCEL'; reason: string; newDate: string | null; newTime: string | null }): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/change`, { method: 'POST', body: b });
+export const confirmMarriageChange = (planId: string, caseId: string): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/change/confirm`, { method: 'POST', body: {} });
+export const decideMarriageChange = (planId: string, caseId: string, b: { approve: boolean; note: string | null }): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/change/decide`, { method: 'POST', body: b });
 /** Records an expense and says which entry it made, so the Treasurer can tie it to approved support. */
 export async function recordMoneyEntryId(input: MoneyEntryInput): Promise<string> {
   return (await apiFetch<{ id: string }>(`${M}/entries`, { method: 'POST', body: input })).id;

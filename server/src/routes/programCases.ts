@@ -15,66 +15,76 @@ import { canRecord } from '../money/rules.js';
 import { liveLines } from '../money/planMoney.js';
 import { spentOf } from '../money/settlement.js';
 import { CHURCH_SYSTEM } from '../work/plan.js';
+import { liveHoldings } from '../capabilities/engine.js';
 
 export const programCasesRouter = Router();
-type Res = import('express').Response;
-type Data = Awaited<ReturnType<typeof loadAccessData>>['data'];
-type Units = Awaited<ReturnType<typeof loadAccessData>>['units'];
-const fail = (res: Res, status: number, code: string, error: string, extra: object = {}) => res.status(status).json({ error, code, ...extra });
 
-interface PlanRow { id: string; systemId: string; title: string; status: string; planType?: string | null; programKind?: string | null; kindJson?: string | null; teamJson: string; deletedAt?: Date | string | null; [k: string]: unknown }
+/** The marriage case type registers itself here (programMarriages.ts), so the two files never import each other while loading. */
+interface MarriageHooks { block: (p: PlanRow, c: CaseRow, me: string, data: Data, units: Units) => Promise<unknown>; canClose: (p: PlanRow, c: CaseRow, me: string, data: Data) => boolean }
+let marriage: MarriageHooks | null = null;
+export const registerMarriage = (m: MarriageHooks) => { marriage = m; };
+export type Res = import('express').Response;
+export type Data = Awaited<ReturnType<typeof loadAccessData>>['data'];
+export type Units = Awaited<ReturnType<typeof loadAccessData>>['units'];
+export const fail = (res: Res, status: number, code: string, error: string, extra: object = {}) => res.status(status).json({ error, code, ...extra });
+
+export interface PlanRow { id: string; systemId: string; title: string; status: string; planType?: string | null; programKind?: string | null; kindJson?: string | null; teamJson: string; deletedAt?: Date | string | null; [k: string]: unknown }
 export interface CaseRow {
   id: string; planId: string; systemId: string; caseType: string; unitId: string; name: string; contact: string; issue: string; capacity: number; need: number; gap: number;
   approved: number; disbursed: number; status: string; condition: string | null; batchId: string | null; outcome: string | null; closeNote: string | null;
-  registeredById: string; createdAt: Date | string; closedAt: Date | string | null;
+  registeredById: string; createdAt: Date | string; closedAt: Date | string | null; detailsJson?: string | null; verifiedById?: string | null; verifiedAt?: Date | string | null; changeJson?: string | null;
 }
-interface BatchRow { id: string; planId: string; systemId: string; unitId: string; mode: string; amount: number; status: string; decidedById: string; decidedAt: Date | string; paidEntryId: string | null }
+export interface BatchRow { id: string; planId: string; systemId: string; unitId: string; mode: string; amount: number; status: string; decidedById: string; decidedAt: Date | string; paidEntryId: string | null }
 interface EventRow { id: string; caseId: string; planId: string; kind: string; text: string; byId: string; at: Date | string }
 interface Line { planId: string | null; amount: number; status: string }
 interface Ent { id: string; planId: string | null; kind: string; status: string; amount: number }
 
-const LIVE = ['SETUP', 'RUNNING', 'PAUSED'];
-const OUTCOMES = ['RESOLVED', 'RECOVERED', 'PASSED', 'CANCELLED'] as const;
-const sum = (xs: number[]) => xs.reduce((n, x) => n + x, 0);
-const iso = (v: Date | string | null | undefined) => (v ? new Date(v).toISOString() : null);
+export const LIVE = ['SETUP', 'RUNNING', 'PAUSED'];
+const OUTCOMES = ['RESOLVED', 'RECOVERED', 'PASSED', 'CANCELLED', 'MARRIED'] as const;
+export const sum = (xs: number[]) => xs.reduce((n, x) => n + x, 0);
+export const iso = (v: Date | string | null | undefined) => (v ? new Date(v).toISOString() : null);
 
-const casesOf = async (planId: string) => ((await prisma.programCase.findMany({ where: { planId } })) as CaseRow[]).filter((c) => c.planId === planId).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
-const batchesOf = async (planId: string) => ((await prisma.programCaseBatch.findMany({ where: { planId } })) as BatchRow[]).filter((b) => b.planId === planId);
+export const casesOf = async (planId: string) => ((await prisma.programCase.findMany({ where: { planId } })) as CaseRow[]).filter((c) => c.planId === planId).sort((a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime());
+export const batchesOf = async (planId: string) => ((await prisma.programCaseBatch.findMany({ where: { planId } })) as BatchRow[]).filter((b) => b.planId === planId);
 const eventsOf = async (caseId: string) => ((await prisma.programCaseEvent.findMany({ where: { caseId } })) as EventRow[]).filter((e) => e.caseId === caseId).sort((a, b) => new Date(a.at).getTime() - new Date(b.at).getTime());
-const event = (c: { id: string; planId: string }, kind: string, text: string, byId: string) => prisma.programCaseEvent.create({ data: { caseId: c.id, planId: c.planId, kind, text, byId } });
+export const event = (c: { id: string; planId: string }, kind: string, text: string, byId: string) => prisma.programCaseEvent.create({ data: { caseId: c.id, planId: c.planId, kind, text, byId } });
 
-const leadersOf = (unitId: string, units: Units, data: Data): string[] => {
+export const leadersOf = (unitId: string, units: Units, data: Data): string[] => {
   const u = (units as Array<{ id: string; systemId: string | null }>).find((x) => x.id === unitId);
   return u?.systemId ? unitApproverIds(u.systemId, data) : [];
 };
-const unitName = (id: string, units: Units) => (units as Array<{ id: string; name: string }>).find((u) => u.id === id)?.name ?? '';
+export const unitName = (id: string, units: Units) => (units as Array<{ id: string; name: string }>).find((u) => u.id === id)?.name ?? '';
 const roleOf = (p: PlanRow, me: string) => teamOf(p as never).find((m: { personId: string }) => m.personId === me)?.role ?? '';
 
 /** The case manager: the people who run the program (its owning unit's leaders and the plan's own managers). */
-const isManager = (p: PlanRow, me: string, data: Data) => canManagePlan(p as never, me, data) || unitApproverIds(p.systemId, data).includes(me);
-const isSubmitter = (p: PlanRow, me: string) => /submitter/i.test(roleOf(p, me));
-const sawAll = (p: PlanRow, me: string, data: Data) => isManager(p, me, data) || canDecideForChurch(me, data) || catechistIds(data).includes(me) || canRecord(me, p.systemId, data);
-const watchers = (p: PlanRow, data: Data) => [...new Set([...catechistIds(data), ...holdersWith(CHURCH_SYSTEM, 'MISSION', 'A', data).filter((id) => canDecideForChurch(id, data))])];
+export const isManager = (p: PlanRow, me: string, data: Data) => canManagePlan(p as never, me, data) || unitApproverIds(p.systemId, data).includes(me);
+export const isSubmitter = (p: PlanRow, me: string) => /submitter/i.test(roleOf(p, me));
+export const secretaryIds = (data: Data): string[] => {
+  const ids = [...new Set((data.positions as Array<{ personId: string }>).map((x) => x.personId))];
+  return ids.filter((id) => liveHoldings(id, data, new Date()).some((h) => h.via === 'OFFICE' && h.office === 'CHURCH_SECRETARY'));
+};
+export const sawAll = (p: PlanRow, me: string, data: Data) => secretaryIds(data).includes(me) || isManager(p, me, data) || canDecideForChurch(me, data) || catechistIds(data).includes(me) || canRecord(me, p.systemId, data);
+export const watchers = (p: PlanRow, data: Data) => [...new Set([...catechistIds(data), ...holdersWith(CHURCH_SYSTEM, 'MISSION', 'A', data).filter((id) => canDecideForChurch(id, data))])];
 
-async function tell(ids: Iterable<string>, p: PlanRow, me: string, title: string, body: string | null, key: string, important = false) {
+export async function tell(ids: Iterable<string>, p: PlanRow, me: string, title: string, body: string | null, key: string, important = false) {
   for (const id of new Set(ids)) if (id !== me) await notifySafely(prisma as never, { kind: important ? 'WAITING_FOR_ME' : 'FOR_INFORMATION', toPersonId: id, systemId: p.systemId, title, body, href: `/s/${p.systemId}/work/plans/${p.id}`, important, sourceKey: `${key}:${id}` });
 }
-async function audit(actorId: string, systemId: string, action: string, detail: string, meta: object) {
+export async function audit(actorId: string, systemId: string, action: string, detail: string, meta: object) {
   await prisma.auditEvent.create({ data: { at: new Date(), actorId, systemId, action, resource: 'WORKPLAN', detail, metaJson: JSON.stringify(meta) } });
 }
 
 /** What the program has left: its budget, less what was spent, less what is approved and not yet paid. */
-async function budgetOf(p: PlanRow) {
+export async function budgetOf(p: PlanRow) {
   const cap = sum(liveLines(((await prisma.moneyPlanItem.findMany({ where: { planId: p.id } })) as Line[]).filter((l) => l.planId === p.id)).map((l) => l.amount));
   const spent = await spentOf(p.id);
   const cases = await casesOf(p.id);
   const batches = await batchesOf(p.id);
-  const committed = sum(batches.filter((b) => b.status !== 'PAID').map((b) => b.amount));
+  const committed = sum(batches.filter((b) => b.status === 'READY' || b.status === 'AWAITING_ALLOCATION').map((b) => b.amount));
   void cases;
   return { cap, spent, committed, remaining: cap - spent - committed };
 }
 
-async function load(req: AuthedRequest, res: Res) {
+export async function load(req: AuthedRequest, res: Res) {
   const me = req.auth!.personId;
   const { data, units } = await loadAccessData(me);
   const p = (await prisma.workPlan.findUnique({ where: { id: String(req.params.id) } })) as PlanRow | null;
@@ -82,9 +92,9 @@ async function load(req: AuthedRequest, res: Res) {
   if (p.planType !== 'PROGRAM' || p.programKind !== 'CASE') return fail(res, 409, 'NOT_A_CASE_PROGRAM', 'Only a case-based program has cases'), null;
   return { me, data, units, p };
 }
-const caseTypeOf = (p: PlanRow): string => { try { return (JSON.parse(p.kindJson ?? '{}') as { caseType?: string }).caseType ?? 'NEEDY'; } catch { return 'NEEDY'; } };
+export const caseTypeOf = (p: PlanRow): string => { try { return (JSON.parse(p.kindJson ?? '{}') as { caseType?: string }).caseType ?? 'NEEDY'; } catch { return 'NEEDY'; } };
 
-async function listView(p: PlanRow, me: string, data: Data, units: Units) {
+export async function listView(p: PlanRow, me: string, data: Data, units: Units) {
   const all = await casesOf(p.id);
   const batches = await batchesOf(p.id);
   const manager = isManager(p, me, data);
@@ -93,7 +103,7 @@ async function listView(p: PlanRow, me: string, data: Data, units: Units) {
   const led = new Set((units as Array<{ id: string; systemId: string | null }>).filter((u) => u.systemId && unitApproverIds(u.systemId, data).includes(me)).map((u) => u.id));
   const mine = seeAll ? all : all.filter((c) => led.has(c.unitId) || c.registeredById === me);
   const live = LIVE.includes(p.status);
-  const pending = all.filter((c) => c.status === 'PENDING');
+  const pending = all.filter((c) => c.status === 'PENDING' && c.caseType !== 'MARRIAGE');
   const group = (cs: CaseRow[]) => [...new Set(cs.map((c) => c.unitId))].map((unitId) => ({ unitId, unitName: unitName(unitId, units), cases: cs.filter((c) => c.unitId === unitId).map((c) => ({ id: c.id, name: c.name, gap: c.gap })) }));
   const batchCases = (b: BatchRow) => all.filter((c) => c.batchId === b.id).map((c) => ({ id: c.id, name: c.name, gap: c.gap, approved: c.approved }));
   return {
@@ -103,7 +113,7 @@ async function listView(p: PlanRow, me: string, data: Data, units: Units) {
     canReview: live && manager && pending.length > 0, pendingByUnit: manager ? group(pending) : [],
     toAllocate: batches.filter((b) => b.status === 'AWAITING_ALLOCATION' && (manager || leadersOf(b.unitId, units, data).includes(me))).filter((b) => leadersOf(b.unitId, units, data).includes(me)).map((b) => ({ batchId: b.id, unitName: unitName(b.unitId, units), amount: b.amount, cases: batchCases(b) })),
     toPay: live && canRecord(me, p.systemId, data) ? batches.filter((b) => b.status === 'READY').map((b) => ({ batchId: b.id, unitName: unitName(b.unitId, units), mode: b.mode, amount: b.amount, cases: batchCases(b).filter((c) => c.approved > 0) })) : [],
-    rows: mine.map((c) => ({ id: c.id, name: c.name, unitId: c.unitId, unitName: unitName(c.unitId, units), issue: c.issue, gap: c.gap, approved: c.approved, disbursed: c.disbursed, status: c.status, condition: c.condition, outcome: c.outcome, at: iso(c.createdAt) })),
+    rows: mine.map((c) => ({ id: c.id, name: c.name, unitId: c.unitId, unitName: unitName(c.unitId, units), issue: c.caseType === 'MARRIAGE' ? (JSON.parse(c.detailsJson ?? '{}') as { date?: string }).date ?? '' : c.issue, gap: c.gap, approved: c.approved, disbursed: c.disbursed, status: c.status, condition: c.condition, outcome: c.outcome, at: iso(c.createdAt), awaiting: c.caseType === 'MARRIAGE' ? (c.status === 'PENDING' ? 'CATECHIST' : c.status === 'VERIFIED' ? 'CHURCH_LEADER' : null) : null })),
   };
 }
 
@@ -117,6 +127,7 @@ programCasesRouter.post('/:id/cases', requireAuth, async (req: AuthedRequest, re
   if (!got) return;
   const { me, data, units, p } = got;
   if (!LIVE.includes(p.status)) return fail(res, 409, 'WRONG_STATE', 'The program is not running');
+  if (caseTypeOf(p) === 'MARRIAGE') return fail(res, 409, 'USE_MARRIAGE_FORM', 'Register a marriage with the marriage form');
   const b = z.object({ unitId: z.string().min(1), name: z.string().trim().min(1).max(TITLE_MAX), contact: z.string().trim().max(120).default(''), issue: z.string().trim().max(2000).default(''), capacity: z.number().int().min(0).max(2_000_000_000).default(0), need: z.number().int().min(0).max(2_000_000_000).default(0) }).safeParse(req.body);
   if (!b.success) return fail(res, 400, 'BAD_INPUT', 'Give the name, the unit and the amounts');
   const allowed = isManager(p, me, data) || isSubmitter(p, me) || leadersOf(b.data.unitId, units, data).includes(me);
@@ -147,6 +158,7 @@ programCasesRouter.post('/:id/cases/review', requireAuth, async (req: AuthedRequ
   const chosen = ids.map((id) => all.find((c) => c.id === id));
   if (chosen.some((c) => !c || c.status !== 'PENDING')) return fail(res, 409, 'NOT_PENDING', 'Only pending cases are reviewed');
   const cases = chosen as CaseRow[];
+  if (cases.some((c) => c.caseType === 'MARRIAGE')) return fail(res, 409, 'USE_MARRIAGE_STEPS', 'A marriage is verified by the Catechist and approved by the Church Leader');
   const budget = await budgetOf(p);
   const wanted = b.data.mode === 'PER_CASE' ? sum(b.data.items.map((i) => i.amount)) : b.data.amount;
   if (b.data.mode === 'PER_CASE') {
@@ -230,7 +242,7 @@ programCasesRouter.post('/:id/cases/batches/:bid/disbursed', requireAuth, async 
   if (entry.amount !== batch.amount) return fail(res, 409, 'ENTRY_AMOUNT', 'The expense must equal the approved support exactly', { approved: batch.amount, entry: entry.amount });
   if ((await batchesOf(p.id)).some((x) => x.paidEntryId === entry.id)) return fail(res, 409, 'ENTRY_USED', 'That expense already paid another batch');
   for (const c of (await casesOf(p.id)).filter((x) => x.batchId === batch.id)) {
-    await prisma.programCase.update({ where: { id: c.id }, data: { status: 'FOLLOW_UP', disbursed: c.approved } });
+    await prisma.programCase.update({ where: { id: c.id }, data: { status: c.caseType === 'MARRIAGE' ? 'APPROVED' : 'FOLLOW_UP', disbursed: c.approved } });
     if (c.approved > 0) await event(c, 'PAID', `Church support of ${c.approved} RWF paid out`, me);
   }
   await prisma.programCaseBatch.update({ where: { id: batch.id }, data: { status: 'PAID', paidEntryId: entry.id, paidById: me, paidAt: new Date() } });
@@ -239,14 +251,16 @@ programCasesRouter.post('/:id/cases/batches/:bid/disbursed', requireAuth, async 
   res.json(await listView(p, me, data, units));
 });
 
-async function detail(p: PlanRow, c: CaseRow, me: string, data: Data, units: Units) {
+export async function detail(p: PlanRow, c: CaseRow, me: string, data: Data, units: Units) {
   const events = await eventsOf(c.id);
   const leader = leadersOf(c.unitId, units, data).includes(me) || c.registeredById === me;
   const open = c.status !== 'CLOSED' && LIVE.includes(p.status);
   return {
     id: c.id, name: c.name, contact: c.contact, issue: c.issue, unitId: c.unitId, unitName: unitName(c.unitId, units), caseType: c.caseType,
     capacity: c.capacity, need: c.need, gap: c.gap, approved: c.approved, disbursed: c.disbursed, status: c.status, condition: c.condition, outcome: c.outcome, closeNote: c.closeNote,
-    canProgress: open && (leader || isManager(p, me, data)), canClose: open && (leader || isManager(p, me, data)) && !(c.status === 'APPROVED'),
+    canProgress: open && c.caseType !== 'MARRIAGE' && (leader || isManager(p, me, data)),
+    canClose: open && (c.caseType === 'MARRIAGE' ? (marriage?.canClose(p, c, me, data) ?? false) : (leader || isManager(p, me, data)) && c.status !== 'APPROVED'),
+    marriage: c.caseType === 'MARRIAGE' ? await marriage?.block(p, c, me, data, units) : null,
     events: events.map((e) => ({ id: e.id, kind: e.kind, text: e.text, at: iso(e.at), byId: e.byId })),
   };
 }
@@ -285,7 +299,13 @@ programCasesRouter.post('/:id/cases/:cid/close', requireAuth, async (req: Authed
   if (!got) return;
   const { me, data, units, p, c } = got;
   const d = await detail(p, c, me, data, units);
-  if (c.status === 'APPROVED') return fail(res, 409, 'SUPPORT_PENDING', 'Support is approved and not yet paid. Wait for the Treasurer, then close the case');
+  if (c.caseType === 'MARRIAGE') {
+    const o = z.object({ outcome: z.enum(['MARRIED', 'CANCELLED']) }).safeParse(req.body);
+    if (!o.success) return fail(res, 400, 'BAD_INPUT', 'A marriage ends as married or cancelled');
+    if (o.data.outcome === 'CANCELLED' && c.status === 'APPROVED') return fail(res, 409, 'USE_CHANGE_REQUEST', 'An approved marriage is cancelled with a cancellation request');
+    if (o.data.outcome === 'MARRIED' && c.status !== 'APPROVED') return fail(res, 409, 'NOT_APPROVED', 'The Church Leader approves the marriage first');
+    if (o.data.outcome === 'MARRIED' && c.approved > c.disbursed) return fail(res, 409, 'SUPPORT_PENDING', 'Support is approved and not yet paid. Wait for the Treasurer, then close the case');
+  } else if (c.status === 'APPROVED' || c.approved > c.disbursed) return fail(res, 409, 'SUPPORT_PENDING', 'Support is approved and not yet paid. Wait for the Treasurer, then close the case');
   if (!d.canClose) return fail(res, 403, 'FORBIDDEN', 'You may not close this case');
   if (c.status === 'PENDING') {
     // a case nobody has reviewed can only be withdrawn

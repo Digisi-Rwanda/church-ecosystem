@@ -107,7 +107,7 @@ export function ActivityCreate() {
   const defaults = kind === 'program' ? { start: `${sy}-01-01`, end: `${pkind === 'FIXED_TERM' ? ey : sy}-12-31` } : { start, end: end || start };
   const yearsOk = kind !== 'program' || (sy >= 2000 && (pkind !== 'FIXED_TERM' || ey >= sy));
   const detailsOk = !!title.trim() && (!plan ? !!unit : true) && !!defaults.start && yearsOk && (kind !== 'fundraising' || targetN > 0);
-  const steps = kind === 'program' && !hasMoney && pkind !== 'CASE' ? NO_MONEY_STEPS : STEPS;
+  const steps = kind === 'program' && !hasMoney && !(pkind === 'CASE' && caseType !== 'MARRIAGE') ? NO_MONEY_STEPS : STEPS;
   const stepName = steps[step];
   const kindInput = (): KindInput => ({
     startYear: sy, endYear: pkind === 'FIXED_TERM' ? ey : null, schedule: pkind === 'ONGOING' ? schedule.trim() : '',
@@ -140,7 +140,7 @@ export function ActivityCreate() {
       beyondUnit: plan?.beyondUnit ?? false, visibility: plan?.visibility ?? 'SYSTEM',
       planType: kind === 'project' ? 'PROJECT' : kind === 'program' ? 'PROGRAM' : 'EVENT',
       fundraising: kind === 'fundraising', fundTarget: kind === 'fundraising' ? targetN : null,
-      ...(kind === 'program' ? { programKind: pkind, purposeTag: purpose || null, hasMoney: pkind === 'CASE' ? true : hasMoney, kind: kindInput() } : {}),
+      ...(kind === 'program' ? { programKind: pkind, purposeTag: purpose || null, hasMoney: pkind === 'CASE' && caseType !== 'MARRIAGE' ? true : hasMoney, kind: kindInput() } : {}),
     };
     let saved = plan ? await editPlan(plan.id, input) : await createPlan(unit, input);
     if (kind === 'project') {
@@ -175,7 +175,7 @@ export function ActivityCreate() {
   });
 
   if (resumeId && resume.failed) return <EmptyState variant="error" title={t('door.work.err.gone')} />;
-  const noMoney = kind === 'program' && !hasMoney && pkind !== 'CASE';
+  const noMoney = kind === 'program' && !hasMoney && !(pkind === 'CASE' && caseType !== 'MARRIAGE');
   const cannotSubmit = noMoney ? false : !money || money.planned <= 0 || money.gap !== 0;
   const lines = money?.lines ?? [];
 

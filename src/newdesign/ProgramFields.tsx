@@ -61,7 +61,7 @@ export function ProgramFields({ v, set }: { v: ProgramValues; set: ProgramSetter
           </SelectField>
         </div>
       )}
-      {v.pkind !== 'CASE' && <div className="ap-full">
+      {(v.pkind !== 'CASE' || v.caseType === 'MARRIAGE') && <div className="ap-full">
         <Segmented
           label={t('door.ac.hasMoney')}
           value={v.hasMoney ? 'yes' : 'no'}

@@ -921,3 +921,110 @@ describe('case-based programs (sick care)', () => {
     expect(notices('p-youth-leader').some((t) => t.includes('Support declined'))).toBe(true);
   });
 });
+
+describe('marriage cases', () => {
+  const CS = (id: string) => `${B}/${id}/cases`;
+  const marriageProgram = async () => {
+    fake.__db.orgUnit.push({ id: 'ou-youth', name: 'Youth', code: 'KAC-YTH', kind: 'MINISTRY', type: 'MINISTRY', parentId: 'ou-church', systemId: 'sys-youth' });
+    const id = await approvedPlan({ planType: 'PROGRAM', programKind: 'CASE', kind: { schedule: '', caseType: 'MARRIAGE' }, visibility: 'CHURCH', startsOn: `${Y}-01-01T00:00:00Z`, endsOn: `${Y}-12-31T00:00:00Z` });
+    fake.__db.person.push({ id: 'p-catechist', fullName: 'Catechist', status: 'ACTIVE' }, { id: 'p-secretary', fullName: 'Church Secretary', status: 'ACTIVE' });
+    fake.__db.position.push(
+      { id: 'pos-cat', personId: 'p-catechist', systemId: 'sys-main', title: 'Catechist', systemRole: 'CATECHIST', grantsAllSystems: false, status: 'ACTIVE', startDate: new Date('2019-01-01') },
+      { id: 'pos-sec', personId: 'p-secretary', systemId: 'sys-main', title: 'Church Secretary', systemRole: 'CHURCH_SECRETARY', grantsAllSystems: false, status: 'ACTIVE', startDate: new Date('2019-01-01') },
+    );
+    return id;
+  };
+  const wedding = `${Y + 1}-03-15`;
+  const reg = (id: string, o: object = {}, as = 'p-youth-leader') => post(as, `${B}/${id}/marriages`, { unitId: 'ou-youth', p1Name: 'John', p2Name: 'Mary', p2Church: 'Grace Chapel (Huye)', date: wedding, time: '14:00', place: 'Main Church', need: 50000, capacity: 20000, ...o });
+  const caseId = async (id: string) => ((await get('p-catechist', CS(id))).body.rows[0].id) as string;
+  const one = async (id: string, cid: string, as = 'p-catechist') => (await get(as, `${CS(id)}/${cid}`)).body;
+
+  it('registered by the unit leader, verified by the Catechist, approved by the Church Leader, with optional support', async () => {
+    const id = await marriageProgram();
+    expect((await reg(id, {}, 'p-choir-member')).status).toBe(403);
+    expect((await post('p-youth-leader', CS(id), { unitId: 'ou-youth', name: 'X', need: 1 })).body.code).toBe('USE_MARRIAGE_FORM');
+    const r = await reg(id);
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(notices('p-catechist').some((t) => t.includes('New marriage to verify'))).toBe(true);
+    const cid = await caseId(id);
+    let c = await one(id, cid);
+    expect(c.marriage).toMatchObject({ p1Name: 'John', p2Name: 'Mary', p2Church: 'Grace Chapel (Huye)', date: wedding, awaiting: 'CATECHIST', canVerify: true, p1Unit: 'Youth' });
+    expect((await post('p-pastor', `${CS(id)}/${cid}/verify`)).status).toBe(403);
+    expect((await post('p-catechist', `${CS(id)}/${cid}/items`, { kind: 'ANNOUNCEMENT', onDate: `${Y + 1}-02-01`, place: 'Main Church' })).status).toBe(409);
+    expect((await post('p-catechist', `${CS(id)}/${cid}/verify`)).status).toBe(200);
+    expect(notices('p-pastor').some((t) => t.includes('Marriage to approve'))).toBe(true);
+    expect((await post('p-catechist', `${CS(id)}/${cid}/approve`, {})).status).toBe(403);
+    expect((await post('p-pastor', `${CS(id)}/${cid}/approve`, { support: 40000 })).body.code).toBe('MORE_THAN_GAP');
+    const ok = await post('p-pastor', `${CS(id)}/${cid}/approve`, { support: 30000 });
+    expect(ok.status, JSON.stringify(ok.body)).toBe(200);
+    expect(ok.body.status).toBe('APPROVED');
+    expect((await get('p-ctr', CS(id))).body.toPay[0]).toMatchObject({ amount: 30000 });
+    expect((await get('p-ctr', CS(id))).body.budget.committed).toBe(30000);
+    c = await one(id, cid);
+    expect(c.marriage.awaiting).toBeNull();
+  });
+
+  it('the Catechist schedules announcements, the Secretary may arrange meetings; dates move without approval', async () => {
+    const id = await marriageProgram();
+    await reg(id, { need: 0, capacity: 0 });
+    const cid = await caseId(id);
+    await post('p-catechist', `${CS(id)}/${cid}/verify`);
+    const ann = await post('p-catechist', `${CS(id)}/${cid}/items`, { kind: 'ANNOUNCEMENT', onDate: `${Y + 1}-02-01`, atTime: '09:00', place: 'Main Church' });
+    expect(ann.status, JSON.stringify(ann.body)).toBe(201);
+    expect(notices('p-secretary').some((t) => t.includes('announcement scheduled'))).toBe(true);
+    expect(notices('p-youth-leader').some((t) => t.includes('announcement scheduled'))).toBe(true);
+    expect((await post('p-secretary', `${CS(id)}/${cid}/items`, { kind: 'ANNOUNCEMENT', onDate: `${Y + 1}-02-08` })).status).toBe(403);
+    expect((await post('p-youth-leader', `${CS(id)}/${cid}/items`, { kind: 'MEETING', onDate: `${Y + 1}-02-02` })).status).toBe(403);
+    const mt = await post('p-secretary', `${CS(id)}/${cid}/items`, { kind: 'MEETING', onDate: `${Y + 1}-02-03`, atTime: '16:00', place: 'Church Hall' });
+    expect(mt.status, JSON.stringify(mt.body)).toBe(201);
+    const m = mt.body.marriage.meetings[0];
+    const moved = await request(app).patch(`${CS(id)}/${cid}/items/${m.id}`).set(bearer('p-secretary')).send({ onDate: `${Y + 1}-02-10` });
+    expect(moved.body.marriage.meetings[0].date).toBe(`${Y + 1}-02-10`);
+    const done = await request(app).patch(`${CS(id)}/${cid}/items/${m.id}`).set(bearer('p-secretary')).send({ status: 'DONE' });
+    expect(done.body.marriage.meetings[0].status).toBe('DONE');
+  });
+
+  it('postponing and cancelling go unit leader → Catechist → Church Leader; cancelling gives back unpaid support', async () => {
+    const id = await marriageProgram();
+    await reg(id);
+    const cid = await caseId(id);
+    await post('p-catechist', `${CS(id)}/${cid}/verify`);
+    await post('p-pastor', `${CS(id)}/${cid}/approve`, { support: 30000 });
+    await post('p-catechist', `${CS(id)}/${cid}/items`, { kind: 'ANNOUNCEMENT', onDate: `${Y + 1}-02-01`, place: 'Main Church' });
+    const newDate = `${Y + 1}-04-12`;
+    expect((await post('p-catechist', `${CS(id)}/${cid}/change`, { kind: 'POSTPONE', reason: 'Family', newDate })).status).toBe(403);
+    expect((await post('p-youth-leader', `${CS(id)}/${cid}/change`, { kind: 'POSTPONE', reason: 'Family' })).body.code).toBe('DATE_REQUIRED');
+    const rq = await post('p-youth-leader', `${CS(id)}/${cid}/change`, { kind: 'POSTPONE', reason: 'Family', newDate });
+    expect(rq.status, JSON.stringify(rq.body)).toBe(200);
+    expect(notices('p-catechist').some((t) => t.includes('Postponement requested'))).toBe(true);
+    expect((await post('p-pastor', `${CS(id)}/${cid}/change/decide`, { approve: true })).status).toBe(409);
+    expect((await post('p-youth-leader', `${CS(id)}/${cid}/change/confirm`)).status).toBe(403);
+    const cf = await post('p-catechist', `${CS(id)}/${cid}/change/confirm`);
+    expect(cf.body.marriage.announcements[0].status).toBe('CANCELLED');
+    expect((await post('p-catechist', `${CS(id)}/${cid}/change/decide`, { approve: true })).status).toBe(403);
+    const dec = await post('p-pastor', `${CS(id)}/${cid}/change/decide`, { approve: true });
+    expect(dec.body.marriage.date).toBe(newDate);
+    expect(dec.body.marriage.change).toBeNull();
+    expect(notices('p-youth-leader').some((t) => t.includes('Marriage postponed'))).toBe(true);
+    expect((await post('p-youth-leader', `${CS(id)}/${cid}/close`, { outcome: 'CANCELLED' })).body.code).toBe('USE_CHANGE_REQUEST');
+    await post('p-youth-leader', `${CS(id)}/${cid}/change`, { kind: 'CANCEL', reason: 'Called off' });
+    await post('p-catechist', `${CS(id)}/${cid}/change/confirm`);
+    const gone = await post('p-pastor', `${CS(id)}/${cid}/change/decide`, { approve: true });
+    expect(gone.body.status).toBe('CLOSED');
+    expect(gone.body.outcome).toBe('CANCELLED');
+    expect((await get('p-ctr', CS(id))).body.toPay).toEqual([]);
+    expect((await get('p-ctr', CS(id))).body.budget.committed).toBe(0);
+    expect(notices('p-catechist').some((t) => t.includes('Marriage cancelled'))).toBe(true);
+  });
+
+  it('a married couple is closed by the Catechist after approval', async () => {
+    const id = await marriageProgram();
+    await reg(id, { need: 0, capacity: 0 });
+    const cid = await caseId(id);
+    expect((await post('p-catechist', `${CS(id)}/${cid}/close`, { outcome: 'MARRIED' })).body.code).toBe('NOT_APPROVED');
+    await post('p-catechist', `${CS(id)}/${cid}/verify`);
+    await post('p-pastor', `${CS(id)}/${cid}/approve`, {});
+    const done = await post('p-catechist', `${CS(id)}/${cid}/close`, { outcome: 'MARRIED', note: 'Blessed' });
+    expect(done.body).toMatchObject({ status: 'CLOSED', outcome: 'MARRIED' });
+  });
+});

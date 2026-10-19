@@ -2010,6 +2010,12 @@ model ProgramCase {
   registeredById String
   createdAt      DateTime  @default(now())
   closedAt       DateTime?
+  /// Marriage: JSON { p1Name, p1Contact, p2Name, p2Church, p2Contact, date, time, place, certificateFileId }
+  detailsJson    String    @default("{}")
+  verifiedById   String?
+  verifiedAt     DateTime?
+  /// Marriage: an open request to postpone or cancel: JSON { kind, reason, newDate, newTime, status: REQUESTED | CONFIRMED, byId, at }
+  changeJson     String?
 
   @@index([planId])
   @@index([systemId])
@@ -2045,6 +2051,26 @@ model ProgramCaseEvent {
   text   String
   byId   String
   at     DateTime @default(now())
+
+  @@index([caseId])
+  @@index([planId])
+}
+
+/// A marriage case's announcements and preparation meetings.
+model ProgramCaseItem {
+  id          String   @id @default(cuid())
+  caseId      String
+  planId      String
+  /// ANNOUNCEMENT | MEETING
+  kind        String
+  /// The church that announces, or where the meeting is held (free text)
+  place       String   @default("")
+  onDate      DateTime
+  atTime      String?
+  /// SCHEDULED | DONE | CANCELLED
+  status      String   @default("SCHEDULED")
+  createdById String
+  createdAt   DateTime @default(now())
 
   @@index([caseId])
   @@index([planId])

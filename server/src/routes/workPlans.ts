@@ -35,7 +35,7 @@ const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v
 
 const PLAN_TYPES = ['PROGRAM', 'EVENT', 'PROJECT'] as const;
 export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL', 'CASE'] as const;
-export const CASE_TYPES = ['SICK_CARE', 'NEEDY'] as const;
+export const CASE_TYPES = ['SICK_CARE', 'NEEDY', 'MARRIAGE'] as const;
 export const PURPOSE_TAGS = ['MINISTRY', 'CAPACITY', 'COMMUNITY', 'OPERATIONS'] as const;
 const short = z.string().trim().max(120).default('');
 const kindSchema = z.object({
@@ -503,7 +503,7 @@ workPlansRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   if (kbad) return fail(res, 400, kbad, 'Check the program kind and its years');
   const row = (await prisma.workPlan.create({
     data: {
-      programKind: b.planType === 'PROGRAM' ? b.programKind ?? 'ONGOING' : null, purposeTag: b.planType === 'PROGRAM' ? b.purposeTag ?? null : null, hasMoney: b.programKind === 'CASE' ? true : b.hasMoney ?? true, kindJson: JSON.stringify(b.kind ?? {}),
+      programKind: b.planType === 'PROGRAM' ? b.programKind ?? 'ONGOING' : null, purposeTag: b.planType === 'PROGRAM' ? b.purposeTag ?? null : null, hasMoney: b.programKind === 'CASE' && b.kind?.caseType !== 'MARRIAGE' ? true : b.hasMoney ?? true, kindJson: JSON.stringify(b.kind ?? {}),
       fundraising: fraise, fundTarget: fraise ? b.fundTarget ?? null : null,
       parentId: b.parentId || null, orgUnitId: unit.id, systemId: unit.systemId, title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null,
       ...timingData(b), ...(kindDates(b.programKind, b.kind) ?? {}), leaderPersonId: b.leaderId,
@@ -542,7 +542,7 @@ workPlansRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
   const row = (await prisma.workPlan.update({
     where: { id: p.id },
     data: {
-      ...(b.programKind !== undefined ? { programKind: ptype === 'PROGRAM' ? b.programKind : null } : {}), ...(b.purposeTag !== undefined ? { purposeTag: b.purposeTag } : {}), ...(b.hasMoney !== undefined ? { hasMoney: nextKind === 'CASE' ? true : b.hasMoney } : {}), ...(b.kind !== undefined ? { kindJson: JSON.stringify(b.kind ?? {}) } : {}),
+      ...(b.programKind !== undefined ? { programKind: ptype === 'PROGRAM' ? b.programKind : null } : {}), ...(b.purposeTag !== undefined ? { purposeTag: b.purposeTag } : {}), ...(b.hasMoney !== undefined ? { hasMoney: nextKind === 'CASE' && nextInfo?.caseType !== 'MARRIAGE' ? true : b.hasMoney } : {}), ...(b.kind !== undefined ? { kindJson: JSON.stringify(b.kind ?? {}) } : {}),
       fundraising: fraise, fundTarget: fraise ? target : null,
       title: b.title, aim: b.aim, needs: b.needs || null, location: b.location || null, ...timingData(b), ...(kindDates(nextKind, nextInfo) ?? {}), leaderPersonId: b.leaderId, teamJson: JSON.stringify(b.team), beyondUnit: b.beyondUnit, visibility: b.visibility,
       planType: b.planType ?? p.planType ?? 'PROJECT',

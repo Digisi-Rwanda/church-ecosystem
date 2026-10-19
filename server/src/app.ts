@@ -27,6 +27,7 @@ import { planSettleRouter } from './routes/planSettle.js';
 import { programYearsRouter } from './routes/programYears.js';
 import { programCohortsRouter } from './routes/programCohorts.js';
 import { programCasesRouter } from './routes/programCases.js';
+import './routes/programMarriages.js';
 import { planFilesRouter } from './routes/planFiles.js';
 import { publicEventsRouter } from './routes/publicEvents.js';
 import { moneyRouter } from './routes/money.js';
