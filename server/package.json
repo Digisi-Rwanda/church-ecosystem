@@ -16,6 +16,7 @@
     "db:push:pg": "prisma db push --schema=prisma/schema.postgres.prisma",
     "db:seed:pg": "tsx prisma/seed.ts",
     "db:baseline": "node scripts/make-baseline.mjs",
+    "people:cleanup": "tsx scripts/remove-gifts-skills-deeds.ts",
     "migrate:pg": "tsx scripts/migrate-deploy.ts",
     "setup:pg": "npm run db:generate:pg && npm run db:push:pg && npm run db:seed:pg",
     "build:render": "npm run db:generate:pg && npm run build",

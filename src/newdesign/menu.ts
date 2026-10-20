@@ -100,8 +100,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
   const some = (list: Array<NavPlace | null>) => list.filter((x): x is NavPlace => x !== null);
 
   const spec: Record<ModuleId, NavPlace[]> = {
-    // My contribution is a member's own view, so it sits with Home.
-    home: [...(shared.has('home') ? [place('home', '', 'door.block.home', true)] : []), place('mine', 'money/mine', 'door.money.mine')],
+    home: shared.has('home') ? [place('home', '', 'door.block.home', true)] : [],
     notifications: [place('notifications', `notifications?system=${encodeURIComponent(systemId)}`, MODULE_LABEL.notifications, true)],
     announcements: [place('announcements', 'announcements', MODULE_LABEL.announcements, true)],
     units: central && shared.has('people') ? [place('units', 'people/units', 'door.people.tab.units')] : [],
@@ -137,6 +136,8 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
             place('accounting', 'money', 'door.money.accounting', true),
           ]
         : []),
+      // My contribution is a member's own view of what they gave; it sits in Management and needs no money letter.
+      place('mine', 'money/mine', 'door.money.mine'),
     ],
     // The year overview of the money is a report, so it sits in Reports (it still needs the Money letter to open).
     reports: [

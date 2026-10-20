@@ -7,6 +7,10 @@ import { nextMemberCode, personWithNationalId, possibleDuplicates } from '../lib
 import { authorizePerson } from '../policy/index.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { lettersInSystem, reachableSystems } from '../capabilities/engine.js';
+import { accessFor } from '../person360/rules.js';
+import { CriteriaSchema, EDU_LEVELS, MARITAL, childrenOf, forbiddenKeys, matches, maritalOf, usableKeys, type Facts, type Viewer } from '../people/filters.js';
+import { SECTORS } from '../person360/rules.js';
+import { isLive } from '../capabilities/engine.js';
 import { CENTRAL, isAdministrator, mayReadPeople, peopleOfSystem, subtreeUnitIds } from '../lib/peopleScope.js';
 import {
   pathParam,
@@ -98,6 +102,104 @@ peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
   const tier = await tierOf(viewer, '\u0000');
   const shown = tier === 'FULL' || tier === 'BASIC' ? 'BASIC' : 'DIRECTORY';
   res.json({ people: people.map((p) => filterPerson(p as Record<string, unknown>, shown)) });
+});
+
+/** What this viewer may filter on: the criteria they can use, and the units to pick from. Nothing else is offered. */
+async function viewerOf(me: string): Promise<Viewer & { units: Array<{ id: string; name: string; parentId: string | null; systemId: string | null }> }> {
+  const { data, units } = await loadAccessData(me);
+  const tier = await tierOf(me, '\u0000');
+  const read = accessFor(me, data).read;
+  return {
+    identity: tier === 'FULL', read,
+    units: (units as Array<{ id: string; name?: string; parentId?: string | null; systemId?: string | null }>).map((u) => ({ id: u.id, name: u.name ?? u.id, parentId: u.parentId ?? null, systemId: u.systemId ?? null })),
+  };
+}
+
+peopleRouter.get('/filter-options', requireAuth, async (req: AuthedRequest, res) => {
+  const requested = typeof req.query.systemId === 'string' ? req.query.systemId : '';
+  const scope = await peopleScopeFor(req.auth!.personId, requested, true);
+  if (scope === 'FORBIDDEN') {
+    res.status(403).json({ error: 'You may not open the people of this system', code: 'NOT_ALLOWED' });
+    return;
+  }
+  const v = await viewerOf(req.auth!.personId);
+  const inside = requested && requested !== CENTRAL ? subtreeUnitIds(v.units, requested) : null;
+  const offered = v.units.filter((u) => !inside || inside.has(u.id)).map((u) => ({ id: u.id, name: u.name }));
+  res.json({
+    criteria: usableKeys(v),
+    units: offered.sort((a, b) => a.name.localeCompare(b.name)),
+    sectors: [...SECTORS], education: [...EDU_LEVELS], marital: v.read.includes('MARRIAGE') ? [...MARITAL] : [],
+  });
+});
+
+/**
+ * Filter the people this caller may list by any mix of criteria, one narrowing the next.
+ * A criterion on something the caller may not read is refused (never silently ignored), so a filtered list can
+ * never reveal what the details themselves would not.
+ */
+peopleRouter.post('/search', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const parsed = z.object({ criteria: CriteriaSchema, systemId: z.string().max(80).optional(), archived: z.boolean().optional(), limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().min(0).optional() }).safeParse(req.body ?? {});
+  if (!parsed.success) {
+    res.status(400).json({ error: 'These filters are not valid', code: 'BAD_INPUT' });
+    return;
+  }
+  const { criteria, systemId = '', archived = false } = parsed.data;
+  const limit = parsed.data.limit ?? 100, offset = parsed.data.offset ?? 0;
+  const scope = await peopleScopeFor(me, systemId, true);
+  if (scope === 'FORBIDDEN') {
+    res.status(403).json({ error: 'You may not open the people of this system', code: 'NOT_ALLOWED' });
+    return;
+  }
+  const v = await viewerOf(me);
+  const banned = forbiddenKeys(criteria, v);
+  if (banned.length) {
+    res.status(403).json({ error: 'You may not filter on details you cannot read', code: 'FIELD_NOT_ALLOWED', fields: banned });
+    return;
+  }
+  const people = (await prisma.person.findMany({
+    where: { ...(scope.ids === null ? {} : { id: { in: [...scope.ids] } }), ...(archived ? { archivedAt: { not: null } } : { archivedAt: null }) },
+    orderBy: { fullName: 'asc' },
+  })) as Array<Record<string, unknown> & { id: string; fullName: string; status: string }>;
+  const sections = v.read.filter((x) => ['EMPLOYMENT', 'EDUCATION', 'FAMILY', 'BAPTISM', 'MARRIAGE', 'CALLING'].includes(x));
+  const ids = new Set(people.map((p) => p.id));
+  const records = ((await prisma.personRecord.findMany({ where: { status: 'CURRENT', section: { in: sections } } })) as Array<{ personId: string; section: string; dataJson: string }>).filter((r) => ids.has(r.personId));
+  const { data, units } = await loadAccessData(me);
+  const now = new Date();
+  const memberships = (data.memberships as Array<{ personId: string; orgUnitId?: string | null; status?: string; startDate?: Date | string | null; endDate?: Date | string | null }>).filter((m) => m.orgUnitId && isLive({ status: m.status ?? 'ACTIVE', startDate: m.startDate, endDate: m.endDate }, now));
+  const unitsOf = new Map<string, string[]>();
+  for (const m of memberships) unitsOf.set(m.personId, [...(unitsOf.get(m.personId) ?? []), m.orgUnitId as string]);
+  const recordsOf = new Map<string, Facts['records']>();
+  for (const r of records) {
+    let data2: Record<string, unknown> = {};
+    try { data2 = JSON.parse(r.dataJson) as Record<string, unknown>; } catch { /* a damaged row counts as empty */ }
+    recordsOf.set(r.personId, [...(recordsOf.get(r.personId) ?? []), { section: r.section as never, data: data2 }]);
+  }
+  const unitRows = units as Array<{ id: string; parentId?: string | null }>;
+  const kids = new Map<string, Set<string>>();
+  const below = (id: string): Set<string> => {
+    const hit = kids.get(id);
+    if (hit) return hit;
+    const out = new Set<string>([id]);
+    let grew = true;
+    while (grew) { grew = false; for (const u of unitRows) if (u.parentId && out.has(u.parentId) && !out.has(u.id)) { out.add(u.id); grew = true; } }
+    kids.set(id, out);
+    return out;
+  };
+  const tier = await tierOf(me, '\u0000');
+  const view = tier === 'FULL' || tier === 'BASIC' ? 'BASIC' : 'DIRECTORY';
+  const hits = people
+    .map((p) => ({ p, f: { id: p.id, fullName: p.fullName, memberCode: p.memberCode as string | null, status: p.status, gender: v.identity ? (p.gender as string | null) : null, dateOfBirth: v.identity ? (p.dateOfBirth as string | null) : null, unitIds: unitsOf.get(p.id) ?? [], records: recordsOf.get(p.id) ?? [] } as Facts }))
+    .filter(({ f }) => matches(f, criteria, now, below));
+  res.json({
+    total: hits.length,
+    offset,
+    people: hits.slice(offset, offset + limit).map(({ p, f }) => ({
+      ...filterPerson(p, view),
+      ...(v.read.includes('MARRIAGE') ? { marital: maritalOf(f) } : {}),
+      ...(v.read.includes('FAMILY') ? { children: childrenOf(f) } : {}),
+    })),
+  });
 });
 
 /**

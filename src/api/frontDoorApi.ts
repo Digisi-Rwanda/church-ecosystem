@@ -144,6 +144,21 @@ export async function fetchPeople(opts: { q?: string; status?: string; archived?
   return res.people;
 }
 
+/** The filters the People directory understands; the server refuses any the viewer may not use. */
+export type PeopleCriteria = {
+  q?: string; status?: PersonStatus[]; unitIds?: string[]; gender?: 'MALE' | 'FEMALE'; ageMin?: number; ageMax?: number;
+  baptismYearsMin?: number; employmentStatus?: string[]; sector?: string[]; employedYearsMin?: number;
+  educationMin?: string; educationIs?: string[]; educationField?: string; childrenMin?: number; childrenMax?: number;
+  marital?: Array<'SINGLE' | 'MARRIED' | 'WIDOWED'>; callingName?: string; callingUnitId?: string;
+};
+export type PeopleCriterionKey = keyof PeopleCriteria;
+export type PeopleFilterOptions = { criteria: PeopleCriterionKey[]; units: Array<{ id: string; name: string }>; sectors: string[]; education: string[]; marital: string[] };
+export type SearchedPerson = DirectoryPerson & { marital?: 'SINGLE' | 'MARRIED' | 'WIDOWED'; children?: number };
+export const fetchPeopleFilterOptions = (systemId?: string): Promise<PeopleFilterOptions> =>
+  apiFetch(`/api/people/filter-options${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+export const searchPeople = (b: { criteria: PeopleCriteria; systemId?: string; archived?: boolean; limit?: number; offset?: number }): Promise<{ total: number; offset: number; people: SearchedPerson[] }> =>
+  apiFetch('/api/people/search', { method: 'POST', body: b });
+
 export async function fetchPerson(id: string): Promise<DirectoryPerson> {
   const res = await apiFetch<{ person: DirectoryPerson }>(`/api/people/${encodeURIComponent(id)}`);
   return res.person;
@@ -1427,10 +1442,10 @@ export async function stopReportSchedule(id: string): Promise<void> {
 }
 
 // ── Person 360 (slice 3.6) ──────────────────────────────────────────────────────
-export type P360Section = 'CONTACT' | 'EMPLOYMENT' | 'EDUCATION' | 'GIFT' | 'SKILL' | 'CALLING' | 'FAMILY' | 'BAPTISM' | 'MARRIAGE';
+export type P360Section = 'CONTACT' | 'EMPLOYMENT' | 'EDUCATION' | 'CALLING' | 'FAMILY' | 'BAPTISM' | 'MARRIAGE';
 export type P360Record = {
   id: string; section: P360Section; data: Record<string, string | number>; status: 'CURRENT' | 'SUPERSEDED' | 'VOIDED';
-  recordedByName: string; recordedAt: string | null; voidReason: string | null; voidedByName: string | null; relatedName: string; programName: string; canChange: boolean;
+  recordedByName: string; recordedAt: string | null; voidReason: string | null; voidedByName: string | null; relatedName: string; unitName?: string; programName: string; canChange: boolean;
 };
 export type P360Person = {
   id: string; fullName: string; memberCode: string | null; status: string; archived: boolean; dateOfBirth: string | null; gender: string | null;
@@ -1439,14 +1454,6 @@ export type P360Person = {
 export type P360View = { person: P360Person; read: P360Section[]; write: P360Section[]; records: P360Record[] };
 export type P360Cohort = { id: string; name: string; cohortLabel: string; learners: Array<{ personId: string; name: string; baptised: boolean }> };
 const P3 = '/api/person360';
-export type P360Deed = { id: string; note: string; day: string; recordedByName: string; unitName: string; mine: boolean };
-export const fetchP360Deeds = (personId: string): Promise<{ canRecord: boolean; items: P360Deed[] }> => apiFetch(`${P3}/${encodeURIComponent(personId)}/deeds`);
-export async function recordP360Deed(personId: string, b: { note: string; day?: string }): Promise<void> {
-  await apiFetch(`${P3}/${encodeURIComponent(personId)}/deeds`, { method: 'POST', body: b });
-}
-export async function removeP360Deed(id: string): Promise<void> {
-  await apiFetch(`${P3}/deeds/${encodeURIComponent(id)}`, { method: 'DELETE' });
-}
 export type P360Document = { id: string; name: string; mime: string; size: number; note: string; uploadedByName: string; uploadedAt: string | null };
 export const fetchP360Documents = (personId: string): Promise<{ canWrite: boolean; items: P360Document[] }> => apiFetch(`${P3}/${encodeURIComponent(personId)}/documents`);
 export async function uploadP360Document(personId: string, b: { name: string; mime: string; data: string }): Promise<void> {
@@ -1459,7 +1466,7 @@ export async function deleteP360Document(id: string): Promise<void> {
 export const fetchP360Access = (): Promise<{ read: P360Section[]; write: P360Section[]; allowed: boolean; leader?: boolean }> => apiFetch(`${P3}/access`);
 export type P360Participation = {
   year: number; totals: { given: number; pledged: number }; more: boolean;
-  items: Array<{ id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'SPONSORSHIP' | 'CLAIM' | 'GOOD_DEED'; amount: number; day: string; system: string | null; label: string; status: string }>;
+  items: Array<{ id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'SPONSORSHIP' | 'CLAIM'; amount: number; day: string; system: string | null; label: string; status: string }>;
 };
 export const fetchP360Participation = (personId: string): Promise<P360Participation> => apiFetch(`${P3}/${encodeURIComponent(personId)}/participation`);
 export const fetchP360 = (personId: string): Promise<P360View> => apiFetch(`${P3}/${encodeURIComponent(personId)}`);

@@ -5,13 +5,12 @@ import { EmptyState } from '../components/ui/EmptyState';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { formatRwf } from './money';
-import { SECTION_ORDER, SINGLE_SECTIONS, sectionKey, valueKey } from './person360';
+import { SECTION_ORDER, SINGLE_SECTIONS, sectionKey, valueText } from './person360';
 import { RecordCard, RecordForm } from './Person360Parts';
 import { useLoad } from './useLoad';
 import { PageHeader, Segmented, SidePanel, initialsOf } from './kit';
 import { BasicsForm, Documents } from './Person360Edit';
 import { Person360Sheet } from './Person360Sheet';
-import { GoodDeeds } from './Person360Deeds';
 import { useCanWritePeople } from './usePeopleAccess';
 
 type Tab = 'timeline' | 'files' | 'callings';
@@ -20,8 +19,9 @@ type Gift = P360Participation['items'][number];
 /** The one-line summary of a record: its values, without the ids. */
 function summary(t: (k: never) => string, r: P360Record): string {
   return Object.entries(r.data)
-    .filter(([k, v]) => !/PersonId$/.test(k) && v !== '')
-    .map(([, v]) => (typeof v === 'string' && /^[A-Z_]+$/.test(v) ? t(valueKey(v) as never) : String(v)))
+    .filter(([k, v]) => !/PersonId$/.test(k) && k !== 'orgUnitId' && v !== '')
+    .map(([, v]) => valueText(t as never, v))
+    .concat(r.unitName ? [r.unitName] : [])
     .join(' · ');
 }
 
@@ -29,8 +29,10 @@ function summary(t: (k: never) => string, r: P360Record): string {
 function Sections({ v, personId, only, reload }: { v: P360View; personId: string; only: P360Section[]; reload: () => void }) {
   const t = useT();
   const [adding, setAdding] = useState<P360Section | null>(null);
+  const [preset, setPreset] = useState<Record<string, string> | undefined>();
   const done = () => {
     setAdding(null);
+    setPreset(undefined);
     reload();
   };
   const shown = SECTION_ORDER.filter((s) => s !== 'CONTACT' && only.includes(s) && v.read.includes(s));
@@ -44,9 +46,14 @@ function Sections({ v, personId, only, reload }: { v: P360View; personId: string
           <section key={section} aria-labelledby={`p360-${section}`}>
             <div className="p360-card-head">
               <h3 id={`p360-${section}`}>{t(sectionKey(section))}</h3>
-              {canAdd && adding !== section && <button type="button" className="linkbtn" onClick={() => setAdding(section)}>{t('door.p360.add', { section: t(sectionKey(section)) })}</button>}
+              {canAdd && adding !== section && (
+                <span className="p360-card-actions">
+                  {section === 'FAMILY' && <button type="button" className="linkbtn" onClick={() => { setPreset({ relation: 'CHILD' }); setAdding(section); }}>{t('door.p360.addChild')}</button>}
+                  <button type="button" className="linkbtn" onClick={() => { setPreset(undefined); setAdding(section); }}>{t('door.p360.add', { section: t(sectionKey(section)) })}</button>
+                </span>
+              )}
             </div>
-            {adding === section && <RecordForm personId={personId} section={section} onDone={done} onCancel={() => setAdding(null)} />}
+            {adding === section && <RecordForm personId={personId} section={section} preset={preset} onDone={done} onCancel={() => { setAdding(null); setPreset(undefined); }} />}
             {items.length === 0 && adding !== section ? (
               <p className="muted">{t('door.p360.none')}</p>
             ) : (
@@ -73,7 +80,7 @@ function Timeline({ records, gifts }: { records: P360Record[]; gifts: Gift[] }) 
       key: `r${r.id}`, at: r.recordedAt as string, day: date(r.recordedAt as string, 'Africa/Kigali'), type: t(sectionKey(r.section)), detail: summary(t as never, r) || '—', by: r.recordedByName, gift: false,
     })),
     ...gifts.map((g): Ev => ({
-      key: `g${g.kind}${g.id}`, at: `${g.day}T12:00:00Z`, day: date(`${g.day}T12:00:00Z`, 'UTC'), type: t(`door.p360.part.kind.${g.kind}` as 'door.p360.part.kind.DONATION'), detail: g.kind === 'GOOD_DEED' ? g.label : `${g.label} · ${formatRwf(g.amount)}`, by: g.system ?? '—', gift: true,
+      key: `g${g.kind}${g.id}`, at: `${g.day}T12:00:00Z`, day: date(`${g.day}T12:00:00Z`, 'UTC'), type: t(`door.p360.part.kind.${g.kind}` as 'door.p360.part.kind.DONATION'), detail: `${g.label} · ${formatRwf(g.amount)}`, by: g.system ?? '—', gift: true,
     })),
   ].sort((a, b) => b.at.localeCompare(a.at));
   const shown = older ? evs : evs.slice(0, 5);
@@ -100,13 +107,12 @@ function Timeline({ records, gifts }: { records: P360Record[]; gifts: Gift[] }) 
 }
 
 /** Participation updates: the latest gifts as short lines, with the year's totals. For the Church Leader only. */
-function Participation({ load, personId, onChanged }: { personId: string; onChanged: () => void; load: { loading: boolean; failed: boolean | import('../api/client').ApiErrorKind; data?: P360Participation | null; reload: () => void } }) {
+function Participation({ load }: { load: { loading: boolean; failed: boolean | import('../api/client').ApiErrorKind; data?: P360Participation | null; reload: () => void } }) {
   const t = useT();
   const [all, setAll] = useState(false);
   const d = load.data ?? undefined;
-  const line = (i: Gift) => i.kind === 'GOOD_DEED'
-    ? `${t('door.p360.part.kind.GOOD_DEED')} · ${i.label}${i.system ? ` (${i.system})` : ''}`
-    : `${t(`door.p360.part.kind.${i.kind}` as 'door.p360.part.kind.DONATION')} · ${i.label} · ${formatRwf(i.amount)}${i.status === 'PLEDGED' ? ` (${t('door.p360.part.pledgedTag')})` : ''}`;
+  const line = (i: Gift) =>
+    `${t(`door.p360.part.kind.${i.kind}` as 'door.p360.part.kind.DONATION')} · ${i.label} · ${formatRwf(i.amount)}${i.status === 'PLEDGED' ? ` (${t('door.p360.part.pledgedTag')})` : ''}`;
   return (
     <section className="card" aria-labelledby="p360-part-h">
       <div className="p360-card-head">
@@ -122,7 +128,6 @@ function Participation({ load, personId, onChanged }: { personId: string; onChan
           </>
         )}
       </LoadState>
-      <GoodDeeds personId={personId} onChanged={onChanged} embedded />
     </section>
   );
 }
@@ -200,13 +205,18 @@ export function Person360Page() {
     const d = v?.records.find((r) => r.section === section && r.status === 'CURRENT')?.data.date;
     return typeof d === 'string' ? d : null;
   };
+  const marriageRec = v?.records.find((r) => r.section === 'MARRIAGE' && r.status === 'CURRENT');
+  const marital = v?.read.includes('MARRIAGE') ? (marriageRec ? (marriageRec.data.endedBy === 'DEATH' ? 'WIDOWED' : 'MARRIED') : 'SINGLE') : null;
+  const children = v?.read.includes('FAMILY') ? v.records.filter((r) => r.section === 'FAMILY' && r.status === 'CURRENT' && r.data.relation === 'CHILD').length : null;
   const baptism = recordDate('BAPTISM');
   const marriage = recordDate('MARRIAGE');
   const facts: Array<[string, string | null | undefined]> = p
     ? [
-        [t('door.p360.f.gender'), p.gender], [t('door.p360.f.dateOfBirth'), day(p.dateOfBirth)], [t('door.p360.f.phone'), p.phone],
+        [t('door.p360.f.gender'), p.gender ? valueText(t as never, p.gender) : p.gender], [t('door.p360.f.dateOfBirth'), day(p.dateOfBirth)], [t('door.p360.f.phone'), p.phone],
         [t('door.p360.f.address'), p.address], [t('door.p360.spouse'), spouse], [t('door.p360.f.memberCode'), p.memberCode],
         [t('door.p360.memberStatus'), t(`door.status.${p.status}` as 'door.status.ACTIVE')], [t('door.p360.registered'), day(baptism)], [t('door.p360.marriageDate'), day(marriage)],
+        ...(marital ? [[t('door.people.maritalStatus'), t(`door.people.marital.${marital}` as 'door.people.marital.WIDOWED')] as [string, string]] : []),
+        ...(children !== null ? [[t('door.people.childrenLabel'), String(children)] as [string, string]] : []),
       ]
     : [];
   const callings = v ? v.records.filter((r) => r.section === 'CALLING' && r.status === 'CURRENT').length : 0;
@@ -261,7 +271,7 @@ export function Person360Page() {
                 </section>
               </div>
               <aside className="p360-right">
-                {isLeader && <Participation load={part} personId={personId} onChanged={part.reload} />}
+                {isLeader && <Participation load={part} />}
                 <Education v={v} personId={personId} reload={load.reload} />
               </aside>
             </div>

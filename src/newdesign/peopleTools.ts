@@ -85,7 +85,7 @@ export function peopleToCsv(list: DirectoryPerson[], head: string[]): string {
 }
 
 /* Saved views: a name and a search, kept only in this browser. */
-export type SavedView = { name: string; q: string; status: string; archived: boolean };
+export type SavedView = { name: string; q: string; status: string; archived: boolean; filters?: Array<{ kind: string; values: Record<string, string> }> };
 const KEY = 'moriah.people.views';
 export function loadViews(): SavedView[] {
   try {

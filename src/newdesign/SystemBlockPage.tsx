@@ -1,8 +1,8 @@
-import { useParams } from 'react-router-dom';
+import { Navigate, useParams } from 'react-router-dom';
 import { EmptyState } from '../components/ui/EmptyState';
 import { useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
-import { isSharedBlock, lettersFor } from './menu';
+import { buildModules, isSharedBlock, lettersFor } from './menu';
 import { ChurchHome } from './ChurchHome';
 import { CHURCH_SYSTEM } from './portalHome';
 import { SystemHome } from './SystemHome';
@@ -27,6 +27,12 @@ export function SystemBlockPage() {
   const blockName = t(`door.block.${block}` as const);
   const letters = lettersFor(capabilities, systemId, block);
 
+  // Someone with no Home letter (a member whose only page is My contribution, under Management) lands on their first page.
+  if (!blockParam && letters.length === 0) {
+    const mods = buildModules(capabilities, systemId);
+    const first = ['people', 'work', 'schedule', 'ministry', 'money', 'reports', 'governance'].map((id) => mods.find((m) => m.id === id)).find((m) => m && m.to);
+    if (first) return <Navigate replace to={first.to} />;
+  }
   if (letters.length === 0) {
     return (
       <EmptyState

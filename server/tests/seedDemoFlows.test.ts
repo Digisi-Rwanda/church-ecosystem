@@ -49,7 +49,6 @@ describe('demo flows seed', () => {
     expect(db.workPlan.some((x: { id: string }) => x.id === 'demo-plan-women-event')).toBe(false);
     expect(db.workPlan.some((x: { id: string }) => x.id === 'real-plan')).toBe(true);
     for (const t of ['PROGRAM', 'EVENT', 'PROJECT']) expect(db.workPlan.filter((x: { planType?: string }) => x.planType === t), t).toHaveLength(1);
-    expect(db.personDeed.filter((d: { personId: string }) => d.personId === 'p-member')).toHaveLength(1);
     expect(db.donation.filter((d: { donorPersonId: string }) => d.donorPersonId === 'p-member')).toHaveLength(1);
     expect(db.contributionList.every((l: { status: string }) => l.status === 'APPROVED')).toBe(true);
     for (const k of ['workTask', 'report', 'meeting', 'decision', 'letter', 'serviceCollection', 'monthPlan', 'scheduleSlot', 'unitGroup']) expect(db[k].length, k).toBe(1);

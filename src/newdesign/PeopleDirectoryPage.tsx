@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { fetchPeople, fetchUpcoming } from '../api/frontDoorApi';
+import { fetchPeople, fetchPeopleFilterOptions, fetchUpcoming, searchPeople, type SearchedPerson } from '../api/frontDoorApi';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
+import { PeopleFilterPanel } from './PeopleFilterPanel';
+import { cleanFilters, isComplete, toCriteria, type ActiveFilter } from './peopleFilters';
 import { loadViews, shortDay, storeViews, type SavedView } from './peopleTools';
 import { useCanWritePeople } from './usePeopleAccess';
 import { useLoad } from './useLoad';
@@ -21,14 +23,30 @@ export function PeopleDirectoryPage() {
   const [status, setStatus] = useState('');
   const [archived, setArchived] = useState(false);
   const [views, setViews] = useState<SavedView[]>(loadViews);
-  const { loading, failed, data, reload } = useLoad(() => fetchPeople({ q: q.trim(), status, archived, systemId }), `dir|${systemId}|${q.trim()}|${status}|${archived}`);
+  const [filters, setFilters] = useState<ActiveFilter[]>([]);
+  const [open, setOpen] = useState(false);
+  const options = useLoad(() => fetchPeopleFilterOptions(systemId), `people-fopts|${systemId}`);
+  const active = filters.filter(isComplete);
+  const criteria = { ...toCriteria(active), ...(q.trim() ? { q: q.trim() } : {}), ...(status && !active.some((f) => f.kind === 'status') ? { status: [status as 'ACTIVE'] } : {}) };
+  const { loading, failed, data, reload } = useLoad(
+    async (): Promise<{ list: SearchedPerson[]; total: number }> => {
+      if (active.length === 0) {
+        const list = await fetchPeople({ q: q.trim(), status, archived, systemId });
+        return { list, total: list.length };
+      }
+      const r = await searchPeople({ criteria, systemId, archived, limit: 200 });
+      return { list: r.people, total: r.total };
+    },
+    `dir|${systemId}|${q.trim()}|${status}|${archived}|${JSON.stringify(active)}`,
+  );
   const upcoming = useLoad(() => fetchUpcoming(30), 'people-upcoming');
   const base = `/s/${systemId}/people`;
-  const list = data ?? [];
+  const list = data?.list ?? [];
+  const total = data?.total ?? 0;
 
   const saveView = () => {
-    const name = (q.trim() || (status ? t(`door.status.${status}` as 'door.status.ACTIVE') : t('door.people.allStatuses'))).slice(0, 40);
-    const next = [{ name, q: q.trim(), status, archived }, ...views.filter((v) => v.name !== name)];
+    const name = (q.trim() || (active.length ? active.map((f) => t(`door.people.fk.${f.kind}` as 'door.people.fk.unit')).join(' + ').slice(0, 40) : '') || (status ? t(`door.status.${status}` as 'door.status.ACTIVE') : t('door.people.allStatuses'))).slice(0, 40);
+    const next = [{ name, q: q.trim(), status, archived, filters: active }, ...views.filter((v) => v.name !== name)];
     setViews(next);
     storeViews(next);
   };
@@ -77,15 +95,21 @@ export function PeopleDirectoryPage() {
             <span>{t('door.people.showArchived')}</span>
           </label>
         )}
-        <button type="button" className="btn ghost sm" onClick={saveView} disabled={!q.trim() && !status && !archived}>
+        {options.data && options.data.criteria.some((k) => k !== 'q' && k !== 'status') && (
+          <button type="button" className="btn ghost sm" aria-expanded={open} onClick={() => setOpen(!open)}>
+            {active.length > 0 ? t('door.people.filters.withCount', { count: active.length }) : t('door.people.filters.title')}
+          </button>
+        )}
+        <button type="button" className="btn ghost sm" onClick={saveView} disabled={!q.trim() && !status && !archived && active.length === 0}>
           {t('door.people.saveView')}
         </button>
       </div>
+      {options.data && (open || active.length > 0) && <PeopleFilterPanel options={options.data} filters={filters} onChange={setFilters} />}
       {views.length > 0 && (
         <ul className="door-chips" aria-label={t('door.people.views')}>
           {views.map((v) => (
             <li key={v.name}>
-              <button type="button" className="door-chip" onClick={() => { setQ(v.q); setStatus(v.status); setArchived(v.archived); }}>
+              <button type="button" className="door-chip" onClick={() => { setQ(v.q); setStatus(v.status); setArchived(v.archived); setFilters(cleanFilters(v.filters)); setOpen(true); }}>
                 {v.name}
               </button>
               <button type="button" className="btn ghost sm" aria-label={t('door.people.dropView', { name: v.name })} onClick={() => dropView(v.name)}>
@@ -115,18 +139,21 @@ export function PeopleDirectoryPage() {
         {list.length === 0 ? (
           <EmptyState variant="no-results" title={t('door.people.none')} detail={t('door.people.noneDetail')} />
         ) : (
+          <>
+          {active.length > 0 && <p className="people-count" role="status">{total > list.length ? t('door.people.filters.tooMany', { shown: list.length, total }) : t('door.people.filters.count', { count: total })}</p>}
           <RowList label={t('door.people.tab.directory')}>
             {list.map((p) => (
               <ListRow
                 key={p.id}
                 avatarName={p.fullName}
                 title={p.fullName}
-                detail={[p.memberCode, p.phone].filter(Boolean).join(' · ') || undefined}
+                detail={[p.memberCode, p.phone, p.marital === 'WIDOWED' ? t('door.people.marital.WIDOWED') : null, typeof p.children === 'number' && p.children > 0 ? t('door.people.children', { count: p.children }) : null].filter(Boolean).join(' · ') || undefined}
                 status={<StatusChip tone={tone(p.status)}>{t(`door.status.${p.status}` as const)}</StatusChip>}
                 to={`${base}/${p.id}`}
               />
             ))}
           </RowList>
+          </>
         )}
       </LoadState>
     </div>

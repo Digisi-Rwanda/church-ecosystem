@@ -2,7 +2,7 @@ import type { ReactNode } from 'react';
 import type { P360Participation, P360Record, P360Section, P360View } from '../api/frontDoorApi';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { formatRwf } from './money';
-import { sectionKey, valueKey } from './person360';
+import { sectionKey, valueText } from './person360';
 
 type Gift = P360Participation['items'][number];
 type Line = { title: string; detail: string; when: string | null };
@@ -16,9 +16,9 @@ export function Person360Sheet({ v, gifts, showGifts }: { v: P360View; gifts: Gi
   const cur = (s: P360Section) => (v.read.includes(s) ? v.records.filter((r) => r.section === s && r.status === 'CURRENT') : []);
   const line = (r: P360Record): Line => {
     const vals = Object.entries(r.data)
-      .filter(([k, x]) => !/PersonId$/.test(k) && k !== 'date' && x !== '')
-      .map(([, x]) => (typeof x === 'string' && /^[A-Z_]+$/.test(x) ? t(valueKey(x) as never) : String(x)));
-    const extra = [r.relatedName, r.programName].filter(Boolean);
+      .filter(([k, x]) => !/PersonId$/.test(k) && k !== 'orgUnitId' && k !== 'date' && x !== '')
+      .map(([, x]) => valueText(t as never, x));
+    const extra = [r.relatedName, r.unitName, r.programName].filter(Boolean);
     const all = [...vals, ...extra];
     const d = typeof r.data.date === 'string' ? r.data.date : null;
     return { title: all[0] ?? t(sectionKey(r.section)), detail: all.slice(1).join(' · '), when: d };
@@ -30,7 +30,6 @@ export function Person360Sheet({ v, gifts, showGifts }: { v: P360View; gifts: Gi
   const callings = block('CALLING');
   const work = block('EMPLOYMENT');
   const edu = block('EDUCATION');
-  const skills = [...block('SKILL'), ...block('GIFT')];
   const family = cur('FAMILY').filter((r) => r.data.relation !== 'SPOUSE').map(line);
   const joined = day(p.joinedChurchOn);
   const intro = [
@@ -73,7 +72,6 @@ export function Person360Sheet({ v, gifts, showGifts }: { v: P360View; gifts: Gi
           <Part title={t('door.p360.sheet.contact')}>{facts(contact)}</Part>
           <Part title={t('door.p360.sheet.personal')}>{facts(personal)}</Part>
           {edu.length > 0 && <Part title={t('door.p360.sheet.education')}>{entries(edu)}</Part>}
-          {skills.length > 0 && <Part title={t('door.p360.sheet.skills')}>{entries(skills)}</Part>}
           {family.length > 0 && <Part title={t('door.p360.section.FAMILY')}>{entries(family)}</Part>}
         </aside>
         <div className="resume-main">
@@ -86,7 +84,7 @@ export function Person360Sheet({ v, gifts, showGifts }: { v: P360View; gifts: Gi
               {gifts.slice(0, 8).map((g) => (
                 <div key={`${g.kind}${g.id}`} className="resume-entry">
                   <strong>{g.label}</strong>
-                  <span>{[day(`${g.day}T12:00:00Z`), g.kind === 'GOOD_DEED' ? t('door.p360.part.kind.GOOD_DEED') : formatRwf(g.amount)].filter(Boolean).join(' · ')}</span>
+                  <span>{[day(`${g.day}T12:00:00Z`), formatRwf(g.amount)].filter(Boolean).join(' · ')}</span>
                 </div>
               ))}
             </Part>

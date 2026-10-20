@@ -1,5 +1,5 @@
 /**
- * Demo content so no page of the church looks empty: two full member profiles (with good deeds and
+ * Demo content so no page of the church looks empty: one full member profile (with
  * giving), groups, couples, visits, contacts, tasks, programs, events and projects, reports, meetings,
  * decisions, letters, service collections and the month's schedule. Runs only where demo accounts are
  * seeded (never on a live deployment). Every row has a fixed id, so running it again changes nothing,
@@ -43,22 +43,19 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
   const secretary = people.has('p-secretary') ? 'p-secretary' : pastor;
   if (!pastor) return out;
 
-  // ── Two full member profiles: facts, records, good deeds and giving ──────────────────────
+  // ── One full member profile: facts, records and giving ──────────────────────
   const profiles = [
     {
       id: 'p-member', sys: 'sys-youth', org: 'ou-youth', gender: 'MALE', dob: '1990-04-12', address: 'KG 11 Ave, Kacyiru, Kigali', joined: '2012-03-04', nid: '1199080012345678',
       records: [
         ['EDUCATION', { level: 'BACHELOR', field: 'Computer Science', school: 'University of Rwanda', startYear: 2009, endYear: 2013 }],
-        ['EMPLOYMENT', { status: 'EMPLOYED', employer: 'Kigali Software Ltd', role: 'Software engineer', since: '2014-02-01' }],
-        ['SKILL', { name: 'Sound and projection', level: 'GOOD' }], ['SKILL', { name: 'Teaching', level: 'GOOD' }],
-        ['GIFT', { name: 'Hospitality', note: 'Welcomes visitors every Sunday' }],
-        ['CALLING', { name: 'Sunday school teacher', note: 'Teaches the young adults class' }],
+        ['EMPLOYMENT', { status: 'EMPLOYED', sector: 'TECHNOLOGY', employer: 'Kigali Software Ltd', role: 'Software engineer', since: '2014-02-01' }],
+        ['CALLING', { name: 'Sunday school teacher', orgUnitId: 'ou-youth', since: '2019-01-06', note: 'Teaches the young adults class' }],
         ['BAPTISM', { date: '2012-06-17', place: 'ADEPR Kacyiru', baptisedBy: 'Rev. Jean Bosco Habimana' }],
         ['MARRIAGE', { date: '2018-08-18', spouseName: 'Diane Uwase', place: 'ADEPR Kacyiru', blessedBy: 'Rev. Jean Bosco Habimana', certificateRef: 'MC-2018-044' }],
-        ['FAMILY', { relation: 'SPOUSE', name: 'Diane Uwase' }], ['FAMILY', { relation: 'CHILD', name: 'Emmanuel Niyonzima' }],
+        ['FAMILY', { relation: 'SPOUSE', name: 'Diane Uwase' }], ['FAMILY', { relation: 'CHILD', name: 'Emmanuel Niyonzima', dateOfBirth: '2019-05-02', gender: 'MALE' }], ['FAMILY', { relation: 'CHILD', name: 'Alice Niyonzima', dateOfBirth: '2022-09-14', gender: 'FEMALE' }],
         ['CONTACT', { label: 'WhatsApp', value: '+250788123456' }],
       ],
-      deeds: [['Paid the school fees of an orphan in the youth fellowship', -200], ['Led the clean-up of the church compound', -120], ['Visited and prayed with three sick members', -45]],
       gifts: [['UNIT', 'sys-youth', 'Umusanzu', 25_000], ['UNIT', 'sys-youth', 'Umusanzu', 25_000], ['UNIT', 'sys-youth', 'Umusanzu', 30_000]],
       donations: [['Building fund', 150_000, -70], ['Harvest thanksgiving', 80_000, -20]],
     },
@@ -67,14 +64,11 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       records: [
         ['EDUCATION', { level: 'MASTER', field: 'Social Work', school: 'Mount Kenya University', startYear: 2016, endYear: 2018 }],
         ['EMPLOYMENT', { status: 'EMPLOYED', employer: 'Hope Rwanda NGO', role: 'Programme officer', since: '2019-05-01' }],
-        ['SKILL', { name: 'Public speaking', level: 'EXPERT' }], ['SKILL', { name: 'Event planning', level: 'GOOD' }],
-        ['GIFT', { name: 'Leadership', note: 'Gathers and encourages young people' }],
         ['CALLING', { name: 'President of the Youth Ministry', note: 'Leads about 120 young people' }], ['CALLING', { name: 'Women in prayer coordinator', note: '' }],
         ['BAPTISM', { date: '2010-04-04', place: 'ADEPR Kacyiru', baptisedBy: 'Rev. Claire Mukamana' }],
         ['FAMILY', { relation: 'PARENT', name: 'Mama Immaculée Ingabire' }], ['FAMILY', { relation: 'SIBLING', name: 'Kevin Ingabire' }],
         ['CONTACT', { label: 'WhatsApp', value: '+250788654321' }],
       ],
-      deeds: [['Organised a free medical camp for 200 neighbours', -160], ['Mentored 12 teenagers through exam season', -90], ['Raised funds for a widow\'s house repair', -30]],
       gifts: [['UNIT', 'sys-youth', 'Umusanzu', 40_000], ['UNIT', 'sys-youth', 'Umusanzu', 40_000]],
       donations: [['Youth conference', 200_000, -50], ['Outreach day', 60_000, -15]],
     },
@@ -83,15 +77,12 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       records: [
         ['EDUCATION', { level: 'BACHELOR', field: 'Accounting and Finance', school: 'University of Kigali', startYear: 2010, endYear: 2014 }],
         ['EMPLOYMENT', { status: 'EMPLOYED', employer: 'Bank of Kigali', role: 'Accountant', since: '2015-03-02' }],
-        ['SKILL', { name: 'Bookkeeping', level: 'EXPERT' }], ['SKILL', { name: 'Choir singing (alto)', level: 'GOOD' }],
-        ['GIFT', { name: 'Singing', note: 'Leads the alto section' }], ['GIFT', { name: 'Stewardship', note: 'Keeps the ministry accounts clean' }],
         ['CALLING', { name: 'Treasurer of the Music Ministry', note: 'Keeps the books and reports every month' }], ['CALLING', { name: 'Alto section leader', note: 'Choir of the first service' }],
         ['BAPTISM', { date: '2022-12-18', place: 'ADEPR Kacyiru', baptisedBy: 'Rev. Jean Bosco Habimana' }],
         ['MARRIAGE', { date: '2019-07-06', spouseName: 'Jean Claude Mugabo', place: 'ADEPR Remera', blessedBy: 'Rev. Claire Mukamana', certificateRef: 'MC-2019-031' }],
         ['FAMILY', { relation: 'SPOUSE', name: 'Jean Claude Mugabo' }], ['FAMILY', { relation: 'CHILD', name: 'Grace Mugabo' }], ['FAMILY', { relation: 'PARENT', name: 'Mama Esther Umuhoza' }],
         ['CONTACT', { label: 'WhatsApp', value: '+250788777111' }],
       ],
-      deeds: [['Kept the choir accounts open and shared them with the whole team', -180], ['Paid for the transport of the choir to the Huye concert', -100], ['Sang at the funeral of a member and comforted the family', -35]],
       gifts: [['UNIT', 'sys-music', 'Umusanzu', 30_000], ['UNIT', 'sys-music', 'Umusanzu', 30_000], ['UNIT', 'sys-music', 'Umusanzu', 35_000]],
       donations: [['Choir instruments fund', 120_000, -80], ['Christmas concert', 90_000, -25]],
     },
@@ -100,15 +91,12 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
       records: [
         ['EDUCATION', { level: 'ASSOCIATE', field: 'Civil Engineering', school: 'IPRC Kigali', startYear: 2005, endYear: 2008 }],
         ['EMPLOYMENT', { status: 'SELF_EMPLOYED', business: 'Habimana Construction', since: '2012-01-15' }],
-        ['SKILL', { name: 'Building and repairs', level: 'EXPERT' }], ['SKILL', { name: 'Mentoring men', level: 'GOOD' }],
-        ['GIFT', { name: 'Service', note: 'First to volunteer for church works' }], ['GIFT', { name: 'Encouragement', note: '' }],
         ['CALLING', { name: 'Vice President of the Men Ministry', note: 'Coordinates the men\'s breakfast and works days' }], ['CALLING', { name: 'Church building committee member', note: '' }],
         ['BAPTISM', { date: '2009-08-09', place: 'ADEPR Kacyiru', baptisedBy: 'Rev. Jean Bosco Habimana' }],
         ['MARRIAGE', { date: '2013-12-21', spouseName: 'Solange Mukamana', place: 'ADEPR Kacyiru', blessedBy: 'Rev. Jean Bosco Habimana', certificateRef: 'MC-2013-102' }],
         ['FAMILY', { relation: 'SPOUSE', name: 'Solange Mukamana' }], ['FAMILY', { relation: 'CHILD', name: 'Ethan Habimana' }], ['FAMILY', { relation: 'CHILD', name: 'Ruth Habimana' }],
         ['CONTACT', { label: 'WhatsApp', value: '+250788999222' }],
       ],
-      deeds: [['Rebuilt the roof of the Sunday school room at no cost', -210], ['Hosted the men\'s prayer breakfast for 40 men', -75], ['Helped a young family move into their new home', -28]],
       gifts: [['UNIT', 'sys-men', 'Umusanzu', 50_000], ['UNIT', 'sys-men', 'Umusanzu', 50_000], ['UNIT', 'sys-men', 'Umusanzu', 50_000]],
       donations: [['Building fund', 300_000, -90], ['Harvest thanksgiving', 150_000, -18]],
     },
@@ -128,8 +116,6 @@ export async function seedDemoContent(db: Db, now = new Date()): Promise<Record<
     }
     let n = 0;
     for (const [section, data] of pr.records) bump('profile records', await ensure(db.personRecord as never, `demo-rec-${pr.id}-${n++}`, { personId: pr.id, section, dataJson: JSON.stringify(data), status: 'CURRENT', recordedById: secretary, recordedAt: at(-300 + n * 7) }));
-    n = 0;
-    for (const [note, days] of pr.deeds.slice(0, 1)) bump('good deeds', await ensure(db.personDeed as never, `demo-deed-${pr.id}-${n++}`, { personId: pr.id, note, day: ymd(at(days)), recordedById: pastor, unitId: 'sys-main' }));
     n = 0;
     for (const [level, systemId, typeName, amount] of pr.gifts.slice(0, 1)) {
       const month = monthKey(at(-30 * (n + 1)));

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { P360Record } from '../api/frontDoorApi';
-import { fieldsFor, formData, groupBySection, p360ErrorKey } from './person360';
+import { fieldsFor, formData, groupBySection, p360ErrorKey, SECTION_ORDER } from './person360';
 
 describe('person 360 helpers', () => {
   it('needs the required fields and drops empty ones', () => {
@@ -33,7 +33,28 @@ describe('person 360 helpers', () => {
     expect(keys('EDUCATION', { level: 'BACHELOR' })).toEqual(['level', 'field', 'school', 'startYear', 'endYear']);
     expect(keys('EMPLOYMENT', { status: 'UNEMPLOYED' })).toEqual(['status', 'since']);
     expect(keys('EMPLOYMENT', { status: 'STUDENT' })).toEqual(['status', 'school', 'field', 'since']);
-    expect(keys('EMPLOYMENT', { status: 'EMPLOYED' })).toEqual(['status', 'employer', 'role', 'since']);
+    expect(keys('EMPLOYMENT', { status: 'EMPLOYED' })).toEqual(['status', 'sector', 'employer', 'role', 'since']);
     expect(formData('EMPLOYMENT', { status: 'UNEMPLOYED', employer: 'MTN', since: '2025-02-01' })).toEqual({ status: 'UNEMPLOYED', since: '2025-02-01' });
+  });
+  it('a child carries a birth date and gender; other relations do not', () => {
+    const keys = (v: Record<string, string>) => fieldsFor('FAMILY', v).map((f) => f.key);
+    expect(keys({ relation: 'CHILD' })).toEqual(['relation', 'relatedPersonId', 'name', 'dateOfBirth', 'gender', 'note']);
+    expect(keys({ relation: 'SPOUSE' })).toEqual(['relation', 'relatedPersonId', 'name']);
+    expect(formData('FAMILY', { relation: 'CHILD', name: 'Eric', dateOfBirth: '2019-05-02', gender: 'MALE', junk: 'x' })).toEqual({ relation: 'CHILD', name: 'Eric', dateOfBirth: '2019-05-02', gender: 'MALE' });
+    expect(formData('FAMILY', { relation: 'CHILD' })).toBeNull();
+  });
+  it('a calling names what the person does and where; gifts and skills are gone', () => {
+    expect(fieldsFor('CALLING', {}).map((f) => f.key)).toEqual(['name', 'orgUnitId', 'since', 'note']);
+    expect(formData('CALLING', { name: 'Bassist', orgUnitId: 'ou-choir' })).toEqual({ name: 'Bassist', orgUnitId: 'ou-choir' });
+    expect(SECTION_ORDER).not.toContain('GIFT');
+    expect(SECTION_ORDER).not.toContain('SKILL');
+  });
+  it('the spouse passing away is recorded on the marriage and needs its date', () => {
+    expect(fieldsFor('MARRIAGE', { endedBy: 'DEATH' }).map((f) => f.key)).toContain('endedOn');
+    expect(fieldsFor('MARRIAGE', {}).map((f) => f.key)).not.toContain('endedOn');
+    expect(formData('MARRIAGE', { date: '2018-08-18', endedBy: 'DEATH' })).toBeNull();
+    expect(formData('MARRIAGE', { date: '2018-08-18', endedBy: 'DEATH', endedOn: '2017-01-01' })).toBeNull();
+    expect(formData('MARRIAGE', { date: '2018-08-18', endedBy: 'DEATH', endedOn: '2024-03-01' })).toEqual({ date: '2018-08-18', endedBy: 'DEATH', endedOn: '2024-03-01' });
+    expect(formData('MARRIAGE', { date: '2018-08-18', endedOn: '2024-03-01' })).toEqual({ date: '2018-08-18' });
   });
 });

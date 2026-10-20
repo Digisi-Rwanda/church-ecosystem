@@ -7766,10 +7766,6 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 @media (max-width: 560px) { .seat-stats { grid-template-columns: 1fr; } .seat-grid { grid-template-columns: 1fr; } }
 
 /* Good deeds */
-.p360-deed-list { list-style: none; margin: 0 0 var(--sp-3); padding: 0; display: grid; gap: var(--sp-2); }
-.p360-deed-list li { display: flex; align-items: center; gap: var(--sp-2); }
-.p360-deed-text { flex: 1; min-width: 0; display: grid; }
-.p360-deed-text small { color: var(--ink-muted); }
 
 /* Searchable choice (many systems) */
 .searchselect { position: relative; }
@@ -7961,9 +7957,6 @@ html[data-theme='dark'] { --cat-1: #3987e5; --cat-2: #d95926; --cat-3: #199e70; 
 .rk-period { display: grid; gap: var(--sp-2); }
 .rk-summary { margin: 0; padding: var(--sp-3) var(--sp-4); border-radius: var(--r-2); background: var(--surface); border: 1px dashed var(--line-strong); font-size: 0.9rem; }
 
-.p360-deeds.embedded { display: grid; gap: var(--sp-3); margin-top: var(--sp-3); padding-top: var(--sp-3); border-top: 1px solid var(--line); }
-.p360-deed-lead { margin: 0; font-size: 0.85rem; color: var(--ink-muted); }
-.p360-deed-manage summary { cursor: pointer; font-size: 0.85rem; color: var(--ink-muted); }
 
 /* Portal: a top bar instead of a sidebar */
 .ptop-shell { min-height: 100vh; background: var(--bg, var(--surface)); }
@@ -8479,4 +8472,24 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
   border-radius: 8px;
   background: var(--surface-2, transparent);
   font-size: 0.9rem;
+}
+
+/* People filters: added one after another, each row narrows the list */
+.people-filters { display: grid; gap: var(--sp-3, 0.75rem); padding: var(--sp-3, 0.9rem) var(--sp-4, 1rem); border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface, #fff); }
+.people-filters-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.6rem; }
+.people-filters-head > strong { margin-right: auto; }
+.people-filters-head select { min-width: 12rem; }
+.people-filter-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.6rem; }
+.people-filter-row { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem; padding-bottom: 0.6rem; border-bottom: 1px solid var(--line); }
+.people-filter-row:last-child { border-bottom: 0; padding-bottom: 0; }
+.people-filter-name { flex: 0 0 11rem; font-weight: 600; color: var(--ink); }
+.people-filter-row select, .people-filter-row input[type="number"], .people-filter-row input[type="text"] { flex: 1 1 9rem; min-width: 0; max-width: 18rem; }
+.people-filter-row input[type="number"] { max-width: 10rem; }
+.people-filter-row .btn { margin-left: auto; }
+.people-count { margin: 0; font-weight: 600; color: var(--ink-muted); }
+.p360-card-actions { display: inline-flex; flex-wrap: wrap; gap: 0.9rem; }
+@media (max-width: 560px) {
+  .people-filter-name { flex-basis: 100%; }
+  .people-filters-head select { flex: 1 1 100%; }
+  .people-filter-row .btn { margin-left: 0; }
 }
