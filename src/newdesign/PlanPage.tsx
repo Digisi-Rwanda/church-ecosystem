@@ -1,3 +1,4 @@
+import { LoadErrorState } from './LoadErrorState';
 import { levelKeyOf } from './planLevels';
 import { useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
@@ -5,7 +6,6 @@ import {
   cancelPlan, deletePlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, rejectPlan, suspendPlan, unsuspendPlan,
   type ActivityMoney, type PlanDetail,
 } from '../api/frontDoorApi';
-import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextAreaField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
@@ -69,7 +69,7 @@ export function PlanPage() {
     }
   };
 
-  if (load.failed) return <EmptyState variant="error" title={t('door.work.err.gone')} />;
+  if (load.failed) return <LoadErrorState kind={load.failed} retry={load.reload} />;
   return (
     <LoadState loading={load.loading || !p} failed={false} retry={load.reload}>
       {p && (

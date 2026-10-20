@@ -1,7 +1,7 @@
+import { LoadErrorState } from './LoadErrorState';
 import { useEffect, useState } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { addMilestone, createPlan, editPlan, fetchActivityMoney, fetchPlan, fetchPlanOptions, planStep, type ActivityMoney, type KindInput, type PlanDetail, type PlanInput, type CaseType, type ProgramKind, type PurposeTag } from '../api/frontDoorApi';
-import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { CreateMoney } from './CreateMoney';
@@ -174,7 +174,7 @@ export function ActivityCreate() {
     navigate(`/s/${systemId}/work/plans/${plan.id}`);
   });
 
-  if (resumeId && resume.failed) return <EmptyState variant="error" title={t('door.work.err.gone')} />;
+  if (resumeId && resume.failed) return <LoadErrorState kind={resume.failed} retry={resume.reload} />;
   const noMoney = kind === 'program' && !hasMoney && !(pkind === 'CASE' && caseType !== 'MARRIAGE');
   const cannotSubmit = noMoney ? false : !money || money.planned <= 0 || money.gap !== 0;
   const lines = money?.lines ?? [];

@@ -45,13 +45,37 @@ export async function requireAuth(
   next();
 }
 
+/** What a client may be told when the request itself was bad (an oversized or unreadable body). Never the raw error. */
+const CLIENT_FAULTS: Record<string, { status: number; code: string; error: string }> = {
+  'entity.too.large': { status: 413, code: 'TOO_BIG', error: 'The request is too large' },
+  'entity.parse.failed': { status: 400, code: 'BAD_REQUEST', error: 'The request could not be read' },
+  'encoding.unsupported': { status: 415, code: 'BAD_REQUEST', error: 'The request could not be read' },
+  'request.aborted': { status: 400, code: 'BAD_REQUEST', error: 'The request was interrupted' },
+};
+
+/**
+ * The last stop for anything a route did not answer itself. The full error goes to the server log (with the
+ * request id, which the client also receives, so a report can be matched to it); the client only ever gets a
+ * fixed message. Deliberate answers (`fail(...)`) never reach here.
+ */
 export function errorHandler(
   err: unknown,
   req: Request,
   res: Response,
-  _next: NextFunction,
+  next: NextFunction,
 ): void {
-  log.error('unhandled error', { id: (req as Request & { id?: string }).id, path: req.path, ...errorFields(err) });
-  const message = err instanceof Error ? err.message : 'Server error';
-  res.status(500).json({ error: message });
+  const id = (req as Request & { id?: string }).id;
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  const type = typeof (err as { type?: unknown })?.type === 'string' ? ((err as { type: string }).type) : '';
+  const known = CLIENT_FAULTS[type];
+  if (known) {
+    log.warn('request rejected', { id, path: req.path, type });
+    res.status(known.status).json({ error: known.error, code: known.code, id });
+    return;
+  }
+  log.error('unhandled error', { id, path: req.path, ...errorFields(err) });
+  res.status(500).json({ error: 'Something went wrong on our side. Please try again.', code: 'SERVER_ERROR', id });
 }

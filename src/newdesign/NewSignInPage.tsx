@@ -16,7 +16,7 @@ const ERROR_KEY: Record<Exclude<SignInResult, 'ok'>, MessageKey> = {
 
 export function NewSignInPage() {
   const t = useT();
-  const { status, signIn } = useFrontDoor();
+  const { status, signIn, sessionEnded } = useFrontDoor();
   const location = useLocation();
   const [error, setError] = useState<MessageKey | null>(null);
   const [busy, setBusy] = useState(false);
@@ -72,6 +72,11 @@ export function NewSignInPage() {
           <form className="stack" onSubmit={onSubmit} aria-busy={busy}>
             <TextField label={t('login.username')} name="username" id="username" autoComplete="username" autoCapitalize="none" required disabled={busy} />
             <TextField label={t('login.password')} name="password" id="password" type="password" autoComplete="current-password" required disabled={busy} />
+            {sessionEnded && !error && (
+              <div className="muted" role="status">
+                {t('door.signIn.expired')}
+              </div>
+            )}
             {error && (
               <div className="error" role="alert">
                 {t(error)}

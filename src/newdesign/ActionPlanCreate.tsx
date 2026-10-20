@@ -1,7 +1,7 @@
+import { LoadErrorState } from './LoadErrorState';
 import { useEffect, useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 import { createPlan, editPlan, fetchPlan, fetchPlanOptions, savePlanDetails, type PlanDetail, type PlanInput } from '../api/frontDoorApi';
-import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { FLOWS, OPTIONS, type FlowField, type FlowKind } from './actionPlanFlows';
@@ -156,7 +156,7 @@ export function ActionPlanCreate() {
     return <div key={f.key} className={f.half ? 'ap-half' : 'ap-full'}>{input}</div>;
   };
 
-  if (resumeId && resume.failed) return <EmptyState variant="error" title={t('door.work.err.gone')} />;
+  if (resumeId && resume.failed) return <LoadErrorState kind={resume.failed} retry={resume.reload} />;
   const last = step === flow.steps.length - 1;
   return (
     <section className="door-block ap" aria-labelledby="door-ap-title">

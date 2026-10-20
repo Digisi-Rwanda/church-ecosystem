@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from 'react';
 import { apiLogin } from '../api/authApi';
-import { ApiError, getApiToken, setApiToken } from '../api/client';
+import { ApiError, SESSION_EXPIRED_EVENT, getApiToken, setApiToken } from '../api/client';
 import { fetchBootstrap, type Capabilities, type PortalSystem } from '../api/frontDoorApi';
 import { clearOffline } from '../api/offlineStore';
 import { clearLoadCache } from './useLoad';
@@ -20,6 +20,8 @@ export type SignInResult = 'ok' | 'refused' | 'unreachable' | 'failed';
 
 type FrontDoorValue = {
   status: Status;
+  /** True when the server ended the session (as opposed to the person signing out). */
+  sessionEnded: boolean;
   personName: string;
   portal: PortalSystem[];
   capabilities: Capabilities | null;
@@ -37,6 +39,7 @@ const Ctx = createContext<FrontDoorValue | null>(null);
  */
 export function FrontDoorProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<Status>(() => (getApiToken() ? 'checking' : 'out'));
+  const [sessionEnded, setSessionEnded] = useState(false);
   const [personName, setPersonName] = useState('');
   const [portal, setPortal] = useState<PortalSystem[]>([]);
   const [capabilities, setCapabilities] = useState<Capabilities | null>(null);
@@ -60,6 +63,22 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
     }
   }, []);
 
+  // A signed-in request the server refused as unauthenticated: the session is over, wherever the person was.
+  useEffect(() => {
+    const ended = () => {
+      if (!getApiToken()) return;
+      clearLoadCache();
+      clearOffline();
+      setApiToken(null);
+      setPortal([]);
+      setCapabilities(null);
+      setSessionEnded(true);
+      setStatus('out');
+    };
+    window.addEventListener(SESSION_EXPIRED_EVENT, ended);
+    return () => window.removeEventListener(SESSION_EXPIRED_EVENT, ended);
+  }, []);
+
   useEffect(() => {
     if (getApiToken()) void load();
     // Only on first mount: a token left from an earlier visit is checked once.
@@ -76,6 +95,7 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
         return 'failed';
       }
       clearLoadCache();
+      setSessionEnded(false);
       await load();
       return 'ok';
     },
@@ -91,12 +111,13 @@ export function FrontDoorProvider({ children }: { children: ReactNode }) {
     setPortal([]);
     setCapabilities(null);
     setPersonName('');
+    setSessionEnded(false);
     setStatus('out');
   }, []);
 
   const value = useMemo<FrontDoorValue>(
-    () => ({ status, personName, portal, capabilities, signIn, signOut, reload: load }),
-    [status, personName, portal, capabilities, signIn, signOut, load],
+    () => ({ status, sessionEnded, personName, portal, capabilities, signIn, signOut, reload: load }),
+    [status, sessionEnded, personName, portal, capabilities, signIn, signOut, load],
   );
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }

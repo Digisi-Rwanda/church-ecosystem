@@ -100,7 +100,7 @@ function Timeline({ records, gifts }: { records: P360Record[]; gifts: Gift[] }) 
 }
 
 /** Participation updates: the latest gifts as short lines, with the year's totals. For the Church Leader only. */
-function Participation({ load, personId, onChanged }: { personId: string; onChanged: () => void; load: { loading: boolean; failed: boolean; data?: P360Participation | null; reload: () => void } }) {
+function Participation({ load, personId, onChanged }: { personId: string; onChanged: () => void; load: { loading: boolean; failed: boolean | import('../api/client').ApiErrorKind; data?: P360Participation | null; reload: () => void } }) {
   const t = useT();
   const [all, setAll] = useState(false);
   const d = load.data ?? undefined;

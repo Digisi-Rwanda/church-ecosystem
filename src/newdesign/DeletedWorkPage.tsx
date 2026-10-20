@@ -1,3 +1,4 @@
+import { LoadErrorState } from './LoadErrorState';
 import { useState } from 'react';
 import { fetchDeletedPlans, fetchDeletedWork, restorePlan, restoreWork } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -15,7 +16,7 @@ export function DeletedWorkPage() {
     return [...light.map((d) => ({ ...d, plan: false })), ...full.map((d) => ({ ...d, plan: true }))].sort((a, b) => (b.deletedAt ?? '').localeCompare(a.deletedAt ?? ''));
   }, 'work-deleted');
   const [error, setError] = useState('');
-  if (list.failed) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
+  if (list.failed) return <LoadErrorState kind={list.failed} retry={list.reload} />;
   const when = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeStyle: 'short', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
   return (
     <section className="door-block" aria-labelledby="door-deleted-title">
