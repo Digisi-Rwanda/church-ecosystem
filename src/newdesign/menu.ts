@@ -169,6 +169,9 @@ const pathOf = (to: string) => to.split('?')[0]!;
 const isUnder = (path: string, to: string, end: boolean) => path === to || (!end && path.startsWith(`${to}/`));
 
 /** The module and place that hold the page being shown. The most specific place wins, so one tab is lit at a time. */
+/** A plan page whose kind is not known yet (loading, or it did not load) names this, so no tab is lit rather than the wrong one. */
+export const PLACE_UNKNOWN = 'unknown';
+
 export function resolveActive(modules: NavModule[], pathname: string, hint?: string | null): { module: NavModule; place: NavPlace | null } | null {
   let best: { module: NavModule; place: NavPlace } | null = null;
   for (const m of modules) {
@@ -179,8 +182,11 @@ export function resolveActive(modules: NavModule[], pathname: string, hint?: str
   }
   if (best && hint) {
     // A plan page: the page names its own place (programs, events or projects) when it is under the same module.
-    const named = best.module.places.find((x) => x.key === hint);
-    if (named && /\/work\/plans\//.test(pathname)) return { module: best.module, place: named };
+    if (/\/work\/plans\//.test(pathname)) {
+      if (hint === PLACE_UNKNOWN) return { module: best.module, place: null };
+      const named = best.module.places.find((x) => x.key === hint);
+      if (named) return { module: best.module, place: named };
+    }
   }
   if (best) return best;
   const parts = pathname.split('/');

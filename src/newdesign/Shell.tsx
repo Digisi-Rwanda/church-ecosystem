@@ -6,7 +6,7 @@ import { ThemeToggle } from '../components/ui/ThemeToggle';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { useFrontDoor } from './FrontDoorContext';
 import { usePlaceHint } from './activePlace';
-import { resolveActive, type NavModule } from './menu';
+import { PLACE_UNKNOWN, resolveActive, type NavModule } from './menu';
 import { badge } from './notices';
 import { useAnnouncementSummary } from './useAnnouncementSummary';
 import { GlobalSearch } from './GlobalSearch';
@@ -86,7 +86,7 @@ export function Shell({
     setOverride((o) => (current.id in o ? Object.fromEntries(Object.entries(o).filter(([k]) => k !== current.id)) : o));
   }, [current?.id]); // oxlint-disable-line react-hooks/exhaustive-deps
 
-  const placeName = active?.place ?? current?.places[0];
+  const placeName = active?.place ?? (placeHint === PLACE_UNKNOWN ? undefined : current?.places[0]);
   const pageTitle = placeName ? `${t(placeName.labelKey as 'door.block.home')} · ${where}` : where;
   useEffect(() => {
     document.title = pageTitle;

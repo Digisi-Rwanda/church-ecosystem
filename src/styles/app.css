@@ -8455,3 +8455,28 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
 
 /* Case program: keep the register / review buttons clear of the filter row below. */
 .case-actions { margin-bottom: 1rem; }
+
+/* The sign-in page's "your session ended" notice, and the one-line error of an optional section. Both use existing tokens, so they follow the theme. */
+.session-notice {
+  padding: 0.6rem 0.8rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--accent-solid, var(--accent));
+  border-radius: 8px;
+  background: var(--surface-2, transparent);
+  color: var(--ink, inherit);
+  font-size: 0.9rem;
+  line-height: 1.4;
+}
+.inline-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.5rem 0;
+  padding: 0.5rem 0.75rem;
+  border: 1px solid var(--line);
+  border-left: 3px solid var(--danger-ink, var(--danger, currentColor));
+  border-radius: 8px;
+  background: var(--surface-2, transparent);
+  font-size: 0.9rem;
+}

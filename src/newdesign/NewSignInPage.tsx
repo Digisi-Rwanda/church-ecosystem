@@ -73,7 +73,7 @@ export function NewSignInPage() {
             <TextField label={t('login.username')} name="username" id="username" autoComplete="username" autoCapitalize="none" required disabled={busy} />
             <TextField label={t('login.password')} name="password" id="password" type="password" autoComplete="current-password" required disabled={busy} />
             {sessionEnded && !error && (
-              <div className="muted" role="status">
+              <div className="session-notice" role="status">
                 {t('door.signIn.expired')}
               </div>
             )}

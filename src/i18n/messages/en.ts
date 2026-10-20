@@ -2172,6 +2172,7 @@ export const en = {
   'door.plan.err.already': 'This person is already registered.',
   'door.plan.err.regClosed': 'Registration is not open.',
   'door.plan.err.attended': 'Attendance is already marked, so this cannot be cancelled.',
+  'door.plan.public.goneDetail': 'Ask the person who invited you for a new link.',
   'door.plan.public.gone': 'This invitation was not found. The link may have been turned off.',
   'door.plan.public.done': 'Thank you. You are registered.',
   'door.plan.public.go': 'Register',

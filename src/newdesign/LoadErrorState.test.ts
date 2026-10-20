@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter } from 'react-router-dom';
 import { describe, expect, it, vi } from 'vitest';
 import { I18nProvider } from '../i18n/I18nContext';
-import { LoadErrorState } from './LoadErrorState';
+import { LoadErrorInline, LoadErrorState } from './LoadErrorState';
 import { LoadState } from './LoadState';
 
 vi.mock('./FrontDoorContext', () => ({ useFrontDoor: () => ({ signOut: () => {} }) }));
@@ -18,6 +18,10 @@ describe('LoadErrorState', () => {
     expect(html).toContain('>Sign in<');
     expect(html).not.toContain('Try again');
     expect(html).not.toContain('went wrong');
+  });
+
+  it('is announced to assistive technology as an alert', () => {
+    expect(render(h(LoadErrorState, { kind: 'server', retry }))).toContain('role="alert"');
   });
 
   it('says access is denied, with no retry', () => {
@@ -51,5 +55,22 @@ describe('LoadErrorState', () => {
     expect(html).not.toContain('content');
     expect(render(h(LoadState, { loading: false, failed: true, retry, children: h('p', null, 'x') }))).toContain('went wrong');
     expect(render(h(LoadState, { loading: false, failed: false, retry, children: h('p', null, 'content') }))).toContain('content');
+  });
+});
+
+describe('LoadErrorInline (an optional section that did not load)', () => {
+  it('is one line, announced, with Retry only where retrying can help', () => {
+    for (const kind of ['server', 'offline'] as const) {
+      const html = render(h(LoadErrorInline, { kind, retry }));
+      expect(html).toContain('inline-error');
+      expect(html).toContain('role="alert"');
+      expect(html).toContain('Try again');
+    }
+    for (const kind of ['invalid', 'forbidden', 'notFound'] as const) expect(render(h(LoadErrorInline, { kind, retry }))).not.toContain('Try again');
+  });
+  it('says what happened, in the shared words', () => {
+    expect(render(h(LoadErrorInline, { kind: 'server', retry }))).toContain('Something went wrong on our side');
+    expect(render(h(LoadErrorInline, { kind: 'offline', retry }))).toContain('No connection');
+    expect(render(h(LoadErrorInline, { kind: 'auth', retry }))).toContain('Your session has ended');
   });
 });

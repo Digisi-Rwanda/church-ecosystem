@@ -1,3 +1,4 @@
+import type { ApiErrorKind } from '../api/client';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { checkinPublic, fetchPublicEvent, registerPublic } from '../api/frontDoorApi';
@@ -11,6 +12,23 @@ import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
 
 /** The page behind an event's public link: an invitation and a name-and-phone form. Nothing else is reachable from here. */
+/** A link that no longer opens (or never did) says so; a connection or server problem says that instead, and can be tried again. */
+function PublicLoadFailed({ kind, retry }: { kind: ApiErrorKind | true; retry: () => void }) {
+  const t = useT();
+  if (kind === 'offline' || kind === 'server' || kind === true) {
+    const offline = kind === 'offline';
+    return (
+      <EmptyState
+        variant="error"
+        title={t(offline ? 'door.err.offline.title' : 'door.err.server.title')}
+        detail={t(offline ? 'door.err.offline.detail' : 'door.err.server.detail')}
+        action={<button type="button" className="btn" onClick={retry}>{t('door.people.retry')}</button>}
+      />
+    );
+  }
+  return <EmptyState variant="error" title={t('door.plan.public.gone')} detail={t('door.plan.public.goneDetail')} />;
+}
+
 export function PublicEventPage() {
   const t = useT();
   const { locale } = useI18n();
@@ -24,7 +42,7 @@ export function PublicEventPage() {
   const e = load.data;
   const when = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeStyle: 'short', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
 
-  if (load.failed) return <EmptyState variant="error" title={t('door.plan.public.gone')} />;
+  if (load.failed) return <PublicLoadFailed kind={load.failed} retry={load.reload} />;
   const send = async () => {
     setError('');
     try {
@@ -83,7 +101,7 @@ export function PublicCheckinPage() {
   const [who, setWho] = useState('');
   const [error, setError] = useState('');
   const e = load.data;
-  if (load.failed) return <EmptyState variant="error" title={t('door.plan.public.gone')} />;
+  if (load.failed) return <PublicLoadFailed kind={load.failed} retry={load.reload} />;
   const send = async () => {
     setError('');
     try {

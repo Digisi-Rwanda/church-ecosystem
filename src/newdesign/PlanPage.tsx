@@ -23,6 +23,7 @@ import { DateChangeBanner, ReviewPrompt, TimePanel } from './PlanTime';
 import { whenSummary } from './when';
 import { useLoad } from './useLoad';
 import { placeOfPlanType, useLightPlace } from './activePlace';
+import { PLACE_UNKNOWN } from './menu';
 import { PageHeader, SidePanel, StatusChip, Tabs } from './kit';
 
 type Ask = 'reject' | 'cancel' | 'delete' | 'done' | 'approve' | 'suspend' | 'unsuspend' | null;
@@ -49,7 +50,7 @@ export function PlanPage() {
   const [tab0, setTab0] = useState<Tab | null>(null);
 
   const p = plan && plan.id === planId ? plan : load.data;
-  useLightPlace(placeOfPlanType(p?.planType));
+  useLightPlace(p ? placeOfPlanType(p.planType) ?? PLACE_UNKNOWN : PLACE_UNKNOWN);
   const live = !!p && (p.state === 'APPROVED' || p.state === 'DONE');
   const tab: Tab = tab0 ?? ((loc.state as { tab?: Tab } | null)?.tab ?? 'overview');
   const setTab = (k: Tab) => setTab0(k);

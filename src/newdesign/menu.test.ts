@@ -101,6 +101,16 @@ describe('buildModules', () => {
     expect(placeOfPlanType(null)).toBeNull();
   });
 
+  it('lights no tab on a plan page whose kind is not known, but keeps the module', async () => {
+    const { buildModules, resolveActive, PLACE_UNKNOWN } = await import('./menu');
+    const mods = buildModules(mk(sys('sys-a', { home: ['R'], work: ['R', 'W'] })), 'sys-a');
+    const a = resolveActive(mods, '/s/sys-a/work/plans/p-1', PLACE_UNKNOWN);
+    expect(a?.place).toBeNull();
+    expect(a?.module.id).toBe('work');
+    // It changes nothing on other pages.
+    expect(resolveActive(mods, '/s/sys-a/work', PLACE_UNKNOWN)?.place?.key).toBe('tasks');
+  });
+
   it('puts the import page in the module of what it imports, and only for people who have that module', async () => {
     const { buildModules, resolveActive } = await import('./menu');
     const caps = mk(sys('sys-a', { home: ['R'], work: ['R', 'W'], schedule: ['R'] }));

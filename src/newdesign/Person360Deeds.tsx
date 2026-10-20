@@ -5,6 +5,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { p360ErrorKey } from './person360';
 import { useLoad } from './useLoad';
+import { LoadErrorInline } from './LoadErrorState';
 
 /** Good deeds of a member, recorded by a secretary. Shows only to those who may record or read them. */
 export function GoodDeeds({ personId, onChanged, embedded = false }: { personId: string; onChanged?: () => void; embedded?: boolean }) {
@@ -17,7 +18,11 @@ export function GoodDeeds({ personId, onChanged, embedded = false }: { personId:
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState<string | null>(null);
   const d = load.data;
-  if (load.failed || (!load.loading && !d)) return null;
+  // Someone who may not read or record deeds, or a record that is not there, sees no section at all (nothing to explain).
+  // A connection or server problem is shown, so a missing list is never mistaken for an empty one.
+  if (load.failed === 'forbidden' || load.failed === 'notFound') return null;
+  if (load.failed) return <LoadErrorInline kind={load.failed} retry={load.reload} />;
+  if (!load.loading && !d) return null;
   const when = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${iso}T12:00:00Z`));
   const refresh = () => {
     load.reload();

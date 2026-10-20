@@ -46,3 +46,30 @@ export function LoadErrorState({ kind, retry }: { kind: ApiErrorKind | true; ret
       return <EmptyState variant="error" title={t('door.err.server.title')} detail={t('door.err.server.detail')} action={again} />;
   }
 }
+
+/**
+ * The compact form for an optional section of a page: one line and, where trying again can help, a Retry.
+ * The rest of the page stays usable. A section the person may not see is hidden by its owner, not shown here.
+ */
+export function LoadErrorInline({ kind, retry }: { kind: ApiErrorKind | true; retry?: () => void }) {
+  const t = useT();
+  const { signOut } = useFrontDoor();
+  const k: ApiErrorKind = kind === true ? 'server' : kind;
+  const text = t(`door.err.${k === 'auth' ? 'auth' : k}.title` as 'door.err.server.title');
+  const can = k === 'offline' || k === 'server';
+  return (
+    <p className="inline-error" role="alert">
+      <span>{text}</span>
+      {can && retry ? (
+        <button type="button" className="btn ghost sm" onClick={retry}>
+          {t('door.people.retry')}
+        </button>
+      ) : null}
+      {k === 'auth' ? (
+        <button type="button" className="btn ghost sm" onClick={signOut}>
+          {t('door.err.auth.action')}
+        </button>
+      ) : null}
+    </p>
+  );
+}
