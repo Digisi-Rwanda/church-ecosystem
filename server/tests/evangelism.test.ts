@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
 import { phoneOk } from '../src/evangelism/rules';
+const TOMORROW = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10); // a day that is always still to come
 
 describe('evangelism rules', () => {
   it('phone numbers', () => {
@@ -64,7 +65,7 @@ describe('contacts', () => {
   });
   it('rejects future follow-ups and follow-ups on closed contacts', async () => {
     const id = (await post('p-outsider', '/api/evangelism/contacts', contact())).body.id;
-    expect((await post('p-outsider', `/api/evangelism/contacts/${id}/followups`, { doneOn: '2026-10-20', note: 'x' })).body.code).toBe('FUTURE_DATE');
+    expect((await post('p-outsider', `/api/evangelism/contacts/${id}/followups`, { doneOn: TOMORROW, note: 'x' })).body.code).toBe('FUTURE_DATE');
     expect((await post('p-outsider', `/api/evangelism/contacts/${id}/status`, { status: 'JOINED' })).status).toBe(200);
     expect((await post('p-outsider', `/api/evangelism/contacts/${id}/followups`, { doneOn: '2026-10-03', note: 'x' })).body.code).toBe('WRONG_STATE');
     expect((await get('p-outsider', '/api/evangelism/contacts?status=JOINED')).body.contacts).toHaveLength(1);

@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
 import { watchTimesProblem } from '../src/caring/rules';
+const TOMORROW = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10); // a day that is always still to come
 
 describe('caring rules', () => {
   it('watch times', () => {
@@ -76,7 +77,7 @@ describe('elderly visits', () => {
     expect((await post('p-member', '/api/caring/visits', visit())).status).toBe(403);
   });
   it('rejects future days and bad people', async () => {
-    expect((await post('p-pastor', '/api/caring/visits', visit({ visitedOn: '2026-10-20' }))).body.code).toBe('FUTURE_DATE');
+    expect((await post('p-pastor', '/api/caring/visits', visit({ visitedOn: TOMORROW }))).body.code).toBe('FUTURE_DATE');
     expect((await post('p-pastor', '/api/caring/visits', visit({ visitedOn: 'x' }))).body.code).toBe('BAD_DATE');
     expect((await post('p-pastor', '/api/caring/visits', visit({ elderId: 'nobody' }))).body.code).toBe('PERSON_NOT_ACTIVE');
   });

@@ -22,6 +22,7 @@
     "build:render": "npm run db:generate:pg && npm run build",
     "start:render": "npm run migrate:pg && npm run db:seed:pg && npm start",
     "test": "vitest run",
+    "bench:people": "node scripts/benchPeople.mjs",
     "test:policy": "tsx scripts/policy-smoke.ts"
   },
   "dependencies": {

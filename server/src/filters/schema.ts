@@ -1,10 +1,10 @@
 /** What a viewer is offered: the fields, operators and choices of a registry that they may use, and nothing else. */
-import { LIMITS, OPERATORS, type FieldDef, type Registry } from './types.js';
+import { LIMITS, OPERATORS, type FieldDef, type Registry, type ValuePart } from './types.js';
 
 export interface FieldSchema {
   key: string; type: string; operators: readonly string[];
   choices?: readonly string[]; comparable?: string[]; min?: number; max?: number;
-  sortable: boolean; unitValued?: boolean; parts?: ReadonlyArray<{ key: string; kind: 'text' | 'unit' }>;
+  sortable: boolean; unitValued?: boolean; parts?: ReadonlyArray<ValuePart>;
 }
 
 export function schemaFor<R, C, V>(registry: Registry<R, C, V>, viewer: V): { fields: FieldSchema[]; sortable: string[]; limits: Record<string, number> } {

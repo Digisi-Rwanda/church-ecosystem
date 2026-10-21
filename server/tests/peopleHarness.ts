@@ -13,12 +13,11 @@ export const row = (over: Partial<Omit<PersonRow, 'rec'>> & { records?: Array<{ 
 
 export interface RunOptions {
   viewer?: PeopleViewer; now?: Date; units?: Record<string, string[]>; sort?: SortRequest; unitScope?: Set<string> | null;
-  people?: Record<string, { fullName: string; dateOfBirth: string | null }>; limit?: number; offset?: number; q?: string;
+  limit?: number; offset?: number; q?: string;
 }
 export const ctxFor = (o: RunOptions = {}): PeopleCtx => ({
   today: kigaliDay(o.now ?? NOW),
   below: (u) => new Set([u, ...(o.units?.[u] ?? [])]),
-  person: (id) => o.people?.[id],
 });
 export function search(rows: PersonRow[], match: MatchRequest | undefined, o: RunOptions = {}) {
   const q = o.q?.toLowerCase();

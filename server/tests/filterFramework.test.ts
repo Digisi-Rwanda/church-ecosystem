@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { FilterError, MatchSchema, PageSchema, SortSchema, kigaliDay, shiftDay, yearsBetween, isDay, schemaFor } from '../src/filters/index';
-import { PEOPLE_FIELDS, childCount, workYears } from '../src/people/fields';
+import { PEOPLE_FIELDS, childCount } from '../src/people/fields';
+import { runSearch, type Registry } from '../src/filters/index';
 import { EVERYTHING, NOW, all, ctxFor, ids, row, search } from './peopleHarness';
 
 const code = (fn: () => unknown) => { try { fn(); } catch (e) { if (e instanceof FilterError) return `${e.status} ${e.code}`; throw e; } return 'ok'; };
@@ -67,7 +68,12 @@ describe('condition validation against the registry', () => {
     expect(run({ field: 'baptismDate', op: 'withinLast', value: { amount: 0, unit: 'days' } })).toBe('400 BAD_INPUT');
     expect(run({ field: 'baptismDate', op: 'withinLast', value: { amount: 5, unit: 'weeks' } })).toBe('400 BAD_INPUT');
     expect(run({ field: 'baptised', op: 'isYes', value: true })).toBe('400 BAD_INPUT');
-    expect(run({ field: 'educationLevel', op: 'atLeast', value: 'OTHER' })).toBe('400 BAD_INPUT'); // unranked
+    expect(run({ field: 'education', op: 'anyMatch', value: { levelAtLeast: 'OTHER' } })).toBe('400 BAD_INPUT'); // unranked
+    expect(run({ field: 'education', op: 'anyMatch', value: {} })).toBe('400 BAD_INPUT');
+    expect(run({ field: 'employment', op: 'anyMatch', value: {} })).toBe('400 BAD_INPUT');
+    expect(run({ field: 'employment', op: 'anyMatch', value: { sector: ['MAGIC'] } })).toBe('400 BAD_INPUT');
+    expect(run({ field: 'employment', op: 'anyMatch', value: { yearsAtLeast: -1 } })).toBe('400 BAD_INPUT');
+    expect(run({ field: 'employment', op: 'anyMatch', value: { sector: 'FINANCE' } })).toBe('400 BAD_INPUT'); // a list is needed
     expect(run({ field: 'calling', op: 'anyMatch', value: {} })).toBe('400 BAD_INPUT');
     expect(run({ field: 'calling', op: 'anyMatch', value: { name: 'x', admin: true } })).toBe('400 BAD_INPUT');
     expect(run({ field: 'calling', op: 'anyMatch', value: { name: '' } })).toBe('400 BAD_INPUT');
@@ -76,7 +82,8 @@ describe('condition validation against the registry', () => {
     expect(run({ field: 'childCount', op: 'equals', value: 0 })).toBe('ok');
     expect(run({ field: 'baptised', op: 'isYes' })).toBe('ok');
     expect(run({ field: 'baptismDate', op: 'withinLast', value: { amount: 3, unit: 'months' } })).toBe('ok');
-    expect(run({ field: 'educationLevel', op: 'atLeast', value: 'BACHELOR' })).toBe('ok');
+    expect(run({ field: 'education', op: 'anyMatch', value: { levelAtLeast: 'BACHELOR', field: 'law' } })).toBe('ok');
+    expect(run({ field: 'employment', op: 'noneMatch', value: { sector: ['FINANCE'], yearsAtLeast: 5 } })).toBe('ok');
     expect(run({ field: 'calling', op: 'anyMatch', value: { name: 'drum' } })).toBe('ok');
   });
   it('a field the viewer may not use is 403 naming only what they sent, and is judged before its value', () => {
@@ -88,9 +95,11 @@ describe('condition validation against the registry', () => {
       expect((e as FilterError).fields).toEqual(['age', 'gender']);
     }
     const nothing = { viewer: { identity: false, read: [] } };
-    for (const f of ['baptised', 'baptismYears', 'employmentSector', 'employedYears', 'educationLevel', 'childCount', 'hasSpouseRecorded', 'calling']) {
-      expect(run({ field: f, op: f === 'baptised' || f === 'hasSpouseRecorded' ? 'isYes' : f === 'calling' ? 'anyMatch' : 'atLeast', value: f === 'calling' ? { name: 'x' } : f === 'educationLevel' ? 'BACHELOR' : f === 'baptised' || f === 'hasSpouseRecorded' ? undefined : 1 }, nothing)).toBe('403 FIELD_NOT_ALLOWED');
-    }
+    const cases: Array<[string, string, unknown]> = [
+      ['baptised', 'isYes', undefined], ['baptismYears', 'atLeast', 1], ['employment', 'anyMatch', { sector: ['FINANCE'] }], ['education', 'anyMatch', { levelAtLeast: 'BACHELOR' }],
+      ['childCount', 'atLeast', 1], ['hasSpouseRecorded', 'isYes', undefined], ['calling', 'anyMatch', { name: 'x' }],
+    ];
+    for (const [field, op, value] of cases) expect(run({ field, op, value }, nothing), field).toBe('403 FIELD_NOT_ALLOWED');
     expect(run({ field: 'name', op: 'contains', value: 'a' }, nothing)).toBe('ok');
     expect(run({ field: 'status', op: 'is', value: 'ACTIVE' }, nothing)).toBe('ok');
   });
@@ -129,30 +138,25 @@ describe('operators and missing values', () => {
     expect(ids([a, b], all({ field: 'memberCode', op: 'contains', value: 'k-' }))).toEqual(['a']); // b has no code
     expect(ids([a, b], all({ field: 'memberCode', op: 'equals', value: 'null' }))).toEqual([]);
   });
-  it('choice: is / is not / any of / none of, and "is not" and "none of" include people with no value', () => {
-    const fin = R({ id: 'f', records: [{ section: 'EMPLOYMENT', data: { status: 'EMPLOYED', sector: 'FINANCE' } }] });
-    const hea = R({ id: 'h', records: [{ section: 'EMPLOYMENT', data: { status: 'EMPLOYED', sector: 'HEALTH' } }] });
-    const non = R({ id: 'n' });
-    const rows = [fin, hea, non];
-    expect(ids(rows, all({ field: 'employmentSector', op: 'is', value: 'FINANCE' }))).toEqual(['f']);
-    expect(ids(rows, all({ field: 'employmentSector', op: 'isNot', value: 'FINANCE' }))).toEqual(['h', 'n']);
-    expect(ids(rows, all({ field: 'employmentSector', op: 'isAny', value: ['FINANCE', 'HEALTH'] }))).toEqual(['f', 'h']);
-    expect(ids(rows, all({ field: 'employmentSector', op: 'isNone', value: ['FINANCE', 'HEALTH'] }))).toEqual(['n']);
+  it('choice and ordinal types (generic framework, synthetic registry): "is not" and "none of" include missing values', () => {
+    interface T { id: string; kind?: string; grades?: string[] }
+    const reg: Registry<T, { today: string }, true> = [
+      { key: 'kind', type: 'choice', choices: ['A', 'B'], allowed: () => true, read: (r) => r.kind },
+      { key: 'grade', type: 'ordinal', choices: ['LOW', 'MID', 'HIGH', 'OTHER'], rank: { LOW: 1, MID: 2, HIGH: 3 }, allowed: () => true, read: (r) => r.grades },
+    ];
+    const rows: T[] = [{ id: 'a', kind: 'A', grades: ['LOW'] }, { id: 'b', kind: 'B', grades: ['LOW', 'HIGH'] }, { id: 'n' }, { id: 'o', kind: 'A', grades: ['OTHER'] }];
+    const q = (c: { field: string; op: string; value?: unknown }) => runSearch({ registry: reg, viewer: true, ctx: { today: '2026-10-20' }, rows, unitScope: null, match: { all: [c] }, page: { limit: 100, offset: 0 } }).items.map((r) => r.id);
+    expect(q({ field: 'kind', op: 'is', value: 'A' })).toEqual(['a', 'o']);
+    expect(q({ field: 'kind', op: 'isNot', value: 'A' })).toEqual(['b', 'n']);
+    expect(q({ field: 'kind', op: 'isAny', value: ['A', 'B'] })).toEqual(['a', 'b', 'o']);
+    expect(q({ field: 'kind', op: 'isNone', value: ['A', 'B'] })).toEqual(['n']);
+    expect(q({ field: 'grade', op: 'atLeast', value: 'HIGH' })).toEqual(['b']); // highest recorded; unranked and missing never
+    expect(q({ field: 'grade', op: 'atMost', value: 'LOW' })).toEqual(['a']);
+    expect(q({ field: 'grade', op: 'is', value: 'OTHER' })).toEqual(['o']);
+    expect(q({ field: 'grade', op: 'isNone', value: ['LOW'] })).toEqual(['n', 'o']);
+  });
+  it('status is a choice every person has', () => {
     expect(ids([a, b], all({ field: 'status', op: 'isNot', value: 'ACTIVE' }))).toEqual(['b']);
-  });
-  it('ordinal education: at least / at most use the highest level recorded; unranked and missing never satisfy them', () => {
-    const lv = (id: string, ...levels: string[]) => R({ id, records: levels.map((level) => ({ section: 'EDUCATION' as const, data: { level } })) });
-    const rows = [lv('sec', 'SECONDARY_A'), lv('ba', 'BACHELOR'), lv('both', 'SECONDARY_A', 'MASTER'), lv('uni', 'UNIVERSITY'), lv('oth', 'OTHER'), lv('none')];
-    expect(ids(rows, all({ field: 'educationLevel', op: 'atLeast', value: 'BACHELOR' }))).toEqual(['ba', 'both', 'uni']);
-    expect(ids(rows, all({ field: 'educationLevel', op: 'atMost', value: 'SECONDARY_A' }))).toEqual(['sec']);
-    expect(ids(rows, all({ field: 'educationLevel', op: 'is', value: 'BACHELOR' }))).toEqual(['ba', 'uni']); // old name counts as the new one
-    expect(ids(rows, all({ field: 'educationLevel', op: 'is', value: 'MASTER' }))).toEqual(['both']); // any record
-    expect(ids(rows, all({ field: 'educationLevel', op: 'isNone', value: ['BACHELOR', 'MASTER'] }))).toEqual(['sec', 'oth', 'none']);
-    expect(ids(rows, all({ field: 'educationField', op: 'contains', value: 'law' }))).toEqual([]);
-  });
-  it('education field matches any record', () => {
-    const p = R({ id: 'p', records: [{ section: 'EDUCATION', data: { level: 'BACHELOR', field: 'Civil Law' } }, { section: 'EDUCATION', data: { level: 'MASTER', field: 'Finance' } }] });
-    expect(ids([p, a], all({ field: 'educationField', op: 'contains', value: 'finan' }))).toEqual(['p']);
   });
   it('numbers: zero is a real value; a missing value never matches at least, at most, between or equals', () => {
     const dob = (id: string, d: string | null) => R({ id, dateOfBirth: d });
@@ -208,6 +212,7 @@ describe('operators and missing values', () => {
 });
 
 describe('AND, grouped OR and no duplicates', () => {
+  const sector = (x: string) => ({ field: 'employment', op: 'anyMatch', value: { sector: [x] } });
   const m = R({ id: 'm', gender: 'MALE', status: 'ACTIVE', unitIds: ['ou-elim'], records: [{ section: 'EMPLOYMENT', data: { status: 'EMPLOYED', sector: 'FINANCE' } }] });
   const f = R({ id: 'f', gender: 'FEMALE', status: 'ACTIVE', unitIds: ['ou-elim', 'ou-youth'], records: [{ section: 'EMPLOYMENT', data: { status: 'EMPLOYED', sector: 'HEALTH' } }] });
   const v = R({ id: 'v', gender: 'MALE', status: 'VISITOR', unitIds: [], records: [] });
@@ -218,11 +223,11 @@ describe('AND, grouped OR and no duplicates', () => {
     expect(ids(rows, all({ field: 'gender', op: 'is', value: 'MALE' }, { field: 'status', op: 'is', value: 'ACTIVE' }))).toEqual(['m']);
   });
   it('one OR group: any of its conditions', () => {
-    const g = { any: [{ field: 'employmentSector', op: 'is', value: 'FINANCE' }, { field: 'employmentSector', op: 'is', value: 'HEALTH' }] };
+    const g = { any: [sector('FINANCE'), sector('HEALTH')] };
     expect(ids(rows, { anyGroups: [g] })).toEqual(['m', 'f']);
   });
   it('groups are combined with AND, and with `all`', () => {
-    const g1 = { any: [{ field: 'employmentSector', op: 'is', value: 'FINANCE' }, { field: 'employmentSector', op: 'is', value: 'HEALTH' }] };
+    const g1 = { any: [sector('FINANCE'), sector('HEALTH')] };
     const g2 = { any: [{ field: 'gender', op: 'is', value: 'FEMALE' }, { field: 'status', op: 'is', value: 'VISITOR' }] };
     expect(ids(rows, { anyGroups: [g1, g2] })).toEqual(['f']);
     expect(ids(rows, { all: [{ field: 'unit', op: 'includesAny', value: ['ou-youth'] }], anyGroups: [g1] })).toEqual(['f']);
@@ -255,37 +260,91 @@ describe('callings, children, employment', () => {
   it('"no such calling" is true of people with none', () => {
     expect(ids([callings, R({ id: 'z' })], all({ field: 'calling', op: 'noneMatch', value: { name: 'drummer' } }), o)).toEqual(['z']);
   });
-  it('children are counted distinctly', () => {
-    const ctx = (people = {}) => ctxFor({ people });
-    const kids = (...recs: Array<Record<string, unknown>>) => R({ id: 'p', records: recs.map((data) => ({ section: 'FAMILY' as const, data: { relation: 'CHILD', ...data } })) });
-    const people = { 'p-eric': { fullName: 'Eric Mugisha', dateOfBirth: '2015-03-02' }, 'p-nodob': { fullName: 'Grace Uwera', dateOfBirth: null } };
-    expect(childCount(kids({ name: 'Eric Mugisha' }, { relatedPersonId: 'p-eric' }), ctx(people))).toBe(1); // by name and linked
-    expect(childCount(kids({ name: 'Eric Mugisha', dateOfBirth: '2015-03-02' }, { relatedPersonId: 'p-eric' }), ctx(people))).toBe(1);
-    expect(childCount(kids({ name: ' éric  MUGISHA ' }, { relatedPersonId: 'p-eric' }), ctx(people))).toBe(1); // case, spacing, accents
-    expect(childCount(kids({ relatedPersonId: 'p-eric' }, { relatedPersonId: 'p-eric' }), ctx(people))).toBe(1); // linked twice
-    expect(childCount(kids({ name: 'Ann', dateOfBirth: '2010-01-01' }, { name: 'ann', dateOfBirth: '2010-01-01' }), ctx())).toBe(1);
-    expect(childCount(kids({ name: 'Ann', dateOfBirth: '2010-01-01' }, { name: 'Ann', dateOfBirth: '2012-02-02' }), ctx())).toBe(2); // same name, two birth dates
-    expect(childCount(kids({ name: 'Grace Uwera' }, { relatedPersonId: 'p-nodob' }, { name: 'Eric Mugisha' }, { relatedPersonId: 'p-eric' }), ctx(people))).toBe(2);
-    expect(childCount(kids({ name: 'A' }, { name: 'B' }, { name: 'C' }), ctx())).toBe(3);
-    expect(childCount(kids({ note: 'nobody named' }), ctx())).toBe(0);
-    expect(childCount(R({ id: 'p', records: [{ section: 'FAMILY', data: { relation: 'SPOUSE', name: 'Ann' } }, { section: 'FAMILY', data: { relation: 'PARENT', name: 'Pa' } }] }), ctx())).toBe(0);
-    expect(ids([kids({ name: 'Eric Mugisha' }, { relatedPersonId: 'p-eric' })], all({ field: 'childCount', op: 'atLeast', value: 2 }), { people })).toEqual([]);
+  const kids = (...recs: Array<Record<string, unknown>>) => R({ id: 'p', records: recs.map((data) => ({ section: 'FAMILY' as const, data: { relation: 'CHILD', ...data } })) });
+  it('children are counted distinctly, from the family records alone', () => {
+    // The same member linked twice; the same name AND birth date written twice (case, spacing, accents ignored).
+    expect(childCount(kids({ relatedPersonId: 'p-eric' }, { relatedPersonId: 'p-eric' }))).toBe(1);
+    expect(childCount(kids({ name: 'Ann', dateOfBirth: '2010-01-01' }, { name: ' ANN ', dateOfBirth: '2010-01-01' }))).toBe(1);
+    expect(childCount(kids({ name: 'Éric  Mugisha', dateOfBirth: '2015-03-02' }, { name: 'eric mugisha', dateOfBirth: '2015-03-02' }))).toBe(1);
+    // A child linked by ID that also carries name and birth date, and the same child written by name and birth date.
+    expect(childCount(kids({ relatedPersonId: 'p-eric', name: 'Eric Mugisha', dateOfBirth: '2015-03-02' }, { name: 'Eric Mugisha', dateOfBirth: '2015-03-02' }))).toBe(1);
+    expect(childCount(kids({ relatedPersonId: 'p-eric', name: 'Eric Mugisha', dateOfBirth: '2015-03-02' }, { relatedPersonId: 'p-eric' }, { name: 'eric mugisha', dateOfBirth: '2015-03-02' }))).toBe(1);
+    // Distinct children with the same name: different birth dates.
+    expect(childCount(kids({ name: 'Ann', dateOfBirth: '2010-01-01' }, { name: 'Ann', dateOfBirth: '2012-02-02' }))).toBe(2);
+    expect(childCount(kids({ relatedPersonId: 'p-1', name: 'Ann', dateOfBirth: '2010-01-01' }, { relatedPersonId: 'p-2', name: 'Ann', dateOfBirth: '2012-02-02' }))).toBe(2);
+    // Missing birth dates: a name alone is weak evidence, so it is never merged with anything.
+    expect(childCount(kids({ name: 'Ann' }, { name: 'Ann' }))).toBe(2);
+    expect(childCount(kids({ name: 'Ann' }, { name: 'Ann', dateOfBirth: '2010-01-01' }))).toBe(2);
+    expect(childCount(kids({ relatedPersonId: 'p-eric' }, { name: 'Eric Mugisha' }))).toBe(2);
+    expect(childCount(kids({ relatedPersonId: 'p-eric', name: 'Eric Mugisha' }, { name: 'Eric Mugisha', dateOfBirth: '2015-03-02' }))).toBe(2);
+    // Conflicting identifiers: two different members share one name and birth date, so a bare record is nobody's duplicate.
+    const clash = [{ relatedPersonId: 'p-1', name: 'Ann', dateOfBirth: '2010-01-01' }, { relatedPersonId: 'p-2', name: 'Ann', dateOfBirth: '2010-01-01' }];
+    expect(childCount(kids(...clash))).toBe(2);
+    expect(childCount(kids(...clash, { name: 'Ann', dateOfBirth: '2010-01-01' }))).toBe(3);
+    // Other relations and records naming nobody never count; every distinct child does.
+    expect(childCount(kids({ note: 'nobody named' }))).toBe(0);
+    expect(childCount(kids({ name: 'A' }, { name: 'B' }, { name: 'C' }))).toBe(3);
+    expect(childCount(R({ id: 'p', records: [{ section: 'FAMILY', data: { relation: 'SPOUSE', name: 'Ann' } }, { section: 'FAMILY', data: { relation: 'PARENT', name: 'Pa' } }] }))).toBe(0);
+    expect(childCount(R({ id: 'p' }))).toBe(0);
   });
-  it('years in work = years since the current employed or self-employed work began', () => {
-    const w = (id: string, ...data: Array<Record<string, unknown>>) => R({ id, records: data.map((d) => ({ section: 'EMPLOYMENT' as const, data: d })) });
-    expect(workYears(w('a', { status: 'EMPLOYED', since: '2018-10-20' }), '2026-10-20')).toBe(8);
-    expect(workYears(w('a', { status: 'EMPLOYED', since: '2018-10-21' }), '2026-10-20')).toBe(7);
-    expect(workYears(w('a', { status: 'SELF_EMPLOYED', since: '2010-01-01' }), '2026-10-20')).toBe(16);
-    expect(workYears(w('a', { status: 'STUDENT', since: '2010-01-01' }), '2026-10-20')).toBeNull();
-    expect(workYears(w('a', { status: 'UNEMPLOYED', since: '2010-01-01' }), '2026-10-20')).toBeNull();
-    expect(workYears(w('a', { status: 'RETIRED', since: '2010-01-01' }), '2026-10-20')).toBeNull();
-    expect(workYears(w('a', { status: 'EMPLOYED' }), '2026-10-20')).toBeNull(); // no start date: unknown, not zero
-    expect(workYears(w('a', { status: 'EMPLOYED', since: '2027-01-01' }), '2026-10-20')).toBeNull();
-    expect(workYears(w('a', { status: 'EMPLOYED', since: '2024-01-01' }, { status: 'SELF_EMPLOYED', since: '2012-01-01' }), '2026-10-20')).toBe(14);
-    const rows = [w('five', { status: 'EMPLOYED', sector: 'FINANCE', since: '2021-01-01' }), w('two', { status: 'EMPLOYED', since: '2024-06-01' }), w('stu', { status: 'STUDENT', since: '2015-01-01' }), R({ id: 'none' })];
-    expect(ids(rows, all({ field: 'employedYears', op: 'atLeast', value: 5 }))).toEqual(['five']);
-    expect(ids(rows, all({ field: 'employedYears', op: 'between', value: [1, 4] }))).toEqual(['two']);
-    expect(ids(rows, all({ field: 'employedYears', op: 'atLeast', value: 0 }))).toEqual(['five', 'two']);
+  it('the count does not depend on the order of the records', () => {
+    const recs = [{ relatedPersonId: 'p-1', name: 'Ann', dateOfBirth: '2010-01-01' }, { name: 'Ann', dateOfBirth: '2010-01-01' }, { name: 'Bob' }, { relatedPersonId: 'p-2' }, { name: 'Bob' }];
+    const base = childCount(kids(...recs));
+    expect(base).toBe(4);
+    for (let i = 0; i < 12; i++) expect(childCount(kids(...[...recs].sort(() => Math.random() - 0.5)))).toBe(base);
+  });
+  it('a linked child the viewer cannot see changes nothing: only the family records are read', () => {
+    // The count comes from the FAMILY records alone, so the linked member (in scope or not) has no way to influence it.
+    const mine = kids({ relatedPersonId: 'p-hidden' }, { name: 'Hidden Person', dateOfBirth: '1990-01-01' });
+    expect(childCount(mine)).toBe(2); // not merged by guessing that p-hidden is called "Hidden Person"
+    expect(ids([mine], all({ field: 'childCount', op: 'equals', value: 2 }))).toEqual(['p']);
+    expect(ids([mine], all({ field: 'childCount', op: 'equals', value: 1 }))).toEqual([]);
+  });
+  it('work: status, sector, field and years are tested on the SAME job', () => {
+    const job = (id: string, ...data: Array<Record<string, unknown>>) => R({ id, records: data.map((d) => ({ section: 'EMPLOYMENT' as const, data: d })) });
+    const finance5 = (op = 'anyMatch') => all({ field: 'employment', op, value: { sector: ['FINANCE'], yearsAtLeast: 5 } });
+    const split = job('split', { status: 'EMPLOYED', sector: 'FINANCE', since: '2024-10-20' }, { status: 'EMPLOYED', sector: 'HEALTH', since: '2020-10-20' }); // Finance for 2 years, another job for 6
+    const same = job('same', { status: 'EMPLOYED', sector: 'FINANCE', since: '2020-10-20' }, { status: 'EMPLOYED', sector: 'HEALTH', since: '2024-10-20' });
+    const self = job('self', { status: 'SELF_EMPLOYED', sector: 'FINANCE', since: '2021-10-21' });
+    const exact = job('exact', { status: 'EMPLOYED', sector: 'FINANCE', since: '2021-10-20' }); // exactly 5 years today
+    expect(ids([split, same, exact, self], finance5())).toEqual(['same', 'exact']);
+    expect(ids([split, same, exact, self], finance5('noneMatch'))).toEqual(['split', 'self']);
+    // Each part alone still finds the person (any job), and separate conditions are separate questions.
+    expect(ids([split], all({ field: 'employment', op: 'anyMatch', value: { sector: ['FINANCE'] } }))).toEqual(['split']);
+    expect(ids([split], all({ field: 'employment', op: 'anyMatch', value: { yearsAtLeast: 5 } }))).toEqual(['split']);
+    expect(ids([split], all({ field: 'employment', op: 'anyMatch', value: { sector: ['FINANCE'] } }, { field: 'employment', op: 'anyMatch', value: { yearsAtLeast: 5 } }))).toEqual(['split']);
+    // Years count only employed or self-employed work that has begun, from its own start date.
+    const y = (d: Record<string, unknown>) => ids([job('x', d)], all({ field: 'employment', op: 'anyMatch', value: { yearsAtLeast: 0 } })).length === 1;
+    expect(y({ status: 'EMPLOYED', since: '2026-10-20' })).toBe(true); // a real zero
+    expect(y({ status: 'STUDENT', since: '2010-01-01' })).toBe(false);
+    expect(y({ status: 'UNEMPLOYED', since: '2010-01-01' })).toBe(false);
+    expect(y({ status: 'RETIRED', since: '2010-01-01' })).toBe(false);
+    expect(y({ status: 'EMPLOYED' })).toBe(false); // no start date: unknown, not zero
+    expect(y({ status: 'EMPLOYED', since: '2027-01-01' })).toBe(false); // not begun
+    // Status and field are on the same job too.
+    const mixed = job('m', { status: 'STUDENT', field: 'Medicine' }, { status: 'EMPLOYED', field: 'Accounting' });
+    expect(ids([mixed], all({ field: 'employment', op: 'anyMatch', value: { status: ['EMPLOYED'], field: 'medic' } }))).toEqual([]);
+    expect(ids([mixed], all({ field: 'employment', op: 'anyMatch', value: { status: ['STUDENT'], field: 'medic' } }))).toEqual(['m']);
+    expect(ids([R({ id: 'none' })], finance5('noneMatch'))).toEqual(['none']);
+  });
+  it('education: level and field are tested on the SAME record', () => {
+    const edu = (id: string, ...data: Array<Record<string, unknown>>) => R({ id, records: data.map((d) => ({ section: 'EDUCATION' as const, data: d })) });
+    const lawDegree = all({ field: 'education', op: 'anyMatch', value: { levelAtLeast: 'BACHELOR', field: 'law' } });
+    // The highest qualification (Master, Finance) and the Law record (Secondary) are different records.
+    const apart = edu('apart', { level: 'MASTER', field: 'Finance' }, { level: 'SECONDARY_A', field: 'Law' });
+    const together = edu('together', { level: 'BACHELOR', field: 'Civil Law' }, { level: 'SECONDARY_A', field: 'Science' });
+    const higher = edu('higher', { level: 'MASTER', field: 'International Law' });
+    const old = edu('old', { level: 'UNIVERSITY', field: 'Law' }); // an older level name counts as Bachelor
+    expect(ids([apart, together, higher, old], lawDegree)).toEqual(['together', 'higher', 'old']);
+    expect(ids([apart, together, higher, old], all({ field: 'education', op: 'noneMatch', value: { levelAtLeast: 'BACHELOR', field: 'law' } }))).toEqual(['apart']);
+    // Level alone looks at every record: the highest counts. Field alone looks at every record too.
+    expect(ids([apart], all({ field: 'education', op: 'anyMatch', value: { levelAtLeast: 'MASTER' } }))).toEqual(['apart']);
+    expect(ids([apart], all({ field: 'education', op: 'anyMatch', value: { field: 'law' } }))).toEqual(['apart']);
+    const rows = [edu('sec', { level: 'SECONDARY_A' }), edu('ba', { level: 'BACHELOR' }), edu('uni', { level: 'UNIVERSITY' }), edu('oth', { level: 'OTHER' }), R({ id: 'none' })];
+    expect(ids(rows, all({ field: 'education', op: 'anyMatch', value: { levelAtLeast: 'BACHELOR' } }))).toEqual(['ba', 'uni']); // unranked and missing never satisfy "at least"
+    expect(ids(rows, all({ field: 'education', op: 'anyMatch', value: { levelIn: ['BACHELOR'] } }))).toEqual(['ba', 'uni']);
+    expect(ids(rows, all({ field: 'education', op: 'anyMatch', value: { levelIn: ['OTHER'] } }))).toEqual(['oth']);
+    expect(ids(rows, all({ field: 'education', op: 'noneMatch', value: { levelAtLeast: 'BACHELOR' } }))).toEqual(['sec', 'oth', 'none']);
   });
 });
 
@@ -315,6 +374,24 @@ describe('church time (Africa/Kigali) and anniversaries', () => {
     expect(yearsBetween('not a date', '2026-10-20')).toBeNull();
     expect(yearsBetween(null, '2026-10-20')).toBeNull();
     expect(yearsBetween('2000-02-30', '2026-10-20')).toBeNull();
+  });
+  it('baptism years and age follow the same Kigali day, including the leap-day rule', () => {
+    const bap = (date: string) => row({ id: 'p', dateOfBirth: date, records: [{ section: 'BAPTISM', data: { date } }] });
+    const at = (iso: string, field: 'baptismYears' | 'age', years: number) => search([bap('2016-02-29')], all({ field, op: 'equals', value: years }), { now: new Date(iso) }).total;
+    for (const field of ['baptismYears', 'age'] as const) {
+      expect(at('2026-02-27T12:00:00Z', field, 9)).toBe(1);
+      expect(at('2026-02-28T12:00:00Z', field, 9)).toBe(1); // 28 February: the anniversary has not come
+      expect(at('2026-02-28T21:59:00Z', field, 9)).toBe(1); // 23:59 on 28 February in Kigali
+      expect(at('2026-02-28T22:00:00Z', field, 10)).toBe(1); // 00:00 on 1 March in Kigali: it has
+      expect(at('2028-02-28T12:00:00Z', field, 11)).toBe(1); // leap year: 29 February itself is the anniversary
+      expect(at('2028-02-29T12:00:00Z', field, 12)).toBe(1);
+    }
+    // 21 October date: the 10th anniversary starts at 00:00 on 21 October in Kigali, which is 22:00 UTC on the 20th.
+    const day = (iso: string, field: 'baptismYears' | 'age') => search([bap('2016-10-21')], all({ field, op: 'atLeast', value: 10 }), { now: new Date(iso) }).total;
+    for (const field of ['baptismYears', 'age'] as const) {
+      expect(day('2026-10-20T21:59:59Z', field)).toBe(0);
+      expect(day('2026-10-20T22:00:00Z', field)).toBe(1);
+    }
   });
   it('baptised exactly ten years ago counts as ten years', () => {
     const p = row({ id: 'p', records: [{ section: 'BAPTISM', data: { date: '2016-10-20' } }] });
@@ -393,10 +470,12 @@ describe('schema offered to a viewer', () => {
   it('lists only fields the viewer may use, with their operators', () => {
     const keys = (v: Parameters<typeof schemaFor>[1]) => schemaFor(PEOPLE_FIELDS, v).fields.map((f) => f.key);
     expect(keys({ identity: false, read: [] })).toEqual(['name', 'memberCode', 'status', 'unit']);
-    expect(keys(EVERYTHING)).toEqual(expect.arrayContaining(['gender', 'age', 'marital', 'childCount', 'calling', 'educationLevel', 'employedYears', 'baptismYears']));
-    expect(keys({ identity: false, read: ['EMPLOYMENT', 'BAPTISM'] })).toEqual(['name', 'memberCode', 'status', 'unit', 'baptised', 'baptismDate', 'baptismYears', 'employmentStatus', 'employmentSector', 'employmentField', 'employedYears']);
+    expect(keys(EVERYTHING)).toEqual(expect.arrayContaining(['gender', 'age', 'marital', 'childCount', 'calling', 'education', 'employment', 'baptismYears']));
+    for (const gone of ['educationLevel', 'educationField', 'employmentStatus', 'employmentSector', 'employmentField', 'employedYears']) expect(keys(EVERYTHING)).not.toContain(gone);
+    expect(keys({ identity: false, read: ['EMPLOYMENT', 'BAPTISM'] })).toEqual(['name', 'memberCode', 'status', 'unit', 'baptised', 'baptismDate', 'baptismYears', 'employment']);
     const s = schemaFor(PEOPLE_FIELDS, EVERYTHING);
-    expect(s.fields.find((f) => f.key === 'educationLevel')).toMatchObject({ type: 'ordinal', comparable: ['NONE', 'PRIMARY', 'SECONDARY_O', 'SECONDARY_A', 'ASSOCIATE', 'BACHELOR', 'MASTER', 'DOCTORATE'] });
+    expect(s.fields.find((f) => f.key === 'education')).toMatchObject({ type: 'records', operators: ['anyMatch', 'noneMatch'], parts: [{ key: 'levelAtLeast', kind: 'choice', choices: ['NONE', 'PRIMARY', 'SECONDARY_O', 'SECONDARY_A', 'ASSOCIATE', 'BACHELOR', 'MASTER', 'DOCTORATE'] }, { key: 'levelIn', kind: 'choices' }, { key: 'field', kind: 'text' }] });
+    expect(s.fields.find((f) => f.key === 'employment')?.parts?.map((p) => p.key)).toEqual(['status', 'sector', 'field', 'yearsAtLeast']);
     expect(s.fields.find((f) => f.key === 'childCount')).toMatchObject({ type: 'number', min: 0, max: 30, operators: ['equals', 'atLeast', 'atMost', 'between'] });
     expect(s.sortable).toEqual(['name', 'memberCode', 'status', 'age', 'baptismDate']);
     expect(schemaFor(PEOPLE_FIELDS, { identity: false, read: [] }).sortable).toEqual(['name', 'memberCode', 'status']);

@@ -57,26 +57,31 @@ beforeEach(async () => {
   rec('p-b', 'MARRIAGE', { date: '2008-01-01', endedOn: '2023-01-01', endedBy: 'DEATH' });
   rec('p-c', 'BAPTISM', { date: '1980-01-01' }, 'VOIDED'); // voided: must not count
   rec('p-y', 'BAPTISM', { date: '2000-01-01' });
+  // Two jobs and two qualifications that only fit a question when they are taken one record at a time.
+  rec('p-y', 'EMPLOYMENT', { status: 'EMPLOYED', sector: 'FINANCE', since: '2024-12-01' }); // Finance for under two years
+  rec('p-y', 'EMPLOYMENT', { status: 'EMPLOYED', sector: 'HEALTH', since: '2015-01-01' }); // another job for over ten
+  rec('p-y', 'EDUCATION', { level: 'MASTER', field: 'Finance' });
+  rec('p-y', 'EDUCATION', { level: 'SECONDARY_A', field: 'Law' });
   const { createApp } = await import('../src/app.js');
   app = createApp();
 });
 
 describe('POST /api/people/search: new request shape', () => {
   it('chains conditions with AND, lists each person once, and reports an exact total and page', async () => {
-    const r = await post('p-pastor', all(c('gender', 'is', 'MALE'), c('unit', 'includesAny', ['ou-music']), c('baptismYears', 'atLeast', 10), c('childCount', 'atLeast', 2), c('educationLevel', 'atLeast', 'BACHELOR'), c('employedYears', 'atLeast', 5)));
+    const r = await post('p-pastor', all(c('gender', 'is', 'MALE'), c('unit', 'includesAny', ['ou-music']), c('baptismYears', 'atLeast', 10), c('childCount', 'atLeast', 2), c('education', 'anyMatch', { levelAtLeast: 'BACHELOR' }), c('employment', 'anyMatch', { yearsAtLeast: 5 })));
     expect(r.status).toBe(200);
     expect(ids(r)).toEqual(['p-a']);
     expect(r.body).toMatchObject({ total: 1, offset: 0, limit: 50, page: { limit: 50, offset: 0, hasMore: false } });
     expect(r.body.people[0]).toMatchObject({ id: 'p-a', children: 2, marital: 'MARRIED' });
   });
   it('grouped OR, combined with AND', async () => {
-    const r = await post('p-pastor', { match: { all: [c('unit', 'includesAny', ['ou-music'])], anyGroups: [{ any: [c('marital', 'is', 'WIDOWED'), c('employmentSector', 'is', 'FINANCE')] }] } });
+    const r = await post('p-pastor', { match: { all: [c('unit', 'includesAny', ['ou-music'])], anyGroups: [{ any: [c('marital', 'is', 'WIDOWED'), c('employment', 'anyMatch', { sector: ['FINANCE'] })] }] } });
     expect(ids(r)).toEqual(['p-a', 'p-b']);
-    const two = await post('p-pastor', { match: { anyGroups: [{ any: [c('marital', 'is', 'WIDOWED'), c('employmentSector', 'is', 'FINANCE')] }, { any: [c('gender', 'is', 'FEMALE')] }] } });
+    const two = await post('p-pastor', { match: { anyGroups: [{ any: [c('marital', 'is', 'WIDOWED'), c('employment', 'anyMatch', { sector: ['FINANCE'] })] }, { any: [c('gender', 'is', 'FEMALE')] }] } });
     expect(ids(two)).toEqual(['p-b']);
   });
   it('missing values: "is not" includes people with no value, positive comparisons do not', async () => {
-    expect(ids(await post('p-pastor', all(c('unit', 'includesAny', ['ou-music']), c('employmentSector', 'isNot', 'FINANCE'))))).toEqual(['p-b', 'p-c']);
+    expect(ids(await post('p-pastor', all(c('unit', 'includesAny', ['ou-music']), c('employment', 'noneMatch', { sector: ['FINANCE'] }))))).toEqual(['p-b', 'p-c']);
     expect(ids(await post('p-pastor', all(c('unit', 'includesAny', ['ou-music']), c('baptismYears', 'atLeast', 0))))).toEqual(['p-a', 'p-b']); // p-c: voided baptism is not a baptism
     expect(ids(await post('p-pastor', all(c('unit', 'includesAny', ['ou-music']), c('childCount', 'equals', 0))))).toEqual(['p-b', 'p-c']);
   });
@@ -143,7 +148,7 @@ describe('POST /api/people/search: old request shape still works, with the same 
       [{ marital: ['WIDOWED'] }, all(c('marital', 'isAny', ['WIDOWED']))],
       [{ childrenMin: 2 }, all(c('childCount', 'atLeast', 2))],
       [{ childrenMax: 0, unitIds: ['ou-music'] }, all(c('childCount', 'atMost', 0), c('unit', 'includesAny', ['ou-music']))],
-      [{ sector: ['FINANCE'], educationMin: 'BACHELOR' }, all(c('employmentSector', 'isAny', ['FINANCE']), c('educationLevel', 'atLeast', 'BACHELOR'))],
+      [{ sector: ['FINANCE'], educationMin: 'BACHELOR' }, all(c('employment', 'anyMatch', { sector: ['FINANCE'] }), c('education', 'anyMatch', { levelAtLeast: 'BACHELOR' }))],
       [{ status: ['INACTIVE'] }, all(c('status', 'isAny', ['INACTIVE']))],
       [{ ageMin: 35, ageMax: 50 }, all(c('age', 'atLeast', 35), c('age', 'atMost', 50))],
       [{ callingName: 'treas', callingUnitId: 'ou-youth' }, all(c('calling', 'anyMatch', { name: 'treas', unitId: 'ou-youth' }))],
@@ -171,6 +176,87 @@ describe('POST /api/people/search: old request shape still works, with the same 
   });
 });
 
+describe('same-record conditions, request-shape guards and response contract', () => {
+  it('a Finance job of five years is one job: Finance for 2 years plus another job for 11 does not qualify', async () => {
+    expect(ids(await post('p-pastor', all(c('employment', 'anyMatch', { sector: ['FINANCE'], yearsAtLeast: 5 }))))).toEqual(['p-a']);
+    expect(ids(await post('p-pastor', all(c('employment', 'anyMatch', { sector: ['FINANCE'] }), c('employment', 'anyMatch', { yearsAtLeast: 5 }))))).toEqual(['p-a', 'p-y']); // two separate questions
+    expect(ids(await post('p-pastor', { criteria: { sector: ['FINANCE'], employedYearsMin: 5 } }))).toEqual(['p-a']);
+  });
+  it('a bachelor in Law is one qualification: a Master in Finance plus a Secondary Law record does not qualify', async () => {
+    expect(ids(await post('p-pastor', all(c('education', 'anyMatch', { levelAtLeast: 'BACHELOR', field: 'law' }))))).toEqual([]);
+    expect(ids(await post('p-pastor', { criteria: { educationMin: 'BACHELOR', educationField: 'law' } }))).toEqual([]);
+    expect(ids(await post('p-pastor', { criteria: { educationMin: 'MASTER' } }))).toEqual(['p-y']);
+    expect(ids(await post('p-pastor', { criteria: { educationField: 'law' } }))).toEqual(['p-y']);
+    expect(ids(await post('p-pastor', all(c('education', 'anyMatch', { levelAtLeast: 'BACHELOR', field: 'account' }))))).toEqual(['p-a']);
+    expect(ids(await post('p-pastor', all(c('education', 'noneMatch', { levelAtLeast: 'BACHELOR', field: 'law' }), c('unit', 'includesAny', ['ou-music']))))).toEqual(['p-a', 'p-b', 'p-c']);
+  });
+  it('the separate employment and education fields of the first Phase 1 draft are gone', async () => {
+    for (const f of ['educationLevel', 'educationField', 'employmentStatus', 'employmentSector', 'employmentField', 'employedYears']) {
+      expect((await post('p-pastor', all(c(f, 'contains', 'a')))).status, f).toBe(400);
+    }
+  });
+  it('the old and the new shape are never mixed, whichever extra key is used', async () => {
+    for (const extra of [{ match: {} }, { sort: { field: 'name', dir: 'asc' } }, { page: { limit: 5, offset: 0 } }, { match: { all: [c('name', 'contains', 'a')] }, sort: { field: 'name', dir: 'asc' }, page: { limit: 5 } }]) {
+      const r = await post('p-pastor', { criteria: { gender: 'MALE' }, ...extra });
+      expect([r.status, r.body.code], JSON.stringify(extra)).toEqual([400, 'BAD_INPUT']);
+      expect(r.body.people).toBeUndefined();
+    }
+    for (const bad of [{ limit: 5 }, { offset: 5 }, { criteria: { gender: 'MALE' }, limit: 5, page: {} }]) expect((await post('p-pastor', bad)).status, JSON.stringify(bad)).toBe(400);
+    expect((await post('p-pastor', { criteria: { gender: 'MALE' }, limit: 5, offset: 0 })).status).toBe(200);
+  });
+  it('the response keeps every field the current screens read, and person items keep the directory shape', async () => {
+    for (const body of [{ criteria: { q: 'Aaron' } }, { q: 'Aaron' }]) {
+      const r = await post('p-pastor', body);
+      expect(Object.keys(r.body)).toEqual(expect.arrayContaining(['total', 'offset', 'limit', 'people']));
+      expect(typeof r.body.total).toBe('number');
+      expect(typeof r.body.offset).toBe('number');
+      const dir = await get('p-pastor', '/api/people?systemId=sys-main&q=Aaron');
+      const listed = Object.keys(dir.body.people[0]).sort();
+      expect(Object.keys(r.body.people[0]).sort()).toEqual([...listed, 'children', 'marital'].sort());
+    }
+    // A viewer who cannot read family or marriage records gets neither extra field.
+    const sec = await post('p-sec', { q: 'Aaron' });
+    expect(Object.keys(sec.body.people[0])).toContain('children');
+    expect(Object.keys(sec.body.people[0])).not.toContain('marital');
+  });
+  it('a scoped viewer pages through exactly their own people, in order, with a true total on every page', async () => {
+    for (let i = 0; i < 130; i++) {
+      const id = `p-mx-${String(i).padStart(3, '0')}`;
+      fake.__db.person.push({ id, fullName: 'Music Member', status: 'ACTIVE' });
+      fake.__db.membership.push({ id: `m-${id}`, personId: id, systemId: 'sys-music', orgUnitId: 'ou-music', type: 'MINISTRY_MEMBER', status: 'ACTIVE', startDate: new Date('2020-01-01') });
+    }
+    const seen: string[] = [];
+    let total = -1;
+    for (let offset = 0; offset < 400; offset += 50) {
+      const r = await post('p-music-pres', { systemId: 'sys-music', page: { limit: 50, offset } });
+      expect(r.status).toBe(200);
+      if (total >= 0) expect(r.body.total).toBe(total);
+      total = r.body.total;
+      expect(r.body.page.hasMore).toBe(offset + 50 < total);
+      seen.push(...ids(r));
+      if (!ids(r).length) break;
+    }
+    expect(seen).toHaveLength(total);
+    expect(new Set(seen).size).toBe(total);
+    expect(seen).not.toContain('p-y');
+    expect(seen.filter((x) => x.startsWith('p-mx-'))).toEqual([...seen.filter((x) => x.startsWith('p-mx-'))].sort());
+    const listed = await get('p-music-pres', '/api/people?systemId=sys-music&limit=200');
+    expect(listed.body.total).toBe(total); // the directory list and the search agree
+  });
+  it('age and baptism years turn over at 00:00 in Kigali, which is 22:00 UTC', async () => {
+    fake.__db.person.push({ id: 'p-day', fullName: 'Day Boundary', status: 'ACTIVE', dateOfBirth: '2000-10-21' });
+    fake.__db.personRecord.push({ id: 'r-day', personId: 'p-day', section: 'BAPTISM', dataJson: JSON.stringify({ date: '2016-10-21' }), status: 'CURRENT', recordedById: 'p-pastor', recordedAt: new Date() });
+    const q = c('name', 'startsWith', 'Day Boundary');
+    const at = async (iso: string) => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date(iso));
+      try { return [await post('p-pastor', all(q, c('baptismYears', 'atLeast', 10))), await post('p-pastor', all(q, c('age', 'atLeast', 26)))].map((r) => ids(r).length); } finally { vi.useRealTimers(); }
+    };
+    expect(await at('2026-10-20T21:59:59Z')).toEqual([0, 0]);
+    expect(await at('2026-10-20T22:00:00Z')).toEqual([1, 1]);
+  });
+});
+
 describe('who may use which field (manually constructed requests)', () => {
   const body = (...conditions: object[]) => all(...conditions);
   const refused = async (as: string, b: object, systemId?: string) => {
@@ -184,7 +270,7 @@ describe('who may use which field (manually constructed requests)', () => {
   });
   it('the secretary and the catechist may use work, education, baptism, family and calling, but not marital status, age or gender', async () => {
     for (const as of ['p-sec', 'p-cat']) {
-      for (const cond of [c('baptismYears', 'atLeast', 1), c('employmentSector', 'is', 'FINANCE'), c('educationLevel', 'atLeast', 'BACHELOR'), c('childCount', 'atLeast', 1), c('calling', 'anyMatch', { name: 'x' })]) {
+      for (const cond of [c('baptismYears', 'atLeast', 1), c('employment', 'anyMatch', { sector: ['FINANCE'] }), c('education', 'anyMatch', { levelAtLeast: 'BACHELOR' }), c('childCount', 'atLeast', 1), c('calling', 'anyMatch', { name: 'x' })]) {
         expect((await post(as, body(cond))).status, `${as} ${cond.field}`).toBe(200);
       }
       expect(await refused(as, body(c('marital', 'is', 'MARRIED')))).toEqual([403, 'FIELD_NOT_ALLOWED', ['marital']]);
@@ -194,7 +280,7 @@ describe('who may use which field (manually constructed requests)', () => {
     }
   });
   it('a unit president may only filter on name, code, status and unit, whichever way the condition is written', async () => {
-    const attempts = [c('gender', 'is', 'MALE'), c('age', 'atLeast', 1), c('baptised', 'isYes'), c('baptismYears', 'atLeast', 1), c('employmentSector', 'isNot', 'FINANCE'), c('educationLevel', 'atLeast', 'BACHELOR'), c('childCount', 'atLeast', 0), c('marital', 'isNot', 'WIDOWED'), c('hasSpouseRecorded', 'isNo'), c('calling', 'noneMatch', { name: 'x' })];
+    const attempts = [c('gender', 'is', 'MALE'), c('age', 'atLeast', 1), c('baptised', 'isYes'), c('baptismYears', 'atLeast', 1), c('employment', 'noneMatch', { sector: ['FINANCE'] }), c('education', 'anyMatch', { levelAtLeast: 'BACHELOR' }), c('childCount', 'atLeast', 0), c('marital', 'isNot', 'WIDOWED'), c('hasSpouseRecorded', 'isNo'), c('calling', 'noneMatch', { name: 'x' })];
     for (const cond of attempts) {
       expect(await refused('p-music-pres', body(cond), 'sys-music'), `all ${cond.field}`).toEqual([403, 'FIELD_NOT_ALLOWED', [cond.field]]);
       expect((await post('p-music-pres', { match: { anyGroups: [{ any: [c('name', 'contains', 'a'), cond] }] }, systemId: 'sys-music' })).body.code, `group ${cond.field}`).toBe('FIELD_NOT_ALLOWED');
@@ -285,7 +371,7 @@ describe('record and unit scope (manually constructed requests)', () => {
     expect((await get('p-music-pres', '/api/people/filter-schema?systemId=sys-main')).status).toBe(403);
     const sec = await get('p-sec', '/api/people/filter-schema');
     const secKeys = sec.body.fields.map((f: any) => f.key);
-    expect(secKeys).toEqual(expect.arrayContaining(['baptismYears', 'employedYears', 'educationLevel', 'childCount', 'calling']));
+    expect(secKeys).toEqual(expect.arrayContaining(['baptismYears', 'employment', 'education', 'childCount', 'calling']));
     for (const k of ['gender', 'age', 'marital']) expect(secKeys).not.toContain(k);
     const lead = await get('p-pastor', '/api/people/filter-schema');
     expect(lead.body.fields.map((f: any) => f.key)).toEqual(expect.arrayContaining(['gender', 'age', 'marital']));
@@ -298,13 +384,14 @@ describe('record and unit scope (manually constructed requests)', () => {
       const keys: string[] = s.body.fields.map((f: any) => f.key);
       for (const f of s.body.fields) {
         const op = f.operators[0];
-        const value = f.type === 'text' ? 'a' : f.type === 'boolean' ? undefined : f.type === 'choice' || f.type === 'ordinal' ? (op === 'is' || op === 'isNot' ? f.choices[0] : [f.choices[0]]) : f.type === 'number' ? 1 : f.type === 'date' ? '2020-01-01' : f.type === 'multi' ? [s.body.units[0].id] : { name: 'x' };
+        const part = (p: any) => (p.kind === 'text' ? 'a' : p.kind === 'choice' ? p.choices[0] : p.kind === 'choices' ? [p.choices[0]] : p.kind === 'number' ? 1 : [s.body.units[0].id]);
+        const value = f.type === 'text' ? 'a' : f.type === 'boolean' ? undefined : f.type === 'choice' || f.type === 'ordinal' ? (op === 'is' || op === 'isNot' ? f.choices[0] : [f.choices[0]]) : f.type === 'number' ? 1 : f.type === 'date' ? '2020-01-01' : f.type === 'multi' ? [s.body.units[0].id] : { [f.parts[0].key]: part(f.parts[0]) };
         const r = await post(as, all(c(f.key, op, value)));
         expect(r.status, `${as} ${f.key}`).toBe(200);
       }
-      const every = ['name', 'memberCode', 'status', 'unit', 'gender', 'age', 'baptised', 'baptismDate', 'baptismYears', 'employmentStatus', 'employmentSector', 'employmentField', 'employedYears', 'educationLevel', 'educationField', 'childCount', 'hasSpouseRecorded', 'marital', 'calling'];
+      const every = ['name', 'memberCode', 'status', 'unit', 'gender', 'age', 'baptised', 'baptismDate', 'baptismYears', 'employment', 'education', 'childCount', 'hasSpouseRecorded', 'marital', 'calling'];
       for (const k of every.filter((k) => !keys.includes(k))) {
-        const sample = k === 'calling' ? c(k, 'anyMatch', { name: 'x' }) : c(k, 'isNot', 'x');
+        const sample = ['calling', 'employment', 'education'].includes(k) ? c(k, 'anyMatch', { field: 'x', name: 'x' }) : c(k, 'isNot', 'x');
         const r = await post(as, all(sample));
         expect([403, 400], `${as} ${k}`).toContain(r.status);
         expect(r.status === 403 ? r.body.code : 'BAD_INPUT').toMatch(/FIELD_NOT_ALLOWED|BAD_INPUT/);

@@ -7,8 +7,9 @@
 import { z } from 'zod';
 import { SECTORS } from '../person360/rules.js';
 import type { Condition, MatchRequest } from '../filters/types.js';
-import { EDU_LEVELS, EMPLOYMENT, MARITAL, NEED_OF, STATUSES, mayUseNeed, type Need, type PeopleViewer } from './fields.js';
+import { EDU_LEVELS, EDU_RANK, EMPLOYMENT, MARITAL, NEED_OF, STATUSES, mayUseNeed, type Need, type PeopleViewer } from './fields.js';
 
+const RANKED_LEVELS = Object.keys(EDU_RANK) as [string, ...string[]];
 const n = (max = 120) => z.number().int().min(0).max(max);
 export const CriteriaSchema = z.object({
   q: z.string().trim().max(80).optional(),
@@ -21,7 +22,7 @@ export const CriteriaSchema = z.object({
   employmentStatus: z.array(z.enum(EMPLOYMENT)).max(5).optional(),
   sector: z.array(z.enum(SECTORS)).max(SECTORS.length).optional(),
   employedYearsMin: n(80).optional(),
-  educationMin: z.enum(EDU_LEVELS).optional(),
+  educationMin: z.enum(RANKED_LEVELS).optional(),
   educationIs: z.array(z.enum(EDU_LEVELS)).max(EDU_LEVELS.length).optional(),
   educationField: z.string().trim().max(80).optional(),
   childrenMin: n(30).optional(),
@@ -36,8 +37,8 @@ export type CriterionKey = keyof Criteria;
 /** The registry field each old criterion is a condition on. `q` is the quick search, not a field. */
 const FIELD_OF: Record<Exclude<CriterionKey, 'q'>, string> = {
   status: 'status', unitIds: 'unit', gender: 'gender', ageMin: 'age', ageMax: 'age', baptismYearsMin: 'baptismYears',
-  employmentStatus: 'employmentStatus', sector: 'employmentSector', employedYearsMin: 'employedYears',
-  educationMin: 'educationLevel', educationIs: 'educationLevel', educationField: 'educationField',
+  employmentStatus: 'employment', sector: 'employment', employedYearsMin: 'employment',
+  educationMin: 'education', educationIs: 'education', educationField: 'education',
   childrenMin: 'childCount', childrenMax: 'childCount', marital: 'marital', callingName: 'calling', callingUnitId: 'calling',
 };
 const needOf = (k: CriterionKey): Need => (k === 'q' ? 'OPEN' : NEED_OF[FIELD_OF[k]] ?? 'IDENTITY');
@@ -60,12 +61,21 @@ export function criteriaToMatch(c: Criteria): MatchRequest {
   if (c.ageMin !== undefined) add('age', 'atLeast', c.ageMin);
   if (c.ageMax !== undefined) add('age', 'atMost', c.ageMax);
   if (c.baptismYearsMin !== undefined) add('baptismYears', 'atLeast', c.baptismYearsMin);
-  if (c.employmentStatus?.length) add('employmentStatus', 'isAny', c.employmentStatus);
-  if (c.sector?.length) add('employmentSector', 'isAny', c.sector);
-  if (c.employedYearsMin !== undefined) add('employedYears', 'atLeast', c.employedYearsMin);
-  if (c.educationMin) add('educationLevel', 'atLeast', c.educationMin);
-  if (c.educationIs?.length) add('educationLevel', 'isAny', c.educationIs);
-  if (c.educationField) add('educationField', 'contains', c.educationField);
+  // Status, sector and years describe one job, and level and field one education record, as they always did.
+  if (c.employmentStatus?.length || c.sector?.length || c.employedYearsMin !== undefined) {
+    add('employment', 'anyMatch', {
+      ...(c.employmentStatus?.length ? { status: c.employmentStatus } : {}),
+      ...(c.sector?.length ? { sector: c.sector } : {}),
+      ...(c.employedYearsMin !== undefined ? { yearsAtLeast: c.employedYearsMin } : {}),
+    });
+  }
+  if (c.educationMin || c.educationIs?.length || c.educationField) {
+    add('education', 'anyMatch', {
+      ...(c.educationMin ? { levelAtLeast: c.educationMin } : {}),
+      ...(c.educationIs?.length ? { levelIn: c.educationIs } : {}),
+      ...(c.educationField ? { field: c.educationField } : {}),
+    });
+  }
   if (c.childrenMin !== undefined) add('childCount', 'atLeast', c.childrenMin);
   if (c.childrenMax !== undefined) add('childCount', 'atMost', c.childrenMax);
   if (c.marital?.length) add('marital', 'isAny', c.marital);

@@ -37,8 +37,6 @@ export interface PeopleCtx {
   today: string;
   /** A unit and every unit below it. */
   below(unitId: string): Set<string>;
-  /** Name and birth date of a person who may be named in a family record (used only to count children once). */
-  person(id: string): { fullName: string; dateOfBirth: string | null } | undefined;
 }
 
 type Base = Omit<PersonRow, 'rec'>;
@@ -56,33 +54,44 @@ export function rowFromData(base: Base, records: Array<{ section: Section; data:
 const norm = (s: unknown) => String(s ?? '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase().replace(/\s+/g, ' ').trim();
 
 /**
- * How many different children are recorded. A child written down by name and also linked to their own member
- * record counts once; so does the same name and birth date written twice. Two records that share a name but
- * carry different birth dates are two children. A child recorded with a name only is taken to be the linked
- * child of that name, if there is one. Only persons the viewer's scope lets us read can lend their name to this
- * matching; the count itself is all that ever leaves.
+ * How many different children are recorded, using only what the family records themselves say (nothing is read
+ * from the linked person, so a person the viewer cannot see can never change a count or be probed through it):
+ *  - records linked to the same member count once;
+ *  - records without a link count once per full identity, which is name AND birth date together (case, spacing
+ *    and accents ignored): the same name and birth date written twice is one child, two birth dates are two children;
+ *  - an unlinked record also counts as the linked child when its name and birth date equal the ones written on that
+ *    linked record, unless two different members carry that same name and birth date (conflicting identifiers:
+ *    nothing is merged);
+ *  - a record with only a name, or a name and no birth date, is never merged on a name alone: weak evidence is not
+ *    identity, so it counts by itself. A child entered once by link and once by bare name therefore counts twice
+ *    until a birth date or the link is added.
+ * The result does not depend on the order of the records.
  */
-export function childCount(row: PersonRow, ctx: PeopleCtx): number {
-  const clusters: Array<Set<string>> = [];
+export function childCount(row: PersonRow): number {
+  const linked = new Set<string>();
+  const idsOfKey = new Map<string, Set<string>>();
+  const unlinkedKeys = new Set<string>();
+  let anonymous = 0;
   for (const d of row.rec('FAMILY')) {
     if (d.relation !== 'CHILD') continue;
-    const keys: string[] = [];
-    const linked = typeof d.relatedPersonId === 'string' && d.relatedPersonId ? d.relatedPersonId : null;
-    if (linked) {
-      keys.push(`id:${linked}`);
-      const p = ctx.person(linked);
-      if (p) { keys.push(`nm:${norm(p.fullName)}|${dayOf(p.dateOfBirth) ?? ''}`, `nmo:${norm(p.fullName)}`); }
-      else if (d.name) keys.push(`nm:${norm(d.name)}|${dayOf(d.dateOfBirth) ?? ''}`);
-    } else if (d.name) {
-      const dob = dayOf(d.dateOfBirth);
-      keys.push(dob ? `nm:${norm(d.name)}|${dob}` : `nmo:${norm(d.name)}`);
-    } else continue;
-    const hit = clusters.filter((c) => keys.some((k) => c.has(k)));
-    const merged = new Set<string>(keys);
-    for (const c of hit) { for (const k of c) merged.add(k); clusters.splice(clusters.indexOf(c), 1); }
-    clusters.push(merged);
+    const id = typeof d.relatedPersonId === 'string' && d.relatedPersonId ? d.relatedPersonId : null;
+    const dob = dayOf(d.dateOfBirth);
+    const name = norm(d.name);
+    const key = name && dob ? `${name}|${dob}` : null;
+    if (id) {
+      linked.add(id);
+      if (key) idsOfKey.set(key, (idsOfKey.get(key) ?? new Set<string>()).add(id));
+    } else if (key) {
+      unlinkedKeys.add(key);
+    } else if (name) anonymous++;
   }
-  return clusters.length;
+  let extra = 0;
+  for (const key of unlinkedKeys) {
+    const ids = idsOfKey.get(key);
+    // Folded into the linked child only when exactly one member carries this name and birth date.
+    if (!ids || ids.size !== 1) extra++;
+  }
+  return linked.size + extra + anonymous;
 }
 
 /** Married, widowed (the spouse passed away) or single (no marriage recorded). */
@@ -97,22 +106,21 @@ const baptismDay = (r: PersonRow, today: string): string | null => {
   const d = dayOf(r.rec('BAPTISM')[0]?.date);
   return d && d <= today ? d : null;
 };
-/**
- * Years in the current work: whole years since the work began, over the person's current employed or
- * self-employed records (the longest running if there are two). Study, unemployment and retirement have none,
- * and a start date in the future does not count.
- */
-export function workYears(r: PersonRow, today: string): number | null {
-  let best: number | null = null;
-  for (const d of r.rec('EMPLOYMENT')) {
-    if (d.status !== 'EMPLOYED' && d.status !== 'SELF_EMPLOYED') continue;
-    const y = yearsBetween(typeof d.since === 'string' ? d.since : null, today);
-    if (y !== null && (best === null || y > best)) best = y;
-  }
-  return best;
-}
+const employmentValue = z.object({
+  status: z.array(z.enum(EMPLOYMENT)).min(1).max(EMPLOYMENT.length).optional(),
+  sector: z.array(z.enum(SECTORS)).min(1).max(SECTORS.length).optional(),
+  field: z.string().trim().min(1).max(80).optional(),
+  yearsAtLeast: z.number().int().min(0).max(80).optional(),
+}).strict().refine((v) => Object.keys(v).length > 0);
+type EmploymentValue = z.infer<typeof employmentValue>;
+const educationValue = z.object({
+  levelAtLeast: z.enum(Object.keys(EDU_RANK) as [string, ...string[]]).optional(),
+  levelIn: z.array(z.enum(EDU_LEVELS)).min(1).max(EDU_LEVELS.length).optional(),
+  field: z.string().trim().min(1).max(80).optional(),
+}).strict().refine((v) => Object.keys(v).length > 0);
+type EducationValue = z.infer<typeof educationValue>;
+
 const ageOf = (r: PersonRow, today: string) => yearsBetween(r.dateOfBirth, today);
-const levelsOf = (r: PersonRow) => r.rec('EDUCATION').map((d) => LEVEL_ALIAS[String(d.level)] ?? String(d.level)).filter(Boolean);
 
 const callingValue = z.object({ name: z.string().trim().min(1).max(80).optional(), unitId: z.string().min(1).max(80).optional() }).strict()
   .refine((v) => v.name !== undefined || v.unitId !== undefined);
@@ -134,13 +142,44 @@ export const PEOPLE_FIELDS = [
   def('BAPTISM', { key: 'baptised', type: 'boolean', read: (r, c) => baptismDay(r, c.today) !== null }),
   def('BAPTISM', { key: 'baptismDate', type: 'date', read: (r) => dayOf(r.rec('BAPTISM')[0]?.date), sortKey: (r) => dayOf(r.rec('BAPTISM')[0]?.date) }),
   def('BAPTISM', { key: 'baptismYears', type: 'number', min: 0, max: 100, read: (r, c) => yearsBetween(baptismDay(r, c.today), c.today) }),
-  def('EMPLOYMENT', { key: 'employmentStatus', type: 'choice', choices: EMPLOYMENT, read: (r) => r.rec('EMPLOYMENT').map((d) => d.status) }),
-  def('EMPLOYMENT', { key: 'employmentSector', type: 'choice', choices: SECTORS, read: (r) => r.rec('EMPLOYMENT').map((d) => d.sector) }),
-  def('EMPLOYMENT', { key: 'employmentField', type: 'text', read: (r) => r.rec('EMPLOYMENT').map((d) => d.field) }),
-  def('EMPLOYMENT', { key: 'employedYears', type: 'number', min: 0, max: 80, read: (r, c) => workYears(r, c.today) }),
-  def('EDUCATION', { key: 'educationLevel', type: 'ordinal', choices: EDU_LEVELS, rank: EDU_RANK, read: (r) => levelsOf(r) }),
-  def('EDUCATION', { key: 'educationField', type: 'text', read: (r) => r.rec('EDUCATION').map((d) => d.field) }),
-  def('FAMILY', { key: 'childCount', type: 'number', min: 0, max: 30, read: (r, c) => childCount(r, c) }),
+  def('EMPLOYMENT', {
+    key: 'employment', type: 'records', valueSchema: employmentValue,
+    valueParts: [
+      { key: 'status', kind: 'choices', choices: EMPLOYMENT }, { key: 'sector', kind: 'choices', choices: SECTORS },
+      { key: 'field', kind: 'text' }, { key: 'yearsAtLeast', kind: 'number', min: 0, max: 80 },
+    ],
+    read: (r) => r.rec('EMPLOYMENT'),
+    // Every part is tested on the SAME work record: Finance for 5+ years means a Finance job of 5+ years.
+    itemMatches: (raw: unknown, value: never, c: PeopleCtx) => {
+      const item = raw as Data, v = value as EmploymentValue;
+      if (v.status && !v.status.includes(String(item.status) as never)) return false;
+      if (v.sector && !v.sector.includes(String(item.sector) as never)) return false;
+      if (v.field !== undefined && !String(item.field ?? '').toLowerCase().includes(v.field.toLowerCase())) return false;
+      if (v.yearsAtLeast !== undefined) {
+        const y = item.status === 'EMPLOYED' || item.status === 'SELF_EMPLOYED' ? yearsBetween(typeof item.since === 'string' ? item.since : null, c.today) : null;
+        if (y === null || y < v.yearsAtLeast) return false;
+      }
+      return true;
+    },
+  }),
+  def('EDUCATION', {
+    key: 'education', type: 'records', valueSchema: educationValue,
+    valueParts: [
+      { key: 'levelAtLeast', kind: 'choice', choices: Object.keys(EDU_RANK) }, { key: 'levelIn', kind: 'choices', choices: EDU_LEVELS },
+      { key: 'field', kind: 'text' },
+    ],
+    read: (r) => r.rec('EDUCATION'),
+    // Level and field are tested on the SAME education record: a bachelor in Law is a record that is both.
+    itemMatches: (raw: unknown, value: never) => {
+      const item = raw as Data, v = value as EducationValue;
+      const level = LEVEL_ALIAS[String(item.level)] ?? String(item.level);
+      if (v.levelAtLeast !== undefined && !(EDU_RANK[level] !== undefined && EDU_RANK[level]! >= EDU_RANK[v.levelAtLeast]!)) return false;
+      if (v.levelIn && !v.levelIn.includes(level as never)) return false;
+      if (v.field !== undefined && !String(item.field ?? '').toLowerCase().includes(v.field.toLowerCase())) return false;
+      return true;
+    },
+  }),
+  def('FAMILY', { key: 'childCount', type: 'number', min: 0, max: 30, read: (r) => childCount(r) }),
   def('FAMILY', { key: 'hasSpouseRecorded', type: 'boolean', read: (r) => r.rec('FAMILY').some((d) => d.relation === 'SPOUSE') }),
   def('MARRIAGE', { key: 'marital', type: 'choice', choices: MARITAL, read: (r) => maritalOf(r) }),
   def('CALLING', {

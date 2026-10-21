@@ -43,8 +43,8 @@ export async function searchPeople(i: {
 }) {
   const { scope, viewer, query } = i;
   const below = unitTree(i.units);
-  const known = new Map<string, Slim>();
-  const ctx: PeopleCtx = { today: kigaliDay(i.now), below, person: (id) => known.get(id) };
+  const known = new Set<string>();
+  const ctx: PeopleCtx = { today: kigaliDay(i.now), below };
 
   // Validate before touching the database: a bad or forbidden request costs nothing.
   const plan = planRequest(PEOPLE_FIELDS, viewer, ctx, scope.units, query.match, query.sort);
@@ -59,7 +59,7 @@ export async function searchPeople(i: {
     orderBy: [{ fullName: nameDir }, { id: 'asc' }],
     select: { id: true, fullName: true, memberCode: true, status: true, gender: true, dateOfBirth: true },
   })) as unknown as Slim[];
-  for (const p of slim) known.set(p.id, p);
+  for (const p of slim) known.add(p.id);
 
   const json = new Map<string, Partial<Record<Section, string[]>>>();
   if (sections.length) {
@@ -117,7 +117,7 @@ export async function searchPeople(i: {
     return [{
       ...filterPerson(p, i.viewTier),
       ...(viewer.read.includes('MARRIAGE') ? { marital: maritalOf(shown) } : {}),
-      ...(viewer.read.includes('FAMILY') ? { children: childCount(shown, ctx) } : {}),
+      ...(viewer.read.includes('FAMILY') ? { children: childCount(shown) } : {}),
     }];
   });
   return { total: result.total, page: result.page, people };

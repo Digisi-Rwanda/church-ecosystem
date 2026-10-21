@@ -23,6 +23,9 @@ export const LIMITS = {
   conditions: 12, groups: 4, listValues: 20, stringLength: 80, pageSize: 100, defaultPageSize: 50, maxOffset: 100_000, amountMax: 3660,
 } as const;
 
+/** One input of a records condition, so a screen can draw it: free text, a unit, one choice, several choices or a whole number. */
+export interface ValuePart { key: string; kind: 'text' | 'unit' | 'choice' | 'choices' | 'number'; choices?: readonly string[]; min?: number; max?: number }
+
 export interface FieldDef<Row, Ctx, Viewer> {
   key: string;
   type: FieldType;
@@ -43,7 +46,7 @@ export interface FieldDef<Row, Ctx, Viewer> {
   /** multi: widen a chosen value into every value that counts as it (a unit includes the units below it). */
   expand?: (value: string, ctx: Ctx) => Iterable<string>;
   /** records: which parts a condition value has, so a screen can draw them. */
-  valueParts?: ReadonlyArray<{ key: string; kind: 'text' | 'unit' }>;
+  valueParts?: ReadonlyArray<ValuePart>;
   /** Organisation units a condition's value names; the viewer's unit scope is checked against them. */
   unitRefs?: (value: never) => string[];
   /** Offered for sorting; the key must be comparable and null when missing (missing sorts last). */

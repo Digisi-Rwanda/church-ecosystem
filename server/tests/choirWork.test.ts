@@ -2,6 +2,7 @@ import request from 'supertest';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakePrisma } from './fakePrisma';
 import { bearer, seedWorld } from './world';
+const TOMORROW = new Date(Date.now() + 2 * 86400_000).toISOString().slice(0, 10); // a day that is always still to come
 
 const fake = createFakePrisma();
 vi.mock('../src/lib/prisma.js', () => ({ prisma: fake }));
@@ -45,7 +46,7 @@ describe('rehearsals', () => {
     expect((await post(LEADER, '/api/choir/rehearsals', reh({ presentIds: ['p-pastor'] }))).body.code).toBe('NOT_A_MEMBER');
     await post(LEADER, '/api/choir/rehearsals', reh());
     expect((await post(LEADER, '/api/choir/rehearsals', reh())).body.code).toBe('ALREADY_EXISTS');
-    expect((await post(LEADER, '/api/choir/rehearsals', reh({ heldOn: '2026-10-20' }))).body.code).toBe('FUTURE_DATE');
+    expect((await post(LEADER, '/api/choir/rehearsals', reh({ heldOn: TOMORROW }))).body.code).toBe('FUTURE_DATE');
     expect((await post(LEADER, '/api/choir/rehearsals', reh({ choirId: 'ch-old' }))).body.code).toBe('WRONG_STATE');
   });
   it('plain singers and outsiders cannot see rehearsals or record them', async () => {
@@ -72,7 +73,7 @@ describe('repertoire', () => {
     expect(id).toBeTruthy();
     expect((await post(LEADER, '/api/choir/songs', { choirId: 'ch-elim', title: 'amazing grace' })).body.code).toBe('ALREADY_EXISTS');
     expect((await post(LEADER, `/api/choir/songs/${id}/sung`, { day: '2026-10-04' })).status).toBe(200);
-    expect((await post(LEADER, `/api/choir/songs/${id}/sung`, { day: '2026-12-04' })).body.code).toBe('FUTURE_DATE');
+    expect((await post(LEADER, `/api/choir/songs/${id}/sung`, { day: TOMORROW })).body.code).toBe('FUTURE_DATE');
     const asSinger = await get('p-choir-member', '/api/choir/songs?choirId=ch-elim');
     expect(asSinger.status).toBeGreaterThanOrEqual(403); // leaders only in this version
     expect((await post('p-choir-member', '/api/choir/songs', { choirId: 'ch-elim', title: 'X' })).status).toBeGreaterThanOrEqual(403);

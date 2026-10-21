@@ -14,7 +14,7 @@ const scalar = z.union([z.string().max(LIMITS.stringLength), z.number().finite()
 const rawValue = z.union([
   scalar,
   z.array(scalar).max(LIMITS.listValues),
-  z.record(z.string().max(20), scalar).refine((o) => Object.keys(o).length <= 4),
+  z.record(z.string().max(20), z.union([scalar, z.array(scalar).max(LIMITS.listValues)])).refine((o) => Object.keys(o).length <= 4),
 ]);
 const conditionShape = z.object({ field: z.string().min(1).max(40), op: z.string().min(1).max(20), value: rawValue.optional() }).strict();
 

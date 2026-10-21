@@ -54,10 +54,10 @@ function build() {
 build();
 
 const c = (field: string, op: string, value?: unknown) => ({ field, op, ...(value === undefined ? {} : { value }) });
-const FIVE = { match: { all: [c('gender', 'is', 'MALE'), c('unit', 'includesAny', ['ou-m1']), c('baptismYears', 'atLeast', 10), c('educationLevel', 'atLeast', 'BACHELOR'), c('childCount', 'atLeast', 2)] } };
+const FIVE = { match: { all: [c('gender', 'is', 'MALE'), c('unit', 'includesAny', ['ou-m1']), c('baptismYears', 'atLeast', 10), c('education', 'anyMatch', { levelAtLeast: 'BACHELOR' }), c('childCount', 'atLeast', 2)] } };
 const SEVEN = { match: {
-  all: [c('gender', 'is', 'MALE'), c('baptismYears', 'atLeast', 5), c('educationLevel', 'atLeast', 'ASSOCIATE'), c('employedYears', 'atLeast', 3)],
-  anyGroups: [{ any: [c('unit', 'includesAny', ['ou-m1']), c('unit', 'includesAny', ['ou-m2'])] }, { any: [c('employmentSector', 'is', 'FINANCE'), c('employmentSector', 'is', 'HEALTH')] }],
+  all: [c('gender', 'is', 'MALE'), c('baptismYears', 'atLeast', 5), c('education', 'anyMatch', { levelAtLeast: 'ASSOCIATE' }), c('employment', 'anyMatch', { yearsAtLeast: 3 })],
+  anyGroups: [{ any: [c('unit', 'includesAny', ['ou-m1']), c('unit', 'includesAny', ['ou-m2'])] }, { any: [c('employment', 'anyMatch', { sector: ['FINANCE'] }), c('employment', 'anyMatch', { sector: ['HEALTH'] })] }],
 }, sort: { field: 'age', dir: 'asc' }, page: { limit: 100 } };
 const WIDE = { match: { all: [c('name', 'contains', 'Person 1')] }, sort: { field: 'age', dir: 'desc' } };
 const NONE = {};
@@ -88,16 +88,39 @@ describe.skipIf(!process.env.BENCH)('People search benchmark (5,000 people, 12,0
     expect(fake.__db.personRecord.length).toBe(RECORDS);
   });
 
-  const runs = async (name: string, body: object, expectTotal?: (total: number) => void) => {
+  /**
+   * Every timed run goes through the whole route (HTTP, access checks, the person and record reads, filtering, the
+   * page read, JSON). The database calls are counted per run, so a run that skipped the reads would fail here
+   * instead of looking fast. `sections` are the record sections the search must read for every person.
+   */
+  const runs = async (name: string, body: object, expectTotal?: (total: number) => void, sections: string[] = []) => {
+    const personRead = vi.spyOn(fake.person, 'findMany');
+    const recordRead = vi.spyOn(fake.personRecord, 'findMany');
     const send = () => request(app).post('/api/people/search').set(bearer('p-pastor')).send(body);
     for (let i = 0; i < 3; i++) expect((await send()).status).toBe(200); // warm-up
+    const wanted = records.filter((r) => sections.includes(r.section)).length;
     const times: number[] = [];
     let last: any;
-    for (let i = 0; i < 20; i++) { const t = performance.now(); last = await send(); times.push(performance.now() - t); }
-    expect(last.status).toBe(200);
+    let first: number | undefined;
+    for (let i = 0; i < 20; i++) {
+      personRead.mockClear(); recordRead.mockClear();
+      const t = performance.now();
+      last = await send();
+      times.push(performance.now() - t);
+      expect(last.status).toBe(200);
+      first ??= last.body.total;
+      expect(last.body.total).toBe(first); // every run answers the same
+      const scan = (await personRead.mock.results[0]!.value as unknown[]).length; // the scan of everyone in scope
+      expect(scan).toBeGreaterThanOrEqual(N);
+      expect(personRead).toHaveBeenCalledTimes(last.body.people.length ? 2 : 1); // the scan, then only the page read in full
+      if (last.body.people.length) expect((await personRead.mock.results[1]!.value as unknown[]).length).toBe(last.body.people.length);
+      if (sections.length) expect((await recordRead.mock.results[0]!.value as unknown[]).length).toBe(wanted); // the record read for the filter
+      else expect(recordRead.mock.calls.every((c) => (c[0] as any).where.personId)).toBe(true); // no filter on records: only the page's own
+    }
+    personRead.mockRestore(); recordRead.mockRestore();
     expectTotal?.(last.body.total);
     const s = stats(times);
-    console.log(`BENCH route  | ${name.padEnd(34)} | total ${String(last.body.total).padStart(4)} | min ${ms(s.min)} | median ${ms(s.median)} | p95 ${ms(s.p95)} | max ${ms(s.max)}`);
+    console.log(`BENCH route  | ${name.padEnd(34)} | total ${String(last.body.total).padStart(4)} | person rows ${N}+ and ${wanted} records read per run | min ${ms(s.min)} | median ${ms(s.median)} | p95 ${ms(s.p95)} | max ${ms(s.max)}`);
     return s;
   };
 
@@ -116,7 +139,7 @@ describe.skipIf(!process.env.BENCH)('People search benchmark (5,000 people, 12,0
       if (!edu.length || Math.max(...edu) < 5) return false;
       return records.filter((r) => r.personId === p.id && r.section === 'FAMILY').length >= 2;
     }).length;
-    const s = await runs('5 conditions (AND)', FIVE, (t) => expect(t).toBe(expected));
+    const s = await runs('5 conditions (AND)', FIVE, (t) => expect(t).toBe(expected), ['BAPTISM', 'EDUCATION', 'FAMILY']);
     expect(expected).toBeGreaterThan(0);
     expect(s.median).toBeGreaterThan(0);
   });
@@ -136,7 +159,7 @@ describe.skipIf(!process.env.BENCH)('People search benchmark (5,000 people, 12,0
       if (!memberships.some((m) => m.personId === p.id && (m.orgUnitId.startsWith('ou-m1') || m.orgUnitId.startsWith('ou-m2')))) return false;
       return mine('EMPLOYMENT').some((d) => d.sector === 'FINANCE' || d.sector === 'HEALTH');
     }).length;
-    await runs('7 conditions + 2 OR groups + sort', SEVEN, (t) => expect(t).toBe(expected));
+    await runs('7 conditions + 2 OR groups + sort', SEVEN, (t) => expect(t).toBe(expected), ['BAPTISM', 'EDUCATION', 'EMPLOYMENT']);
     expect(expected).toBeGreaterThan(0);
   });
   it('wide text search with sort', async () => { await runs('name contains + sort by age', WIDE); });
