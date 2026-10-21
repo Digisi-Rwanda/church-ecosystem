@@ -8,9 +8,11 @@ import { authorizePerson } from '../policy/index.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { lettersInSystem, reachableSystems } from '../capabilities/engine.js';
 import { accessFor } from '../person360/rules.js';
-import { CriteriaSchema, EDU_LEVELS, MARITAL, childrenOf, forbiddenKeys, matches, maritalOf, usableKeys, type Facts, type Viewer } from '../people/filters.js';
+import { CriteriaSchema, criteriaToMatch, forbiddenKeys, usableKeys, type Viewer } from '../people/filters.js';
+import { EDU_LEVELS, MARITAL, PEOPLE_FIELDS } from '../people/fields.js';
+import { searchPeople, type PeopleSearch } from '../people/search.js';
+import { FilterError, MatchSchema, PageSchema, SortSchema, schemaFor } from '../filters/index.js';
 import { SECTORS } from '../person360/rules.js';
-import { isLive } from '../capabilities/engine.js';
 import { CENTRAL, isAdministrator, mayReadPeople, peopleOfSystem, subtreeUnitIds } from '../lib/peopleScope.js';
 import {
   pathParam,
@@ -25,7 +27,8 @@ export const peopleRouter = Router();
  * searching names to appoint or give a sign-in); otherwise the exact set of people of the named system.
  * A system that is not named means every system the caller may read, never more.
  */
-async function peopleScopeFor(me: string, requested: string, withUnits: boolean): Promise<{ ids: Set<string> | null } | 'FORBIDDEN'> {
+/** `ids` is whose people may be listed; `units` is which organisation units the viewer may see or filter by (null: all). Both use the same scope. */
+async function peopleScopeFor(me: string, requested: string, withUnits: boolean): Promise<{ ids: Set<string> | null; units: Set<string> | null } | 'FORBIDDEN'> {
   const { data, units } = await loadAccessData(me);
   const now = new Date();
   const unitRows = units as Array<{ id: string; parentId?: string | null; systemId?: string | null }>;
@@ -39,16 +42,20 @@ async function peopleScopeFor(me: string, requested: string, withUnits: boolean)
   };
   if (requested) {
     if (!mayReadPeople(me, requested, data, now)) return 'FORBIDDEN';
-    return { ids: requested === CENTRAL ? null : of(requested) };
+    return { ids: requested === CENTRAL ? null : of(requested), units: requested === CENTRAL ? null : subtreeUnitIds(unitRows, requested) };
   }
-  if (isAdministrator(me, data, now)) return { ids: null };
+  if (isAdministrator(me, data, now)) return { ids: null, units: null };
   const reach = reachableSystems(me, data, now);
   const readable = (reach === null ? unitRows.map((u) => u.systemId ?? '').concat(CENTRAL) : [...reach]).filter((s, i, a) => s && a.indexOf(s) === i && mayReadPeople(me, s, data, now));
   if (readable.length === 0) return 'FORBIDDEN';
-  if (readable.includes(CENTRAL)) return { ids: null };
+  if (readable.includes(CENTRAL)) return { ids: null, units: null };
   const out = new Set<string>();
-  for (const s of readable) for (const id of of(s)) out.add(id);
-  return { ids: out };
+  const unitScope = new Set<string>();
+  for (const s of readable) {
+    for (const id of of(s)) out.add(id);
+    for (const u of subtreeUnitIds(unitRows, s)) unitScope.add(u);
+  }
+  return { ids: out, units: unitScope };
 }
 
 const tierOf = personTier;
@@ -83,37 +90,46 @@ peopleRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
     : {};
   const mine = req.auth!.personId;
   const wanted = scope.ids === null ? ids : (ids.length ? ids : [...scope.ids, mine]).filter((id) => id === mine || scope.ids!.has(id));
+  const limit = ids.length ? 200 : Math.min(Math.max(Number(req.query.limit) || 100, 1), 200);
+  const offset = ids.length ? 0 : Math.max(Number(req.query.offset) || 0, 0);
   if (scope.ids !== null && wanted.length === 0) {
-    res.json({ people: [] });
+    res.json({ people: [], total: 0, offset, limit });
     return;
   }
-  const people = await prisma.person.findMany({
-    where: {
-      ...text,
-      ...(wanted.length ? { id: { in: wanted } } : {}),
-      ...(status && ['ACTIVE', 'INACTIVE', 'VISITOR'].includes(status) ? { status } : {}),
-      ...(wantArchived ? { archivedAt: { not: null } } : { archivedAt: null }),
-    },
-    orderBy: { fullName: 'asc' },
-    take: ids.length ? 200 : 100,
-  });
+  const where = {
+    ...text,
+    ...(wanted.length ? { id: { in: wanted } } : {}),
+    ...(status && ['ACTIVE', 'INACTIVE', 'VISITOR'].includes(status) ? { status } : {}),
+    ...(wantArchived ? { archivedAt: { not: null } } : { archivedAt: null }),
+  };
+  // Name order with the id as tie-breaker, so pages never repeat or skip a person when names are equal.
+  const [people, total] = await Promise.all([
+    prisma.person.findMany({ where, orderBy: [{ fullName: 'asc' }, { id: 'asc' }], skip: offset, take: limit }),
+    prisma.person.count({ where }),
+  ]);
   // The list is a directory: identity details never travel here; contact details only for the people module.
   const viewer = req.auth!.personId;
   const tier = await tierOf(viewer, '\u0000');
   const shown = tier === 'FULL' || tier === 'BASIC' ? 'BASIC' : 'DIRECTORY';
-  res.json({ people: people.map((p) => filterPerson(p as Record<string, unknown>, shown)) });
+  res.json({ people: people.map((p) => filterPerson(p as Record<string, unknown>, shown)), total, offset, limit });
 });
 
 /** What this viewer may filter on: the criteria they can use, and the units to pick from. Nothing else is offered. */
-async function viewerOf(me: string): Promise<Viewer & { units: Array<{ id: string; name: string; parentId: string | null; systemId: string | null }> }> {
+async function viewerOf(me: string): Promise<Viewer & { tier: string; units: Array<{ id: string; name: string; parentId: string | null; systemId: string | null }> }> {
   const { data, units } = await loadAccessData(me);
   const tier = await tierOf(me, '\u0000');
   const read = accessFor(me, data).read;
   return {
-    identity: tier === 'FULL', read,
+    tier, identity: tier === 'FULL', read,
     units: (units as Array<{ id: string; name?: string; parentId?: string | null; systemId?: string | null }>).map((u) => ({ id: u.id, name: u.name ?? u.id, parentId: u.parentId ?? null, systemId: u.systemId ?? null })),
   };
 }
+
+const refuse = (res: import('express').Response, e: unknown): boolean => {
+  if (!(e instanceof FilterError)) return false;
+  res.status(e.status).json({ error: e.message, code: e.code, ...(e.fields ? { fields: e.fields } : {}) });
+  return true;
+};
 
 peopleRouter.get('/filter-options', requireAuth, async (req: AuthedRequest, res) => {
   const requested = typeof req.query.systemId === 'string' ? req.query.systemId : '';
@@ -123,8 +139,8 @@ peopleRouter.get('/filter-options', requireAuth, async (req: AuthedRequest, res)
     return;
   }
   const v = await viewerOf(req.auth!.personId);
-  const inside = requested && requested !== CENTRAL ? subtreeUnitIds(v.units, requested) : null;
-  const offered = v.units.filter((u) => !inside || inside.has(u.id)).map((u) => ({ id: u.id, name: u.name }));
+  // Only units inside the viewer's own scope are offered; others stay unnamed.
+  const offered = v.units.filter((u) => scope.units === null || scope.units.has(u.id)).map((u) => ({ id: u.id, name: u.name }));
   res.json({
     criteria: usableKeys(v),
     units: offered.sort((a, b) => a.name.localeCompare(b.name)),
@@ -133,73 +149,90 @@ peopleRouter.get('/filter-options', requireAuth, async (req: AuthedRequest, res)
 });
 
 /**
- * Filter the people this caller may list by any mix of criteria, one narrowing the next.
- * A criterion on something the caller may not read is refused (never silently ignored), so a filtered list can
- * never reveal what the details themselves would not.
+ * The fields, operators and choices this viewer may use in a search, drawn from the same registry the search
+ * itself checks against: a field they could not search on is not listed, and the units are only those in their scope.
+ */
+peopleRouter.get('/filter-schema', requireAuth, async (req: AuthedRequest, res) => {
+  const requested = typeof req.query.systemId === 'string' ? req.query.systemId : '';
+  const scope = await peopleScopeFor(req.auth!.personId, requested, true);
+  if (scope === 'FORBIDDEN') {
+    res.status(403).json({ error: 'You may not open the people of this system', code: 'NOT_ALLOWED' });
+    return;
+  }
+  const v = await viewerOf(req.auth!.personId);
+  const units = v.units.filter((u) => scope.units === null || scope.units.has(u.id)).map((u) => ({ id: u.id, name: u.name }));
+  res.json({ ...schemaFor(PEOPLE_FIELDS, v), units: units.sort((a, b) => a.name.localeCompare(b.name)), defaultSort: { field: 'name', dir: 'asc' } });
+});
+
+const SearchBody = z.object({
+  q: z.string().trim().max(80).optional(), systemId: z.string().max(80).optional(), archived: z.boolean().optional(),
+  match: MatchSchema.optional(), sort: SortSchema.optional(), page: PageSchema.optional(),
+}).strict();
+/** The first request shape, accepted for one more release. */
+const LegacyBody = z.object({ criteria: CriteriaSchema, systemId: z.string().max(80).optional(), archived: z.boolean().optional(), limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().min(0).optional() });
+
+/**
+ * Filter the people this caller may list. The request is `{ q?, systemId?, archived?, match: { all, anyGroups }, sort?, page? }`:
+ * every `all` condition must hold and each OR group needs one of its conditions, so criteria narrow one another.
+ * The old `{ criteria }` shape still works and is translated onto the same rules.
+ * A condition on something the caller may not read is refused (never silently ignored), so a filtered list can
+ * never reveal what the details themselves would not; the viewer's people are chosen first, so counts and pages
+ * only ever describe people they may list.
  */
 peopleRouter.post('/search', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const parsed = z.object({ criteria: CriteriaSchema, systemId: z.string().max(80).optional(), archived: z.boolean().optional(), limit: z.number().int().min(1).max(200).optional(), offset: z.number().int().min(0).optional() }).safeParse(req.body ?? {});
-  if (!parsed.success) {
+  const raw = req.body ?? {};
+  const legacy = typeof raw === 'object' && raw !== null && 'criteria' in raw;
+  // The two shapes are never mixed: a request that names `criteria` may not also carry `match`, `sort` or `page`.
+  const mixed = legacy && ['match', 'sort', 'page'].some((k) => k in (raw as object));
+  const parsedLegacy = legacy && !mixed ? LegacyBody.safeParse(raw) : null;
+  const parsedNew = legacy ? null : SearchBody.safeParse(raw);
+  if (mixed || (parsedLegacy && !parsedLegacy.success) || (parsedNew && !parsedNew.success)) {
     res.status(400).json({ error: 'These filters are not valid', code: 'BAD_INPUT' });
     return;
   }
-  const { criteria, systemId = '', archived = false } = parsed.data;
-  const limit = parsed.data.limit ?? 100, offset = parsed.data.offset ?? 0;
+  const systemId = (parsedLegacy?.data ?? parsedNew!.data!).systemId ?? '';
+  const archived = (parsedLegacy?.data ?? parsedNew!.data!).archived ?? false;
   const scope = await peopleScopeFor(me, systemId, true);
   if (scope === 'FORBIDDEN') {
     res.status(403).json({ error: 'You may not open the people of this system', code: 'NOT_ALLOWED' });
     return;
   }
   const v = await viewerOf(me);
-  const banned = forbiddenKeys(criteria, v);
-  if (banned.length) {
-    res.status(403).json({ error: 'You may not filter on details you cannot read', code: 'FIELD_NOT_ALLOWED', fields: banned });
-    return;
+  let query: PeopleSearch;
+  if (parsedLegacy) {
+    const { criteria } = parsedLegacy.data;
+    // A unit outside the viewer's scope cannot be used as a condition: it would reveal who also belongs to it.
+    const asked = [...(criteria.unitIds ?? []), ...(criteria.callingUnitId ? [criteria.callingUnitId] : [])];
+    if (scope.units !== null && asked.some((u) => !scope.units!.has(u))) {
+      res.status(403).json({ error: 'You may not filter by a unit outside your own', code: 'UNIT_NOT_ALLOWED' });
+      return;
+    }
+    const banned = forbiddenKeys(criteria, v);
+    if (banned.length) {
+      res.status(403).json({ error: 'You may not filter on details you cannot read', code: 'FIELD_NOT_ALLOWED', fields: banned });
+      return;
+    }
+    query = { q: criteria.q, archived, match: criteriaToMatch(criteria), page: { limit: parsedLegacy.data.limit ?? 100, offset: parsedLegacy.data.offset ?? 0 } };
+  } else {
+    const b = parsedNew!.data!;
+    const page = PageSchema.safeParse(b.page ?? {});
+    if (!page.success) {
+      res.status(400).json({ error: 'These filters are not valid', code: 'BAD_INPUT' });
+      return;
+    }
+    query = { q: b.q, archived, match: b.match, sort: b.sort, page: page.data };
   }
-  const people = (await prisma.person.findMany({
-    where: { ...(scope.ids === null ? {} : { id: { in: [...scope.ids] } }), ...(archived ? { archivedAt: { not: null } } : { archivedAt: null }) },
-    orderBy: { fullName: 'asc' },
-  })) as Array<Record<string, unknown> & { id: string; fullName: string; status: string }>;
-  const sections = v.read.filter((x) => ['EMPLOYMENT', 'EDUCATION', 'FAMILY', 'BAPTISM', 'MARRIAGE', 'CALLING'].includes(x));
-  const ids = new Set(people.map((p) => p.id));
-  const records = ((await prisma.personRecord.findMany({ where: { status: 'CURRENT', section: { in: sections } } })) as Array<{ personId: string; section: string; dataJson: string }>).filter((r) => ids.has(r.personId));
-  const { data, units } = await loadAccessData(me);
-  const now = new Date();
-  const memberships = (data.memberships as Array<{ personId: string; orgUnitId?: string | null; status?: string; startDate?: Date | string | null; endDate?: Date | string | null }>).filter((m) => m.orgUnitId && isLive({ status: m.status ?? 'ACTIVE', startDate: m.startDate, endDate: m.endDate }, now));
-  const unitsOf = new Map<string, string[]>();
-  for (const m of memberships) unitsOf.set(m.personId, [...(unitsOf.get(m.personId) ?? []), m.orgUnitId as string]);
-  const recordsOf = new Map<string, Facts['records']>();
-  for (const r of records) {
-    let data2: Record<string, unknown> = {};
-    try { data2 = JSON.parse(r.dataJson) as Record<string, unknown>; } catch { /* a damaged row counts as empty */ }
-    recordsOf.set(r.personId, [...(recordsOf.get(r.personId) ?? []), { section: r.section as never, data: data2 }]);
+  try {
+    const { data, units } = await loadAccessData(me);
+    const out = await searchPeople({
+      scope, viewer: v, units: units as Array<{ id: string; parentId?: string | null }>, memberships: data.memberships as never,
+      now: new Date(), query, viewTier: v.tier === 'FULL' || v.tier === 'BASIC' ? 'BASIC' : 'DIRECTORY',
+    });
+    res.json({ total: out.total, offset: out.page.offset, limit: out.page.limit, page: out.page, people: out.people });
+  } catch (e) {
+    if (!refuse(res, e)) throw e;
   }
-  const unitRows = units as Array<{ id: string; parentId?: string | null }>;
-  const kids = new Map<string, Set<string>>();
-  const below = (id: string): Set<string> => {
-    const hit = kids.get(id);
-    if (hit) return hit;
-    const out = new Set<string>([id]);
-    let grew = true;
-    while (grew) { grew = false; for (const u of unitRows) if (u.parentId && out.has(u.parentId) && !out.has(u.id)) { out.add(u.id); grew = true; } }
-    kids.set(id, out);
-    return out;
-  };
-  const tier = await tierOf(me, '\u0000');
-  const view = tier === 'FULL' || tier === 'BASIC' ? 'BASIC' : 'DIRECTORY';
-  const hits = people
-    .map((p) => ({ p, f: { id: p.id, fullName: p.fullName, memberCode: p.memberCode as string | null, status: p.status, gender: v.identity ? (p.gender as string | null) : null, dateOfBirth: v.identity ? (p.dateOfBirth as string | null) : null, unitIds: unitsOf.get(p.id) ?? [], records: recordsOf.get(p.id) ?? [] } as Facts }))
-    .filter(({ f }) => matches(f, criteria, now, below));
-  res.json({
-    total: hits.length,
-    offset,
-    people: hits.slice(offset, offset + limit).map(({ p, f }) => ({
-      ...filterPerson(p, view),
-      ...(v.read.includes('MARRIAGE') ? { marital: maritalOf(f) } : {}),
-      ...(v.read.includes('FAMILY') ? { children: childrenOf(f) } : {}),
-    })),
-  });
 });
 
 /**

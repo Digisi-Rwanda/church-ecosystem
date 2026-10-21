@@ -123,3 +123,20 @@ export function timelineOf(input: {
   for (const r of input.records ?? []) if ((r.section === 'BAPTISM' || r.section === 'MARRIAGE') && ok(r.day)) out.push({ day: r.day.slice(0, 10), kind: r.section, name: '' });
   return out.sort((a, b) => b.day.localeCompare(a.day));
 }
+
+/** The page numbers to show: always the first, the last and the neighbours of the current page, with gaps marked as null. */
+export function pageWindow(page: number, pages: number): Array<number | null> {
+  const keep = new Set([1, pages, page - 1, page, page + 1].filter((n) => n >= 1 && n <= pages));
+  const out: Array<number | null> = [];
+  let last = 0;
+  for (const n of [...keep].sort((a, b) => a - b)) {
+    if (n - last > 1) out.push(null);
+    out.push(n);
+    last = n;
+  }
+  return out;
+}
+
+/** "Showing 51–100 of 250": the first and last row on this page, from a zero-based offset. */
+export const pageRange = (offset: number, shown: number, total: number): { from: number; to: number; total: number } =>
+  total === 0 || shown === 0 ? { from: 0, to: 0, total } : { from: offset + 1, to: offset + shown, total };

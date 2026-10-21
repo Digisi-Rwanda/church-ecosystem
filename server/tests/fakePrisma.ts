@@ -50,6 +50,16 @@ function model(store: Row[]) {
   const api: Record<string, any> = {
     findMany: async (a: Row = {}) => {
       let out = store.filter((r) => matches(r, a.where));
+      if (a.orderBy) {
+        const keys = (Array.isArray(a.orderBy) ? a.orderBy : [a.orderBy]).map((o: Row) => Object.entries(o)[0] as [string, string]);
+        out = [...out].sort((x, y) => {
+          for (const [k, dir] of keys) {
+            const c = x[k] === y[k] ? 0 : x[k] == null ? 1 : y[k] == null ? -1 : x[k] < y[k] ? -1 : 1;
+            if (c) return dir === 'desc' ? -c : c;
+          }
+          return 0;
+        });
+      }
       if (a.skip) out = out.slice(a.skip);
       if (a.take) out = out.slice(0, a.take);
       return out.map((r) => ({ ...r }));

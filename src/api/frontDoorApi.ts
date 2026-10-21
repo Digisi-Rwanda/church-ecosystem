@@ -133,6 +133,17 @@ export type Structure = {
   offices: OfficeRecord[];
 };
 
+/** One page of the directory with the exact number of matches, so every person can be reached. */
+export async function fetchPeoplePage(opts: { q?: string; status?: string; archived?: boolean; systemId?: string; limit: number; offset: number }): Promise<{ people: DirectoryPerson[]; total: number }> {
+  const qs = new URLSearchParams({ limit: String(opts.limit), offset: String(opts.offset) });
+  if (opts.q) qs.set('q', opts.q);
+  if (opts.status) qs.set('status', opts.status);
+  if (opts.archived) qs.set('archived', 'true');
+  if (opts.systemId) qs.set('systemId', opts.systemId);
+  const res = await apiFetch<{ people: DirectoryPerson[]; total?: number }>(`/api/people?${qs}`);
+  return { people: res.people, total: res.total ?? res.people.length };
+}
+
 export async function fetchPeople(opts: { q?: string; status?: string; archived?: boolean; ids?: string[]; systemId?: string } = {}): Promise<DirectoryPerson[]> {
   const qs = new URLSearchParams();
   if (opts.q) qs.set('q', opts.q);

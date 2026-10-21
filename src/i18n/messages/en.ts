@@ -3524,8 +3524,6 @@ export const en = {
   'door.people.filters.clear': 'Clear all',
   'door.people.filters.hint': 'Add a filter, then another, to narrow the list step by step.',
   'door.people.filters.remove': 'Remove the filter {name}',
-  'door.people.filters.count': 'People matching: {count}',
-  'door.people.filters.tooMany': 'Showing the first {shown} of {total} matching people. Add a filter to narrow the list.',
   'door.people.fk.unit': 'Unit',
   'door.people.fk.status': 'Status',
   'door.people.fk.gender': 'Gender',
@@ -3549,6 +3547,14 @@ export const en = {
   'door.people.ff.children.max': 'At most',
   'door.people.ff.calling.name': 'For example: Bassist',
   'door.people.ff.education.exact': 'Only this level',
+  'door.people.count.all': '{total} people',
+  'door.people.count.matches': '{total} people match',
+  'door.people.count.range': 'Showing {from}–{to} of {total} people',
+  'door.people.count.rangeMatches': 'Showing {from}–{to} of {total} matching people',
+  'door.pager.label': 'Pages',
+  'door.pager.prev': 'Previous',
+  'door.pager.next': 'Next',
+  'door.pager.page': 'Page {n}',
 } as const;
 
 export type MessageKey = keyof typeof en;

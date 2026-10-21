@@ -1,17 +1,30 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { fetchPeople, fetchPeopleFilterOptions, fetchUpcoming, searchPeople, type SearchedPerson } from '../api/frontDoorApi';
+import { fetchPeoplePage, fetchPeopleFilterOptions, fetchUpcoming, searchPeople, type SearchedPerson } from '../api/frontDoorApi';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { PeopleFilterPanel } from './PeopleFilterPanel';
 import { cleanFilters, isComplete, toCriteria, type ActiveFilter } from './peopleFilters';
-import { loadViews, shortDay, storeViews, type SavedView } from './peopleTools';
+import { loadViews, pageRange, shortDay, storeViews, type SavedView } from './peopleTools';
+import { Pager } from './Pager';
 import { useCanWritePeople } from './usePeopleAccess';
 import { useLoad } from './useLoad';
 import { EmptyState, ListRow, PageHeader, PrintButton, RowList, StatusChip } from './kit';
 
+const PAGE_SIZE = 50;
 const STATUSES = ['ACTIVE', 'INACTIVE', 'VISITOR'] as const;
 const tone = (s: string) => (s === 'ACTIVE' ? 'success' : s === 'VISITOR' ? 'info' : 'neutral');
+
+/** How many people there are, and which of them this page shows. Announced politely when it changes. */
+function PeopleCount({ offset, shown, total, filtered }: { offset: number; shown: number; total: number; filtered: boolean }) {
+  const t = useT();
+  const r = pageRange(offset, shown, total);
+  return (
+    <p className="people-count" role="status" aria-live="polite">
+      {total <= shown ? t(filtered ? 'door.people.count.matches' : 'door.people.count.all', { total }) : t(filtered ? 'door.people.count.rangeMatches' : 'door.people.count.range', { from: r.from, to: r.to, total })}
+    </p>
+  );
+}
 
 /** The directory: search, filter, keep a view for next time, export the list, and see who has a day coming. */
 export function PeopleDirectoryPage() {
@@ -25,19 +38,21 @@ export function PeopleDirectoryPage() {
   const [views, setViews] = useState<SavedView[]>(loadViews);
   const [filters, setFilters] = useState<ActiveFilter[]>([]);
   const [open, setOpen] = useState(false);
+  const [page, setPage] = useState(1);
+  const offset = (page - 1) * PAGE_SIZE;
   const options = useLoad(() => fetchPeopleFilterOptions(systemId), `people-fopts|${systemId}`);
   const active = filters.filter(isComplete);
   const criteria = { ...toCriteria(active), ...(q.trim() ? { q: q.trim() } : {}), ...(status && !active.some((f) => f.kind === 'status') ? { status: [status as 'ACTIVE'] } : {}) };
   const { loading, failed, data, reload } = useLoad(
     async (): Promise<{ list: SearchedPerson[]; total: number }> => {
       if (active.length === 0) {
-        const list = await fetchPeople({ q: q.trim(), status, archived, systemId });
-        return { list, total: list.length };
+        const r = await fetchPeoplePage({ q: q.trim(), status, archived, systemId, limit: PAGE_SIZE, offset });
+        return { list: r.people, total: r.total };
       }
-      const r = await searchPeople({ criteria, systemId, archived, limit: 200 });
+      const r = await searchPeople({ criteria, systemId, archived, limit: PAGE_SIZE, offset });
       return { list: r.people, total: r.total };
     },
-    `dir|${systemId}|${q.trim()}|${status}|${archived}|${JSON.stringify(active)}`,
+    `dir|${systemId}|${q.trim()}|${status}|${archived}|${JSON.stringify(active)}|${page}`,
   );
   const upcoming = useLoad(() => fetchUpcoming(30), 'people-upcoming');
   const base = `/s/${systemId}/people`;
@@ -80,8 +95,8 @@ export function PeopleDirectoryPage() {
         }
       />
       <div className="door-toolbar">
-        <input type="search" value={q} onChange={(e) => setQ(e.target.value)} placeholder={t('door.people.search')} aria-label={t('door.people.search')} />
-        <select value={status} onChange={(e) => setStatus(e.target.value)} aria-label={t('door.people.statusFilter')}>
+        <input type="search" value={q} onChange={(e) => { setQ(e.target.value); setPage(1); }} placeholder={t('door.people.search')} aria-label={t('door.people.search')} />
+        <select value={status} onChange={(e) => { setStatus(e.target.value); setPage(1); }} aria-label={t('door.people.statusFilter')}>
           <option value="">{t('door.people.allStatuses')}</option>
           {STATUSES.map((s) => (
             <option key={s} value={s}>
@@ -91,7 +106,7 @@ export function PeopleDirectoryPage() {
         </select>
         {canWrite && (
           <label className="control-check">
-            <input type="checkbox" checked={archived} onChange={(e) => setArchived(e.target.checked)} />
+            <input type="checkbox" checked={archived} onChange={(e) => { setArchived(e.target.checked); setPage(1); }} />
             <span>{t('door.people.showArchived')}</span>
           </label>
         )}
@@ -104,12 +119,12 @@ export function PeopleDirectoryPage() {
           {t('door.people.saveView')}
         </button>
       </div>
-      {options.data && (open || active.length > 0) && <PeopleFilterPanel options={options.data} filters={filters} onChange={setFilters} />}
+      {options.data && (open || active.length > 0) && <PeopleFilterPanel options={options.data} filters={filters} onChange={(next) => { setFilters(next); setPage(1); }} />}
       {views.length > 0 && (
         <ul className="door-chips" aria-label={t('door.people.views')}>
           {views.map((v) => (
             <li key={v.name}>
-              <button type="button" className="door-chip" onClick={() => { setQ(v.q); setStatus(v.status); setArchived(v.archived); setFilters(cleanFilters(v.filters)); setOpen(true); }}>
+              <button type="button" className="door-chip" onClick={() => { setQ(v.q); setStatus(v.status); setArchived(v.archived); setFilters(cleanFilters(v.filters)); setOpen(true); setPage(1); }}>
                 {v.name}
               </button>
               <button type="button" className="btn ghost sm" aria-label={t('door.people.dropView', { name: v.name })} onClick={() => dropView(v.name)}>
@@ -140,7 +155,7 @@ export function PeopleDirectoryPage() {
           <EmptyState variant="no-results" title={t('door.people.none')} detail={t('door.people.noneDetail')} />
         ) : (
           <>
-          {active.length > 0 && <p className="people-count" role="status">{total > list.length ? t('door.people.filters.tooMany', { shown: list.length, total }) : t('door.people.filters.count', { count: total })}</p>}
+          <PeopleCount offset={offset} shown={list.length} total={total} filtered={active.length > 0 || !!q.trim() || !!status} />
           <RowList label={t('door.people.tab.directory')}>
             {list.map((p) => (
               <ListRow
@@ -153,6 +168,7 @@ export function PeopleDirectoryPage() {
               />
             ))}
           </RowList>
+          <Pager page={page} pages={Math.max(1, Math.ceil(total / PAGE_SIZE))} onPage={(n) => { setPage(n); window.scrollTo({ top: 0 }); }} />
           </>
         )}
       </LoadState>

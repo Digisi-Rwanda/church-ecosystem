@@ -8493,3 +8493,7 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
   .people-filters-head select { flex: 1 1 100%; }
   .people-filter-row .btn { margin-left: 0; }
 }
+
+.pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem; margin-top: var(--sp-4, 1rem); }
+.pager ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; align-items: center; }
+.pager .btn[aria-current="page"] { cursor: default; }

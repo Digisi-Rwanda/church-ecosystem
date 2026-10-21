@@ -43,3 +43,20 @@ describe('person timeline', () => {
     expect(e[0].name).toBe('Treasurer · Choir');
   });
 });
+
+import { pageRange, pageWindow } from './peopleTools';
+describe('paging helpers', () => {
+  it('shows the first, last and neighbouring pages with gaps marked', () => {
+    expect(pageWindow(1, 1)).toEqual([1]);
+    expect(pageWindow(1, 4)).toEqual([1, 2, null, 4]);
+    expect(pageWindow(3, 4)).toEqual([1, 2, 3, 4]);
+    expect(pageWindow(5, 10)).toEqual([1, null, 4, 5, 6, null, 10]);
+    expect(pageWindow(10, 10)).toEqual([1, null, 9, 10]);
+  });
+  it('says which rows a page holds', () => {
+    expect(pageRange(0, 50, 250)).toEqual({ from: 1, to: 50, total: 250 });
+    expect(pageRange(200, 50, 250)).toEqual({ from: 201, to: 250, total: 250 });
+    expect(pageRange(250, 0, 250)).toEqual({ from: 0, to: 0, total: 250 });
+    expect(pageRange(0, 0, 0)).toEqual({ from: 0, to: 0, total: 0 });
+  });
+});
