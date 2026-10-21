@@ -12,7 +12,8 @@ import { LoadState } from './LoadState';
 import { shiftMonth, thisMonth } from './music';
 import { ROLES, candidatesFor, issuesOfService, openBlocking, protocolErrorKey, sortIssues } from './protocol';
 import { downloadSchedulePdf } from './schedulePdf';
-import { Bulletin, DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
+import { MusicBulletin, ProtocolBulletin } from './Bulletins';
+import { DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
 import { useLoad } from './useLoad';
 import { EmptyState, PageHeader, SidePanel, StatusChip, Tabs, initialsOf } from './kit';
 
@@ -117,7 +118,7 @@ function ChoirSchedule({ view, state, layout }: { view: ProtocolMonthView; state
     <>
       <div className="pt-bar"><span className="muted">v{view.music.version}</span><span className="pt-bar-actions"><button type="button" className="btn secondary" onClick={pdf}>{t('door.sch.pdf')}</button></span></div>
       {layout === 'list' && <ScheduleList rows={view.services.map((s) => ({ id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), names: s.music.map((n) => ({ name: n })) }))} />}
-      {layout === 'bulletin' && <Bulletin title={monthName(view.month)} subtitle={t(`door.sch.tab.${state === 'PUBLISHED' ? 'published' : 'confirmed'}` as 'door.sch.tab.confirmed')} rows={view.services.map((s) => ({ id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), names: s.music.map((n) => ({ name: n })) }))} />}
+      {layout === 'bulletin' && <MusicBulletin month={view.month} services={view.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, names: s.music }))} />}
       {layout === 'cards' && <ul className="pt-grid">
         {view.services.map((s) => (
           <li key={s.id} className="pt-card">
@@ -221,7 +222,7 @@ export function ProtocolTeamsPage() {
     chip: <StatusChip tone={regular(s) >= s.target ? 'success' : 'warn'}>{t('door.protocol.teamSize', { count: String(regular(s)), target: String(s.target) })}</StatusChip>,
     onEdit: edit ? () => setEditing(s.id) : undefined,
   }));
-  const grid = (edit: boolean) => v && (layout === 'list' ? <ScheduleList rows={teamRows(edit)} /> : layout === 'bulletin' ? <Bulletin title={monthName(month)} subtitle={t('door.own.teams')} rows={teamRows(false)} /> : (
+  const grid = (edit: boolean) => v && (layout === 'list' ? <ScheduleList rows={teamRows(edit)} /> : layout === 'bulletin' ? <ProtocolBulletin month={month} services={v.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, team: s.team.filter((m) => m.slotKind !== 'FILL_IN').map((m) => ({ name: m.name, role: m.role })) }))} /> : (
     <ul className="pt-grid">
       {v.services.map((s) => <ServiceCard key={s.id} svc={s} view={v} onEdit={edit ? () => setEditing(s.id) : undefined} />)}
     </ul>

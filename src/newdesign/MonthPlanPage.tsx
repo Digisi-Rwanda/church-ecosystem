@@ -8,7 +8,8 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { addableUnits, musicErrorKey, scheduleErrorText, servicesOfMonth } from './music';
-import { Bulletin, DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
+import { MusicBulletin } from './Bulletins';
+import { DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
 import { downloadSchedulePdf } from './schedulePdf';
 import { useLoad } from './useLoad';
 import { EmptyState, PageHeader, SidePanel, Tabs } from './kit';
@@ -96,7 +97,7 @@ function Services({ services, months, units, edit, view }: { services: ScheduleS
   return (
     <>
       {view === 'list' && <ScheduleList rows={rows} />}
-      {view === 'bulletin' && <Bulletin rows={rows} title={months.length === 1 ? monthName(months[0]!) : t('door.own.monthplan')} subtitle={months.length > 1 ? `${monthName(months[0]!)} – ${monthName(months[months.length - 1]!)}` : undefined} />}
+      {view === 'bulletin' && months.map((m) => <MusicBulletin key={m} month={m} services={servicesOfMonth(services, m).map((s) => ({ id: s.id, date: s.date, kind: s.kind, names: s.units.map((u) => u.name) }))} />)}
       {view === 'cards' && months.map((m) => (
         <div key={m} className="pt-month-block">
           {months.length > 1 && <h3>{monthName(m)}</h3>}

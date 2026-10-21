@@ -8497,3 +8497,38 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
 .pager { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 0.5rem; margin-top: var(--sp-4, 1rem); }
 .pager ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; align-items: center; }
 .pager .btn[aria-current="page"] { cursor: default; }
+
+/* ── Printed bulletins: choir schedule (weeks) and protocol teams (four columns) ── */
+.bl-sheet { background: #fff; color: #111; border: 2px solid #111; max-width: 56rem; margin: 0 auto; width: 100%; font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+.bl-head { padding: 0.5rem 0.75rem; display: grid; gap: 0.35rem; justify-items: start; }
+.bl-church { margin: 0; color: #1f6fb0; font-weight: 700; font-size: 0.95rem; }
+.bl-title { margin: 0; font-size: 1.15rem; text-decoration: underline; letter-spacing: 0.01em; }
+.bl-blue { color: #1f6fb0; text-decoration: none; justify-self: center; font-size: 1.2rem; }
+.bl-protocol .bl-head { justify-items: center; text-align: center; }
+.bl-week { font-family: inherit; width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 0.95rem; }
+.bl-t0 { background: #e4f1dc; } .bl-t1 { background: #eeeeee; } .bl-t2 { background: #dde9f6; } .bl-t3 { background: #e2e2e2; }
+.bl-week th, .bl-week td { border: 1px solid #111; padding: 0.2rem 0.4rem; min-height: 1.6rem; height: 1.6rem; text-align: center; overflow-wrap: anywhere; }
+.bl-week td { text-align: left; }
+.bl-week .bl-band { background: #d9d9d9; font-size: 1rem; }
+.bl-week .bl-tue { background: #5b9bd5; color: #fff; }
+.bl-week .bl-fri { background: #fbe5d6; }
+.bl-week .bl-sun { background: #92d050; color: #1f5a8f; }
+.bl-week .bl-dates th { background: #fff; color: #1f5a8f; }
+.bl-week .bl-dates th.bl-left { color: #111; text-align: left; }
+.bl-special { background: #dfe3f3; border-top: 1px solid #111; }
+.bl-special h4 { margin: 0; background: #ffe699; padding: 0.3rem 0.5rem; font-size: 1.05rem; border-bottom: 1px solid #111; }
+.bl-special p { margin: 0; padding: 0.2rem 0.5rem; font-weight: 700; border-bottom: 1px solid #fff; }
+.bl-cols { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); border-top: 1px solid #999; }
+.bl-col { padding: 0.6rem 0.5rem; display: grid; gap: 1rem; align-content: start; font-size: 0.85rem; border-right: 1px solid #999; }
+.bl-col:last-child { border-right: 0; }
+.bl-c1 { background: #eaf0fb; } .bl-c2 { background: #f0edf8; } .bl-c3 { background: #f2f2f2; } .bl-c4 { background: #eaf5ea; }
+.bl-team h4 { margin: 0 0 0.4rem; font-size: 0.85rem; background: #d9d9d9; display: inline-block; padding: 0.1rem 0.3rem; }
+.bl-team ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.25rem; counter-reset: bl; }
+.bl-team li { counter-increment: bl; }
+.bl-team li::before { content: counter(bl) '. '; }
+.bl-team p { margin: 0; }
+.bl-announce { margin: 0; text-align: center; font-size: 1rem; }
+.bl-notes { width: 100%; border: 1px dashed #9a9a9a; background: transparent; font: inherit; font-weight: 700; padding: 0.3rem; resize: vertical; }
+.bl-notes-print { display: none; white-space: pre-wrap; font-weight: 700; }
+@media (max-width: 720px) { .bl-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bl-week { font-size: 0.8rem; } }
+@media print { .bl-notes { display: none; } .bl-notes-print { display: block; } .bl-sheet { max-width: none; } }
