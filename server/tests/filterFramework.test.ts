@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { FilterError, MatchSchema, PageSchema, SortSchema, kigaliDay, shiftDay, yearsBetween, isDay, schemaFor } from '../src/filters/index';
 import { PEOPLE_FIELDS, childCount } from '../src/people/fields';
 import { runSearch, type Registry } from '../src/filters/index';
-import { EVERYTHING, NOW, all, ctxFor, ids, row, search } from './peopleHarness';
+import { EVERYTHING, NOW, all, ids, row, search } from './peopleHarness';
 
 const code = (fn: () => unknown) => { try { fn(); } catch (e) { if (e instanceof FilterError) return `${e.status} ${e.code}`; throw e; } return 'ok'; };
 const R = (extra: Parameters<typeof row>[0]) => row(extra);

@@ -120,7 +120,7 @@ describe.skipIf(!process.env.BENCH)('People search benchmark (5,000 people, 12,0
     personRead.mockRestore(); recordRead.mockRestore();
     expectTotal?.(last.body.total);
     const s = stats(times);
-    console.log(`BENCH route  | ${name.padEnd(34)} | total ${String(last.body.total).padStart(4)} | person rows ${N}+ and ${wanted} records read per run | min ${ms(s.min)} | median ${ms(s.median)} | p95 ${ms(s.p95)} | max ${ms(s.max)}`);
+    console.log(`BENCH[stand-in] route  | ${name.padEnd(34)} | total ${String(last.body.total).padStart(4)} | person rows ${N}+ and ${wanted} records read per run | min ${ms(s.min)} | median ${ms(s.median)} | p95 ${ms(s.p95)} | max ${ms(s.max)}`);
     return s;
   };
 
@@ -182,7 +182,7 @@ describe.skipIf(!process.env.BENCH)('People search benchmark (5,000 people, 12,0
       times.push(performance.now() - t);
     }
     const s = stats(times);
-    console.log(`BENCH engine | 5 conditions over ${full.length} rows       | median ${ms(s.median)} | p95 ${ms(s.p95)} | max ${ms(s.max)} (row objects built in ${ms(build)})`);
+    console.log(`BENCH[stand-in] engine | 5 conditions over ${full.length} rows       | median ${ms(s.median)} | p95 ${ms(s.p95)} | max ${ms(s.max)} (row objects built in ${ms(build)})`);
     expect(s.median).toBeLessThan(5000);
   });
 
@@ -190,10 +190,11 @@ describe.skipIf(!process.env.BENCH)('People search benchmark (5,000 people, 12,0
     const sections = new Set(['BAPTISM', 'EDUCATION', 'FAMILY']);
     const slim = JSON.stringify(people.map((p) => ({ id: p.id, fullName: p.fullName, memberCode: p.memberCode, status: p.status, gender: p.gender, dateOfBirth: p.dateOfBirth })));
     const recs = JSON.stringify(records.filter((r) => sections.has(r.section)).map((r) => ({ personId: r.personId, section: r.section, dataJson: JSON.stringify(r.data) })));
-    console.log(`BENCH data   | person rows ${(slim.length / 1024).toFixed(0)} KiB + record rows ${(recs.length / 1024).toFixed(0)} KiB (${records.filter((r) => sections.has(r.section)).length} records) per search`);
+    console.log(`BENCH[stand-in] data   | person rows ${(slim.length / 1024).toFixed(0)} KiB + record rows ${(recs.length / 1024).toFixed(0)} KiB (${records.filter((r) => sections.has(r.section)).length} records) per search`);
   });
 
   it('environment', () => {
+    console.log('BENCH NOTE | STAND-IN RESULTS: in-memory database, no PostgreSQL, no network. NOT production latency; the 800 ms target is not demonstrated by this run (see docs/people-filtering.md for the staging procedure).');
     console.log(`BENCH env    | node ${process.version} | ${os.cpus()[0]?.model} x${os.cpus().length} | ${(os.totalmem() / 2 ** 30).toFixed(1)} GiB RAM | ${os.platform()} ${os.release()}`);
   });
 });

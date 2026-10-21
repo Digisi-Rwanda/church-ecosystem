@@ -170,6 +170,20 @@ export const fetchPeopleFilterOptions = (systemId?: string): Promise<PeopleFilte
 export const searchPeople = (b: { criteria: PeopleCriteria; systemId?: string; archived?: boolean; limit?: number; offset?: number }): Promise<{ total: number; offset: number; people: SearchedPerson[] }> =>
   apiFetch('/api/people/search', { method: 'POST', body: b });
 
+/** What the server offers this viewer to filter a list by: fields, the operators each takes, choices, limits and units in reach. */
+export type FilterValuePart = { key: string; kind: 'text' | 'unit' | 'choice' | 'choices' | 'number'; choices?: string[]; min?: number; max?: number };
+export type FieldSchema = {
+  key: string; type: 'text' | 'choice' | 'ordinal' | 'number' | 'date' | 'boolean' | 'multi' | 'records'; operators: string[];
+  choices?: string[]; comparable?: string[]; min?: number; max?: number; sortable: boolean; unitValued?: boolean; parts?: FilterValuePart[];
+};
+export type FilterLimits = { conditions: number; groups: number; listValues: number; stringLength: number; pageSize: number; defaultPageSize: number };
+export type FilterSchema = { fields: FieldSchema[]; sortable: string[]; limits: FilterLimits; units: Array<{ id: string; name: string }>; defaultSort: { field: string; dir: 'asc' | 'desc' } };
+export type PeopleSearchResult = { total: number; offset: number; limit: number; people: SearchedPerson[]; page: { limit: number; offset: number; hasMore: boolean } };
+export const fetchPeopleFilterSchema = (systemId?: string): Promise<FilterSchema> =>
+  apiFetch(`/api/people/filter-schema${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+/** The grouped search: `{ q, systemId, archived, match: { all, anyGroups }, sort, page }`. The server checks every part again. */
+export const searchPeopleFiltered = (body: Record<string, unknown>): Promise<PeopleSearchResult> => apiFetch('/api/people/search', { method: 'POST', body });
+
 export async function fetchPerson(id: string): Promise<DirectoryPerson> {
   const res = await apiFetch<{ person: DirectoryPerson }>(`/api/people/${encodeURIComponent(id)}`);
   return res.person;
