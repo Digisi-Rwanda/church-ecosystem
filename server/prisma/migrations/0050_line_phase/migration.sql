@@ -1,0 +1,1 @@
+ALTER TABLE "MoneyPlanItem" ADD COLUMN IF NOT EXISTS "milestoneId" TEXT;

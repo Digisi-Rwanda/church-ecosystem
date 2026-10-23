@@ -203,8 +203,9 @@ describe('applying', () => {
     const r = await run(csv, { createChoirs: true });
     expect(r).toMatchObject({ choirsCreated: 1, musicUnitsAdded: 1 });
     const org = fake.__db.orgUnit.find((o: any) => o.name === 'Gamma Chorale');
-    expect(org).toMatchObject({ type: 'TEAM', systemId: 'sys-choir', parentId: 'ou-choir-parent' });
-    expect(fake.__db.membership.find((m: any) => m.systemId === 'sys-choir').orgUnitId).toBe(org.id);
+    expect(org).toMatchObject({ type: 'TEAM', systemId: 'sys-choir-gamma-chorale', parentId: 'ou-choir-parent' }); // a new choir is a system of its own
+    expect(fake.__db.churchSystem.some((x: any) => x.id === 'sys-choir-gamma-chorale')).toBe(true);
+    expect(fake.__db.membership.find((m: any) => m.systemId === 'sys-choir-gamma-chorale').orgUnitId).toBe(org.id);
     const units = JSON.parse(fake.__db.scheduleDocument.find((d: any) => d.key === 'music').data).musicSchedule.units;
     expect(units.find((u: any) => u.name === 'Gamma Chorale').orgUnitId).toBe(org.id);
     // the same name next time is found, not created again

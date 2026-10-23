@@ -13,6 +13,7 @@
  *              (matched by email, phone, then name) are updated, not duplicated.
  */
 import { randomInt, randomUUID } from 'node:crypto';
+import { choirSystemId, isChoirSystem } from './ministryOrgs.js';
 import { hashPassword } from './auth.js';
 
 export const COLUMNS = {
@@ -352,7 +353,7 @@ export async function loadExisting(db: Db): Promise<Existing> {
   const positions = (await db.position.findMany({
     where: { systemId: 'sys-protocol' },
   })) as ExistingPosition[];
-  const orgChoirs = ((await db.orgUnit.findMany({ where: { systemId: 'sys-choir', type: 'TEAM' } })) as OrgChoir[]).map(
+  const orgChoirs = ((await db.orgUnit.findMany({ where: { type: 'TEAM' } })) as Array<OrgChoir & { systemId?: string | null }>).filter((o) => isChoirSystem(o.systemId)).map(
     (o) => ({ id: o.id, name: o.name }),
   );
   const music = await db.scheduleDocument.findUnique({ where: { key: 'music' } });
@@ -366,9 +367,10 @@ async function settleChoirs(db: Db, plan: Plan, out: ApplyResult) {
   const need = used.filter((c) => c.create || !c.musicUnitId);
   if (need.length === 0) return;
 
-  const orgs = (await db.orgUnit.findMany({ where: { systemId: 'sys-choir', type: 'TEAM' } })) as (OrgChoir & {
+  const orgs = ((await db.orgUnit.findMany({ where: { type: 'TEAM' } })) as (OrgChoir & {
+    systemId?: string | null;
     parentId?: string | null;
-  })[];
+  })[]).filter((o) => isChoirSystem(o.systemId));
   for (const c of need.filter((x) => x.create)) {
     let parentId = orgs.find((o) => o.parentId)?.parentId ?? null;
     if (!parentId) {
@@ -378,7 +380,9 @@ async function settleChoirs(db: Db, plan: Plan, out: ApplyResult) {
     if (!parentId) continue; // no choir tree on this server: the choir exists on Music's list only
     let id = `ou-choir-${slug(c.name)}`;
     for (let n = 2; await db.orgUnit.findUnique({ where: { id } }); n++) id = `ou-choir-${slug(c.name)}-${n}`;
-    await db.orgUnit.create({ data: { id, name: c.name, type: 'TEAM', parentId, systemId: 'sys-choir' } });
+    const systemId = choirSystemId(id);
+    await db.orgUnit.create({ data: { id, name: c.name, type: 'TEAM', kind: 'TEAM', parentId, systemId } });
+    await db.churchSystem.create({ data: { id: systemId, code: `CHOIR-${slug(c.name).toUpperCase()}`, name: c.name, shortName: c.name, kind: 'MINISTRY', basePath: `/systems/choir/${slug(c.name)}`, description: 'A choir with its own system', orgUnitId: id } });
     orgs.push({ id, name: c.name, parentId });
     c.orgUnitId = id;
     out.choirsCreated++;
@@ -394,7 +398,7 @@ async function settleChoirs(db: Db, plan: Plan, out: ApplyResult) {
     if (found) return found.id;
     let id = `mu-${slug(name)}`;
     for (let n = 2; list.some((u) => u.id === id); n++) id = `mu-${slug(name)}-${n}`;
-    list.push({ id, kind: 'PRIMARY', name, ...(orgUnitId ? { orgUnitId } : {}), systemId: 'sys-choir', active: true } as MusicUnitRow);
+    list.push({ id, kind: 'PRIMARY', name, ...(orgUnitId ? { orgUnitId } : {}), systemId: orgUnitId ? choirSystemId(orgUnitId) : 'sys-choir', active: true } as MusicUnitRow);
     out.musicUnitsAdded++;
     return id;
   };
@@ -486,7 +490,7 @@ export async function applyPlan(
     await ensureMembership(personId, 'sys-main', 'CHURCH_MEMBER', 'Church member');
     await ensureMembership(personId, 'sys-protocol', 'MINISTRY_MEMBER', 'Protocol member');
     if (p.choir?.orgUnitId) {
-      await ensureMembership(personId, 'sys-choir', 'CHOIR_MEMBER', 'Choir member', p.choir.orgUnitId);
+      await ensureMembership(personId, ((await db.orgUnit.findUnique({ where: { id: p.choir.orgUnitId } })) as { systemId?: string | null } | null)?.systemId ?? 'sys-choir', 'CHOIR_MEMBER', 'Choir member', p.choir.orgUnitId);
     }
     if (p.createPosition) {
       await db.position.create({

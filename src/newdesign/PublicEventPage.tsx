@@ -1,0 +1,140 @@
+import type { ApiErrorKind } from '../api/client';
+import { useState } from 'react';
+import { useParams } from 'react-router-dom';
+import { checkinPublic, fetchPublicEvent, registerPublic } from '../api/frontDoorApi';
+import { EmptyState } from '../components/ui/EmptyState';
+import { TextField } from '../components/ui/Field';
+import { useI18n, useT } from '../i18n/I18nContext';
+import { errorCode } from './governance';
+import { LoadState } from './LoadState';
+import { planErrorKey } from './plans';
+import { useLoad } from './useLoad';
+import { PageHeader } from './kit';
+
+/** The page behind an event's public link: an invitation and a name-and-phone form. Nothing else is reachable from here. */
+/** A link that no longer opens (or never did) says so; a connection or server problem says that instead, and can be tried again. */
+function PublicLoadFailed({ kind, retry }: { kind: ApiErrorKind | true; retry: () => void }) {
+  const t = useT();
+  if (kind === 'offline' || kind === 'server' || kind === true) {
+    const offline = kind === 'offline';
+    return (
+      <EmptyState
+        variant="error"
+        title={t(offline ? 'door.err.offline.title' : 'door.err.server.title')}
+        detail={t(offline ? 'door.err.offline.detail' : 'door.err.server.detail')}
+        action={<button type="button" className="btn" onClick={retry}>{t('door.people.retry')}</button>}
+      />
+    );
+  }
+  return <EmptyState variant="error" title={t('door.plan.public.gone')} detail={t('door.plan.public.goneDetail')} />;
+}
+
+export function PublicEventPage() {
+  const t = useT();
+  const { locale } = useI18n();
+  const { token = '' } = useParams();
+  const load = useLoad(() => fetchPublicEvent(token), `public-event|${token}`);
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
+  const [trap, setTrap] = useState('');
+  const [done, setDone] = useState(false);
+  const [error, setError] = useState('');
+  const e = load.data;
+  const when = (iso: string | null) => (iso ? new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeStyle: 'short', timeZone: 'Africa/Kigali' }).format(new Date(iso)) : '');
+
+  if (load.failed) return <PublicLoadFailed kind={load.failed} retry={load.reload} />;
+  const send = async () => {
+    setError('');
+    try {
+      await registerPublic(token, { name: name.trim(), phone: phone.trim(), website: trap });
+      setDone(true);
+    } catch (err) {
+      setError(t(planErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+    }
+  };
+  return (
+    <main className="door-block" aria-labelledby="door-public-title">
+      <LoadState loading={load.loading || !e} failed={false} retry={load.reload}>
+        {e && (
+          <>
+            <PageHeader id="door-public-title" title={e.title} purpose={[when(e.startsOn), e.location].filter(Boolean).join(' · ')} />
+            {e.aim && <p>{e.aim}</p>}
+            {done ? (
+              <p role="status">{t('door.plan.public.done')}</p>
+            ) : e.open && e.formUrl ? (
+              <a className="btn primary" href={e.formUrl} target="_blank" rel="noopener noreferrer">{t('door.plan.public.useForm')}</a>
+            ) : e.open ? (
+              <form
+                className="panel"
+                onSubmit={(ev) => {
+                  ev.preventDefault();
+                  void send();
+                }}
+              >
+                <TextField label={t('door.plan.guests.name')} name="pub-name" value={name} onChange={(x) => setName(x.target.value)} required />
+                <TextField label={t('door.plan.guests.phone')} name="pub-phone" inputMode="tel" value={phone} onChange={(x) => setPhone(x.target.value)} required />
+                <input className="door-trap" tabIndex={-1} autoComplete="off" aria-hidden="true" name="website" value={trap} onChange={(x) => setTrap(x.target.value)} />
+                {error && <p role="alert" className="door-error">{error}</p>}
+                <button type="submit" className="btn primary" disabled={name.trim().length < 2 || phone.trim().length < 6}>
+                  {t('door.plan.public.go')}
+                </button>
+              </form>
+            ) : (
+              <p role="status">{e.full ? t('door.plan.public.full') : t('door.plan.public.closed')}</p>
+            )}
+          </>
+        )}
+      </LoadState>
+    </main>
+  );
+}
+
+/** The page behind the attendance code at the door: a phone number marks a registered person as here. */
+export function PublicCheckinPage() {
+  const t = useT();
+  const { token = '' } = useParams();
+  const load = useLoad(() => fetchPublicEvent(token), `public-checkin|${token}`);
+  const [phone, setPhone] = useState('');
+  const [name, setName] = useState('');
+  const [trap, setTrap] = useState('');
+  const [needName, setNeedName] = useState(false);
+  const [who, setWho] = useState('');
+  const [error, setError] = useState('');
+  const e = load.data;
+  if (load.failed) return <PublicLoadFailed kind={load.failed} retry={load.reload} />;
+  const send = async () => {
+    setError('');
+    try {
+      const r = await checkinPublic(token, { phone: phone.trim(), name: needName ? name.trim() : undefined, website: trap });
+      setWho(r.name);
+    } catch (err) {
+      const code = errorCode(err);
+      if (code === 'NOT_REGISTERED') setNeedName(true);
+      setError(t(planErrorKey(code) as 'door.people.actionFailed'));
+    }
+  };
+  return (
+    <main className="door-block" aria-labelledby="door-checkin-title">
+      <LoadState loading={load.loading || !e} failed={false} retry={load.reload}>
+        {e && (
+          <>
+            <PageHeader id="door-checkin-title" title={e.title} purpose={t('door.plan.public.checkinTitle')} />
+            {who ? (
+              <p role="status">{t('door.plan.public.checkinDone', { name: who })}</p>
+            ) : e.checkin ? (
+              <form className="panel" onSubmit={(ev) => { ev.preventDefault(); void send(); }}>
+                <TextField label={t('door.plan.guests.phone')} name="chk-phone" inputMode="tel" value={phone} onChange={(x) => setPhone(x.target.value)} required />
+                {needName && <TextField label={t('door.plan.guests.name')} name="chk-name" value={name} onChange={(x) => setName(x.target.value)} required />}
+                <input className="door-trap" tabIndex={-1} autoComplete="off" aria-hidden="true" name="website" value={trap} onChange={(x) => setTrap(x.target.value)} />
+                {error && <p role="alert" className="door-error">{error}</p>}
+                <button type="submit" className="btn primary" disabled={phone.trim().length < 6 || (needName && name.trim().length < 2)}>{t('door.plan.public.checkinGo')}</button>
+              </form>
+            ) : (
+              <p role="status">{t('door.plan.public.checkinClosed')}</p>
+            )}
+          </>
+        )}
+      </LoadState>
+    </main>
+  );
+}
