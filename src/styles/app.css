@@ -121,10 +121,29 @@ html[data-theme='dark'] {
   background: var(--paper);
 }
 
-html[data-theme='dark'] .login-form-pane {
+html[data-theme='dark'] .login-page.login-split {
   background:
-    radial-gradient(circle at 12% 18%, color-mix(in srgb, #fff 6%, transparent), transparent 42%),
-    linear-gradient(165deg, #152033 0%, #0f1722 55%, #121c2a 100%);
+    radial-gradient(ellipse 80% 55% at 8% 0%, color-mix(in srgb, #2a4a6e 55%, transparent), transparent 55%),
+    linear-gradient(180deg, #152033 0%, #0f1722 52%, #121c2a 100%);
+}
+
+html[data-theme='dark'] .login-page.login-split::after {
+  background: color-mix(in srgb, #1b2a3d 88%, #0f1722);
+}
+
+html[data-theme='dark'] .login-form-pane,
+html[data-theme='dark'] .login-hero-pane {
+  background: transparent;
+}
+
+html[data-theme='dark'] .login-hero-brand {
+  color: var(--ink);
+  text-shadow: none;
+}
+
+html[data-theme='dark'] .login-hero-line,
+html[data-theme='dark'] .login-moriah-system {
+  color: var(--ink-muted);
 }
 
 html[data-theme='dark'] .ministry-top {
@@ -2013,19 +2032,36 @@ tr.soft-critical-row td:first-child {
 .login-page.login-split {
   place-items: stretch;
   padding: 0;
-  grid-template-columns: minmax(0, 0.95fr) minmax(0, 1.05fr);
-  grid-template-areas: "form hero";
-  background: var(--brand-sky);
+  position: relative;
+  overflow: hidden;
+  grid-template-columns: minmax(0, 1.05fr) minmax(0, 0.95fr);
+  grid-template-areas: "hero form";
+  background:
+    radial-gradient(ellipse 70% 50% at 8% 0%, #f4f9ff 0%, transparent 55%),
+    radial-gradient(ellipse 55% 40% at 92% 8%, #d7ebfb 0%, transparent 50%),
+    linear-gradient(180deg, #eaf4fd 0%, #d4e8f8 48%, #c3dcf3 100%);
+}
+
+.login-page.login-split::after {
+  content: "";
+  position: absolute;
+  left: -18%;
+  right: -18%;
+  bottom: -28%;
+  height: 48%;
+  pointer-events: none;
+  background: #d7eafb;
+  border-radius: 50% 50% 0 0 / 100% 100% 0 0;
 }
 
 .login-form-pane {
   position: relative;
+  z-index: 1;
   display: grid;
   place-items: center;
-  padding: clamp(1.25rem, 4vw, 2.5rem);
-  background:
-    radial-gradient(circle at 12% 18%, color-mix(in srgb, #fff 55%, transparent), transparent 42%),
-    linear-gradient(165deg, #c5daf0 0%, var(--brand-sky) 55%, #9cbcdd 100%);
+  justify-items: start;
+  padding: clamp(1.25rem, 4vw, 2.5rem) clamp(2rem, 6vw, 5.5rem) clamp(1.25rem, 4vw, 2.5rem) 1rem;
+  background: transparent;
   min-width: 0;
   width: 100%;
   max-width: 100%;
@@ -2034,86 +2070,88 @@ tr.soft-critical-row td:first-child {
 
 .login-hero-pane {
   position: relative;
+  z-index: 1;
   display: flex;
   flex-direction: column;
-  justify-content: flex-end;
+  justify-content: center;
+  align-items: center;
   min-height: 100vh;
   min-height: 100dvh;
   overflow: hidden;
-  color: #fff;
-  background: #1a2d4a;
+  color: var(--ink);
+  background: transparent;
   min-width: 0;
   width: 100%;
   grid-area: hero;
+  padding: clamp(1.75rem, 6vw, 4.5rem) 1.5rem clamp(1.75rem, 6vw, 4.5rem) clamp(2rem, 7vw, 6rem);
 }
 
 .login-hero-media {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  max-width: none;
-  object-fit: cover;
-  object-position: center 35%;
-  image-rendering: auto;
-  -webkit-backface-visibility: hidden;
-  backface-visibility: hidden;
-  filter: none;
-  transform: translateZ(0);
+  display: none;
 }
 
-.login-hero-shade {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  background: color-mix(in srgb, #0c1b33 28%, transparent);
+.login-hero-shade,
+.login-hero-wave {
+  display: none;
 }
 
 .login-hero-copy {
   position: relative;
   z-index: 1;
-  padding: clamp(1.5rem, 4vw, 3rem);
-  max-width: 34rem;
+  max-width: 28rem;
+  display: grid;
+  gap: clamp(1.75rem, 4vw, 3rem);
+}
+
+.login-moriah {
+  display: grid;
+  justify-items: start;
+  gap: 0.15rem;
+}
+
+.login-moriah img {
+  width: min(13.5rem, 72%);
+  height: auto;
+  object-fit: contain;
+}
+
+.login-moriah-system {
+  margin: -0.35rem 0 0 0.15rem;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.32em;
+  color: #1d4f86;
+}
+
+.login-quote {
+  margin: 0;
 }
 
 .login-hero-brand {
-  margin: 0 0 0.65rem;
+  margin: 0 0 0.85rem;
   font-family: var(--font-display);
-  font-size: clamp(1.65rem, 3.2vw, 2.35rem);
+  font-size: clamp(1.55rem, 3vw, 2.15rem);
   font-weight: 800;
   letter-spacing: -0.035em;
-  line-height: 1.15;
-  text-shadow: 0 1px 2px color-mix(in srgb, #0c1b33 55%, transparent);
+  line-height: 1.25;
+  color: #163a66;
 }
 
 .login-hero-line {
   margin: 0;
-  font-size: 1.02rem;
+  font-size: 1rem;
   line-height: 1.5;
-  color: color-mix(in srgb, #fff 92%, transparent);
-  text-shadow: 0 1px 2px color-mix(in srgb, #0c1b33 45%, transparent);
-}
-
-.login-hero-wave {
-  position: absolute;
-  right: 0;
-  bottom: 0;
-  width: min(52%, 22rem);
-  height: 7.5rem;
-  z-index: 1;
-  pointer-events: none;
-  background:
-    radial-gradient(ellipse 120% 100% at 100% 100%, var(--brand-yellow) 0 46%, transparent 47%),
-    radial-gradient(ellipse 90% 90% at 70% 110%, var(--brand-coral) 0 42%, transparent 43%);
+  color: #7a93ad;
 }
 
 .login-page.login-split .login-card {
   margin: 0;
-  width: min(420px, 100%);
+  width: min(440px, 100%);
   max-width: 100%;
-  border-radius: 18px;
+  border-radius: 22px;
   border: none;
-  box-shadow: var(--shadow-lg);
+  padding: 2rem 1.85rem 1.85rem;
+  box-shadow: 0 18px 50px color-mix(in srgb, #163a66 14%, transparent);
 }
 
 .login-demos {
@@ -2135,21 +2173,74 @@ tr.soft-critical-row td:first-child {
 
 .login-brand {
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
   align-items: center;
-  text-align: center;
+  text-align: left;
   gap: 0.85rem;
-  margin-bottom: 0.35rem;
+  margin-bottom: 0.55rem;
 }
 
 .login-brand img {
-  width: 4.75rem;
-  height: 4.75rem;
+  width: 3.35rem;
+  height: 3.35rem;
+  flex: none;
   object-fit: contain;
 }
 
 .login-brand h1 {
-  margin: 0 0 0.25rem;
+  margin: 0 0 0.15rem;
+}
+
+.login-card-sub {
+  margin: 0;
+}
+
+.login-form {
+  gap: 0.85rem;
+}
+
+.login-input {
+  position: relative;
+}
+
+.login-input-icon {
+  position: absolute;
+  left: 0.95rem;
+  top: 2.15rem;
+  width: 1.05rem;
+  height: 1.05rem;
+  color: #8aa0b8;
+  pointer-events: none;
+}
+
+.login-input input {
+  border-radius: 999px;
+  min-height: 2.7rem;
+  padding-left: 2.55rem;
+}
+
+.login-forgot {
+  appearance: none;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 650;
+  align-self: end;
+  margin: -0.35rem 0.15rem 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.login-forgot:hover {
+  text-decoration: underline;
+}
+
+.login-forgot-hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--ink-muted);
 }
 
 .login-card {
@@ -2164,18 +2255,19 @@ tr.soft-critical-row td:first-child {
 }
 
 .login-card h1 {
-  margin: 0 0 0.35rem;
+  margin: 0 0 0.1rem;
   font-family: var(--font-display);
-  font-size: 1.55rem;
+  font-size: 1.28rem;
   font-weight: 800;
   letter-spacing: -0.03em;
 }
 
 .login-card .btn {
   width: 100%;
-  min-height: 2.75rem;
-  border-radius: 14px;
+  min-height: 2.85rem;
+  border-radius: 999px;
   font-size: 0.95rem;
+  margin-top: 0.35rem;
 }
 
 .login-motto {
@@ -2187,7 +2279,7 @@ tr.soft-critical-row td:first-child {
   color: color-mix(in srgb, var(--ink-muted) 90%, var(--brand-sky-deep));
 }
 
-/* Tablet / mobile login — fixed hero, form grows independently */
+/* Tablet / mobile login — quote above, form below */
 @media (max-width: 960px) {
   .login-page.login-split {
     grid-template-columns: minmax(0, 1fr);
@@ -2202,20 +2294,30 @@ tr.soft-critical-row td:first-child {
 
   .login-hero-pane {
     min-height: 0;
-    height: clamp(11.5rem, 38svh, 16rem);
-    max-height: 16rem;
+    height: auto;
+    max-height: none;
     flex-shrink: 0;
     justify-content: flex-end;
-  }
-
-  .login-hero-media {
-    object-position: center 32%;
+    padding: clamp(1.15rem, 4vw, 1.75rem) clamp(1rem, 4vw, 1.5rem) 0.35rem;
   }
 
   .login-hero-copy {
-    padding: clamp(0.85rem, 3vw, 1.25rem) clamp(1rem, 4vw, 1.5rem)
-      clamp(1rem, 3vw, 1.35rem);
     max-width: none;
+    gap: 0.85rem;
+    justify-items: center;
+    text-align: center;
+  }
+
+  .login-moriah {
+    justify-items: center;
+  }
+
+  .login-moriah img {
+    width: min(10rem, 52%);
+  }
+
+  .login-moriah-system {
+    margin-left: 0;
   }
 
   .login-hero-brand {
@@ -2230,12 +2332,6 @@ tr.soft-critical-row td:first-child {
 
   .login-hero-line {
     font-size: clamp(0.82rem, 2.8vw, 0.95rem);
-  }
-
-  .login-hero-wave {
-    width: min(48%, 13rem);
-    height: clamp(3.5rem, 12vw, 5rem);
-    opacity: 0.85;
   }
 
   .login-form-pane {
@@ -2254,23 +2350,27 @@ tr.soft-critical-row td:first-child {
     max-width: 26rem;
     margin-inline: auto;
     padding: 1.35rem 1.15rem 1.25rem;
-    border-radius: 16px;
+    border-radius: 18px;
     flex-shrink: 0;
   }
 
   .login-brand {
-    gap: 0.55rem;
+    gap: 0.7rem;
     margin-bottom: 0.15rem;
   }
 
   .login-brand img {
-    width: 3.5rem;
-    height: 3.5rem;
+    width: 2.85rem;
+    height: 2.85rem;
   }
 
   .login-card h1 {
-    font-size: 1.35rem;
+    font-size: 1.2rem;
     overflow-wrap: anywhere;
+  }
+
+  .login-input-icon {
+    top: 2.05rem;
   }
 
   .login-demos {
@@ -2286,12 +2386,7 @@ tr.soft-critical-row td:first-child {
 
 @media (max-width: 480px) {
   .login-hero-pane {
-    height: clamp(10.5rem, 36svh, 14rem);
-    max-height: 14rem;
-  }
-
-  .login-hero-copy {
-    padding: 0.75rem 0.9rem 0.95rem;
+    padding-top: 1rem;
   }
 
   .login-hero-brand {
@@ -2308,11 +2403,6 @@ tr.soft-critical-row td:first-child {
 }
 
 @media (max-height: 700px) and (max-width: 960px) {
-  .login-hero-pane {
-    height: 9.5rem;
-    max-height: 9.5rem;
-  }
-
   .login-hero-brand {
     font-size: 0.95rem;
     -webkit-line-clamp: 2;
@@ -2323,9 +2413,13 @@ tr.soft-critical-row td:first-child {
     font-size: 0.78rem;
   }
 
+  .login-moriah img {
+    width: 7.5rem;
+  }
+
   .login-brand img {
-    width: 2.85rem;
-    height: 2.85rem;
+    width: 2.5rem;
+    height: 2.5rem;
   }
 }
 
@@ -7468,7 +7562,7 @@ a.board-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
 
 /* ───────────── Phase 4: phone first ───────────── */
 .lang-switch select { min-height: 2.25rem; border: 1px solid var(--line); border-radius: var(--radius-sm); background: var(--surface-2); color: var(--ink); padding: 0 0.5rem; font: inherit; }
-.lang-switch-login { justify-self: end; }
+.lang-switch-login { justify-self: end; position: absolute; top: 1rem; right: 1rem; z-index: 2; }
 .bottom-nav { display: none; }
 @media (max-width: 900px) {
   /* Four busiest places at the thumb; the full menu stays in the drawer ("More"). */
@@ -8507,15 +8601,34 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
 .bl-col:last-child { border-right: 0; }
 .bl-c1 { background: #eaf0fb; } .bl-c2 { background: #f0edf8; } .bl-c3 { background: #f2f2f2; } .bl-c4 { background: #eaf5ea; }
 .bl-team h4 { margin: 0 0 0.4rem; font-size: 0.85rem; background: #d9d9d9; display: inline-block; padding: 0.1rem 0.3rem; }
-.bl-team ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.25rem; counter-reset: bl; }
-.bl-team li { counter-increment: bl; }
+.bl-team h4.bl-igaburo { background: #ffe699; }
+.bl-team ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.15rem; counter-reset: bl; }
+.bl-team li { counter-increment: bl; min-height: 1.15em; }
 .bl-team li::before { content: counter(bl) '. '; }
 .bl-team p { margin: 0; }
 .bl-announce { margin: 0; text-align: center; font-size: 1rem; }
 .bl-notes { width: 100%; border: 1px dashed #9a9a9a; background: transparent; font: inherit; font-weight: 700; padding: 0.3rem; resize: vertical; }
 .bl-notes-print { display: none; white-space: pre-wrap; font-weight: 700; }
+.bl-protocol { max-width: 72rem; }
+.bl-pweeks { display: grid; gap: 0; overflow-x: auto; border-top: 1px solid #111; }
+.bl-pweek { padding: 0.45rem 0.4rem 0.7rem; display: grid; gap: 0.7rem; align-content: start; font-size: 0.78rem; border-right: 1px solid #999; min-width: 0; }
+.bl-pweek:last-child { border-right: 0; }
+.bl-pweek:nth-child(4n+1) { background: #eaf0fb; }
+.bl-pweek:nth-child(4n+2) { background: #f0edf8; }
+.bl-pweek:nth-child(4n+3) { background: #f2f2f2; }
+.bl-pweek:nth-child(4n+4) { background: #eaf5ea; }
+.bl-pweek-title { margin: 0; text-align: center; font-size: 0.82rem; color: #1f6fb0; text-transform: uppercase; }
+.bl-pfoot { margin: 0; padding: 0.45rem 0.6rem; font-size: 0.8rem; font-style: italic; border-top: 1px solid #111; }
 @media (max-width: 720px) { .bl-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bl-week { font-size: 0.8rem; } }
-@media print { .bl-notes { display: none; } .bl-notes-print { display: block; } .bl-sheet { max-width: none; } }
+@media print {
+  .bl-notes { display: none; }
+  .bl-notes-print { display: block; }
+  .bl-sheet { max-width: none; }
+  .bl-week, .bl-pweek { break-inside: avoid; }
+  body:has(.bl-sheet.print-sheet) * { visibility: hidden; }
+  .bl-sheet.print-sheet, .bl-sheet.print-sheet * { visibility: visible; }
+  .bl-sheet.print-sheet { position: absolute; left: 0; top: 0; width: 100%; border: 0; }
+}
 
 /* ── Filter builder, active-filter chips and the directory's result bar (grouped filters) ── */
 .pf-toolbar select { min-width: 0; }

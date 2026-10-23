@@ -1,5 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { ddmmyyyy, mondayOf, monthWord, musicTitle, musicWeeks, numberedTeam, protocolColumns, protocolTitle, weekRows, weekTitle } from './bulletins';
+import {
+  ddmmyyyy, mondayOf, monthWord, musicPdfFilename, musicTitle, musicWeeks, numberedTeam, paddedTeam,
+  protocolPdfFilename, protocolTitle, protocolWeeks, weekRows, weekTitle,
+} from './bulletins';
 
 const svc = (id: string, date: string, kind: string, names: string[] = []) => ({ id, date, kind, names });
 
@@ -25,12 +28,13 @@ describe('music bulletin', () => {
   });
   it('titles and sizes the weeks like the sheet', () => {
     const { weeks } = musicWeeks(services);
-    expect(weekTitle(weeks[0]!)).toBe('ICYUMWERU CYA MBERE CYO KUVA 05/10/2026 - 11/10/2026');
-    expect(weekTitle(weeks[1]!)).toBe('ICYUMWERU CYA KABIRI CYO KUVA 19/10/2026 - 25/10/2026');
+    expect(weekTitle(weeks[0]!)).toBe('FIRST WEEK: 05/10/2026 - 11/10/2026');
+    expect(weekTitle(weeks[1]!)).toBe('SECOND WEEK: 19/10/2026 - 25/10/2026');
     expect(weekRows(weeks[0]!)).toBe(3);
-    expect(weekRows(weeks[1]!)).toBe(1);
-    expect(musicTitle('2026-10')).toBe('UKO AMAKORALI AZITABIRA AMATERANIRO MU UKWAKIRA 2026');
-    expect(monthWord('2026-04')).toBe('MATA');
+    expect(weekRows(weeks[1]!)).toBe(3);
+    expect(musicTitle('2026-10')).toBe('HOW THE CHOIRS WILL SERVE IN THE SERVICES, OCTOBER 2026');
+    expect(monthWord('2026-04')).toBe('APRIL');
+    expect(musicPdfFilename('2026-10')).toBe('Choir_Schedule_October_2026.pdf');
   });
 });
 
@@ -39,15 +43,30 @@ describe('protocol bulletin', () => {
     const t = numberedTeam([{ name: 'B', role: 'MEMBER' }, { name: 'V', role: 'VICE_LEADER' }, { name: 'C', role: 'MEMBER' }, { name: 'L', role: 'TEAM_LEADER' }]);
     expect(t).toEqual([{ n: 1, name: 'L', tag: 'Team Lead' }, { n: 2, name: 'V', tag: 'V/s Team Lead' }, { n: 3, name: 'B', tag: undefined }, { n: 4, name: 'C', tag: undefined }]);
   });
-  it('sorts services into the weekday, first-service and second-service columns', () => {
+  it('pads every team to ten lines', () => {
+    const t = paddedTeam([{ name: 'A', role: 'MEMBER' }]);
+    expect(t).toHaveLength(10);
+    expect(t[0]).toEqual({ n: 1, name: 'A', tag: undefined });
+    expect(t[9]).toEqual({ n: 10, name: '' });
+  });
+  it('stacks each week as a column, Tuesday through the two Sunday services', () => {
     const team = [{ name: 'X', role: 'MEMBER' as const }];
-    const c = protocolColumns([
+    const weeks = protocolWeeks([
       { id: '3', date: '2026-09-13', kind: 'SS1', team }, { id: '1', date: '2026-09-05', kind: 'IGABURO', team }, { id: '2', date: '2026-09-06', kind: 'SS1', team },
       { id: '4', date: '2026-09-06', kind: 'SS2', team }, { id: '5', date: '2026-09-08', kind: 'TUESDAY', team },
     ]);
-    expect(c.weekday.map((b) => b.heading)).toEqual(['IGABURO 05/09/2026', 'Iternaniro rya kuwa kabiri 08/09/2026']);
-    expect(c.first.map((b) => b.heading)).toEqual(['Iternaniro rya mbere 06/09/2026', 'Iternaniro rya mbere 13/09/2026']);
-    expect(c.second.map((b) => b.heading)).toEqual(['Iternaniro rya kabiri 06/09/2026']);
+    expect(weeks.map((w) => w.heading)).toEqual(['ICYUMWERU CYA MBERE (1)', 'ICYUMWERU CYA KABIRI (2)']);
+    expect(weeks[0]!.services.map((b) => b.heading)).toEqual([
+      'Iteraniro ryo ku igaburo ryera 05/09/2026',
+      'Iteraniro rya mbere(1) kucyumweru 06/09/2026',
+      'Iteraniro rya kabiri(2) kucyumweru 06/09/2026',
+    ]);
+    expect(weeks[1]!.services.map((b) => b.heading)).toEqual([
+      'Iteraniro ryo kuwa kabiri 08/09/2026',
+      'Iteraniro rya mbere(1) kucyumweru 13/09/2026',
+    ]);
+    expect(weeks[0]!.services[0]!.members).toHaveLength(10);
     expect(protocolTitle('2026-09')).toBe("GAHUNDA YA PROTOCOLE Y'UKWEZI KWA 09");
+    expect(protocolPdfFilename('2026-09')).toBe('Protocol_Schedule_September_2026.pdf');
   });
 });

@@ -8,9 +8,10 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { addableUnits, musicErrorKey, scheduleErrorText, servicesOfMonth } from './music';
+import { musicPdfFilename } from './bulletins';
 import { MusicBulletin } from './Bulletins';
 import { DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
-import { downloadSchedulePdf } from './schedulePdf';
+import { downloadSchedulePdf, printNamedSheet } from './schedulePdf';
 import { useLoad } from './useLoad';
 import { EmptyState, PageHeader, SidePanel, Tabs } from './kit';
 
@@ -163,9 +164,16 @@ function DraftBody({ id, state, onDone, show, view }: { id: string; state: Sched
   const open = (d?.months ?? []).filter((m) => m.decided !== 'PUBLISHED').map((m) => m.periodKey);
   const run = async (job: () => Promise<unknown>, to?: Tab) => { try { await job(); onDone(to); } catch (err) { show(err); } };
   const edit: Edit = async (e) => { try { setLive((await editScheduleDraft(id, e)).warnings); draft.reload(); } catch (err) { show(err); } };
-  const pdf = () => d && downloadSchedulePdf(`choir-schedule-draft-${d.label}`.replace(/\s+/g, '-'), t('door.sch.pdfTitle', { state: t('door.sch.tab.generated') }), d.label, d.months.map((m) => ({
-    heading: monthName(m.periodKey), lines: servicesOfMonth(d.services, m.periodKey).map((s) => `${day(s.date)} · ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}: ${s.units.map((u) => u.name).join(', ') || '-'}`),
-  })));
+  const pdf = () => {
+    if (!d) return;
+    if (view === 'bulletin') {
+      printNamedSheet(d.months[0] ? musicPdfFilename(d.months[0].periodKey) : `Choir_Schedule_${d.label.replace(/\s+/g, '_')}.pdf`);
+      return;
+    }
+    downloadSchedulePdf(`choir-schedule-draft-${d.label}`.replace(/\s+/g, '-'), t('door.sch.pdfTitle', { state: t('door.sch.tab.generated') }), d.label, d.months.map((m) => ({
+      heading: monthName(m.periodKey), lines: servicesOfMonth(d.services, m.periodKey).map((s) => `${day(s.date)} · ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}: ${s.units.map((u) => u.name).join(', ') || '-'}`),
+    })));
+  };
   return (
     <LoadState loading={draft.loading} failed={draft.failed} retry={draft.reload}>
       {d && (
@@ -194,9 +202,16 @@ function MonthBody({ month, mode, state, onDone, show, view }: { month: string; 
   const data = useLoad(() => fetchScheduleMonth(month), `music-month|${month}`);
   const m = data.data;
   const edit: Edit = async (e) => { try { await editScheduleMonth(month, e); data.reload(); onDone(); } catch (err) { show(err); } };
-  const pdf = () => m && downloadSchedulePdf(`choir-schedule-${month}`, t('door.sch.pdfTitle', { state: t(`door.sch.tab.${mode}` as 'door.sch.tab.confirmed') }), monthName(month), [{
-    heading: monthName(month), lines: m.services.map((s) => `${day(s.date)} · ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}: ${s.units.map((u) => u.name).join(', ') || '-'}`),
-  }]);
+  const pdf = () => {
+    if (!m) return;
+    if (view === 'bulletin') {
+      printNamedSheet(musicPdfFilename(month));
+      return;
+    }
+    downloadSchedulePdf(`choir-schedule-${month}`, t('door.sch.pdfTitle', { state: t(`door.sch.tab.${mode}` as 'door.sch.tab.confirmed') }), monthName(month), [{
+      heading: monthName(month), lines: m.services.map((s) => `${day(s.date)} · ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}: ${s.units.map((u) => u.name).join(', ') || '-'}`),
+    }]);
+  };
   return (
     <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>
       {m && (

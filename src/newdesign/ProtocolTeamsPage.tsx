@@ -11,7 +11,8 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { shiftMonth, thisMonth } from './music';
 import { ROLES, candidatesFor, issuesOfService, openBlocking, protocolErrorKey, sortIssues } from './protocol';
-import { downloadSchedulePdf } from './schedulePdf';
+import { downloadSchedulePdf, printNamedSheet } from './schedulePdf';
+import { musicPdfFilename, protocolPdfFilename } from './bulletins';
 import { MusicBulletin, ProtocolBulletin } from './Bulletins';
 import { DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
 import { useLoad } from './useLoad';
@@ -111,9 +112,15 @@ function ChoirSchedule({ view, state, layout }: { view: ProtocolMonthView; state
   const day = useShortDay();
   if (!view.music) return <EmptyState title={t('door.sch.waitMusic')} />;
   if (view.music.state !== state || view.services.length === 0) return <EmptyState title={t(`door.sch.emptyChoirs.${state}` as 'door.sch.emptyChoirs.CONFIRMED')} />;
-  const pdf = () => downloadSchedulePdf(`choir-schedule-${view.month}`, t('door.sch.pdfTitle', { state: t(`door.sch.tab.${state === 'PUBLISHED' ? 'published' : 'confirmed'}` as 'door.sch.tab.confirmed') }), monthName(view.month), [{
-    heading: monthName(view.month), lines: view.services.map((s) => `${day(s.date)} · ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}: ${s.music.join(', ') || '-'}`),
-  }]);
+  const pdf = () => {
+    if (layout === 'bulletin') {
+      printNamedSheet(musicPdfFilename(view.month));
+      return;
+    }
+    downloadSchedulePdf(`choir-schedule-${view.month}`, t('door.sch.pdfTitle', { state: t(`door.sch.tab.${state === 'PUBLISHED' ? 'published' : 'confirmed'}` as 'door.sch.tab.confirmed') }), monthName(view.month), [{
+      heading: monthName(view.month), lines: view.services.map((s) => `${day(s.date)} · ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}: ${s.music.join(', ') || '-'}`),
+    }]);
+  };
   return (
     <>
       <div className="pt-bar"><span className="muted">v{view.music.version}</span><span className="pt-bar-actions"><button type="button" className="btn secondary" onClick={pdf}>{t('door.sch.pdf')}</button></span></div>
@@ -211,6 +218,10 @@ export function ProtocolTeamsPage() {
   );
   const pdf = (state: 'draft' | 'confirmed' | 'published') => {
     if (!v) return;
+    if (layout === 'bulletin') {
+      printNamedSheet(protocolPdfFilename(month), { landscape: true });
+      return;
+    }
     downloadSchedulePdf(`teams-${state}-${month}`, t('door.sch.pdfTitleTeams', { state: t(`door.sch.p.${state}` as 'door.sch.p.draft') }), monthName(month), v.services.map((s) => ({
       heading: `${day(s.date)} · ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}${s.music.length ? ` (${s.music.join(', ')})` : ''}`,
       lines: s.team.length ? s.team.map((m) => `${m.name}${m.role !== 'MEMBER' ? ` - ${t(`door.protocol.role.${m.role}` as 'door.protocol.role.MEMBER')}` : ''}${m.slotKind !== 'REGULAR' ? ` (${t(`door.protocol.slot.${m.slotKind}` as 'door.protocol.slot.EXTRA')})` : ''}`) : ['-'],

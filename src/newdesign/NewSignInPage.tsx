@@ -14,12 +14,43 @@ const ERROR_KEY: Record<Exclude<SignInResult, 'ok'>, MessageKey> = {
   failed: 'door.signIn.failed',
 };
 
+function UserIcon() {
+  return (
+    <svg className="login-input-icon" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M16.5 7.5a4.5 4.5 0 1 1-9 0 4.5 4.5 0 0 1 9 0ZM4.5 20.1a7.5 7.5 0 0 1 15 0"
+      />
+    </svg>
+  );
+}
+
+function LockIcon() {
+  return (
+    <svg className="login-input-icon" viewBox="0 0 24 24" aria-hidden>
+      <path
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        d="M7.5 11V8.4a4.5 4.5 0 0 1 9 0V11M6.5 11h11a1.5 1.5 0 0 1 1.5 1.5v7A1.5 1.5 0 0 1 17.5 21h-11A1.5 1.5 0 0 1 5 19.5v-7A1.5 1.5 0 0 1 6.5 11Z"
+      />
+    </svg>
+  );
+}
+
 export function NewSignInPage() {
   const t = useT();
   const { status, signIn, sessionEnded } = useFrontDoor();
   const location = useLocation();
   const [error, setError] = useState<MessageKey | null>(null);
   const [busy, setBusy] = useState(false);
+  const [forgotOpen, setForgotOpen] = useState(false);
   const scripture = useMemo(() => pickScripture(), []);
   const from = (location.state as { from?: { pathname: string } } | null)?.from?.pathname;
 
@@ -41,37 +72,64 @@ export function NewSignInPage() {
   return (
     <div className="login-page login-split">
       <aside className="login-hero-pane" aria-label={t('login.welcome')}>
-        <img
-          className="login-hero-media"
-          src="/brand/church-building.png?v=2"
-          alt="ADEPR Kacyiru church building"
-          decoding="async"
-          fetchPriority="high"
-        />
-        <div className="login-hero-shade" aria-hidden />
         <div className="login-hero-copy">
-          <p className="login-hero-brand">“{scripture.text}”</p>
-          <p className="login-hero-line">{scripture.ref}</p>
+          <div className="login-moriah">
+            <img src="/brand/moriah-logo.png" alt={t('login.moriahAlt')} width={233} height={135} />
+            <p className="login-moriah-system">{t('login.product')}</p>
+          </div>
+          <blockquote className="login-quote">
+            <p className="login-hero-brand">“{scripture.text}”</p>
+            <p className="login-hero-line">{scripture.ref}</p>
+          </blockquote>
         </div>
-        <div className="login-hero-wave" aria-hidden />
       </aside>
 
       <div className="login-form-pane">
+        <LanguageSwitch className="lang-switch-login" />
         <div className="login-card stack">
-          <LanguageSwitch className="lang-switch-login" />
           <div className="login-brand">
-            <img src="/brand/adepr-logo.png" alt="ADEPR" width={76} height={76} />
+            <img src="/brand/adepr-logo.png" alt={t('login.churchAlt')} width={56} height={56} />
             <div>
               <h1>ADEPR Kacyiru</h1>
-              <p className="muted" style={{ margin: 0 }}>
-                {t('login.subtitleMain')}
-              </p>
+              <p className="muted login-card-sub">{t('login.subtitleMain')}</p>
             </div>
           </div>
 
-          <form className="stack" onSubmit={onSubmit} aria-busy={busy}>
-            <TextField label={t('login.username')} name="username" id="username" autoComplete="username" autoCapitalize="none" required disabled={busy} />
-            <TextField label={t('login.password')} name="password" id="password" type="password" autoComplete="current-password" required disabled={busy} />
+          <form className="stack login-form" onSubmit={onSubmit} aria-busy={busy}>
+            <div className="login-input">
+              <UserIcon />
+              <TextField
+                label={t('login.username')}
+                name="username"
+                id="username"
+                autoComplete="username"
+                autoCapitalize="none"
+                placeholder={t('login.usernamePlaceholder')}
+                required
+                disabled={busy}
+              />
+            </div>
+            <div className="login-input">
+              <LockIcon />
+              <TextField
+                label={t('login.password')}
+                name="password"
+                id="password"
+                type="password"
+                autoComplete="current-password"
+                placeholder={t('login.passwordPlaceholder')}
+                required
+                disabled={busy}
+              />
+            </div>
+            <button type="button" className="login-forgot" onClick={() => setForgotOpen((open) => !open)}>
+              {t('login.forgot')}
+            </button>
+            {forgotOpen && (
+              <p className="login-forgot-hint" role="status">
+                {t('login.forgotHint')}
+              </p>
+            )}
             {sessionEnded && !error && (
               <div className="session-notice" role="status">
                 {t('door.signIn.expired')}

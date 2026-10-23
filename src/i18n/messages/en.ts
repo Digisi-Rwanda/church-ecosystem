@@ -29,9 +29,16 @@ export const en = {
 
   // Sign-in
   'login.welcome': 'Welcome',
+  'login.product': 'SYSTEM',
+  'login.moriahAlt': 'Moriah',
+  'login.churchAlt': 'ADEPR',
   'login.subtitleMain': 'Sign in to continue to your account',
   'login.username': 'Username',
   'login.password': 'Password',
+  'login.usernamePlaceholder': 'Enter your username',
+  'login.passwordPlaceholder': 'Enter your password',
+  'login.forgot': 'Forgot password?',
+  'login.forgotHint': 'Ask an administrator to reset your password.',
   'login.signIn': 'Sign in',
   'login.signingIn': 'Signing in…',
   'login.signingInLabel': 'Signing in',
