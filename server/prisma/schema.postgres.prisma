@@ -1398,6 +1398,12 @@ model ProtocolPlan {
   relaxedById       String?
   relaxedAt         DateTime?
   updatedAt         DateTime  @default(now())
+  /// The scheduling-config version this plan was built against, so the plan
+  /// stays reproducible and stale-detection can compare config versions.
+  configVersionId   String?
+  configVersion     ConfigVersion? @relation(fields: [configVersionId], references: [id])
+
+  @@index([configVersionId])
 }
 
 /// A person on a service's team. Removed rows are deleted from the working plan; published versions keep a snapshot.
@@ -1540,6 +1546,12 @@ model MusicMonth {
   publishedById   String?
   updatedAt       DateTime
   updatedById     String?
+  /// The scheduling-config version this confirmed/published month was generated
+  /// and validated against, so the month stays reproducible.
+  configVersionId String?
+  configVersion   ConfigVersion? @relation(fields: [configVersionId], references: [id])
+
+  @@index([configVersionId])
 }
 
 /// Every confirm, publish and edit of a month, kept for good.
@@ -2074,4 +2086,204 @@ model ProgramCaseItem {
 
   @@index([caseId])
   @@index([planId])
+}
+
+/* ─── Configurable scheduling (Music & Protocol) ───
+
+   Versioned, tenant-scoped configuration that replaces hard-coded church
+   scheduling policy. Every row carries systemId (tenant), effectiveFrom /
+   effectiveTo and status, so edits create a new version instead of
+   overwriting history. schedules reference ConfigVersion to stay reproducible.
+*/
+
+/// One published snapshot of a church's scheduling configuration.
+model ConfigVersion {
+  id                 String   @id @default(cuid())
+  systemId           String
+  version            Int
+  label              String
+  status             String   @default("DRAFT") // DRAFT | ACTIVE | SUPERSEDED | SCHEDULED
+  effectiveFrom      DateTime @default(now())
+  effectiveTo        DateTime?
+  createdByPersonId  String
+  createdAt          DateTime @default(now())
+  reason             String?
+  previousVersionId  String?
+  notesJson          String   @default("{}")
+  validationJson     String   @default("{}")
+  affectedSchedulesJson String @default("[]")
+  musicMonths        MusicMonth[]
+  protocolPlans      ProtocolPlan[]
+  schedulingServices SchedulingService[]
+  choirCategories    ChoirCategory[]
+  categoryServicePolicies CategoryServicePolicy[]
+  choirCategoryLinks ChoirCategoryLink[]
+  protocolServiceRules ProtocolServiceRule[]
+  protocolDutyPolicies ProtocolDutyPolicy[]
+
+  @@unique([systemId, version])
+  @@index([systemId, status])
+}
+
+/// A church-defined service type / occurrence (replaces the fixed SS1, SS2,
+/// TUESDAY, FRIDAY, IGABURO list). `code` is the stable identity referenced by
+/// generated service IDs (`msvc-<date>-<code>`) and by Protocol; it never
+/// changes once a schedule refers to it.
+model SchedulingService {
+  id                String   @id @default(cuid())
+  systemId          String
+  code              String   // stable slug, e.g. ss1, tuesday, igaburo
+  name              String
+  kind              String   @default("SERVICE") // SERVICE | REHEARSAL | MEETING | OTHER
+  weekday           Int?     // 0 = Sunday … 6 = Saturday
+  time              String?  // HH:MM
+  recurrence        String   @default("WEEKLY") // WEEKLY | MONTHLY | SELECTED_DATES | CUSTOM
+  selectedDatesJson String   @default("[]")
+  active            Boolean  @default(true)
+  effectiveFrom     DateTime @default(now())
+  effectiveTo       DateTime?
+  musicRequired     Boolean  @default(false)
+  protocolRequired  Boolean  @default(false)
+  /// Maximum number of choirs allowed on one service instance (legacy: 3 for SS1/SS2).
+  maxChoirs         Int      @default(3)
+  /// The config version this row belongs to (snapshot integrity).
+  configVersionId   String?
+  configVersion     ConfigVersion? @relation(fields: [configVersionId], references: [id])
+  displayOrder      Int      @default(0)
+  supersedesId      String?
+  createdByPersonId String
+  createdAt         DateTime @default(now())
+
+  @@unique([systemId, code])
+  @@index([systemId, active])
+  @@index([configVersionId])
+}
+
+/// A category of choirs (replaces the fixed PRIMARY, SECONDARY, CHILDREN,
+/// WORSHIP roles). The name confers no automatic behavior — behavior comes
+/// only from CategoryServicePolicy.
+model ChoirCategory {
+  id                String   @id @default(cuid())
+  systemId          String
+  code              String
+  name              String
+  description       String   @default("")
+  active            Boolean  @default(true)
+  effectiveFrom     DateTime @default(now())
+  effectiveTo       DateTime?
+  supersedesId      String?
+  createdByPersonId String
+  createdAt         DateTime @default(now())
+  /// The config version this row belongs to (snapshot integrity).
+  configVersionId   String?
+  configVersion     ConfigVersion? @relation(fields: [configVersionId], references: [id])
+
+  @@unique([systemId, code])
+  @@index([systemId, active])
+  @@index([configVersionId])
+}
+
+/// Policy for one category × one service: eligibility + frequency target.
+model CategoryServicePolicy {
+  id                String   @id @default(cuid())
+  systemId          String
+  categoryId        String
+  serviceId         String
+  eligible          Boolean  @default(true)
+  active            Boolean  @default(true)
+  frequencyTarget   Int?     // null = no fixed target
+  frequencyCounting String   @default("ASSIGNMENTS") // ASSIGNMENTS | DISTINCT_DATES
+  frequencyKind     String   @default("TARGET")    // MINIMUM | TARGET | MAXIMUM
+  planningMode      String   @default("ROTATION")  // ROTATION | FIXED | MANUAL
+  /// Minimum number of this category required on the service (legacy: Tuesday=1 primary, Igaburo=2 primaries).
+  minCount          Int?
+  /// Maximum number of this category allowed on the service (legacy: PRIMARY=1 per service, max 3 total).
+  maxCount          Int?
+  /// If true, every eligible member of this category must be scheduled on the service (legacy: all Worship on Tuesday).
+  requireAll        Boolean  @default(false)
+  /// The config version this row belongs to (snapshot integrity).
+  configVersionId   String?
+  configVersion     ConfigVersion? @relation(fields: [configVersionId], references: [id])
+  effectiveFrom     DateTime @default(now())
+  effectiveTo       DateTime?
+  supersedesId      String?
+  createdByPersonId String
+  createdAt         DateTime @default(now())
+
+  @@unique([systemId, categoryId, serviceId])
+  @@index([systemId, categoryId])
+  @@index([configVersionId])
+}
+
+/// Links a choir to a category, with optional per-choir eligibility / frequency overrides.
+model ChoirCategoryLink {
+  id                   String   @id @default(cuid())
+  systemId             String
+  choirId              String   // references MusicChoir.id
+  categoryId           String
+  eligibleOverrideJson String   @default("{}")       // { eligible: boolean }
+  frequencyOverrideJson String  @default("{}")       // per-service overrides
+  active               Boolean  @default(true)
+  effectiveFrom        DateTime @default(now())
+  effectiveTo          DateTime?
+  supersedesId         String?
+  createdByPersonId    String
+  createdAt            DateTime @default(now())
+  /// The config version this row belongs to (snapshot integrity).
+  configVersionId      String?
+  configVersion        ConfigVersion? @relation(fields: [configVersionId], references: [id])
+
+  @@unique([systemId, choirId])
+  @@index([systemId, categoryId])
+  @@index([configVersionId])
+}
+
+/// Protocol staffing rule for one service.
+model ProtocolServiceRule {
+  id                   String   @id @default(cuid())
+  systemId             String
+  serviceId            String   // references SchedulingService.id
+  active               Boolean  @default(true)
+  required             Boolean  @default(false)
+  defaultTeamSize      Int      @default(10)
+  teamSizeOverridesJson String  @default("{}")       // { serviceId: size }
+  requireChoir         Boolean  @default(true)
+  requireWorship       Boolean  @default(true)
+  relaxableKindsJson   String   @default("[]")
+  /// The config version this row belongs to (snapshot integrity).
+  configVersionId      String?
+  configVersion        ConfigVersion? @relation(fields: [configVersionId], references: [id])
+  effectiveFrom        DateTime @default(now())
+  effectiveTo          DateTime?
+  supersedesId         String?
+  createdByPersonId    String
+  createdAt            DateTime @default(now())
+
+  @@unique([systemId, serviceId])
+  @@index([configVersionId])
+}
+
+/// Monthly Protocol duty policy (replaces the hard-coded target 3 / max 4 / team 10).
+model ProtocolDutyPolicy {
+  id                     String   @id @default(cuid())
+  systemId               String
+  preferTarget           Int      @default(3)
+  softMax                Int      @default(3)
+  hardMax                Int      @default(4)
+  extraDutyPolicy        String   @default("ALLOW_WHEN_SHORT") // ALLOW_WHEN_SHORT | NEVER | ALWAYS
+  duplicateSameDayAllowed Boolean @default(false)
+  musicCompatibilityRequired Boolean @default(true)
+  leadershipPrioritiesJson String  @default("[]")
+  exceptionsAllowed      Boolean  @default(true)
+  /// The config version this row belongs to (snapshot integrity).
+  configVersionId        String?
+  configVersion          ConfigVersion? @relation(fields: [configVersionId], references: [id])
+  effectiveFrom          DateTime @default(now())
+  effectiveTo            DateTime?
+  supersedesId           String?
+  createdByPersonId      String
+  createdAt              DateTime @default(now())
+
+  @@index([systemId])
+  @@index([configVersionId])
 }

@@ -57,6 +57,7 @@ import { protocolOfficesRouter } from './routes/protocolOffices.js';
 import { scheduleStateRouter } from './routes/scheduleState.js';
 import { ssoRouter } from './routes/sso.js';
 import { systemsRouter } from './routes/systems.js';
+import { configRouter } from './scheduling/configRouter.js';
 
 export function createApp() {
   const app = express();
@@ -151,6 +152,7 @@ export function createApp() {
   app.use('/api/dashboard', dashboardRouter);
   app.use('/api/protocol', protocolRouter);
   app.use('/api/music/schedule', musicScheduleRouter);
+  app.use('/api/scheduling', configRouter);
   app.use('/api/evangelism', evangelismRouter);
   app.use('/api/music', musicRouter);
   app.use('/api/choir', choirWorkRouter);

@@ -589,6 +589,241 @@ async function main() {
     console.log('  pastor / pastor123  (CHURCH_LEADER)');
     console.log('  treasurer / treas123  (CHURCH_TREASURER)');
   }
+
+  // ─── Idempotent initial scheduling configuration (slice 3.17) ───
+  // Represents the verified legacy rules as versioned, tenant-scoped config.
+  // Rerunning the seed does not duplicate rows: every insert is guarded by an
+  // existence check on the stable natural key (code, or system+category+service).
+  try {
+    await seedInitialSchedulingConfig(prisma);
+  } catch (err) {
+    // Never stop the server from starting over configuration that could not be seeded.
+    console.warn('  scheduling config seed skipped:', err instanceof Error ? err.message : err);
+  }
+}
+
+async function seedInitialSchedulingConfig(prisma: import('@prisma/client').PrismaClient): Promise<void> {
+  const now = new Date();
+
+  // ── System tenants ──
+  const MUSIC = 'sys-music';
+  const PROTOCOL = 'sys-protocol';
+
+  // ── Bootstrap actor (church leader) ──
+  const actor = await prisma.person.findFirst({ where: { systemRole: 'CHURCH_LEADER' } });
+  if (!actor) {
+    console.warn('  scheduling config seed skipped: no CHURCH_LEADER person');
+    return;
+  }
+  const actorId = actor.id;
+
+  // ── ConfigVersion v1 (ACTIVE) ──
+  let version = await prisma.configVersion.findFirst({ where: { systemId: MUSIC, version: 1 } });
+  if (!version) {
+    version = await prisma.configVersion.create({
+      data: {
+        systemId: MUSIC,
+        version: 1,
+        label: 'Initial scheduling configuration (legacy rules)',
+        status: 'ACTIVE',
+        effectiveFrom: now,
+        createdByPersonId: actorId,
+        reason: 'Initial seed reproducing verified legacy Music and Protocol scheduling rules',
+        notesJson: JSON.stringify({ source: 'legacy-hard-coded', slice: '3.17' }),
+        validationJson: JSON.stringify({}),
+        affectedSchedulesJson: JSON.stringify([]),
+      },
+    });
+  }
+
+  // ── Scheduling services (Music + Protocol) ──
+  // Five service types from the legacy engine: SS1, SS2, TUESDAY, FRIDAY, IGABURO.
+  // SS1, SS2, TUESDAY, IGABURO are used by both Music and Protocol. FRIDAY is Music-only.
+  const services = [
+    { systemId: MUSIC, code: 'ss1', name: 'Sunday Service 1', kind: 'SERVICE', weekday: 0, time: '09:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, configVersionId: version.id, displayOrder: 0 },
+    { systemId: MUSIC, code: 'ss2', name: 'Sunday Service 2', kind: 'SERVICE', weekday: 0, time: '11:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, configVersionId: version.id, displayOrder: 1 },
+    { systemId: MUSIC, code: 'tuesday', name: 'Tuesday Service', kind: 'SERVICE', weekday: 2, time: '18:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, configVersionId: version.id, displayOrder: 2 },
+    { systemId: MUSIC, code: 'friday', name: 'Friday Service', kind: 'SERVICE', weekday: 5, time: '18:00', musicRequired: true, protocolRequired: false, maxChoirs: 3, configVersionId: version.id, displayOrder: 3 },
+    { systemId: MUSIC, code: 'igaburo', name: 'Igaburo (Holy Communion)', kind: 'SERVICE', weekday: null, time: null, recurrence: 'MONTHLY', musicRequired: true, protocolRequired: true, maxChoirs: 3, configVersionId: version.id, displayOrder: 4 },
+  ];
+  const serviceIds = new Map<string, string>();
+  for (const s of services) {
+    const existing = await prisma.schedulingService.findFirst({ where: { systemId: s.systemId, code: s.code } });
+    let id: string;
+    if (existing) {
+      id = existing.id;
+    } else {
+      const created = await prisma.schedulingService.create({
+        data: {
+          ...s, systemId: s.systemId, code: s.code, name: s.name, kind: s.kind,
+          weekday: s.weekday, time: s.time, recurrence: s.recurrence ?? 'WEEKLY',
+          selectedDatesJson: '[]', active: true, effectiveFrom: now,
+          musicRequired: s.musicRequired, protocolRequired: s.protocolRequired,
+          displayOrder: s.displayOrder, createdByPersonId: actorId,
+        },
+      });
+      id = created.id;
+    }
+    serviceIds.set(`${s.systemId}|${s.code}`, id);
+  }
+
+  // Also register the same services under sys-protocol (Protocol references them by code).
+  const protocolServices = [
+    { code: 'ss1', name: 'Sunday Service 1', protocolRequired: true },
+    { code: 'ss2', name: 'Sunday Service 2', protocolRequired: true },
+    { code: 'tuesday', name: 'Tuesday Service', protocolRequired: true },
+    { code: 'igaburo', name: 'Igaburo (Holy Communion)', protocolRequired: true },
+  ];
+  for (const s of protocolServices) {
+    const existing = await prisma.schedulingService.findFirst({ where: { systemId: PROTOCOL, code: s.code } });
+    if (!existing) {
+      await prisma.schedulingService.create({
+        data: {
+          systemId: PROTOCOL, code: s.code, name: s.name, kind: 'SERVICE',
+          weekday: s.code === 'tuesday' ? 2 : s.code === 'ss1' || s.code === 'ss2' ? 0 : null,
+          time: s.code === 'ss1' ? '09:00' : s.code === 'ss2' ? '11:00' : s.code === 'tuesday' ? '18:00' : null,
+          recurrence: s.code === 'igaburo' ? 'MONTHLY' : 'WEEKLY',
+          selectedDatesJson: '[]', active: true, effectiveFrom: now,
+          musicRequired: false, protocolRequired: true, maxChoirs: 3,
+          configVersionId: version.id, displayOrder: 0, createdByPersonId: actorId,
+        },
+      });
+    }
+  }
+
+  // ── Choir categories (Music) ──
+  // Four categories from the legacy ROLES: PRIMARY, SECONDARY, CHILDREN, WORSHIP.
+  const categories = [
+    { code: 'PRIMARY', name: 'Primary Choir', description: 'Adult primary choir' },
+    { code: 'SECONDARY', name: 'Secondary Choir', description: 'Adult secondary choir' },
+    { code: 'CHILDREN', name: 'Children’s Choir', description: 'Children / Sunday School choir' },
+    { code: 'WORSHIP', name: 'Worship Team', description: 'Worship team (music only)' },
+  ];
+  const categoryIds = new Map<string, string>();
+  for (const c of categories) {
+    const existing = await prisma.choirCategory.findFirst({ where: { systemId: MUSIC, code: c.code } });
+    let id: string;
+    if (existing) {
+      id = existing.id;
+    } else {
+      const created = await prisma.choirCategory.create({
+        data: {
+          systemId: MUSIC, code: c.code, name: c.name, description: c.description,
+          active: true, effectiveFrom: now, configVersionId: version.id, createdByPersonId: actorId,
+        },
+      });
+      id = created.id;
+    }
+    categoryIds.set(c.code, id);
+  }
+
+  // ── Category × service policies ──
+  // Legacy behavior:
+  //  - Children's choirs only at SS1 (first Sunday service)
+  //  - Worship team only on Tuesday
+  //  - Primary and Secondary at SS1, SS2, TUESDAY, IGABURO
+  //  - A choir at most once per service (frequency target 1)
+  const policyRows = [
+    // PRIMARY: eligible at SS1, SS2, TUESDAY, IGABURO; not FRIDAY
+    // maxCount: 1 per service (one primary per service); Friday/Tuesday exactly 1 primary
+    // Igaburo exactly 2 primaries (handled by minCount=maxCount=2)
+    { category: 'PRIMARY', service: 'ss1', eligible: true, target: 1, minCount: null, maxCount: 1, requireAll: false },
+    { category: 'PRIMARY', service: 'ss2', eligible: true, target: 1, minCount: null, maxCount: 1, requireAll: false },
+    { category: 'PRIMARY', service: 'tuesday', eligible: true, target: 1, minCount: 1, maxCount: 1, requireAll: false },
+    { category: 'PRIMARY', service: 'igaburo', eligible: true, target: 1, minCount: 2, maxCount: 2, requireAll: false },
+    // SECONDARY: same as PRIMARY for eligibility, maxCount 1 per service
+    { category: 'SECONDARY', service: 'ss1', eligible: true, target: 1, minCount: null, maxCount: 1, requireAll: false },
+    { category: 'SECONDARY', service: 'ss2', eligible: true, target: 1, minCount: null, maxCount: 1, requireAll: false },
+    { category: 'SECONDARY', service: 'tuesday', eligible: true, target: 1, minCount: null, maxCount: 1, requireAll: false },
+    { category: 'SECONDARY', service: 'igaburo', eligible: true, target: 1, minCount: null, maxCount: 1, requireAll: false },
+    // CHILDREN: only SS1; maxCount 3 (all children choirs on SS1)
+    { category: 'CHILDREN', service: 'ss1', eligible: true, target: null, minCount: null, maxCount: 3, requireAll: false },
+    { category: 'CHILDREN', service: 'ss2', eligible: false },
+    { category: 'CHILDREN', service: 'tuesday', eligible: false },
+    { category: 'CHILDREN', service: 'igaburo', eligible: false },
+    { category: 'CHILDREN', service: 'friday', eligible: false },
+    // WORSHIP: only TUESDAY; requireAll=true (all worship on Tuesday)
+    { category: 'WORSHIP', service: 'ss1', eligible: false },
+    { category: 'WORSHIP', service: 'ss2', eligible: false },
+    { category: 'WORSHIP', service: 'tuesday', eligible: true, target: null, minCount: null, maxCount: null, requireAll: true },
+    { category: 'WORSHIP', service: 'igaburo', eligible: false },
+    { category: 'WORSHIP', service: 'friday', eligible: false },
+  ];
+  for (const p of policyRows) {
+    const catId = categoryIds.get(p.category);
+    const svcId = serviceIds.get(`${MUSIC}|${p.service}`);
+    if (!catId || !svcId) continue;
+    const existing = await prisma.categoryServicePolicy.findFirst({
+      where: { systemId: MUSIC, categoryId: catId, serviceId: svcId },
+    });
+    if (!existing) {
+      await prisma.categoryServicePolicy.create({
+        data: {
+          systemId: MUSIC, categoryId: catId, serviceId: svcId,
+          eligible: p.eligible ?? true,
+          active: true,
+          frequencyTarget: p.target ?? null,
+          frequencyCounting: 'ASSIGNMENTS',
+          frequencyKind: 'TARGET',
+          planningMode: 'ROTATION',
+          minCount: p.minCount ?? null,
+          maxCount: p.maxCount ?? null,
+          requireAll: p.requireAll ?? false,
+          configVersionId: version.id,
+          effectiveFrom: now, createdByPersonId: actorId,
+        },
+      });
+    }
+  }
+
+  // ── Protocol service rules ──
+  // Legacy: SS1, SS2, TUESDAY, IGABURO require Protocol staffing; FRIDAY does not.
+  // defaultTeamSize=10, requireChoir=true, requireWorship=true.
+  const protocolRuleRows = [
+    { service: 'ss1', required: true, defaultTeamSize: 10, requireChoir: true, requireWorship: true },
+    { service: 'ss2', required: true, defaultTeamSize: 10, requireChoir: true, requireWorship: true },
+    { service: 'tuesday', required: true, defaultTeamSize: 10, requireChoir: true, requireWorship: true },
+    { service: 'igaburo', required: true, defaultTeamSize: 10, requireChoir: true, requireWorship: true },
+  ];
+  for (const r of protocolRuleRows) {
+    const svcId = serviceIds.get(`${PROTOCOL}|${r.service}`);
+    if (!svcId) continue;
+    const existing = await prisma.protocolServiceRule.findFirst({ where: { systemId: PROTOCOL, serviceId: svcId } });
+    if (!existing) {
+      await prisma.protocolServiceRule.create({
+        data: {
+          systemId: PROTOCOL, serviceId: svcId,
+          active: true,
+          required: r.required, defaultTeamSize: r.defaultTeamSize,
+          teamSizeOverridesJson: '{}',
+          requireChoir: r.requireChoir, requireWorship: r.requireWorship,
+          relaxableKindsJson: '[]', configVersionId: version.id,
+          effectiveFrom: now, createdByPersonId: actorId,
+        },
+      });
+    }
+  }
+
+  // ── Protocol duty policy ──
+  // Legacy BASE_RULES: preferTarget=3, softMax=3, hardMax=4, defaultTeamSize=10.
+  const existingPolicy = await prisma.protocolDutyPolicy.findFirst({ where: { systemId: PROTOCOL } });
+  if (!existingPolicy) {
+      await prisma.protocolDutyPolicy.create({
+        data: {
+          systemId: PROTOCOL,
+          preferTarget: 3, softMax: 3, hardMax: 4,
+          extraDutyPolicy: 'ALLOW_WHEN_SHORT',
+          duplicateSameDayAllowed: false,
+          musicCompatibilityRequired: true,
+          leadershipPrioritiesJson: '[]',
+          exceptionsAllowed: true,
+          configVersionId: version.id,
+          effectiveFrom: now, createdByPersonId: actorId,
+        },
+      });
+  }
+
+  console.log(`  scheduling config: version v1, ${services.length} services, ${categories.length} categories, ${policyRows.length} policies, ${protocolRuleRows.length} protocol rules, 1 duty policy`);
 }
 
 main()
