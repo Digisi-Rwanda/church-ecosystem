@@ -8,12 +8,14 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
+import { loadProtocolConfig } from '../scheduling/configLoader.js';
 import { notifySafely } from '../lib/notify.js';
 import { officeOf } from '../lib/offices.js';
 import { getPlanned, loadChoirs } from '../music/store.js';
 import { parse } from '../music/schedule.js';
 import {
   buildProtocolTeams, canServeKind, musicConflictCode, musicRequirements, scoreAttendanceRow, validateProtocolTeamsDetailed,
+  buildRulesFromConfig, targetTeamSizeFor,
 } from '../protocol/engine.js';
 import type {
   ProtocolIssue, ProtocolRosterMember, ProtocolSchedulingRules, ProtocolService, ProtocolServiceKind, ProtocolTeamSlot,
@@ -113,11 +115,22 @@ async function monthCtx(month: string) {
     if (!unitsOnService.has(a.serviceId)) unitsOnService.set(a.serviceId, new Set());
     unitsOnService.get(a.serviceId)!.add(a.unitId);
   }
+  // Load the active scheduling configuration (Phase 3 integration).
+  const protocolConfig = await loadProtocolConfig();
   const services: ProtocolService[] = (planned?.services ?? [])
     .filter((s) => (KINDS as readonly string[]).includes(s.kind))
-    .map((s) => ({ id: serviceId(s.id), musicServiceId: s.id, monthKey: month, date: s.date, kind: s.kind as ProtocolServiceKind, label: s.label, targetTeamSize: 10 }))
+    .map((s) => {
+      // Use configured target team size when available; fall back to 10.
+      const cfg = protocolConfig.services.find((cs) => cs.code === s.kind);
+      const rule = protocolConfig.rules.find((r) => r.serviceId === s.id);
+      return {
+        id: serviceId(s.id), musicServiceId: s.id, monthKey: month, date: s.date,
+        kind: s.kind as ProtocolServiceKind, label: s.label,
+        targetTeamSize: cfg?.targetTeamSize ?? rule?.defaultTeamSize ?? 10,
+      };
+    })
     .sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
-  const rules = rulesFor(planRow?.relaxTuesday ?? false);
+  const rules = buildRulesFromConfig(protocolConfig.rules, protocolConfig.dutyPolicy, planRow?.relaxTuesday ?? false);
   return { month, planned, planRow, rosterRows: rows, roster: members, slotRows, slots: slotRows.map(slotOf), services, rules, choirUnits, unitsOnService, kindOf: (u: string) => kindById.get(u) };
 }
 type Ctx = Awaited<ReturnType<typeof monthCtx>>;

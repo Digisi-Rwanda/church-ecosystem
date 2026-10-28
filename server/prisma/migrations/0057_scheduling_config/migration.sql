@@ -51,6 +51,7 @@ CREATE TABLE IF NOT EXISTS "SchedulingService" (
     "musicRequired" BOOLEAN NOT NULL DEFAULT false,
     "protocolRequired" BOOLEAN NOT NULL DEFAULT false,
     "maxChoirs" INTEGER NOT NULL DEFAULT 3,
+    "targetTeamSize" INTEGER NOT NULL DEFAULT 10,
     "configVersionId" TEXT,
     "displayOrder" INTEGER NOT NULL DEFAULT 0,
     "supersedesId" TEXT,

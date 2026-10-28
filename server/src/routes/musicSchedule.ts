@@ -9,7 +9,10 @@ import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { notifySafely } from '../lib/notify.js';
-import { buildMusicCalendar, generateMusicChoirSchedule, periodOptionsForHorizon, validateSchedule } from '../music/engine.js';
+import { buildMusicCalendar, generateMusicChoirSchedule, periodOptionsForHorizon, validateSchedule, validateConfigPolicies, servicePolicyFor, serviceByCode } from '../music/engine.js';
+import { loadMusicConfig } from '../scheduling/configLoader.js';
+import type { SchedulingServiceView } from '../scheduling/types.js';
+import type { CategoryServicePolicyView, ChoirCategoryView } from '../scheduling/types.js';
 import {
   diffLineup, fingerprint, historyFrom, monthsOf, parse, sliceMonth, summarise, unitsOn, withService, type DraftDoc, type LogAction, type LogChange, type MonthDoc,
 } from '../music/schedule.js';
@@ -155,16 +158,26 @@ musicScheduleRouter.post('/drafts/generate', requireAuth, async (req: AuthedRequ
   if (start < nowMonth()) return fail(res, 400, 'PAST', 'Choose a period from this month on');
   const units = unitsFrom(await loadChoirs());
   const services = buildMusicCalendar(start, horizon);
+  // Load active scheduling configuration and pass it to the engine.
+  const cfg = await loadMusicConfig();
+  const svcByCode = new Map(cfg.services.map((s) => [s.code, s]));
   const result = generateMusicChoirSchedule({ services, units, history: historyFrom(await loadMonths(), units) });
   if (!result.ok) return fail(res, 422, 'ENGINE', result.reason ?? 'Could not build a valid schedule');
+  // Validate against both legacy rules and the active category policies.
+  const v = validateSchedule(services, result.assignments, 'strict', units);
+  const cv = validateConfigPolicies({
+    services, assignments: result.assignments, units,
+    policies: cfg.policies, categories: cfg.categories, serviceByCode: svcByCode,
+  });
+  if (!v.ok) return fail(res, 422, 'ENGINE', v.reason ?? 'Could not build a valid schedule');
+  if (!cv.ok) return fail(res, 422, 'CONFIG', cv.reason ?? 'Configuration policy violation');
   const fp = fingerprint(start, horizon, services, result.assignments);
   const dup = (await drafts()).map(draftDoc).find((d) => fingerprint(d.startMonth, d.horizon, d.services, d.assignments) === fp);
   if (dup) return fail(res, 409, 'DUPLICATE', 'This is the same schedule as an existing draft');
-  const v = validateSchedule(services, result.assignments, 'strict', units);
   const row = (await prisma.musicDraft.create({
     data: {
       label: `${start} · ${horizon.toLowerCase()}`, horizon, startMonth: start, servicesJson: JSON.stringify(services), assignmentsJson: JSON.stringify(result.assignments),
-      warningsJson: JSON.stringify([...result.warnings, ...v.warnings]), createdById: g.me,
+      warningsJson: JSON.stringify([...result.warnings, ...v.warnings, ...cv.warnings]), createdById: g.me,
     },
   })) as { id: string };
   await audit(g.me, 'DRAFT_GENERATED', `Generated a ${horizon.toLowerCase()} choir schedule from ${start}`, { draftId: row.id });
@@ -175,7 +188,13 @@ const editBody = z.object({ serviceId: z.string().min(1), action: z.enum(['add',
 type Edit = z.infer<typeof editBody>;
 
 /** Apply one hand edit to a lineup; hard rules refuse, soft ones come back as warnings. */
-function applyEdit(services: MusicServiceSlot[], assignments: MusicAssignment[], e: Edit, units: readonly MusicScheduleUnit[]) {
+function applyEdit(
+  services: MusicServiceSlot[],
+  assignments: MusicAssignment[],
+  e: Edit,
+  units: readonly MusicScheduleUnit[],
+  cfg: { policies: CategoryServicePolicyView[]; categories: ChoirCategoryView[]; serviceByCode: Map<string, SchedulingServiceView> } | null,
+) {
   if (!services.some((s) => s.id === e.serviceId)) return { ok: false as const, status: 404, code: 'NOT_FOUND', error: 'Service not found' };
   const now = unitsOn(assignments, e.serviceId);
   let next: string[];
@@ -193,6 +212,14 @@ function applyEdit(services: MusicServiceSlot[], assignments: MusicAssignment[],
   }
   const after = withService(assignments, e.serviceId, next);
   const v = validateSchedule(services, after, 'manual', units);
+  if (cfg) {
+    const cv = validateConfigPolicies({ services, assignments: after, units, policies: cfg.policies, categories: cfg.categories, serviceByCode: cfg.serviceByCode });
+    // Legacy rules take precedence: a unit on both SS1 and SS2 is a RULE violation,
+    // not a CONFIG violation. Check legacy first so the engine's own reason wins.
+    if (!v.ok) return { ok: false as const, status: 409, code: 'RULE', error: v.reason ?? 'This breaks a scheduling rule', warnings: v.warnings };
+    if (!cv.ok) return { ok: false as const, status: 409, code: 'CONFIG', error: cv.reason ?? 'This breaks a configuration policy', warnings: cv.warnings };
+    return { ok: true as const, assignments: after, warnings: [...v.warnings, ...cv.warnings] };
+  }
   if (!v.ok) return { ok: false as const, status: 409, code: 'RULE', error: v.reason ?? 'This breaks a scheduling rule', warnings: v.warnings };
   return { ok: true as const, assignments: after, warnings: v.warnings };
 }
@@ -205,7 +232,11 @@ musicScheduleRouter.post('/drafts/:id/edit', requireAuth, async (req: AuthedRequ
   const row = (await drafts()).find((d) => d.id === String(req.params.id));
   if (!row) return fail(res, 404, 'NOT_FOUND', 'Draft not found');
   const d = draftDoc(row);
-  const r = applyEdit(d.services, d.assignments, parsed.data, unitsFrom(await loadChoirs()));
+  const cfg = await loadMusicConfig();
+  const r = applyEdit(d.services, d.assignments, parsed.data, unitsFrom(await loadChoirs()), {
+    policies: cfg.policies, categories: cfg.categories,
+    serviceByCode: new Map(cfg.services.map((s) => [s.code, s])),
+  });
   if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code, warnings: 'warnings' in r ? r.warnings : [] });
   await prisma.musicDraft.update({ where: { id: d.id }, data: { assignmentsJson: JSON.stringify(r.assignments), warningsJson: JSON.stringify(r.warnings) } });
   res.json({ ok: true, warnings: r.warnings });
@@ -345,7 +376,11 @@ musicScheduleRouter.post('/months/:month/edit', requireAuth, async (req: AuthedR
   const before = (await loadMonths()).find((m) => m.periodKey === month);
   if (!before) return fail(res, 404, 'NOT_FOUND', 'No choir schedule for this month');
   const units = unitsFrom(await loadChoirs());
-  const r = applyEdit(before.services, before.assignments, parsed.data, units);
+  const cfg = await loadMusicConfig();
+  const r = applyEdit(before.services, before.assignments, parsed.data, units, {
+    policies: cfg.policies, categories: cfg.categories,
+    serviceByCode: new Map(cfg.services.map((s) => [s.code, s])),
+  });
   if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code, warnings: 'warnings' in r ? r.warnings : [] });
   const doc: MonthDoc = { ...before, assignments: r.assignments, warnings: r.warnings, version: before.version + 1 };
   const changes = diffLineup(before, doc, nameFor(units));

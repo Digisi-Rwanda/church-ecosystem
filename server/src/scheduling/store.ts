@@ -329,17 +329,17 @@ export async function createProtocolServiceRule(input: ProtocolServiceRuleCreate
       createdByPersonId: input.createdByPersonId,
     },
   });
-  return toProtocolRuleView(r);
+  return toRuleView(r);
 }
 
 export async function getProtocolServiceRule(id: string): Promise<ProtocolServiceRuleView | null> {
   const r = await prisma.protocolServiceRule.findUnique({ where: { id } });
-  return r ? toProtocolRuleView(r) : null;
+  return r ? toRuleView(r) : null;
 }
 
 export async function getProtocolServiceRuleByService(systemId: SystemId, serviceId: string): Promise<ProtocolServiceRuleView | null> {
   const r = await prisma.protocolServiceRule.findFirst({ where: { systemId, serviceId } });
-  return r ? toProtocolRuleView(r) : null;
+  return r ? toRuleView(r) : null;
 }
 
 export async function listProtocolServiceRules(systemId: SystemId): Promise<ProtocolServiceRuleView[]> {
@@ -347,7 +347,7 @@ export async function listProtocolServiceRules(systemId: SystemId): Promise<Prot
     where: { systemId },
     orderBy: [{ serviceId: 'asc' }],
   });
-  return rows.map(toProtocolRuleView);
+  return rows.map(toRuleView);
 }
 
 /* ─── ProtocolDutyPolicy ─── */
@@ -409,9 +409,9 @@ async function assertNoActiveRecord(
   }
 }
 
-/* ─── Internal mappers ─── */
+/* ─── Internal mappers (also exported for the config loader) ─── */
 
-function toConfigVersionView(r: any): ConfigVersionView {
+export function toConfigVersionView(r: any): ConfigVersionView {
   return {
     id: r.id, systemId: r.systemId, version: r.version, label: r.label, status: r.status as ConfigStatus,
     effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
@@ -422,7 +422,7 @@ function toConfigVersionView(r: any): ConfigVersionView {
   };
 }
 
-function toServiceView(r: any): SchedulingServiceView {
+export function toServiceView(r: any): SchedulingServiceView {
   return {
     id: r.id, systemId: r.systemId, code: r.code, name: r.name, kind: r.kind as ServiceKind,
     weekday: r.weekday, time: r.time, recurrence: r.recurrence as Recurrence,
@@ -430,13 +430,13 @@ function toServiceView(r: any): SchedulingServiceView {
     active: r.active,
     effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
     musicRequired: r.musicRequired, protocolRequired: r.protocolRequired,
-    maxChoirs: r.maxChoirs, configVersionId: r.configVersionId,
+    maxChoirs: r.maxChoirs, targetTeamSize: r.targetTeamSize ?? 10, configVersionId: r.configVersionId,
     displayOrder: r.displayOrder, supersedesId: r.supersedesId,
     createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
   };
 }
 
-function toCategoryView(r: any): ChoirCategoryView {
+export function toCategoryView(r: any): ChoirCategoryView {
   return {
     id: r.id, systemId: r.systemId, code: r.code, name: r.name, description: r.description,
     active: r.active,
@@ -446,7 +446,7 @@ function toCategoryView(r: any): ChoirCategoryView {
   };
 }
 
-function toPolicyView(r: any): CategoryServicePolicyView {
+export function toPolicyView(r: any): CategoryServicePolicyView {
   return {
     id: r.id, systemId: r.systemId, categoryId: r.categoryId, serviceId: r.serviceId,
     active: r.active ?? true,
@@ -461,7 +461,7 @@ function toPolicyView(r: any): CategoryServicePolicyView {
   };
 }
 
-function toLinkView(r: any): ChoirCategoryLinkView {
+export function toLinkView(r: any): ChoirCategoryLinkView {
   return {
     id: r.id, systemId: r.systemId, choirId: r.choirId, categoryId: r.categoryId,
     eligibleOverride: parseJson(r.eligibleOverrideJson, {}),
@@ -473,7 +473,7 @@ function toLinkView(r: any): ChoirCategoryLinkView {
   };
 }
 
-function toProtocolRuleView(r: any): ProtocolServiceRuleView {
+export function toRuleView(r: any): ProtocolServiceRuleView {
   return {
     id: r.id, systemId: r.systemId, serviceId: r.serviceId, active: r.active ?? true,
     required: r.required,
@@ -487,7 +487,7 @@ function toProtocolRuleView(r: any): ProtocolServiceRuleView {
   };
 }
 
-function toDutyPolicyView(r: any): ProtocolDutyPolicyView {
+export function toDutyPolicyView(r: any): ProtocolDutyPolicyView {
   return {
     id: r.id, systemId: r.systemId,
     preferTarget: r.preferTarget, softMax: r.softMax, hardMax: r.hardMax,

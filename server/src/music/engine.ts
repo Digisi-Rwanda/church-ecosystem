@@ -8,6 +8,11 @@ import type {
   MusicServiceSlot,
 } from './types.js';
 import { MUSIC_SERVICE_LABELS } from './types.js';
+import type {
+  CategoryServicePolicyView,
+  ChoirCategoryView,
+  SchedulingServiceView,
+} from '../scheduling/types.js';
 import type { MusicScheduleUnit } from './types.js';
 
 const isUnitActive = (u: MusicScheduleUnit): boolean => u.active !== false;
@@ -935,4 +940,107 @@ export function periodOptionsForHorizon(
     out.push({ value, label });
   }
   return out;
+}
+
+/* ─── Config-aware overrides (Phase 3) ─── */
+
+/** A category's policy for one service: eligibility, min/max, requireAll. */
+export type MusicServicePolicy = {
+  eligible: boolean;
+  minCount: number | null;
+  maxCount: number | null;
+  requireAll: boolean;
+};
+
+/** Map (serviceCode, unitKind) → policy. Falls back to the legacy rules when no config. */
+export function servicePolicyFor(
+  serviceCode: string,
+  unitKind: string,
+  policies: CategoryServicePolicyView[],
+  categories: ChoirCategoryView[],
+): MusicServicePolicy {
+  const cat = categories.find((c) => c.code === unitKind);
+  const pol = policies.find(
+    (p) => p.categoryId === cat?.id && p.serviceId === serviceCode,
+  );
+  if (!pol) {
+    // Legacy defaults: PRIMARY eligible everywhere, CHILDREN only SS1, WORSHIP only TUESDAY
+    if (unitKind === 'CHILDREN') return serviceCode === 'SS1'
+      ? { eligible: true, minCount: null, maxCount: 3, requireAll: false }
+      : { eligible: false, minCount: null, maxCount: 0, requireAll: false };
+    if (unitKind === 'WORSHIP') return serviceCode === 'TUESDAY'
+      ? { eligible: true, minCount: null, maxCount: null, requireAll: true }
+      : { eligible: false, minCount: null, maxCount: 0, requireAll: false };
+    if (unitKind === 'SECONDARY') return ['SS1', 'SS2'].includes(serviceCode)
+      ? { eligible: true, minCount: null, maxCount: 1, requireAll: false }
+      : { eligible: false, minCount: null, maxCount: 0, requireAll: false };
+    return { eligible: true, minCount: null, maxCount: null, requireAll: false };
+  }
+  return {
+    eligible: pol.eligible,
+    minCount: pol.minCount,
+    maxCount: pol.maxCount,
+    requireAll: pol.requireAll,
+  };
+}
+
+/** Build a service-code → SchedulingService map for looking up service metadata. */
+export function serviceByCode(
+  services: SchedulingServiceView[],
+  code: string,
+): SchedulingServiceView | undefined {
+  return services.find((s) => s.code === code);
+}
+
+/** Validate assignments against category policies. Returns warnings + rejections. */
+export function validateConfigPolicies(input: {
+  services: MusicServiceSlot[];
+  assignments: MusicAssignment[];
+  units: readonly MusicScheduleUnit[];
+  policies: CategoryServicePolicyView[];
+  categories: ChoirCategoryView[];
+  serviceByCode: Map<string, SchedulingServiceView>;
+}): { ok: boolean; warnings: string[]; reason?: string } {
+  const warnings: string[] = [];
+  const unitById = new Map(input.units.map((u) => [u.id, u]));
+  const svcById = new Map(input.services.map((s) => [s.id, s]));
+  const byService = groupBy(input.assignments, (a) => a.serviceId);
+
+  for (const s of input.services) {
+    const svc = input.serviceByCode.get(s.kind);
+    const units = byService[s.id] ?? [];
+    // Group by unit kind
+    const byKind = new Map<string, string[]>();
+    for (const a of units) {
+      const kind = unitById.get(a.unitId)?.kind;
+      if (!kind) continue;
+      const arr = byKind.get(kind) ?? [];
+      arr.push(a.unitId);
+      byKind.set(kind, arr);
+    }
+    for (const [kind, ids] of byKind) {
+      const pol = servicePolicyFor(svc?.code ?? s.kind, kind, input.policies, input.categories);
+      if (!pol.eligible) {
+        return { ok: false, warnings, reason: `${kind} is not eligible for ${s.label}` };
+      }
+      if (pol.maxCount !== null && ids.length > pol.maxCount) {
+        return { ok: false, warnings, reason: `${s.label}: ${kind} has ${ids.length}, max ${pol.maxCount}` };
+      }
+      if (pol.minCount !== null && ids.length < pol.minCount) {
+        return { ok: false, warnings, reason: `${s.label}: ${kind} has ${ids.length}, min ${pol.minCount}` };
+      }
+    }
+    // requireAll: every active unit of this kind must be on the service
+    for (const [kind, ids] of byKind) {
+      const pol = servicePolicyFor(svc?.code ?? s.kind, kind, input.policies, input.categories);
+      if (pol.requireAll) {
+        const active = input.units.filter((u) => u.kind === kind && u.active !== false);
+        const missing = active.filter((u) => !ids.includes(u.id));
+        if (missing.length) {
+          warnings.push(`${s.date}: ${kind} ${missing.map((u) => u.name).join(', ')} missing (requireAll)`);
+        }
+      }
+    }
+  }
+  return { ok: true, warnings };
 }

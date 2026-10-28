@@ -2145,6 +2145,8 @@ model SchedulingService {
   protocolRequired  Boolean  @default(false)
   /// Maximum number of choirs allowed on one service instance (legacy: 3 for SS1/SS2).
   maxChoirs         Int      @default(3)
+  /// Target Protocol team size for this service (legacy: 10).
+  targetTeamSize    Int      @default(10)
   /// The config version this row belongs to (snapshot integrity).
   configVersionId   String?
   configVersion     ConfigVersion? @relation(fields: [configVersionId], references: [id])

@@ -53,6 +53,7 @@ export interface SchedulingServiceView {
   musicRequired: boolean;
   protocolRequired: boolean;
   maxChoirs: number;
+  targetTeamSize: number;
   configVersionId: string | null;
   displayOrder: number;
   supersedesId: string | null;
@@ -280,7 +281,7 @@ export const toServiceView = (r: SchedulingService): SchedulingServiceView => ({
   active: r.active,
   effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
   musicRequired: r.musicRequired, protocolRequired: r.protocolRequired,
-  maxChoirs: r.maxChoirs, configVersionId: r.configVersionId,
+  maxChoirs: r.maxChoirs, targetTeamSize: r.targetTeamSize, configVersionId: r.configVersionId,
   displayOrder: r.displayOrder, supersedesId: r.supersedesId,
   createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
 });

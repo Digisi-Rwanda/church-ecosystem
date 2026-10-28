@@ -545,3 +545,48 @@ export function scoreAttendanceRow(input: {
   if (status === 'HALF_PRESENT') return PROTOCOL_SCORE_POINTS.HALF_PRESENT;
   return PROTOCOL_SCORE_POINTS.PRESENT;
 }
+
+/* ─── Config-aware rule building (Phase 3) ─── */
+
+import type {
+  ProtocolDutyPolicyView,
+  ProtocolServiceRuleView,
+  SchedulingServiceView,
+} from '../scheduling/types.js';
+
+/**
+ * Build ProtocolSchedulingRules from the loaded configuration, falling back
+ * to the legacy BASE_RULES when no config exists yet.
+ */
+export function buildRulesFromConfig(
+  rules: ProtocolServiceRuleView[],
+  dutyPolicy: ProtocolDutyPolicyView | null,
+  relaxTuesday = false,
+): ProtocolSchedulingRules {
+  const rule = rules[0]; // one active rule per system
+  if (!rule && !dutyPolicy) {
+    return relaxTuesday
+      ? { preferTarget: 3, softMax: 3, hardMax: 4, defaultTeamSize: 10, requireChoirOnService: true, requireWorshipOnService: true, relaxChoirOnKinds: ['TUESDAY'] }
+      : { preferTarget: 3, softMax: 3, hardMax: 4, defaultTeamSize: 10, requireChoirOnService: true, requireWorshipOnService: true };
+  }
+  const dp = dutyPolicy ?? { preferTarget: 3, softMax: 3, hardMax: 4 };
+  return {
+    preferTarget: dp.preferTarget,
+    softMax: dp.softMax,
+    hardMax: dp.hardMax,
+    defaultTeamSize: rule?.defaultTeamSize ?? 10,
+    requireChoirOnService: rule?.requireChoir ?? true,
+    requireWorshipOnService: rule?.requireWorship ?? true,
+    relaxChoirOnKinds: relaxTuesday ? ['TUESDAY'] : [],
+  };
+}
+
+/** Look up the configured target team size for a service code. */
+export function targetTeamSizeFor(
+  service: ProtocolService,
+  services: SchedulingServiceView[],
+  rule: ProtocolServiceRuleView | undefined,
+): number {
+  const svc = services.find((s) => s.code === service.kind);
+  return svc?.targetTeamSize ?? rule?.defaultTeamSize ?? 10;
+}
