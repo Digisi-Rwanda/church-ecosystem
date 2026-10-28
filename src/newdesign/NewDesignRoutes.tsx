@@ -62,6 +62,7 @@ import {
   WatchesPage,
   WorkPage,
 } from './pages';
+import { DoorSchedulingConfigPage } from './pages';
 import { GovernanceLayout } from './GovernanceLayout';
 import { NewDesignLayout, RequireSignedIn } from './NewDesignGuards';
 import { NewSignInPage } from './NewSignInPage';
@@ -152,6 +153,7 @@ export function newDesignRoutes() {
           <Route path="sponsorship" element={<SponsorshipPage />} />
           <Route path="roster" element={<ProtocolRosterPage />} />
           <Route path="teams" element={<ProtocolTeamsPage />} />
+          <Route path="config" element={<DoorSchedulingConfigPage />} />
           <Route path="mine" element={<ProtocolMinePage />} />
           <Route path="deaconreports" element={<ProtocolReportsPage />} />
           <Route path="deleted-work" element={<DeletedWorkPage />} />
@@ -161,3 +163,4 @@ export function newDesignRoutes() {
     </Route>
   );
 }
+

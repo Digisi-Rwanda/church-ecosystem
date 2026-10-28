@@ -14,7 +14,7 @@ export type PortalSystem = {
 };
 
 /** A system's own blocks after the six shared ones. */
-export type OwnBlock = 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves';
+export type OwnBlock = 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves' | 'config';
 
 export type Capabilities = {
   personId: string;
@@ -2086,3 +2086,86 @@ export const decideMarriageChange = (planId: string, caseId: string, b: { approv
 export async function recordMoneyEntryId(input: MoneyEntryInput): Promise<string> {
   return (await apiFetch<{ id: string }>(`${M}/entries`, { method: 'POST', body: input })).id;
 }
+
+// ── Scheduling configuration (slice 3.17) ───────────────────────────────────────
+
+export type SchedulingServiceApi = {
+  id: string; systemId: string; code: string; name: string; kind: ServiceKind;
+  weekday: number | null; time: string | null; recurrence: Recurrence; selectedDates: string[];
+  active: boolean; effectiveFrom: string; effectiveTo: string | null;
+  musicRequired: boolean; protocolRequired: boolean; maxChoirs: number; targetTeamSize: number;
+  configVersionId: string | null; displayOrder: number; supersedesId: string | null;
+  createdByPersonId: string; createdAt: string;
+};
+export type ChoirCategoryApi = {
+  id: string; systemId: string; code: string; name: string; description: string; active: boolean;
+  effectiveFrom: string; effectiveTo: string | null; configVersionId: string | null;
+  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+};
+export type CategoryServicePolicyApi = {
+  id: string; systemId: string; categoryId: string; serviceId: string; eligible: boolean; active: boolean;
+  frequencyTarget: number | null; frequencyCounting: FrequencyCounting; frequencyKind: FrequencyKind;
+  planningMode: PlanningMode; minCount: number | null; maxCount: number | null; requireAll: boolean;
+  configVersionId: string | null; effectiveFrom: string; effectiveTo: string | null;
+  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+};
+export type ChoirCategoryLinkApi = {
+  id: string; systemId: string; choirId: string; categoryId: string;
+  eligibleOverride: Record<string, unknown>; frequencyOverride: Record<string, unknown>; active: boolean;
+  effectiveFrom: string; effectiveTo: string | null; configVersionId: string | null;
+  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+};
+export type ProtocolServiceRuleApi = {
+  id: string; systemId: string; serviceId: string; active: boolean; required: boolean;
+  defaultTeamSize: number; teamSizeOverrides: Record<string, number>; requireChoir: boolean;
+  requireWorship: boolean; relaxableKinds: string[]; configVersionId: string | null;
+  effectiveFrom: string; effectiveTo: string | null; supersedesId: string | null;
+  createdByPersonId: string; createdAt: string;
+};
+export type ProtocolDutyPolicyApi = {
+  id: string; systemId: string; preferTarget: number; softMax: number; hardMax: number;
+  extraDutyPolicy: 'ALLOW_WHEN_SHORT' | 'NEVER' | 'ALWAYS'; duplicateSameDayAllowed: boolean;
+  musicCompatibilityRequired: boolean; leadershipPriorities: string[]; exceptionsAllowed: boolean;
+  configVersionId: string | null; effectiveFrom: string; effectiveTo: string | null;
+  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+};
+export type ConfigVersionApi = {
+  id: string; systemId: string; version: number; label: string; status: ConfigStatus;
+  effectiveFrom: string; effectiveTo: string | null; createdByPersonId: string; createdAt: string;
+  reason: string | null; previousVersionId: string | null; notes: Record<string, unknown>;
+  validation: Record<string, unknown>; affectedSchedules: string[];
+};
+export type ConfigStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'SCHEDULED';
+export type ServiceKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
+export type Recurrence = 'WEEKLY' | 'MONTHLY' | 'SELECTED_DATES' | 'CUSTOM';
+export type FrequencyCounting = 'ASSIGNMENTS' | 'DISTINCT_DATES';
+export type FrequencyKind = 'MINIMUM' | 'TARGET' | 'MAXIMUM';
+export type PlanningMode = 'ROTATION' | 'FIXED' | 'MANUAL';
+
+const SC = '/api/scheduling/config';
+const scGet = <T>(path: string, systemId: string): Promise<T> =>
+  apiFetch<T>(`${SC}${path}?systemId=${encodeURIComponent(systemId)}`);
+const scPost = (path: string, body: object) => apiFetch(`${SC}${path}`, { method: 'POST', body });
+
+export const fetchConfigVersions = (systemId: string): Promise<{ versions: ConfigVersionApi[] }> => scGet(`${SC}/versions`, systemId);
+export const fetchSchedulingServices = (systemId: string, activeOnly = false): Promise<{ services: SchedulingServiceApi[] }> =>
+  scGet(`${SC}/services${activeOnly ? '?active=true' : ''}`, systemId);
+export const fetchChoirCategories = (systemId: string, activeOnly = false): Promise<{ categories: ChoirCategoryApi[] }> =>
+  scGet(`${SC}/categories${activeOnly ? '?active=true' : ''}`, systemId);
+export const fetchCategoryServicePolicies = (systemId: string): Promise<{ policies: CategoryServicePolicyApi[] }> =>
+  scGet(`${SC}/policies`, systemId);
+export const fetchChoirCategoryLinks = (systemId: string): Promise<{ links: ChoirCategoryLinkApi[] }> =>
+  scGet(`${SC}/links`, systemId);
+export const fetchProtocolServiceRules = (systemId: string): Promise<{ rules: ProtocolServiceRuleApi[] }> =>
+  scGet(`${SC}/protocol/rules`, systemId);
+export const fetchProtocolDutyPolicy = (systemId: string): Promise<{ policy: ProtocolDutyPolicyApi }> =>
+  scGet(`${SC}/protocol/policy`, systemId);
+
+export const createConfigVersion = (body: object) => scPost(`${SC}/versions`, body);
+export const createSchedulingService = (body: object) => scPost(`${SC}/services`, body);
+export const createChoirCategory = (body: object) => scPost(`${SC}/categories`, body);
+export const createCategoryServicePolicy = (body: object) => scPost(`${SC}/policies`, body);
+export const createChoirCategoryLink = (body: object) => scPost(`${SC}/links`, body);
+export const createProtocolServiceRule = (body: object) => scPost(`${SC}/protocol/rules`, body);
+export const createProtocolDutyPolicy = (body: object) => scPost(`${SC}/protocol/policy`, body);
+export const retireSchedulingService = (id: string) => apiFetch(`${SC}/services/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });

@@ -123,7 +123,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
       : [],
     schedule: [
       ...(shared.has('schedule') && !hasOwnSchedule(systemId) ? [place('schedule', 'schedule', 'door.block.schedule')] : []),
-      ...some(['monthplan', 'teams', 'mine', 'watches', 'pulpit'].map(ownPlace)),
+      ...some(['monthplan', 'teams', 'mine', 'watches', 'pulpit', 'config'].map(ownPlace)),
     ],
     ministry: some(['choirs', 'rehearsals', 'repertoire', 'sponsorship', 'roster'].map(ownPlace)),
     // Funds (with its Contributions tab), Budget and Accounting. The contribution lists are a tab of Funds, not a menu item.

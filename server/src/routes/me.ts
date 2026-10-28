@@ -98,7 +98,7 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
 const SYSTEMS_WITH_ORGANISATION = ['sys-music', 'sys-deacon'];
 
 function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, holdings: ReturnType<typeof liveHoldings>) {
-  const own: Array<{ key: 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves'; letters: AccessLetter[]; variant?: string }> = [];
+  const own: Array<{ key: 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves' | 'config'; letters: AccessLetter[]; variant?: string }> = [];
   // Central Administration home (slice 2.4): the main church's leaders see the whole church at a glance.
   if (systemId === 'sys-main' && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'central', letters: modules.GOVERNANCE });
   // Only a system that has units beneath it shows an Organisation: Music (its choirs) and Deacon (Protocol).
@@ -117,6 +117,8 @@ function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, ho
   // Collections: the Church Treasurer records them and the Church Leader reads them; nobody else sees the page.
   if (systemId === 'sys-main' && holdings.some((h) => h.via === 'OFFICE' && h.scope === 'CHURCH' && (h.office === 'CHURCH_TREASURER' || h.office === 'CHURCH_LEADER'))) own.push({ key: 'collections', letters: holdings.some((h) => h.office === 'CHURCH_TREASURER') ? ['R', 'W'] : ['R'] });
   if (systemId === MUSIC && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'monthplan', letters: modules.SCHEDULING });
+  // Scheduling configuration (slice 3.17): the services, categories, policies, choir links and protocol rules.
+  if ((systemId === MUSIC || systemId === 'sys-protocol') && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'config', letters: modules.SCHEDULING });
   if ((systemId === MUSIC || isChoirSystem(systemId) || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'choirs', letters: modules.PEOPLE });
   if ((isChoirSystem(systemId) || systemId === 'sys-worship') && (modules.PEOPLE ?? []).length > 0) {
     own.push({ key: 'rehearsals', letters: modules.PEOPLE });

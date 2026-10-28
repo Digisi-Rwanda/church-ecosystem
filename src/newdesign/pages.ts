@@ -197,3 +197,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   WatchesPage: loadWatchesPage,
   WorkPage: loadWorkPage,
 };
+
+const loadDoorSchedulingConfigPage = () => import('./DoorSchedulingConfigPage').then((m) => ({ default: m.DoorSchedulingConfigPage }));
+export const DoorSchedulingConfigPage = lazy(loadDoorSchedulingConfigPage);
+pageLoaders.DoorSchedulingConfigPage = loadDoorSchedulingConfigPage;
