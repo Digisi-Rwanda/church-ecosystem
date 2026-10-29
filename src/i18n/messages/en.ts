@@ -9,6 +9,9 @@ export const en = {
 
   'shell.signOut': 'Sign out',
   'shell.memberFallback': 'Member',
+  'shell.menuOpen': 'Open the menu',
+  'shell.menuClose': 'Close the menu',
+  'shell.primaryNav': 'Main navigation',
 
   // Menu groups
   'nav.group.home': 'Home',
@@ -84,6 +87,16 @@ export const en = {
   'door.people.add': 'Add a person',
   'door.people.none': 'No people found',
   'door.people.noneDetail': 'Try a different search, or add the person.',
+  'door.people.count.all': '{total} people',
+  'door.people.count.matches': '{total} people match',
+  'door.people.count.range': '{from}–{to} of {total}',
+  'door.people.count.rangeMatches': '{from}–{to} of {total} matches',
+  'door.people.filters.title': 'Filters',
+  'door.people.filters.withCount': 'Filters ({count})',
+  'door.people.maritalStatus': 'Marital status',
+  'door.people.marital.WIDOWED': 'Widowed',
+  'door.people.childrenLabel': 'Children',
+  'door.people.children': '{count} children',
   'door.people.col.code': 'Code',
   'door.people.col.name': 'Name',
   'door.people.col.status': 'Status',
@@ -3514,6 +3527,12 @@ export const en = {
   'door.ac.reserveNote': 'The money is reserved when you submit, and released if the activity is returned, withdrawn or cancelled.',
   'door.ac.submit': 'Submit for approval',
   // Plan page: money while running, settlement, team
+  // Plan team
+  'door.plan.team.edit': 'Edit team',
+  'door.plan.team.add': 'Add team member',
+  'door.plan.team.role': 'Role',
+  'door.plan.team.addBtn': 'Add member',
+  'door.plan.team.note': 'Add people and their roles for this activity.',
   'door.plan.suspendTitle': 'Suspend with note',
   'door.plan.suspendPurpose': 'Work and spending stop until you lift the suspension.',
   'door.pm.sum.approved': 'Total approved',
@@ -3545,5 +3564,3 @@ export const en = {
 
 export type MessageKey = keyof typeof en;
 export type Messages = Record<MessageKey, string>;
-
-
