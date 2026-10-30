@@ -13,7 +13,6 @@ import {
   type ChoirCategoryApi,
   type ChoirCategoryLinkApi,
   type ConfigVersionApi,
-  type ProtocolDutyPolicyApi,
   type ProtocolServiceRuleApi,
   type SchedulingServiceApi,
 } from "../api/frontDoorApi";

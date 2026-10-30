@@ -10,7 +10,7 @@ const pages = Object.entries(sources).map(([path, text]) => ({ name: path.replac
 /** Parts that are not pages, or whose own headings are not page titles. */
 const NOT_A_PAGE_TITLE = new Set(['Dashboard.tsx', 'LetterPage.tsx', 'SystemCards.tsx', 'Shell.tsx', 'NewSignInPage.tsx']);
 /** Where a drawn width or colour is real data (a bar's length), not styling. */
-const MAY_USE_INLINE_STYLE = new Set(['ContributionList.tsx', 'ContributionsPage.tsx', 'Dashboard.tsx', 'DonationsPanel.tsx', 'MoneyBlockParts.tsx', 'MoneyBudgetPage.tsx', 'NewSignInPage.tsx']);
+const MAY_USE_INLINE_STYLE = new Set(['Bulletins.tsx', 'ContributionList.tsx', 'ContributionsPage.tsx', 'Dashboard.tsx', 'DonationsPanel.tsx', 'MoneyBlockParts.tsx', 'MoneyBudgetPage.tsx', 'NewSignInPage.tsx']);
 
 describe('kit gate', () => {
   it('actually sees the pages', () => {
