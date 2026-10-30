@@ -2143,29 +2143,31 @@ export type FrequencyKind = 'MINIMUM' | 'TARGET' | 'MAXIMUM';
 export type PlanningMode = 'ROTATION' | 'FIXED' | 'MANUAL';
 
 const SC = '/api/scheduling/config';
-const scGet = <T>(path: string, systemId: string): Promise<T> =>
-  apiFetch<T>(`${SC}${path}?systemId=${encodeURIComponent(systemId)}`);
+const scGet = <T>(path: string, systemId: string, params: Record<string, string> = {}): Promise<T> => {
+  const query = new URLSearchParams({ systemId, ...params });
+  return apiFetch<T>(`${SC}${path}?${query}`);
+};
 const scPost = (path: string, body: object) => apiFetch(`${SC}${path}`, { method: 'POST', body });
 
-export const fetchConfigVersions = (systemId: string): Promise<{ versions: ConfigVersionApi[] }> => scGet(`${SC}/versions`, systemId);
+export const fetchConfigVersions = (systemId: string): Promise<{ versions: ConfigVersionApi[] }> => scGet('/versions', systemId);
 export const fetchSchedulingServices = (systemId: string, activeOnly = false): Promise<{ services: SchedulingServiceApi[] }> =>
-  scGet(`${SC}/services${activeOnly ? '?active=true' : ''}`, systemId);
+  scGet('/services', systemId, activeOnly ? { active: 'true' } : {});
 export const fetchChoirCategories = (systemId: string, activeOnly = false): Promise<{ categories: ChoirCategoryApi[] }> =>
-  scGet(`${SC}/categories${activeOnly ? '?active=true' : ''}`, systemId);
+  scGet('/categories', systemId, activeOnly ? { active: 'true' } : {});
 export const fetchCategoryServicePolicies = (systemId: string): Promise<{ policies: CategoryServicePolicyApi[] }> =>
-  scGet(`${SC}/policies`, systemId);
+  scGet('/policies', systemId);
 export const fetchChoirCategoryLinks = (systemId: string): Promise<{ links: ChoirCategoryLinkApi[] }> =>
-  scGet(`${SC}/links`, systemId);
+  scGet('/links', systemId);
 export const fetchProtocolServiceRules = (systemId: string): Promise<{ rules: ProtocolServiceRuleApi[] }> =>
-  scGet(`${SC}/protocol/rules`, systemId);
+  scGet('/protocol/rules', systemId);
 export const fetchProtocolDutyPolicy = (systemId: string): Promise<{ policy: ProtocolDutyPolicyApi }> =>
-  scGet(`${SC}/protocol/policy`, systemId);
+  scGet('/protocol/policy', systemId);
 
-export const createConfigVersion = (body: object) => scPost(`${SC}/versions`, body);
-export const createSchedulingService = (body: object) => scPost(`${SC}/services`, body);
-export const createChoirCategory = (body: object) => scPost(`${SC}/categories`, body);
-export const createCategoryServicePolicy = (body: object) => scPost(`${SC}/policies`, body);
-export const createChoirCategoryLink = (body: object) => scPost(`${SC}/links`, body);
-export const createProtocolServiceRule = (body: object) => scPost(`${SC}/protocol/rules`, body);
-export const createProtocolDutyPolicy = (body: object) => scPost(`${SC}/protocol/policy`, body);
+export const createConfigVersion = (body: object) => scPost('/versions', body);
+export const createSchedulingService = (body: object) => scPost('/services', body);
+export const createChoirCategory = (body: object) => scPost('/categories', body);
+export const createCategoryServicePolicy = (body: object) => scPost('/policies', body);
+export const createChoirCategoryLink = (body: object) => scPost('/links', body);
+export const createProtocolServiceRule = (body: object) => scPost('/protocol/rules', body);
+export const createProtocolDutyPolicy = (body: object) => scPost('/protocol/policy', body);
 export const retireSchedulingService = (id: string) => apiFetch(`${SC}/services/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });

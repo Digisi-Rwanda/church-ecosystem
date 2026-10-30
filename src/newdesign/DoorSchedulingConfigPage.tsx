@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { useParams } from "react-router-dom";
+import { useParams, useSearchParams } from "react-router-dom";
 import {
   fetchCategoryServicePolicies,
   fetchChoirCategories,
@@ -34,7 +34,9 @@ import {
 export function DoorSchedulingConfigPage() {
   const t = useT();
   const { systemId = "" } = useParams();
-  const [tab, setTab] = useState<(typeof CONFIG_TABS)[number]>("services");
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get("tab");
+  const tab = CONFIG_TABS.find((candidate) => candidate === requestedTab) ?? "services";
 
   return (
     <section className="door-block" aria-labelledby="door-config-title">
@@ -48,7 +50,11 @@ export function DoorSchedulingConfigPage() {
             type="button"
             className={"door-menu-link" + (tab === k ? " active" : "")}
             aria-current={tab === k ? "page" : undefined}
-            onClick={() => setTab(k)}
+            onClick={() => {
+              const next = new URLSearchParams(searchParams);
+              next.set("tab", k);
+              setSearchParams(next);
+            }}
           >
             {t(configTabKey(k))}
           </button>
