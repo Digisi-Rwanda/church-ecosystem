@@ -1,54 +1,66 @@
 /**
- * Apply database migrations at start-up (replaces `prisma db push` on Render).
+ * Apply database migrations at start-up.
  * Run: npm run migrate:pg  (from server/)
  *
- * - Migrations present, empty database: creates everything.
- * - Migrations present, database shaped earlier by `db push`: marks the baseline as
- *   applied once (no data changes), then deploys anything newer.
- * - No migrations folder yet (baseline not generated): falls back to `db push` and says so,
- *   so a deploy can never leave the database without tables.
+ * A missing baseline or any migration failure stops startup. Baseline adoption must
+ * be performed explicitly; this runner never changes schema outside migrations.
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
-import { BASELINE_MIGRATION, hasBaseline, needsBaseline } from '../src/lib/migrations.js';
+import { join, resolve } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { runMigrationDeployment } from '../src/lib/migrationRunner.js';
 
 const SCHEMA = 'prisma/schema.postgres.prisma';
 const MIGRATIONS = join('prisma', 'migrations');
 
-function prisma(args: string[]) {
-  const r = spawnSync('npx', ['prisma', ...args, `--schema=${SCHEMA}`], {
-    encoding: 'utf8',
-    shell: true,
-  });
-  if (r.stdout) process.stdout.write(r.stdout);
-  if (r.stderr) process.stderr.write(r.stderr);
-  return { status: r.status ?? 1, output: `${r.stdout ?? ''}\n${r.stderr ?? ''}` };
+type SpawnResult = {
+  status: number | null;
+  stdout?: string | null;
+  stderr?: string | null;
+  error?: Error;
+};
+type Spawn = (
+  command: string,
+  args: string[],
+  options: { encoding: 'utf8'; shell: true },
+) => SpawnResult;
+
+export function executeMigrationRunner(
+  spawn: Spawn = spawnSync,
+  targetProcess: { exitCode?: number } = process,
+  reportOutput: (output: string) => void = (output) => process.stdout.write(output),
+  reportError: (error: string) => void = (error) => process.stderr.write(`${error}\n`),
+): number {
+  const entries = existsSync(MIGRATIONS)
+    ? readdirSync(MIGRATIONS, { withFileTypes: true }).map((d) => ({
+        name: d.name,
+        isDirectory: d.isDirectory(),
+        hasSql: d.isDirectory() && existsSync(join(MIGRATIONS, d.name, 'migration.sql')),
+      }))
+    : [];
+
+  const status = runMigrationDeployment(
+    entries,
+    (args) => {
+      const result = spawn(
+        'npx',
+        ['prisma', ...args, `--schema=${SCHEMA}`],
+        { encoding: 'utf8', shell: true },
+      );
+      return {
+        status: result.status,
+        output: `${result.stdout ?? ''}\n${result.stderr ?? ''}`,
+        error: result.error,
+      };
+    },
+    reportOutput,
+    reportError,
+  );
+  targetProcess.exitCode = status;
+  return status;
 }
 
-const entries = existsSync(MIGRATIONS)
-  ? readdirSync(MIGRATIONS, { withFileTypes: true }).map((d) => ({
-      name: d.name,
-      isDirectory: d.isDirectory(),
-      hasSql: d.isDirectory() && existsSync(join(MIGRATIONS, d.name, 'migration.sql')),
-    }))
-  : [];
-
-if (!hasBaseline(entries)) {
-  console.warn('[migrate] Baseline migration not found — applying the schema with db push instead. Generate the baseline: npm run db:baseline');
-  process.exit(prisma(['db', 'push']).status);
+if (process.argv[1] && pathToFileURL(resolve(process.argv[1])).href === import.meta.url) {
+  executeMigrationRunner();
 }
-
-let result = prisma(['migrate', 'deploy']);
-if (result.status !== 0 && needsBaseline(result.output)) {
-  console.log(`[migrate] Database already has tables: marking ${BASELINE_MIGRATION} as applied (no data changes).`);
-  const resolved = prisma(['migrate', 'resolve', '--applied', BASELINE_MIGRATION]);
-  if (resolved.status !== 0) process.exit(resolved.status);
-  result = prisma(['migrate', 'deploy']);
-}
-if (result.status !== 0) {
-  // A failed migration must never leave the server down: fall back to the old way (add-only changes).
-  console.warn('[migrate] migrate deploy failed — falling back to db push so the server can start.');
-  result = prisma(['db', 'push']);
-}
-process.exit(result.status);
