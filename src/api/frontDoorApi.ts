@@ -2116,7 +2116,7 @@ export type ChoirCategoryLinkApi = {
   supersedesId: string | null; createdByPersonId: string; createdAt: string;
 };
 export type ProtocolServiceRuleApi = {
-  id: string; systemId: string; serviceId: string; active: boolean; required: boolean;
+  id: string; systemId: string; serviceId: string; serviceCode?: string; active: boolean; required: boolean;
   defaultTeamSize: number; teamSizeOverrides: Record<string, number>; requireChoir: boolean;
   requireWorship: boolean; relaxableKinds: string[]; configVersionId: string | null;
   effectiveFrom: string; effectiveTo: string | null; supersedesId: string | null;
@@ -2150,24 +2150,40 @@ const scGet = <T>(path: string, systemId: string, params: Record<string, string>
 const scPost = (path: string, body: object) => apiFetch(`${SC}${path}`, { method: 'POST', body });
 
 export const fetchConfigVersions = (systemId: string): Promise<{ versions: ConfigVersionApi[] }> => scGet('/versions', systemId);
-export const fetchSchedulingServices = (systemId: string, activeOnly = false): Promise<{ services: SchedulingServiceApi[] }> =>
-  scGet('/services', systemId, activeOnly ? { active: 'true' } : {});
-export const fetchChoirCategories = (systemId: string, activeOnly = false): Promise<{ categories: ChoirCategoryApi[] }> =>
-  scGet('/categories', systemId, activeOnly ? { active: 'true' } : {});
-export const fetchCategoryServicePolicies = (systemId: string): Promise<{ policies: CategoryServicePolicyApi[] }> =>
-  scGet('/policies', systemId);
-export const fetchChoirCategoryLinks = (systemId: string): Promise<{ links: ChoirCategoryLinkApi[] }> =>
-  scGet('/links', systemId);
-export const fetchProtocolServiceRules = (systemId: string): Promise<{ rules: ProtocolServiceRuleApi[] }> =>
-  scGet('/protocol/rules', systemId);
-export const fetchProtocolDutyPolicy = (systemId: string): Promise<{ policy: ProtocolDutyPolicyApi }> =>
-  scGet('/protocol/policy', systemId);
+export const fetchSchedulingServices = (systemId: string, activeOnly = false, configVersionId?: string): Promise<{ services: SchedulingServiceApi[] }> =>
+  scGet('/services', systemId, { ...(activeOnly ? { active: 'true' } : {}), ...(configVersionId ? { configVersionId } : {}) });
+export const fetchChoirCategories = (systemId: string, activeOnly = false, configVersionId?: string): Promise<{ categories: ChoirCategoryApi[] }> =>
+  scGet('/categories', systemId, { ...(activeOnly ? { active: 'true' } : {}), ...(configVersionId ? { configVersionId } : {}) });
+export const fetchCategoryServicePolicies = (systemId: string, configVersionId?: string): Promise<{ policies: CategoryServicePolicyApi[] }> =>
+  scGet('/policies', systemId, configVersionId ? { configVersionId } : {});
+export const fetchChoirCategoryLinks = (systemId: string, configVersionId?: string): Promise<{ links: ChoirCategoryLinkApi[] }> =>
+  scGet('/links', systemId, configVersionId ? { configVersionId } : {});
+export const fetchProtocolServiceRules = (systemId: string, configVersionId?: string): Promise<{ rules: ProtocolServiceRuleApi[] }> =>
+  scGet('/protocol/rules', systemId, configVersionId ? { configVersionId } : {});
+export const fetchProtocolDutyPolicy = (systemId: string, configVersionId?: string): Promise<{ policy: ProtocolDutyPolicyApi | null }> =>
+  scGet('/protocol/policy', systemId, configVersionId ? { configVersionId } : {});
 
 export const createConfigVersion = (body: object) => scPost('/versions', body);
+export const cloneConfigVersion = (systemId: string, label: string, reason?: string) =>
+  scPost('/versions/clone', { systemId, label, reason });
+export const activateConfigVersion = (id: string) =>
+  apiFetch(`${SC}/versions/${encodeURIComponent(id)}/activate`, { method: 'POST', body: {} });
 export const createSchedulingService = (body: object) => scPost('/services', body);
 export const createChoirCategory = (body: object) => scPost('/categories', body);
 export const createCategoryServicePolicy = (body: object) => scPost('/policies', body);
 export const createChoirCategoryLink = (body: object) => scPost('/links', body);
 export const createProtocolServiceRule = (body: object) => scPost('/protocol/rules', body);
 export const createProtocolDutyPolicy = (body: object) => scPost('/protocol/policy', body);
+export const updateSchedulingService = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/services/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateChoirCategory = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/categories/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateCategoryServicePolicy = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/policies/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateChoirCategoryLink = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/links/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateProtocolServiceRule = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/protocol/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateProtocolDutyPolicy = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/protocol/policy/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
 export const retireSchedulingService = (id: string) => apiFetch(`${SC}/services/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });

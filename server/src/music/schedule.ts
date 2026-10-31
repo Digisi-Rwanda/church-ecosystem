@@ -15,6 +15,7 @@ export interface MonthDoc {
   services: MusicServiceSlot[];
   assignments: MusicAssignment[];
   warnings: string[];
+  configVersionId?: string | null;
 }
 export interface DraftDoc {
   id: string;
@@ -24,6 +25,7 @@ export interface DraftDoc {
   services: MusicServiceSlot[];
   assignments: MusicAssignment[];
   warnings: string[];
+  configVersionId?: string | null;
 }
 export interface LogChange { kind: 'ADDED' | 'REMOVED' | 'SERVICE_ADDED' | 'SERVICE_REMOVED' | 'RESCHEDULED'; serviceId: string; text: string }
 export type LogAction = 'CONFIRMED' | 'RECONFIRMED' | 'PUBLISHED' | 'EDITED';

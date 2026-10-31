@@ -43,6 +43,13 @@ export const CONFIG_TABS = [
 ] as const;
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 
+export const configTabsForSystem = (systemId: string): readonly ConfigTab[] =>
+  systemId === 'sys-music'
+    ? CONFIG_TABS.filter((tab) => tab !== 'protocol' && tab !== 'duty')
+    : systemId === 'sys-protocol'
+      ? CONFIG_TABS.filter((tab) => tab === 'services' || tab === 'protocol' || tab === 'duty' || tab === 'versions')
+      : ['services', 'versions'];
+
 export const configTabKey = (tab: ConfigTab): MessageKey => `door.config.tab.${tab}`;
 
 /** A weekday 0-6 (Sunday-first) as a translated name. */

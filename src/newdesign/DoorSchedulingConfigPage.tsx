@@ -1,249 +1,207 @@
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
-  fetchCategoryServicePolicies,
-  fetchChoirCategories,
-  fetchChoirCategoryLinks,
+  activateConfigVersion,
+  cloneConfigVersion,
+  createConfigVersion,
   fetchConfigVersions,
-  fetchProtocolDutyPolicy,
-  fetchProtocolServiceRules,
-  fetchSchedulingServices,
-  retireSchedulingService,
-  type CategoryServicePolicyApi,
-  type ChoirCategoryApi,
-  type ChoirCategoryLinkApi,
   type ConfigVersionApi,
-  type ProtocolServiceRuleApi,
-  type SchedulingServiceApi,
 } from "../api/frontDoorApi";
 import { useT } from "../i18n/I18nContext";
 import { LoadState } from "./LoadState";
 import { useLoad } from "./useLoad";
 import { EmptyState, PageHeader } from "./kit";
 import {
-  CONFIG_TABS,
+  CategoriesEditor,
+  LinksEditor,
+  PoliciesEditor,
+  ProtocolDutyEditor,
+  ProtocolRulesEditor,
+  ServicesEditor,
+} from "./SchedulingConfigEditors";
+import {
+  configTabsForSystem,
   configTabKey,
-  extraDutyPolicyName,
-  linkSummary,
-  policySummary,
-  ruleSummary,
-  serviceSummary,
   versionSummary,
 } from "./config";
+
+type VersionCreateResult = { version?: ConfigVersionApi | string };
+
+async function createDraftVersion(systemId: string, rows: ConfigVersionApi[], label: string): Promise<VersionCreateResult> {
+  if (rows.some((version) => version.status === "ACTIVE")) {
+    return await cloneConfigVersion(systemId, label) as VersionCreateResult;
+  }
+  const nextVersion = rows.reduce((max, version) => Math.max(max, version.version), 0) + 1;
+  return await createConfigVersion({ systemId, version: nextVersion, label, status: "DRAFT" }) as VersionCreateResult;
+}
+
+const createdVersionId = (result: VersionCreateResult) =>
+  typeof result.version === "string" ? result.version : result.version?.id;
 
 export function DoorSchedulingConfigPage() {
   const t = useT();
   const { systemId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
+  const tabs = configTabsForSystem(systemId);
+  const [createError, setCreateError] = useState("");
+  const versions = useLoad(() => fetchConfigVersions(systemId), `sched-config-versions|${systemId}`);
+  const rows = useMemo(() => versions.data?.versions ?? [], [versions.data?.versions]);
+  const requestedVersionId = searchParams.get("version");
+  const selectedVersion = rows.find((version) => version.id === requestedVersionId)
+    ?? rows.find((version) => version.status === "ACTIVE")
+    ?? rows[0];
+  const versionId = selectedVersion?.id ?? "";
+  const editable = selectedVersion?.status === "DRAFT";
   const requestedTab = searchParams.get("tab");
-  const tab = CONFIG_TABS.find((candidate) => candidate === requestedTab) ?? "services";
+  const tab = tabs.find((candidate) => candidate === requestedTab) ?? "services";
+
+  useEffect(() => {
+    if (requestedVersionId && !rows.some((version) => version.id === requestedVersionId)) return;
+    if (!selectedVersion || selectedVersion.id === requestedVersionId) return;
+    const next = new URLSearchParams(searchParams);
+    next.set("version", selectedVersion.id);
+    setSearchParams(next, { replace: true });
+  }, [requestedVersionId, rows, searchParams, selectedVersion, setSearchParams]);
+
+  const selectVersion = (id: string) => {
+    const next = new URLSearchParams(searchParams);
+    if (id) next.set("version", id);
+    else next.delete("version");
+    setSearchParams(next);
+  };
+  const selectTab = (nextTab: string) => {
+    const next = new URLSearchParams(searchParams);
+    next.set("tab", nextTab);
+    setSearchParams(next);
+  };
+  const createInitialDraft = async () => {
+    setCreateError("");
+    try {
+      const result = await createDraftVersion(systemId, rows, t("door.config.version.draftLabel"));
+      versions.reload();
+      const id = createdVersionId(result);
+      if (id) selectVersion(id);
+    } catch (reason) {
+      setCreateError(reason instanceof Error && reason.message ? reason.message : t("door.config.err.server"));
+    }
+  };
 
   return (
     <section className="door-block" aria-labelledby="door-config-title">
       <div>
         <PageHeader id="door-config-title" title={t("door.config.title")} purpose={t("door.purpose.config")} />
       </div>
+      <LoadState loading={versions.loading} failed={versions.failed} retry={versions.reload}>
+        {rows.length === 0 ? (
+          <div className="panel door-form">
+            <p className="muted">{t("door.config.versions.empty")}</p>
+            {createError && <p className="door-error" role="alert">{createError}</p>}
+            <button type="button" className="btn sm" onClick={() => void createInitialDraft()}>
+              {t("door.config.version.createDraft")}
+            </button>
+          </div>
+        ) : (
+          <>
+            <label className="door-config-version">
+              {t("door.config.selectedVersion")}
+              <select value={versionId} onChange={(event) => selectVersion(event.currentTarget.value)}>
+                {rows.map((version) => <option key={version.id} value={version.id}>{versionSummary(version, t)}</option>)}
+              </select>
+            </label>
+            <p className="muted" role="status">
+              {editable ? t("door.config.draftEditable") : t("door.config.versionReadOnly", {
+                status: selectedVersion ? t(`door.config.status.${selectedVersion.status}` as Parameters<typeof t>[0]) : "",
+              })}
+            </p>
+          </>
+        )}
+      </LoadState>
       <nav className="door-menu" aria-label={t("door.config.tabs")}>
-        {CONFIG_TABS.map((k) => (
-          <button
-            key={k}
-            type="button"
-            className={"door-menu-link" + (tab === k ? " active" : "")}
-            aria-current={tab === k ? "page" : undefined}
-            onClick={() => {
-              const next = new URLSearchParams(searchParams);
-              next.set("tab", k);
-              setSearchParams(next);
-            }}
-          >
-            {t(configTabKey(k))}
+        {tabs.map((key) => (
+          <button key={key} type="button" className={"door-menu-link" + (tab === key ? " active" : "")}
+            aria-current={tab === key ? "page" : undefined} onClick={() => selectTab(key)}>
+            {t(configTabKey(key))}
           </button>
         ))}
       </nav>
-      {tab === "services" && <ServicesTab systemId={systemId} />}
-      {tab === "categories" && <CategoriesTab systemId={systemId} />}
-      {tab === "policies" && <PoliciesTab systemId={systemId} />}
-      {tab === "links" && <LinksTab systemId={systemId} />}
-      {tab === "protocol" && <ProtocolTab systemId={systemId} />}
-      {tab === "duty" && <DutyTab systemId={systemId} />}
-      {tab === "versions" && <VersionsTab systemId={systemId} />}
+      {tab === "services" && <ServicesEditor systemId={systemId} version={selectedVersion} />}
+      {tab === "categories" && <CategoriesEditor systemId={systemId} version={selectedVersion} />}
+      {tab === "policies" && <PoliciesEditor systemId={systemId} version={selectedVersion} />}
+      {tab === "links" && <LinksEditor systemId={systemId} version={selectedVersion} />}
+      {tab === "protocol" && <ProtocolRulesEditor systemId={systemId} version={selectedVersion} />}
+      {tab === "duty" && <ProtocolDutyEditor systemId={systemId} version={selectedVersion} />}
+      {tab === "versions" && (
+        <VersionsTab systemId={systemId} rows={rows} selectedId={versionId} reload={versions.reload} selectVersion={selectVersion} />
+      )}
     </section>
   );
 }
 
-function ServicesTab({ systemId }: { systemId: string }) {
+function VersionsTab({ systemId, rows, selectedId, reload, selectVersion }: {
+  systemId: string;
+  rows: ConfigVersionApi[];
+  selectedId: string;
+  reload: () => void;
+  selectVersion: (id: string) => void;
+}) {
   const t = useT();
-  const list = useLoad(() => fetchSchedulingServices(systemId, false), "sched-config-services|" + systemId);
   const [error, setError] = useState("");
+  const [working, setWorking] = useState(false);
   const run = async (job: () => Promise<unknown>) => {
     setError("");
+    setWorking(true);
     try {
       await job();
-      list.reload();
-    } catch {
-      setError(t("door.config.err.server"));
+      reload();
+    } catch (reason) {
+      setError(reason instanceof Error && reason.message ? reason.message : t("door.config.err.server"));
+    } finally {
+      setWorking(false);
+    }
+  };
+  const createDraft = async () => {
+    setError("");
+    setWorking(true);
+    try {
+      const result = await createDraftVersion(systemId, rows, t("door.config.version.draftLabel"));
+      reload();
+      const id = createdVersionId(result);
+      if (id) selectVersion(id);
+    } catch (reason) {
+      setError(reason instanceof Error && reason.message ? reason.message : t("door.config.err.server"));
+    } finally {
+      setWorking(false);
     }
   };
   return (
-    <>
+    <div>
       {error && <p className="door-error" role="alert">{error}</p>}
-      <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
-        {(list.data?.services ?? []).length === 0 ? (
-          <EmptyState title={t("door.config.services.empty")} />
-        ) : (
-          <ul className="door-notices">
-            {(list.data?.services ?? []).map((s: SchedulingServiceApi) => (
-              <li key={s.id} className="panel door-notice">
-                <div className="door-notice-main">
-                  <strong>{s.name}</strong>
-                  <p className="muted">{serviceSummary(s, t)}</p>
-                  {s.active && (
-                    <button type="button" className="btn ghost sm" onClick={() => void run(() => retireSchedulingService(s.id))}>
-                      {t("door.config.form.retire")}
+      <button type="button" className="btn sm" disabled={working} onClick={() => void createDraft()}>
+        {t("door.config.version.createDraft")}
+      </button>
+      {rows.length === 0 ? <EmptyState title={t("door.config.versions.empty")} /> : (
+        <ul className="door-notices">
+          {rows.map((version) => (
+            <li key={version.id} className="panel door-notice">
+              <div className="door-notice-main">
+                <strong>{version.label}</strong>
+                <p className="muted">{versionSummary(version, t)}</p>
+                <div className="door-row">
+                  <button type="button" className="btn ghost sm" onClick={() => selectVersion(version.id)}>
+                    {version.id === selectedId ? t("door.config.version.selected") : t("door.config.version.select")}
+                  </button>
+                  {version.status === "DRAFT" && (
+                    <button type="button" className="btn ghost sm" disabled={working}
+                      onClick={() => void run(() => activateConfigVersion(version.id))}>
+                      {t("door.config.version.activate")}
                     </button>
                   )}
                 </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </LoadState>
-    </>
-  );
-}
-
-function CategoriesTab({ systemId }: { systemId: string }) {
-  const t = useT();
-  const list = useLoad(() => fetchChoirCategories(systemId, false), "sched-config-cats|" + systemId);
-  return (
-    <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
-      {(list.data?.categories ?? []).length === 0 ? (
-        <EmptyState title={t("door.config.categories.empty")} />
-      ) : (
-        <ul className="door-notices">
-          {(list.data?.categories ?? []).map((c: ChoirCategoryApi) => (
-            <li key={c.id} className="panel door-notice">
-              <div className="door-notice-main">
-                <strong>{c.name}</strong>
-                <p className="muted">{c.description || c.code}</p>
               </div>
             </li>
           ))}
         </ul>
       )}
-    </LoadState>
-  );
-}
-
-function PoliciesTab({ systemId }: { systemId: string }) {
-  const t = useT();
-  const list = useLoad(() => fetchCategoryServicePolicies(systemId), "sched-config-policies|" + systemId);
-  return (
-    <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
-      {(list.data?.policies ?? []).length === 0 ? (
-        <EmptyState title={t("door.config.policies.empty")} />
-      ) : (
-        <ul className="door-notices">
-          {(list.data?.policies ?? []).map((p: CategoryServicePolicyApi) => (
-            <li key={p.id} className="panel door-notice">
-              <div className="door-notice-main">
-                <p className="muted">{policySummary(p, t)}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </LoadState>
-  );
-}
-
-function LinksTab({ systemId }: { systemId: string }) {
-  const t = useT();
-  const list = useLoad(() => fetchChoirCategoryLinks(systemId), "sched-config-links|" + systemId);
-  return (
-    <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
-      {(list.data?.links ?? []).length === 0 ? (
-        <EmptyState title={t("door.config.links.empty")} />
-      ) : (
-        <ul className="door-notices">
-          {(list.data?.links ?? []).map((l: ChoirCategoryLinkApi) => (
-            <li key={l.id} className="panel door-notice">
-              <div className="door-notice-main">
-                <p className="muted">{linkSummary(l, t)}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </LoadState>
-  );
-}
-
-function ProtocolTab({ systemId }: { systemId: string }) {
-  const t = useT();
-  const list = useLoad(() => fetchProtocolServiceRules(systemId), "sched-config-protocol|" + systemId);
-  return (
-    <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
-      {(list.data?.rules ?? []).length === 0 ? (
-        <EmptyState title={t("door.config.protocol.empty")} />
-      ) : (
-        <ul className="door-notices">
-          {(list.data?.rules ?? []).map((r: ProtocolServiceRuleApi) => (
-            <li key={r.id} className="panel door-notice">
-              <div className="door-notice-main">
-                <p className="muted">{ruleSummary(r, t)}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </LoadState>
-  );
-}
-
-function DutyTab({ systemId }: { systemId: string }) {
-  const t = useT();
-  const pol = useLoad(() => fetchProtocolDutyPolicy(systemId), "sched-config-duty|" + systemId);
-  return (
-    <LoadState loading={pol.loading} failed={pol.failed} retry={pol.reload}>
-      {pol.data?.policy ? (
-        <div className="panel">
-          <ul className="door-list">
-            <li><strong>{t("door.config.duty.preferTarget")}:</strong> {pol.data.policy.preferTarget}</li>
-            <li><strong>{t("door.config.duty.softMax")}:</strong> {pol.data.policy.softMax}</li>
-            <li><strong>{t("door.config.duty.hardMax")}:</strong> {pol.data.policy.hardMax}</li>
-            <li><strong>{t("door.config.duty.extra")}:</strong> {extraDutyPolicyName(pol.data.policy.extraDutyPolicy, t)}</li>
-            <li><strong>{t("door.config.duty.duplicate")}:</strong> {pol.data.policy.duplicateSameDayAllowed ? t("door.config.form.yes") : t("door.config.form.no")}</li>
-            <li><strong>{t("door.config.duty.music")}:</strong> {pol.data.policy.musicCompatibilityRequired ? t("door.config.form.yes") : t("door.config.form.no")}</li>
-            <li><strong>{t("door.config.duty.exceptions")}:</strong> {pol.data.policy.exceptionsAllowed ? t("door.config.form.yes") : t("door.config.form.no")}</li>
-          </ul>
-        </div>
-      ) : (
-        <EmptyState title={t("door.config.versions.empty")} />
-      )}
-    </LoadState>
-  );
-}
-
-function VersionsTab({ systemId }: { systemId: string }) {
-  const t = useT();
-  const list = useLoad(() => fetchConfigVersions(systemId), "sched-config-versions|" + systemId);
-  return (
-    <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
-      {(list.data?.versions ?? []).length === 0 ? (
-        <EmptyState title={t("door.config.versions.empty")} />
-      ) : (
-        <ul className="door-notices">
-          {(list.data?.versions ?? []).map((v: ConfigVersionApi) => (
-            <li key={v.id} className="panel door-notice">
-              <div className="door-notice-main">
-                <strong>{v.label}</strong>
-                <p className="muted">{versionSummary(v, t)}</p>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </LoadState>
+    </div>
   );
 }

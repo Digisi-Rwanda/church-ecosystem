@@ -54,6 +54,7 @@ export interface ProtocolService {
   date: string;
   kind: ProtocolServiceKind;
   label: string;
+  time?: string | null;
   targetTeamSize: number;
   /** Music service id this slot mirrors. */
   musicServiceId?: string;
@@ -296,5 +297,9 @@ export interface ProtocolSchedulingRules {
    * (set per month by the Coordinator — e.g. ['TUESDAY']).
    */
   relaxChoirOnKinds?: ProtocolServiceKind[];
+  serviceRequirements?: Partial<Record<ProtocolServiceKind, {
+    choir: boolean;
+    worship: boolean;
+    coordinatorRelaxable: boolean;
+  }>>;
 }
-

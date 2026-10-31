@@ -7,12 +7,14 @@ interface MonthRow {
   periodKey: string; state: string; version: number; batchId?: string | null; batchHorizon?: string | null;
   servicesJson: string; assignmentsJson: string; warningsJson?: string | null;
   confirmedAt?: Date | string | null; publishedAt?: Date | string | null; updatedAt?: Date | string | null;
+  configVersionId?: string | null;
 }
 interface ChoirRow { id: string; name: string; role: string; active: boolean; systemId?: string | null }
 
 export const toDoc = (r: MonthRow): MonthDoc => ({
   periodKey: r.periodKey, state: r.state === 'PUBLISHED' ? 'PUBLISHED' : 'CONFIRMED', version: r.version, batchId: r.batchId, batchHorizon: r.batchHorizon,
   services: parse<MusicServiceSlot[]>(r.servicesJson, []), assignments: parse<MusicAssignment[]>(r.assignmentsJson, []), warnings: parse<string[]>(r.warningsJson, []),
+  configVersionId: r.configVersionId ?? null,
 });
 
 export const loadMonthRows = async (): Promise<MonthRow[]> => (await prisma.musicMonth.findMany()) as MonthRow[];

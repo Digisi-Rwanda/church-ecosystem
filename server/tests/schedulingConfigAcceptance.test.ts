@@ -311,10 +311,10 @@ describe('Acceptance — seed idempotency', () => {
     const seedContent = fs.readFileSync('prisma/seed.ts', 'utf8');
     // Check for idempotency patterns (findFirst-before-create guards)
     expect(seedContent).toContain('findFirst({ where: { systemId: MUSIC, code:');
-    expect(seedContent).toContain('findFirst({ where: { systemId: PROTOCOL, code:');
     expect(seedContent).toContain('categoryId: catId, serviceId: svcId');
-    expect(seedContent).toContain('systemId: PROTOCOL, serviceId: svcId');
-    expect(seedContent).toContain('where: { systemId: PROTOCOL }');
+    expect(seedContent).toContain('systemId: PROTOCOL, serviceId: svcId, configVersionId: protocolVersion.id');
+    expect(seedContent).toContain('configVersionId: protocolVersion.id');
+    expect(seedContent).toContain('serviceIds.get(`${MUSIC}|${r.service}`)');
     // Check for configVersionId references
     expect(seedContent).toContain('configVersionId: version.id');
     // Check for maxChoirs
@@ -369,9 +369,9 @@ describe('Acceptance — legacy-rule coverage mapping', () => {
       'Protocol musicCompatibilityRequired=true': 'FULLY',
       'Tuesday choir/Worship rule relaxable': 'FULLY (relaxableKindsJson)',
       // Not represented
-      'Music engine consumption of config': 'NOT (Phase 3 boundary)',
-      'Protocol engine consumption of config': 'NOT (Phase 3 boundary)',
-      'UI for config management': 'NOT (Phase 3 boundary)',
+      'Music engine consumption of config': 'PARTIALLY (calendar and policy validation)',
+      'Protocol engine consumption of config': 'PARTIALLY (rules are pinned to a version)',
+      'Configuration record editing forms': 'NOT (draft API is available, forms remain incomplete)',
       'Per-choir frequency overrides': 'PARTIALLY (ChoirCategoryLink.frequencyOverrideJson)',
     };
     // Log the coverage for review
@@ -381,7 +381,7 @@ describe('Acceptance — legacy-rule coverage mapping', () => {
     expect(notCovered.length).toBeGreaterThan(0); // engine consumption, UI are NOT (expected)
     // But no rule that Phase 2 should model is NOT
     const phase2Rules = notCovered.filter(([k]) =>
-      !k.includes('engine consumption') && !k.includes('UI for')
+      !k.includes('engine consumption') && !k.includes('editing forms')
     );
     expect(phase2Rules.length).toBe(0);
   });

@@ -42,22 +42,27 @@ export type LoadedProtocolConfig = {
   dutyPolicy: ProtocolDutyPolicyView | null;
 };
 
-async function activeVersion(systemId: string): Promise<ConfigVersionView | null> {
-  const v = await prisma.configVersion.findFirst({
-    where: { systemId, status: 'ACTIVE' },
-    orderBy: { version: 'desc' },
-  });
+async function activeVersion(systemId: string, versionId?: string): Promise<ConfigVersionView | null> {
+  const v = versionId
+    ? await prisma.configVersion.findFirst({ where: { id: versionId, systemId } })
+    : await prisma.configVersion.findFirst({
+      where: { systemId, status: 'ACTIVE' },
+      orderBy: { version: 'desc' },
+    });
   return v ? toConfigVersionView(v) : null;
 }
 
 /** Load everything the Music engine needs. */
-export async function loadMusicConfig(): Promise<LoadedMusicConfig> {
-  const [version, services, categories, policies, links] = await Promise.all([
-    activeVersion(SYSTEM_MUSIC),
-    prisma.schedulingService.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
-    prisma.choirCategory.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
-    prisma.categoryServicePolicy.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
-    prisma.choirCategoryLink.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
+export async function loadMusicConfig(versionId?: string): Promise<LoadedMusicConfig> {
+  const version = await activeVersion(SYSTEM_MUSIC, versionId);
+  if (versionId && !version) throw new Error(`Music configuration version ${versionId} was not found`);
+  if (!version) return { version: null, services: [], categories: [], policies: [], choirLinks: new Map() };
+  const versionFilter = { systemId: SYSTEM_MUSIC, configVersionId: version.id, active: true };
+  const [services, categories, policies, links] = await Promise.all([
+    prisma.schedulingService.findMany({ where: versionFilter }),
+    prisma.choirCategory.findMany({ where: versionFilter }),
+    prisma.categoryServicePolicy.findMany({ where: versionFilter }),
+    prisma.choirCategoryLink.findMany({ where: versionFilter }),
   ]);
   const choirLinks = new Map<string, string[]>();
   for (const l of links) {
@@ -75,17 +80,32 @@ export async function loadMusicConfig(): Promise<LoadedMusicConfig> {
 }
 
 /** Load everything the Protocol engine needs. */
-export async function loadProtocolConfig(): Promise<LoadedProtocolConfig> {
-  const [version, services, rules, dutyPolicy] = await Promise.all([
-    activeVersion(SYSTEM_PROTOCOL),
-    prisma.schedulingService.findMany({ where: { systemId: SYSTEM_PROTOCOL, active: true } }),
-    prisma.protocolServiceRule.findMany({ where: { systemId: SYSTEM_PROTOCOL, active: true } }),
-    prisma.protocolDutyPolicy.findFirst({ where: { systemId: SYSTEM_PROTOCOL } }),
+export async function loadProtocolConfig(versionId?: string, calendarVersionId?: string): Promise<LoadedProtocolConfig> {
+  const [version, calendarVersion] = await Promise.all([
+    activeVersion(SYSTEM_PROTOCOL, versionId),
+    activeVersion(SYSTEM_MUSIC, calendarVersionId),
   ]);
+  if (versionId && !version) throw new Error(`Protocol configuration version ${versionId} was not found`);
+  if (calendarVersionId && !calendarVersion) throw new Error(`Shared calendar version ${calendarVersionId} was not found`);
+  if (!version) return { version: null, services: [], rules: [], dutyPolicy: null };
+  const [services, allServices, ruleRows, dutyPolicy] = await Promise.all([
+    calendarVersion
+      ? prisma.schedulingService.findMany({ where: { systemId: SYSTEM_MUSIC, configVersionId: calendarVersion.id, active: true } })
+      : prisma.schedulingService.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
+    prisma.schedulingService.findMany({ where: { systemId: SYSTEM_MUSIC } }),
+    prisma.protocolServiceRule.findMany({ where: { systemId: SYSTEM_PROTOCOL, configVersionId: version.id, active: true } }),
+    prisma.protocolDutyPolicy.findFirst({ where: { systemId: SYSTEM_PROTOCOL, configVersionId: version.id } }),
+  ]);
+  const codeById = new Map(allServices.map((s) => [s.id, s.code]));
+  const currentIdByCode = new Map(services.map((s) => [s.code, s.id]));
+  const rules = ruleRows.map((r) => {
+    const code = codeById.get(r.serviceId);
+    return toRuleView({ ...r, serviceId: (code && currentIdByCode.get(code)) || r.serviceId });
+  });
   return {
     version,
     services: services.map(toServiceView),
-    rules: rules.map(toRuleView),
+    rules,
     dutyPolicy: dutyPolicy ? toDutyPolicyView(dutyPolicy) : null,
   };
 }

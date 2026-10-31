@@ -64,6 +64,131 @@ export async function getActiveConfigVersion(systemId: SystemId): Promise<Config
   return r ? toConfigVersionView(r) : null;
 }
 
+export async function cloneActiveConfigVersion(
+  systemId: SystemId,
+  input: { label: string; createdByPersonId: string; reason?: string | null },
+): Promise<ConfigVersionView> {
+  const active = await prisma.configVersion.findFirst({
+    where: { systemId, status: 'ACTIVE' },
+    orderBy: [{ version: 'desc' }],
+  });
+  if (!active) {
+    const latest = await prisma.configVersion.findFirst({ where: { systemId }, orderBy: [{ version: 'desc' }] });
+    return createConfigVersion({
+      systemId,
+      version: (latest?.version ?? 0) + 1,
+      label: input.label,
+      status: 'DRAFT',
+      createdByPersonId: input.createdByPersonId,
+      reason: input.reason,
+      previousVersionId: latest?.id ?? null,
+    });
+  }
+
+  const now = new Date();
+  return prisma.$transaction(async (tx) => {
+    const latest = await tx.configVersion.findFirst({ where: { systemId }, orderBy: [{ version: 'desc' }] });
+    const version = await tx.configVersion.create({
+      data: {
+        systemId,
+        version: (latest?.version ?? active.version) + 1,
+        label: input.label,
+        status: 'DRAFT',
+        effectiveFrom: now,
+        createdByPersonId: input.createdByPersonId,
+        reason: input.reason ?? null,
+        previousVersionId: active.id,
+        notesJson: active.notesJson,
+        validationJson: '{}',
+        affectedSchedulesJson: '[]',
+      },
+    });
+
+    const [services, categories, policies, links, rules, dutyPolicies] = await Promise.all([
+      tx.schedulingService.findMany({ where: { systemId, configVersionId: active.id } }),
+      tx.choirCategory.findMany({ where: { systemId, configVersionId: active.id } }),
+      tx.categoryServicePolicy.findMany({ where: { systemId, configVersionId: active.id } }),
+      tx.choirCategoryLink.findMany({ where: { systemId, configVersionId: active.id } }),
+      tx.protocolServiceRule.findMany({ where: { systemId, configVersionId: active.id } }),
+      tx.protocolDutyPolicy.findMany({ where: { systemId, configVersionId: active.id } }),
+    ]);
+
+    const serviceIdMap = new Map<string, string>();
+    for (const row of services) {
+      const copy = await tx.schedulingService.create({ data: {
+        systemId, code: row.code, name: row.name, kind: row.kind, weekday: row.weekday, time: row.time,
+        recurrence: row.recurrence, selectedDatesJson: row.selectedDatesJson, active: row.active,
+        effectiveFrom: now, effectiveTo: null, musicRequired: row.musicRequired, protocolRequired: row.protocolRequired,
+        maxChoirs: row.maxChoirs, targetTeamSize: row.targetTeamSize, configVersionId: version.id,
+        displayOrder: row.displayOrder, supersedesId: row.id, createdByPersonId: input.createdByPersonId,
+      } });
+      serviceIdMap.set(row.id, copy.id);
+    }
+    const categoryIdMap = new Map<string, string>();
+    for (const row of categories) {
+      const copy = await tx.choirCategory.create({ data: {
+        systemId, code: row.code, name: row.name, description: row.description, active: row.active,
+        effectiveFrom: now, effectiveTo: null, configVersionId: version.id, supersedesId: row.id,
+        createdByPersonId: input.createdByPersonId,
+      } });
+      categoryIdMap.set(row.id, copy.id);
+    }
+    for (const row of policies) await tx.categoryServicePolicy.create({ data: {
+      systemId,
+      categoryId: categoryIdMap.get(row.categoryId) ?? row.categoryId,
+      serviceId: serviceIdMap.get(row.serviceId) ?? row.serviceId,
+      eligible: row.eligible, active: row.active,
+      frequencyTarget: row.frequencyTarget, frequencyCounting: row.frequencyCounting, frequencyKind: row.frequencyKind,
+      planningMode: row.planningMode, minCount: row.minCount, maxCount: row.maxCount, requireAll: row.requireAll,
+      configVersionId: version.id, effectiveFrom: now, effectiveTo: null, supersedesId: row.id,
+      createdByPersonId: input.createdByPersonId,
+    } });
+    for (const row of links) await tx.choirCategoryLink.create({ data: {
+      systemId, choirId: row.choirId, categoryId: categoryIdMap.get(row.categoryId) ?? row.categoryId,
+      eligibleOverrideJson: row.eligibleOverrideJson,
+      frequencyOverrideJson: row.frequencyOverrideJson, active: row.active, effectiveFrom: now, effectiveTo: null,
+      configVersionId: version.id, supersedesId: row.id, createdByPersonId: input.createdByPersonId,
+    } });
+    for (const row of rules) await tx.protocolServiceRule.create({ data: {
+      systemId, serviceId: serviceIdMap.get(row.serviceId) ?? row.serviceId,
+      active: row.active, required: row.required, defaultTeamSize: row.defaultTeamSize,
+      teamSizeOverridesJson: row.teamSizeOverridesJson, requireChoir: row.requireChoir, requireWorship: row.requireWorship,
+      relaxableKindsJson: row.relaxableKindsJson, configVersionId: version.id, effectiveFrom: now, effectiveTo: null,
+      supersedesId: row.id, createdByPersonId: input.createdByPersonId,
+    } });
+    for (const row of dutyPolicies) await tx.protocolDutyPolicy.create({ data: {
+      systemId, preferTarget: row.preferTarget, softMax: row.softMax, hardMax: row.hardMax,
+      extraDutyPolicy: row.extraDutyPolicy, duplicateSameDayAllowed: row.duplicateSameDayAllowed,
+      musicCompatibilityRequired: row.musicCompatibilityRequired, leadershipPrioritiesJson: row.leadershipPrioritiesJson,
+      exceptionsAllowed: row.exceptionsAllowed, configVersionId: version.id, effectiveFrom: now, effectiveTo: null,
+      supersedesId: row.id, createdByPersonId: input.createdByPersonId,
+    } });
+
+    return toConfigVersionView(version);
+  });
+}
+
+export async function activateConfigVersion(id: string, systemId: SystemId): Promise<ConfigVersionView | null> {
+  return prisma.$transaction(async (tx) => {
+    const target = await tx.configVersion.findFirst({ where: { id, systemId } });
+    if (!target) return null;
+    if (target.status !== 'DRAFT' && target.status !== 'SCHEDULED') {
+      throw new Error('Only a draft or scheduled configuration can be activated');
+    }
+
+    const now = new Date();
+    await tx.configVersion.updateMany({
+      where: { systemId, status: 'ACTIVE' },
+      data: { status: 'SUPERSEDED', effectiveTo: now },
+    });
+    const activated = await tx.configVersion.update({
+      where: { id },
+      data: { status: 'ACTIVE', effectiveFrom: now, effectiveTo: null },
+    });
+    return toConfigVersionView(activated);
+  });
+}
+
 export async function supersedeConfigVersion(id: string, now: Date): Promise<void> {
   await prisma.configVersion.update({
     where: { id },
@@ -76,7 +201,7 @@ export async function supersedeConfigVersion(id: string, now: Date): Promise<voi
 export async function createSchedulingService(input: SchedulingServiceCreateInput): Promise<SchedulingServiceView> {
   await assertNoActiveRecord(
     'schedulingService',
-    { systemId: input.systemId, code: input.code, active: true },
+    { systemId: input.systemId, code: input.code, active: true, ...(input.configVersionId ? { configVersionId: input.configVersionId } : {}) },
     `A service with code “${input.code}” already exists in system ${input.systemId}`,
   );
   const r = await prisma.schedulingService.create({
@@ -109,14 +234,23 @@ export async function getSchedulingService(id: string): Promise<SchedulingServic
   return r ? toServiceView(r) : null;
 }
 
-export async function getSchedulingServiceByCode(systemId: SystemId, code: string): Promise<SchedulingServiceView | null> {
-  const r = await prisma.schedulingService.findFirst({ where: { systemId, code } });
+export async function getSchedulingServiceByCode(systemId: SystemId, code: string, configVersionId?: string): Promise<SchedulingServiceView | null> {
+  const r = await prisma.schedulingService.findFirst({ where: { systemId, code, ...(configVersionId ? { configVersionId } : {}) } });
   return r ? toServiceView(r) : null;
 }
 
-export async function listSchedulingServices(systemId: SystemId, activeOnly = false): Promise<SchedulingServiceView[]> {
+export async function getSchedulingServiceByCodeInVersion(
+  systemId: SystemId, code: string, configVersionId: string,
+): Promise<SchedulingServiceView | null> {
+  const r = await prisma.schedulingService.findFirst({ where: { systemId, code, configVersionId } });
+  return r ? toServiceView(r) : null;
+}
+
+export async function listSchedulingServices(
+  systemId: SystemId, activeOnly = false, configVersionId?: string,
+): Promise<SchedulingServiceView[]> {
   const rows = await prisma.schedulingService.findMany({
-    where: activeOnly ? { systemId, active: true } : { systemId },
+    where: { systemId, ...(activeOnly ? { active: true } : {}), ...(configVersionId ? { configVersionId } : {}) },
     orderBy: [{ displayOrder: 'asc' }, { code: 'asc' }],
   });
   return rows.map(toServiceView);
@@ -124,9 +258,10 @@ export async function listSchedulingServices(systemId: SystemId, activeOnly = fa
 
 export async function updateSchedulingService(
   id: string,
-  patch: Partial<Pick<SchedulingServiceCreateInput, 'name' | 'kind' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'effectiveTo' | 'musicRequired' | 'protocolRequired' | 'displayOrder'>>,
+  patch: Partial<Pick<SchedulingServiceCreateInput, 'code' | 'name' | 'kind' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'effectiveTo' | 'musicRequired' | 'protocolRequired' | 'maxChoirs' | 'displayOrder'>>,
 ): Promise<SchedulingServiceView> {
   const data: Record<string, unknown> = {};
+  if (patch.code !== undefined) data.code = patch.code;
   if (patch.name !== undefined) data.name = patch.name;
   if (patch.kind !== undefined) data.kind = patch.kind;
   if (patch.weekday !== undefined) data.weekday = patch.weekday;
@@ -137,6 +272,7 @@ export async function updateSchedulingService(
   if (patch.effectiveTo !== undefined) data.effectiveTo = patch.effectiveTo ? new Date(patch.effectiveTo) : null;
   if (patch.musicRequired !== undefined) data.musicRequired = patch.musicRequired;
   if (patch.protocolRequired !== undefined) data.protocolRequired = patch.protocolRequired;
+  if (patch.maxChoirs !== undefined) data.maxChoirs = patch.maxChoirs;
   if (patch.displayOrder !== undefined) data.displayOrder = patch.displayOrder;
   const r = await prisma.schedulingService.update({ where: { id }, data });
   return toServiceView(r);
@@ -154,7 +290,7 @@ export async function supersedeSchedulingService(id: string, now: Date): Promise
 export async function createChoirCategory(input: ChoirCategoryCreateInput): Promise<ChoirCategoryView> {
   await assertNoActiveRecord(
     'choirCategory',
-    { systemId: input.systemId, code: input.code, active: true },
+    { systemId: input.systemId, code: input.code, active: true, ...(input.configVersionId ? { configVersionId: input.configVersionId } : {}) },
     `A category with code “${input.code}” already exists in system ${input.systemId}`,
   );
   const r = await prisma.choirCategory.create({
@@ -179,14 +315,24 @@ export async function getChoirCategory(id: string): Promise<ChoirCategoryView | 
   return r ? toCategoryView(r) : null;
 }
 
-export async function getChoirCategoryByCode(systemId: SystemId, code: string): Promise<ChoirCategoryView | null> {
-  const r = await prisma.choirCategory.findFirst({ where: { systemId, code } });
+export async function getChoirCategoryByCode(systemId: SystemId, code: string, configVersionId?: string): Promise<ChoirCategoryView | null> {
+  const r = await prisma.choirCategory.findFirst({ where: { systemId, code, ...(configVersionId ? { configVersionId } : {}) } });
   return r ? toCategoryView(r) : null;
 }
 
-export async function listChoirCategories(systemId: SystemId, activeOnly = false): Promise<ChoirCategoryView[]> {
+export async function updateChoirCategory(
+  id: string,
+  patch: Partial<Pick<ChoirCategoryCreateInput, 'code' | 'name' | 'description' | 'active'>>,
+): Promise<ChoirCategoryView> {
+  const r = await prisma.choirCategory.update({ where: { id }, data: patch });
+  return toCategoryView(r);
+}
+
+export async function listChoirCategories(
+  systemId: SystemId, activeOnly = false, configVersionId?: string,
+): Promise<ChoirCategoryView[]> {
   const rows = await prisma.choirCategory.findMany({
-    where: activeOnly ? { systemId, active: true } : { systemId },
+    where: { systemId, ...(activeOnly ? { active: true } : {}), ...(configVersionId ? { configVersionId } : {}) },
     orderBy: [{ name: 'asc' }],
   });
   return rows.map(toCategoryView);
@@ -197,7 +343,7 @@ export async function listChoirCategories(systemId: SystemId, activeOnly = false
 export async function createCategoryServicePolicy(input: CategoryServicePolicyCreateInput): Promise<CategoryServicePolicyView> {
   await assertNoActiveRecord(
     'categoryServicePolicy',
-    { systemId: input.systemId, categoryId: input.categoryId, serviceId: input.serviceId },
+    { systemId: input.systemId, categoryId: input.categoryId, serviceId: input.serviceId, ...(input.configVersionId ? { configVersionId: input.configVersionId } : {}) },
     `A policy for category ${input.categoryId} × service ${input.serviceId} already exists in system ${input.systemId}`,
   );
   const r = await prisma.categoryServicePolicy.create({
@@ -229,9 +375,19 @@ export async function getCategoryServicePolicy(id: string): Promise<CategoryServ
   return r ? toPolicyView(r) : null;
 }
 
-export async function listCategoryServicePolicies(systemId: SystemId): Promise<CategoryServicePolicyView[]> {
+export async function updateCategoryServicePolicy(
+  id: string,
+  patch: Partial<Pick<CategoryServicePolicyCreateInput,
+    'categoryId' | 'serviceId' | 'eligible' | 'active' | 'frequencyTarget' | 'frequencyCounting' |
+    'frequencyKind' | 'planningMode' | 'minCount' | 'maxCount' | 'requireAll'>>,
+): Promise<CategoryServicePolicyView> {
+  const r = await prisma.categoryServicePolicy.update({ where: { id }, data: patch });
+  return toPolicyView(r);
+}
+
+export async function listCategoryServicePolicies(systemId: SystemId, configVersionId?: string): Promise<CategoryServicePolicyView[]> {
   const rows = await prisma.categoryServicePolicy.findMany({
-    where: { systemId },
+    where: { systemId, ...(configVersionId ? { configVersionId } : {}) },
     orderBy: [{ categoryId: 'asc' }, { serviceId: 'asc' }],
   });
   return rows.map(toPolicyView);
@@ -264,7 +420,7 @@ export async function createChoirCategoryLink(input: {
 }): Promise<ChoirCategoryLinkView> {
   await assertNoActiveRecord(
     'choirCategoryLink',
-    { systemId: input.systemId, choirId: input.choirId, active: true },
+    { systemId: input.systemId, choirId: input.choirId, active: true, ...(input.configVersionId ? { configVersionId: input.configVersionId } : {}) },
     `A category link for choir ${input.choirId} already exists in system ${input.systemId}`,
   );
   const r = await prisma.choirCategoryLink.create({
@@ -290,14 +446,29 @@ export async function getChoirCategoryLink(id: string): Promise<ChoirCategoryLin
   return r ? toLinkView(r) : null;
 }
 
-export async function getChoirCategoryLinkByChoir(systemId: SystemId, choirId: string): Promise<ChoirCategoryLinkView | null> {
-  const r = await prisma.choirCategoryLink.findFirst({ where: { systemId, choirId } });
+export async function updateChoirCategoryLink(
+  id: string,
+  patch: Partial<Pick<Parameters<typeof createChoirCategoryLink>[0],
+    'choirId' | 'categoryId' | 'eligibleOverride' | 'frequencyOverride' | 'active'>>,
+): Promise<ChoirCategoryLinkView> {
+  const data: Record<string, unknown> = {};
+  if (patch.choirId !== undefined) data.choirId = patch.choirId;
+  if (patch.categoryId !== undefined) data.categoryId = patch.categoryId;
+  if (patch.eligibleOverride !== undefined) data.eligibleOverrideJson = stringifyJson(patch.eligibleOverride);
+  if (patch.frequencyOverride !== undefined) data.frequencyOverrideJson = stringifyJson(patch.frequencyOverride);
+  if (patch.active !== undefined) data.active = patch.active;
+  const r = await prisma.choirCategoryLink.update({ where: { id }, data });
+  return toLinkView(r);
+}
+
+export async function getChoirCategoryLinkByChoir(systemId: SystemId, choirId: string, configVersionId?: string): Promise<ChoirCategoryLinkView | null> {
+  const r = await prisma.choirCategoryLink.findFirst({ where: { systemId, choirId, ...(configVersionId ? { configVersionId } : {}) } });
   return r ? toLinkView(r) : null;
 }
 
-export async function listChoirCategoryLinks(systemId: SystemId): Promise<ChoirCategoryLinkView[]> {
+export async function listChoirCategoryLinks(systemId: SystemId, configVersionId?: string): Promise<ChoirCategoryLinkView[]> {
   const rows = await prisma.choirCategoryLink.findMany({
-    where: { systemId },
+    where: { systemId, ...(configVersionId ? { configVersionId } : {}) },
     orderBy: [{ choirId: 'asc' }],
   });
   return rows.map(toLinkView);
@@ -308,7 +479,7 @@ export async function listChoirCategoryLinks(systemId: SystemId): Promise<ChoirC
 export async function createProtocolServiceRule(input: ProtocolServiceRuleCreateInput): Promise<ProtocolServiceRuleView> {
   await assertNoActiveRecord(
     'protocolServiceRule',
-    { systemId: input.systemId, serviceId: input.serviceId },
+    { systemId: input.systemId, serviceId: input.serviceId, ...(input.configVersionId ? { configVersionId: input.configVersionId } : {}) },
     `A protocol rule for service ${input.serviceId} already exists in system ${input.systemId}`,
   );
   const r = await prisma.protocolServiceRule.create({
@@ -337,14 +508,33 @@ export async function getProtocolServiceRule(id: string): Promise<ProtocolServic
   return r ? toRuleView(r) : null;
 }
 
-export async function getProtocolServiceRuleByService(systemId: SystemId, serviceId: string): Promise<ProtocolServiceRuleView | null> {
-  const r = await prisma.protocolServiceRule.findFirst({ where: { systemId, serviceId } });
+export async function updateProtocolServiceRule(
+  id: string,
+  patch: Partial<Pick<ProtocolServiceRuleCreateInput,
+    'serviceId' | 'active' | 'required' | 'defaultTeamSize' | 'teamSizeOverrides' |
+    'requireChoir' | 'requireWorship' | 'relaxableKinds'>>,
+): Promise<ProtocolServiceRuleView> {
+  const data: Record<string, unknown> = {};
+  if (patch.serviceId !== undefined) data.serviceId = patch.serviceId;
+  if (patch.active !== undefined) data.active = patch.active;
+  if (patch.required !== undefined) data.required = patch.required;
+  if (patch.defaultTeamSize !== undefined) data.defaultTeamSize = patch.defaultTeamSize;
+  if (patch.teamSizeOverrides !== undefined) data.teamSizeOverridesJson = stringifyJson(patch.teamSizeOverrides);
+  if (patch.requireChoir !== undefined) data.requireChoir = patch.requireChoir;
+  if (patch.requireWorship !== undefined) data.requireWorship = patch.requireWorship;
+  if (patch.relaxableKinds !== undefined) data.relaxableKindsJson = stringifyJson(patch.relaxableKinds);
+  const r = await prisma.protocolServiceRule.update({ where: { id }, data });
+  return toRuleView(r);
+}
+
+export async function getProtocolServiceRuleByService(systemId: SystemId, serviceId: string, configVersionId?: string): Promise<ProtocolServiceRuleView | null> {
+  const r = await prisma.protocolServiceRule.findFirst({ where: { systemId, serviceId, ...(configVersionId ? { configVersionId } : {}) } });
   return r ? toRuleView(r) : null;
 }
 
-export async function listProtocolServiceRules(systemId: SystemId): Promise<ProtocolServiceRuleView[]> {
+export async function listProtocolServiceRules(systemId: SystemId, configVersionId?: string): Promise<ProtocolServiceRuleView[]> {
   const rows = await prisma.protocolServiceRule.findMany({
-    where: { systemId },
+    where: { systemId, ...(configVersionId ? { configVersionId } : {}) },
     orderBy: [{ serviceId: 'asc' }],
   });
   return rows.map(toRuleView);
@@ -353,6 +543,11 @@ export async function listProtocolServiceRules(systemId: SystemId): Promise<Prot
 /* ─── ProtocolDutyPolicy ─── */
 
 export async function createProtocolDutyPolicy(input: ProtocolDutyPolicyCreateInput): Promise<ProtocolDutyPolicyView> {
+  await assertNoActiveRecord(
+    'protocolDutyPolicy',
+    { systemId: input.systemId, configVersionId: input.configVersionId },
+    `A Protocol duty policy already exists in system ${input.systemId} for this version`,
+  );
   const r = await prisma.protocolDutyPolicy.create({
     data: {
       systemId: input.systemId,
@@ -379,14 +574,33 @@ export async function getProtocolDutyPolicy(id: string): Promise<ProtocolDutyPol
   return r ? toDutyPolicyView(r) : null;
 }
 
-export async function getProtocolDutyPolicyBySystem(systemId: SystemId): Promise<ProtocolDutyPolicyView | null> {
-  const r = await prisma.protocolDutyPolicy.findFirst({ where: { systemId } });
+export async function updateProtocolDutyPolicy(
+  id: string,
+  patch: Partial<Pick<ProtocolDutyPolicyCreateInput,
+    'preferTarget' | 'softMax' | 'hardMax' | 'extraDutyPolicy' | 'duplicateSameDayAllowed' |
+    'musicCompatibilityRequired' | 'leadershipPriorities' | 'exceptionsAllowed'>>,
+): Promise<ProtocolDutyPolicyView> {
+  const data: Record<string, unknown> = {};
+  if (patch.preferTarget !== undefined) data.preferTarget = patch.preferTarget;
+  if (patch.softMax !== undefined) data.softMax = patch.softMax;
+  if (patch.hardMax !== undefined) data.hardMax = patch.hardMax;
+  if (patch.extraDutyPolicy !== undefined) data.extraDutyPolicy = patch.extraDutyPolicy;
+  if (patch.duplicateSameDayAllowed !== undefined) data.duplicateSameDayAllowed = patch.duplicateSameDayAllowed;
+  if (patch.musicCompatibilityRequired !== undefined) data.musicCompatibilityRequired = patch.musicCompatibilityRequired;
+  if (patch.leadershipPriorities !== undefined) data.leadershipPrioritiesJson = stringifyJson(patch.leadershipPriorities);
+  if (patch.exceptionsAllowed !== undefined) data.exceptionsAllowed = patch.exceptionsAllowed;
+  const r = await prisma.protocolDutyPolicy.update({ where: { id }, data });
+  return toDutyPolicyView(r);
+}
+
+export async function getProtocolDutyPolicyBySystem(systemId: SystemId, configVersionId?: string): Promise<ProtocolDutyPolicyView | null> {
+  const r = await prisma.protocolDutyPolicy.findFirst({ where: { systemId, ...(configVersionId ? { configVersionId } : {}) } });
   return r ? toDutyPolicyView(r) : null;
 }
 
-export async function listProtocolDutyPolicies(systemId: SystemId): Promise<ProtocolDutyPolicyView[]> {
+export async function listProtocolDutyPolicies(systemId: SystemId, configVersionId?: string): Promise<ProtocolDutyPolicyView[]> {
   const rows = await prisma.protocolDutyPolicy.findMany({
-    where: { systemId },
+    where: { systemId, ...(configVersionId ? { configVersionId } : {}) },
     orderBy: [{ createdAt: 'desc' }],
   });
   return rows.map(toDutyPolicyView);

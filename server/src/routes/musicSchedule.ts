@@ -29,22 +29,28 @@ const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v
 const HORIZONS = ['MONTH', 'QUARTER', 'HALF', 'YEAR'] as const;
 const nowMonth = () => new Date().toISOString().slice(0, 7);
 
-interface DraftRow { id: string; label: string; horizon: string; startMonth: string; servicesJson: string; assignmentsJson: string; warningsJson?: string | null; createdAt?: Date | string | null }
+interface DraftRow { id: string; label: string; horizon: string; startMonth: string; servicesJson: string; assignmentsJson: string; warningsJson?: string | null; configVersionId?: string | null; createdAt?: Date | string | null }
 const draftDoc = (r: DraftRow): DraftDoc => ({
   id: r.id, label: r.label, horizon: r.horizon as MusicHorizon, startMonth: r.startMonth,
   services: parse<MusicServiceSlot[]>(r.servicesJson, []), assignments: parse<MusicAssignment[]>(r.assignmentsJson, []), warnings: parse<string[]>(r.warningsJson, []),
+  configVersionId: r.configVersionId ?? null,
 });
 const drafts = async (): Promise<DraftRow[]> => (await prisma.musicDraft.findMany()) as DraftRow[];
 
 async function audit(actorId: string, action: string, detail: string, meta: object) {
   await prisma.auditEvent.create({ data: { at: new Date(), actorId, systemId: MUSIC, action, resource: 'SCHEDULING', detail, metaJson: JSON.stringify(meta) } });
 }
-async function writeLog(periodKey: string, stage: 'CONFIRMED' | 'PUBLISHED', action: LogAction, version: number, byId: string, changes: LogChange[]) {
-  await prisma.musicLog.create({ data: { periodKey, stage, action, version, byId, summary: summarise(action, stage, changes), changesJson: JSON.stringify(changes) } });
+async function writeLog(periodKey: string, stage: 'CONFIRMED' | 'PUBLISHED', action: LogAction, version: number, byId: string, changes: LogChange[], doc?: MonthDoc) {
+  await prisma.musicLog.create({ data: {
+    periodKey, stage, action, version, byId, summary: summarise(action, stage, changes), changesJson: JSON.stringify(changes),
+    configVersionId: doc?.configVersionId ?? null,
+    servicesSnapshotJson: doc ? JSON.stringify(doc.services) : null,
+    assignmentsSnapshotJson: doc ? JSON.stringify(doc.assignments) : null,
+  } });
 }
 async function saveMonth(doc: MonthDoc, extra: Record<string, unknown>) {
   const rows = await loadMonthRows();
-  const data = { state: doc.state, version: doc.version, batchId: doc.batchId ?? null, batchHorizon: doc.batchHorizon ?? null, servicesJson: JSON.stringify(doc.services), assignmentsJson: JSON.stringify(doc.assignments), warningsJson: JSON.stringify(doc.warnings), ...extra };
+  const data = { state: doc.state, version: doc.version, batchId: doc.batchId ?? null, batchHorizon: doc.batchHorizon ?? null, servicesJson: JSON.stringify(doc.services), assignmentsJson: JSON.stringify(doc.assignments), warningsJson: JSON.stringify(doc.warnings), configVersionId: doc.configVersionId ?? null, ...extra };
   const row = rows.find((r) => r.periodKey === doc.periodKey) as (typeof rows)[number] & { id?: string } | undefined;
   if (row?.id) await prisma.musicMonth.update({ where: { id: row.id }, data });
   else await prisma.musicMonth.create({ data: { periodKey: doc.periodKey, confirmedAt: new Date(), confirmedById: '', updatedAt: new Date(), ...data } as never });
@@ -82,7 +88,8 @@ function serviceViews(services: MusicServiceSlot[], assignments: MusicAssignment
   return [...services]
     .sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind))
     .map((s) => ({
-      id: s.id, periodKey: s.periodKey, date: s.date, kind: s.kind, label: s.label,
+      id: s.id, periodKey: s.periodKey, date: s.date, kind: s.kind, label: s.label, time: s.time ?? null,
+      musicRequired: s.musicRequired ?? true, protocolRequired: s.protocolRequired ?? false,
       units: unitsOn(assignments, s.id).map((id) => ({ unitId: id, name: by.get(id)?.name ?? id, kind: by.get(id)?.kind ?? 'PRIMARY' })),
     }));
 }
@@ -157,17 +164,26 @@ musicScheduleRouter.post('/drafts/generate', requireAuth, async (req: AuthedRequ
   const { horizon, start } = parsed.data;
   if (start < nowMonth()) return fail(res, 400, 'PAST', 'Choose a period from this month on');
   const units = unitsFrom(await loadChoirs());
-  const services = buildMusicCalendar(start, horizon);
-  // Load active scheduling configuration and pass it to the engine.
+  // Pin the draft to the exact Music rules version used for generation.
   const cfg = await loadMusicConfig();
-  const svcByCode = new Map(cfg.services.map((s) => [s.code, s]));
-  const result = generateMusicChoirSchedule({ services, units, history: historyFrom(await loadMonths(), units) });
+  let services: MusicServiceSlot[];
+  try {
+    services = buildMusicCalendar(start, horizon, cfg.version ? cfg.services : undefined);
+  } catch (error) {
+    if (error instanceof Error) return fail(res, 422, 'CONFIG', error.message);
+    throw error;
+  }
+  const musicServices = services.filter((service) => service.musicRequired !== false);
+  const svcByCode = new Map(cfg.services.map((s) => [s.code.toUpperCase(), s]));
+  const result = musicServices.length
+    ? generateMusicChoirSchedule({ services: musicServices, units, history: historyFrom(await loadMonths(), units) })
+    : { ok: true, assignments: [], warnings: [] };
   if (!result.ok) return fail(res, 422, 'ENGINE', result.reason ?? 'Could not build a valid schedule');
   // Validate against both legacy rules and the active category policies.
-  const v = validateSchedule(services, result.assignments, 'strict', units);
+  const v = validateSchedule(musicServices, result.assignments, 'strict', units);
   const cv = validateConfigPolicies({
-    services, assignments: result.assignments, units,
-    policies: cfg.policies, categories: cfg.categories, serviceByCode: svcByCode,
+    services: musicServices, assignments: result.assignments, units,
+    policies: cfg.policies, categories: cfg.categories, serviceByCode: svcByCode, choirLinks: cfg.choirLinks,
   });
   if (!v.ok) return fail(res, 422, 'ENGINE', v.reason ?? 'Could not build a valid schedule');
   if (!cv.ok) return fail(res, 422, 'CONFIG', cv.reason ?? 'Configuration policy violation');
@@ -178,6 +194,7 @@ musicScheduleRouter.post('/drafts/generate', requireAuth, async (req: AuthedRequ
     data: {
       label: `${start} · ${horizon.toLowerCase()}`, horizon, startMonth: start, servicesJson: JSON.stringify(services), assignmentsJson: JSON.stringify(result.assignments),
       warningsJson: JSON.stringify([...result.warnings, ...v.warnings, ...cv.warnings]), createdById: g.me,
+      configVersionId: cfg.version?.id ?? null,
     },
   })) as { id: string };
   await audit(g.me, 'DRAFT_GENERATED', `Generated a ${horizon.toLowerCase()} choir schedule from ${start}`, { draftId: row.id });
@@ -193,9 +210,13 @@ function applyEdit(
   assignments: MusicAssignment[],
   e: Edit,
   units: readonly MusicScheduleUnit[],
-  cfg: { policies: CategoryServicePolicyView[]; categories: ChoirCategoryView[]; serviceByCode: Map<string, SchedulingServiceView> } | null,
+  cfg: { policies: CategoryServicePolicyView[]; categories: ChoirCategoryView[]; serviceByCode: Map<string, SchedulingServiceView>; choirLinks: Map<string, string[]> } | null,
 ) {
   if (!services.some((s) => s.id === e.serviceId)) return { ok: false as const, status: 404, code: 'NOT_FOUND', error: 'Service not found' };
+  if (services.find((s) => s.id === e.serviceId)?.musicRequired === false) {
+    return { ok: false as const, status: 409, code: 'NOT_MUSIC_SERVICE', error: 'This service does not use choir assignments' };
+  }
+  const musicServices = services.filter((service) => service.musicRequired !== false);
   const now = unitsOn(assignments, e.serviceId);
   let next: string[];
   if (e.action === 'add') {
@@ -211,9 +232,9 @@ function applyEdit(
     next = now.map((x) => (x === e.unitId ? e.toUnitId! : x));
   }
   const after = withService(assignments, e.serviceId, next);
-  const v = validateSchedule(services, after, 'manual', units);
+  const v = validateSchedule(musicServices, after, 'manual', units);
   if (cfg) {
-    const cv = validateConfigPolicies({ services, assignments: after, units, policies: cfg.policies, categories: cfg.categories, serviceByCode: cfg.serviceByCode });
+    const cv = validateConfigPolicies({ services: musicServices, assignments: after, units, policies: cfg.policies, categories: cfg.categories, serviceByCode: cfg.serviceByCode, choirLinks: cfg.choirLinks });
     // Legacy rules take precedence: a unit on both SS1 and SS2 is a RULE violation,
     // not a CONFIG violation. Check legacy first so the engine's own reason wins.
     if (!v.ok) return { ok: false as const, status: 409, code: 'RULE', error: v.reason ?? 'This breaks a scheduling rule', warnings: v.warnings };
@@ -232,11 +253,12 @@ musicScheduleRouter.post('/drafts/:id/edit', requireAuth, async (req: AuthedRequ
   const row = (await drafts()).find((d) => d.id === String(req.params.id));
   if (!row) return fail(res, 404, 'NOT_FOUND', 'Draft not found');
   const d = draftDoc(row);
-  const cfg = await loadMusicConfig();
-  const r = applyEdit(d.services, d.assignments, parsed.data, unitsFrom(await loadChoirs()), {
+  const cfg = d.configVersionId ? await loadMusicConfig(d.configVersionId) : null;
+  const r = applyEdit(d.services, d.assignments, parsed.data, unitsFrom(await loadChoirs()), cfg ? {
     policies: cfg.policies, categories: cfg.categories,
-    serviceByCode: new Map(cfg.services.map((s) => [s.code, s])),
-  });
+    serviceByCode: new Map(cfg.services.map((s) => [s.code.toUpperCase(), s])),
+    choirLinks: cfg.choirLinks,
+  } : null);
   if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code, warnings: 'warnings' in r ? r.warnings : [] });
   await prisma.musicDraft.update({ where: { id: d.id }, data: { assignmentsJson: JSON.stringify(r.assignments), warningsJson: JSON.stringify(r.warnings) } });
   res.json({ ok: true, warnings: r.warnings });
@@ -275,14 +297,17 @@ async function confirmMonths(me: string, row: DraftRow, chosen: string[]): Promi
   const batchId = `mbatch-${Date.now().toString(36)}`;
   const at = new Date();
   for (const month of chosen) {
-    if (sliceMonth(d, month).assignments.length === 0) return { ok: false, status: 409, code: 'EMPTY', error: `${month} has no choirs assigned yet` };
+    const slice = sliceMonth(d, month);
+    if (slice.services.some((service) => service.musicRequired !== false) && slice.assignments.length === 0) {
+      return { ok: false, status: 409, code: 'EMPTY', error: `${month} has no choirs assigned yet` };
+    }
   }
   for (const month of chosen) {
     const slice = sliceMonth(d, month);
     const before = existing.get(month) ?? null;
-    const doc: MonthDoc = { periodKey: month, state: 'CONFIRMED', version: (before?.version ?? 0) + 1, batchId, batchHorizon: d.horizon, services: slice.services, assignments: slice.assignments, warnings: d.warnings };
+    const doc: MonthDoc = { periodKey: month, state: 'CONFIRMED', version: (before?.version ?? 0) + 1, batchId, batchHorizon: d.horizon, services: slice.services, assignments: slice.assignments, warnings: d.warnings, configVersionId: d.configVersionId ?? null };
     await saveMonth(doc, { confirmedAt: before ? undefined : at, confirmedById: me, updatedAt: at, updatedById: me, ...(before ? {} : {}) });
-    await writeLog(month, 'CONFIRMED', before ? 'RECONFIRMED' : 'CONFIRMED', doc.version, me, before ? diffLineup(before, doc, nameFor(units)) : []);
+    await writeLog(month, 'CONFIRMED', before ? 'RECONFIRMED' : 'CONFIRMED', doc.version, me, before ? diffLineup(before, doc, nameFor(units)) : [], doc);
   }
   await takeMonthsOut(row, chosen);
   await tellProtocol('Music confirmed a choir schedule', `Months: ${chosen.join(', ')}. You can build Protocol teams against them.`, `music-confirm:${chosen.join(',')}:${Date.now()}`);
@@ -313,7 +338,7 @@ async function publishMonths(me: string, months: string[]): Promise<{ ok: true }
   for (const month of chosen) {
     const doc = have.get(month)!;
     await saveMonth({ ...doc, state: 'PUBLISHED' }, { publishedAt: at, publishedById: me, updatedAt: at, updatedById: me });
-    await writeLog(month, 'PUBLISHED', 'PUBLISHED', doc.version, me, []);
+    await writeLog(month, 'PUBLISHED', 'PUBLISHED', doc.version, me, [], doc);
     await tellChoirs('Choir schedule published', `The choir schedule for ${month} is published.`, `music-pub:${month}:v${doc.version}`);
   }
   return { ok: true };
@@ -341,7 +366,12 @@ musicScheduleRouter.post('/drafts/:id/publish', requireAuth, async (req: AuthedR
   const existing = new Map((await loadMonths()).map((m) => [m.periodKey, m]));
   const already = months.filter((m) => existing.get(m)?.state === 'PUBLISHED');
   const fresh = months.filter((m) => !already.includes(m));
-  for (const m of months) if (sliceMonth(d, m).assignments.length === 0) return fail(res, 409, 'EMPTY', `${m} has no choirs assigned yet`);
+  for (const m of months) {
+    const slice = sliceMonth(d, m);
+    if (slice.services.some((service) => service.musicRequired !== false) && slice.assignments.length === 0) {
+      return fail(res, 409, 'EMPTY', `${m} has no choirs assigned yet`);
+    }
+  }
   const units = unitsFrom(await loadChoirs());
   const at = new Date();
   for (const month of already) {
@@ -349,7 +379,7 @@ musicScheduleRouter.post('/drafts/:id/publish', requireAuth, async (req: AuthedR
     const slice = sliceMonth(d, month);
     const doc: MonthDoc = { ...before, services: slice.services, assignments: slice.assignments, warnings: d.warnings, version: before.version + 1 };
     await saveMonth(doc, { updatedAt: at, updatedById: g.me });
-    await writeLog(month, 'PUBLISHED', 'EDITED', doc.version, g.me, diffLineup(before, doc, nameFor(units)));
+    await writeLog(month, 'PUBLISHED', 'EDITED', doc.version, g.me, diffLineup(before, doc, nameFor(units)), doc);
     await tellChoirs('Choir schedule published', `The choir schedule for ${month} is published (v${doc.version}).`, `music-pub:${month}:v${doc.version}`);
   }
   if (fresh.length) {
@@ -376,16 +406,17 @@ musicScheduleRouter.post('/months/:month/edit', requireAuth, async (req: AuthedR
   const before = (await loadMonths()).find((m) => m.periodKey === month);
   if (!before) return fail(res, 404, 'NOT_FOUND', 'No choir schedule for this month');
   const units = unitsFrom(await loadChoirs());
-  const cfg = await loadMusicConfig();
-  const r = applyEdit(before.services, before.assignments, parsed.data, units, {
+  const cfg = before.configVersionId ? await loadMusicConfig(before.configVersionId) : null;
+  const r = applyEdit(before.services, before.assignments, parsed.data, units, cfg ? {
     policies: cfg.policies, categories: cfg.categories,
-    serviceByCode: new Map(cfg.services.map((s) => [s.code, s])),
-  });
+    serviceByCode: new Map(cfg.services.map((s) => [s.code.toUpperCase(), s])),
+    choirLinks: cfg.choirLinks,
+  } : null);
   if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code, warnings: 'warnings' in r ? r.warnings : [] });
   const doc: MonthDoc = { ...before, assignments: r.assignments, warnings: r.warnings, version: before.version + 1 };
   const changes = diffLineup(before, doc, nameFor(units));
   await saveMonth(doc, { updatedAt: new Date(), updatedById: g.me });
-  await writeLog(month, doc.state, 'EDITED', doc.version, g.me, changes);
+  await writeLog(month, doc.state, 'EDITED', doc.version, g.me, changes, doc);
   if (doc.state === 'PUBLISHED') await tellChoirs('Choir schedule updated', `The choir schedule for ${month} was updated (v${doc.version}). The previous version is replaced.`, `music-edit:${month}:v${doc.version}`);
   await tellProtocol('Music changed a choir schedule', `${month}: ${summarise('EDITED', doc.state, changes)}`, `music-edit-prot:${month}:v${doc.version}`);
   await audit(g.me, 'MONTH_EDITED', `Edited ${month} (v${doc.version})`, { month, version: doc.version });

@@ -1434,8 +1434,12 @@ model ProtocolHistory {
   publishedById String
   slotsJson     String
   notesJson     String   @default("[]")
+  /// The Protocol rules version used to generate and publish this snapshot.
+  configVersionId String?
+  configVersion ConfigVersion? @relation(fields: [configVersionId], references: [id])
 
   @@unique([monthKey, version])
+  @@index([configVersionId])
 }
 
 /// Present, half present, excused or absent: one row per person per service.
@@ -1525,6 +1529,11 @@ model MusicDraft {
   warningsJson   String   @default("[]")
   createdById    String
   createdAt      DateTime @default(now())
+  /// The Music rules version used to generate and validate this draft.
+  configVersionId String?
+  configVersion ConfigVersion? @relation(fields: [configVersionId], references: [id])
+
+  @@index([configVersionId])
 }
 
 /// A month the Music team has confirmed (Protocol may plan against it) or published (the choirs see it).
@@ -1566,8 +1575,14 @@ model MusicLog {
   byId        String
   summary     String
   changesJson String   @default("[]")
+  /// Version and full schedule state at this logged transition.
+  configVersionId String?
+  configVersion ConfigVersion? @relation(fields: [configVersionId], references: [id])
+  servicesSnapshotJson String?
+  assignmentsSnapshotJson String?
 
   @@index([periodKey])
+  @@index([configVersionId])
 }
 
 /// The preferences of one system: unit details and money options, as JSON (slice 3.18).
@@ -2112,7 +2127,10 @@ model ConfigVersion {
   validationJson     String   @default("{}")
   affectedSchedulesJson String @default("[]")
   musicMonths        MusicMonth[]
+  musicDrafts        MusicDraft[]
+  musicLogs           MusicLog[]
   protocolPlans      ProtocolPlan[]
+  protocolHistories  ProtocolHistory[]
   schedulingServices SchedulingService[]
   choirCategories    ChoirCategory[]
   categoryServicePolicies CategoryServicePolicy[]
@@ -2155,7 +2173,7 @@ model SchedulingService {
   createdByPersonId String
   createdAt         DateTime @default(now())
 
-  @@unique([systemId, code])
+  @@unique([systemId, code, configVersionId])
   @@index([systemId, active])
   @@index([configVersionId])
 }
@@ -2179,7 +2197,7 @@ model ChoirCategory {
   configVersionId   String?
   configVersion     ConfigVersion? @relation(fields: [configVersionId], references: [id])
 
-  @@unique([systemId, code])
+  @@unique([systemId, code, configVersionId])
   @@index([systemId, active])
   @@index([configVersionId])
 }
@@ -2211,7 +2229,7 @@ model CategoryServicePolicy {
   createdByPersonId String
   createdAt         DateTime @default(now())
 
-  @@unique([systemId, categoryId, serviceId])
+  @@unique([systemId, categoryId, serviceId, configVersionId], map: "CategoryServicePolicy_config_version_key")
   @@index([systemId, categoryId])
   @@index([configVersionId])
 }
@@ -2234,7 +2252,7 @@ model ChoirCategoryLink {
   configVersionId      String?
   configVersion        ConfigVersion? @relation(fields: [configVersionId], references: [id])
 
-  @@unique([systemId, choirId])
+  @@unique([systemId, choirId, configVersionId])
   @@index([systemId, categoryId])
   @@index([configVersionId])
 }
@@ -2260,7 +2278,7 @@ model ProtocolServiceRule {
   createdByPersonId    String
   createdAt            DateTime @default(now())
 
-  @@unique([systemId, serviceId])
+  @@unique([systemId, serviceId, configVersionId])
   @@index([configVersionId])
 }
 

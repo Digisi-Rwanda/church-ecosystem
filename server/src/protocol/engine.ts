@@ -99,11 +99,13 @@ export function musicRequirements(
   rules: ProtocolSchedulingRules,
   kind: ProtocolServiceKind,
 ): { choir: boolean; worship: boolean } {
-  const relaxed = rules.relaxChoirOnKinds?.includes(kind) ?? false;
+  const serviceRule = rules.serviceRequirements?.[kind];
+  const relaxed = (rules.relaxChoirOnKinds?.includes(kind) ?? false)
+    && (serviceRule?.coordinatorRelaxable ?? true);
   return {
-    choir: rules.requireChoirOnService && !relaxed,
+    choir: (serviceRule?.choir ?? rules.requireChoirOnService) && !relaxed,
     worship:
-      (rules.requireWorshipOnService ?? rules.requireChoirOnService) && !relaxed,
+      (serviceRule?.worship ?? rules.requireWorshipOnService ?? rules.requireChoirOnService) && !relaxed,
   };
 }
 
@@ -562,22 +564,30 @@ export function buildRulesFromConfig(
   rules: ProtocolServiceRuleView[],
   dutyPolicy: ProtocolDutyPolicyView | null,
   relaxTuesday = false,
+  services: SchedulingServiceView[] = [],
 ): ProtocolSchedulingRules {
-  const rule = rules[0]; // one active rule per system
-  if (!rule && !dutyPolicy) {
-    return relaxTuesday
-      ? { preferTarget: 3, softMax: 3, hardMax: 4, defaultTeamSize: 10, requireChoirOnService: true, requireWorshipOnService: true, relaxChoirOnKinds: ['TUESDAY'] }
-      : { preferTarget: 3, softMax: 3, hardMax: 4, defaultTeamSize: 10, requireChoirOnService: true, requireWorshipOnService: true };
-  }
   const dp = dutyPolicy ?? { preferTarget: 3, softMax: 3, hardMax: 4 };
+  const serviceRequirements: NonNullable<ProtocolSchedulingRules['serviceRequirements']> = {};
+  const protocolKinds: readonly ProtocolServiceKind[] = ['SS1', 'SS2', 'TUESDAY', 'IGABURO'];
+  for (const rule of rules) {
+    const service = services.find((candidate) => candidate.id === rule.serviceId);
+    const kind = service?.code.toUpperCase() as ProtocolServiceKind | undefined;
+    if (!kind || !protocolKinds.includes(kind)) continue;
+    serviceRequirements[kind] = {
+      choir: rule.requireChoir,
+      worship: rule.requireWorship,
+      coordinatorRelaxable: rule.relaxableKinds.some((value) => value.toUpperCase() === kind),
+    };
+  }
   return {
     preferTarget: dp.preferTarget,
     softMax: dp.softMax,
     hardMax: dp.hardMax,
-    defaultTeamSize: rule?.defaultTeamSize ?? 10,
-    requireChoirOnService: rule?.requireChoir ?? true,
-    requireWorshipOnService: rule?.requireWorship ?? true,
+    defaultTeamSize: 10,
+    requireChoirOnService: true,
+    requireWorshipOnService: true,
     relaxChoirOnKinds: relaxTuesday ? ['TUESDAY'] : [],
+    serviceRequirements,
   };
 }
 

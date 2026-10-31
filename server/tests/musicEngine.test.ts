@@ -1,7 +1,8 @@
 /** The old Music engine, ported to the server: these are its original tests with the lineup passed in. */
 import { describe, expect, it } from 'vitest';
 import type { MusicScheduleUnit } from '../src/music/types';
-import { buildMusicCalendar, generateMusicChoirSchedule, periodOptionsForHorizon, validateSchedule } from '../src/music/engine';
+import { buildMusicCalendar, generateMusicChoirSchedule, periodOptionsForHorizon, validateConfigPolicies, validateSchedule } from '../src/music/engine';
+import type { CategoryServicePolicyView, ChoirCategoryView, SchedulingServiceView } from '../src/scheduling/types';
 
 const DEFAULT: MusicScheduleUnit[] = [
   { id: 'mu-ijwi', kind: 'PRIMARY', name: "Ijwi ry' umwami Yesu", active: true },
@@ -43,6 +44,24 @@ describe('music engine: the church lineup', () => {
     expect(new Set(a.map((x) => x.id)).size).toBe(a.length);
     expect(a.find((x) => x.kind === 'SS1')!.id).toMatch(/^msvc-2026-09-\d\d-SS1$/);
   });
+  it('builds Music slots from the pinned shared calendar recurrence, names and flags', () => {
+    const services = buildMusicCalendar('2026-03', 'MONTH', [
+      { code: 'ss1', name: 'Sunday Gathering', weekday: 0, time: '10:30', recurrence: 'WEEKLY', selectedDates: [], active: true, musicRequired: true, protocolRequired: true },
+      { code: 'igaburo', name: 'Communion', weekday: null, time: null, recurrence: 'MONTHLY', selectedDates: [], active: true, musicRequired: false, protocolRequired: true },
+      { code: 'friday', name: 'Retired Friday', weekday: 5, time: '18:00', recurrence: 'WEEKLY', selectedDates: [], active: false, musicRequired: true, protocolRequired: false },
+    ]);
+    const sunday = services.filter((s) => s.kind === 'SS1');
+    expect(sunday).toHaveLength(5);
+    expect(sunday[0]).toMatchObject({ date: '2026-03-01', label: 'Sunday Gathering · 2026-03-01', time: '10:30', musicRequired: true, protocolRequired: true });
+    expect(services.filter((s) => s.kind === 'IGABURO')).toHaveLength(1);
+    expect(services.find((s) => s.kind === 'IGABURO')).toMatchObject({ musicRequired: false, protocolRequired: true });
+    expect(services.some((s) => s.kind === 'FRIDAY')).toBe(false);
+  });
+  it('rejects calendar entries the fixed scheduling engines do not support', () => {
+    expect(() => buildMusicCalendar('2026-03', 'MONTH', [
+      { code: 'special', name: 'Special Service', weekday: 0, time: '09:00', recurrence: 'WEEKLY', selectedDates: [], active: true, musicRequired: true, protocolRequired: true },
+    ])).toThrow(/Unsupported scheduling service code/);
+  });
   it('a retired choir is never scheduled, but stays valid in history', () => {
     const units = DEFAULT.map((u) => (u.id === 'mu-elim' ? { ...u, active: false } : u));
     const services = buildMusicCalendar('2026-09', 'MONTH');
@@ -61,6 +80,49 @@ describe('music engine: the church lineup', () => {
     const soft = validateSchedule(services, [{ id: 'a', serviceId: tue.id, unitId: 'mu-worship', source: 'MANUAL' }], 'manual', DEFAULT);
     expect(soft.ok).toBe(true);
     expect(soft.warnings.length).toBeGreaterThan(0);
+  });
+});
+
+describe('music engine: versioned category policies', () => {
+  const service: SchedulingServiceView = {
+    id: 'service-ss1-v1', systemId: 'sys-music', code: 'ss1', name: 'Sunday', kind: 'SERVICE',
+    weekday: 0, time: '10:00', recurrence: 'WEEKLY', selectedDates: [], active: true,
+    effectiveFrom: '2026-01-01T00:00:00.000Z', effectiveTo: null, musicRequired: true, protocolRequired: true,
+    maxChoirs: 3, targetTeamSize: 10, configVersionId: 'music-v1', displayOrder: 0, supersedesId: null,
+    createdByPersonId: 'leader', createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  const category: ChoirCategoryView = {
+    id: 'primary-v1', systemId: 'sys-music', code: 'PRIMARY', name: 'Primary', description: '',
+    active: true, effectiveFrom: '2026-01-01T00:00:00.000Z', effectiveTo: null,
+    configVersionId: 'music-v1', supersedesId: null, createdByPersonId: 'leader',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
+  const policy = (updates: Partial<CategoryServicePolicyView>): CategoryServicePolicyView => ({
+    id: 'policy-v1', systemId: 'sys-music', categoryId: category.id, serviceId: service.id,
+    eligible: true, active: true, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET',
+    planningMode: 'ROTATION', minCount: null, maxCount: null, requireAll: false, configVersionId: 'music-v1',
+    effectiveFrom: '2026-01-01T00:00:00.000Z', effectiveTo: null, supersedesId: null,
+    createdByPersonId: 'leader', createdAt: '2026-01-01T00:00:00.000Z', ...updates,
+  });
+  const slot = buildMusicCalendar('2026-03', 'MONTH').find((entry) => entry.kind === 'SS1')!;
+  const units: MusicScheduleUnit[] = [{ id: 'primary-choir', kind: 'PRIMARY', name: 'Primary choir' }];
+  const validate = (configPolicy: CategoryServicePolicyView) => validateConfigPolicies({
+    services: [slot],
+    assignments: [{ id: 'assignment', serviceId: slot.id, unitId: 'primary-choir', source: 'ENGINE' }],
+    units,
+    policies: [configPolicy],
+    categories: [category],
+    serviceByCode: new Map([['SS1', service]]),
+  });
+
+  it('resolves policy service references through the versioned service id', () => {
+    expect(validate(policy({ eligible: false })).reason).toMatch(/not eligible/);
+  });
+
+  it('enforces frequency minima and reports target shortfalls', () => {
+    expect(validate(policy({ frequencyTarget: 2, frequencyKind: 'MINIMUM' })).reason).toMatch(/Frequency minimum/);
+    expect(validate(policy({ frequencyTarget: 2, frequencyKind: 'TARGET' })).warnings).toHaveLength(1);
+    expect(validate(policy({ frequencyTarget: 1, frequencyKind: 'MINIMUM' })).ok).toBe(true);
   });
 });
 

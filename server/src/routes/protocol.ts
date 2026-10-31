@@ -39,6 +39,7 @@ interface PlanRow {
   id: string; monthKey: string; status: string; version: number; notesJson: string; generatedAt?: Date | string | null; submittedAt?: Date | string | null; submittedById?: string | null;
   reviewedAt?: Date | string | null; reviewedById?: string | null; publishedAt?: Date | string | null; publishedById?: string | null; musicVersionBuiltOn?: number | null;
   musicSnapshotJson?: string | null; musicStaleNotified?: boolean; overridesJson: string; relaxTuesday: boolean; relaxReason?: string | null; relaxedById?: string | null; relaxedAt?: Date | string | null;
+  configVersionId?: string | null;
 }
 interface SlotRow { id: string; monthKey: string; serviceId: string; personId: string; source: string; role: string; recommendedRole?: string | null; roleStatus?: string | null; slotKind: string; replacedPersonId?: string | null }
 interface PersonRow { id: string; fullName: string; status?: string; archivedAt?: Date | string | null }
@@ -116,22 +117,27 @@ async function monthCtx(month: string) {
     unitsOnService.get(a.serviceId)!.add(a.unitId);
   }
   // Load the active scheduling configuration (Phase 3 integration).
-  const protocolConfig = await loadProtocolConfig();
+  const protocolConfig = await loadProtocolConfig(planRow?.configVersionId ?? undefined, planned?.configVersionId ?? undefined);
   const services: ProtocolService[] = (planned?.services ?? [])
-    .filter((s) => (KINDS as readonly string[]).includes(s.kind))
+    .filter((s) => s.protocolRequired !== false && (KINDS as readonly string[]).includes(s.kind))
     .map((s) => {
       // Use configured target team size when available; fall back to 10.
       const cfg = protocolConfig.services.find((cs) => cs.code === s.kind);
-      const rule = protocolConfig.rules.find((r) => r.serviceId === s.id);
+      const rule = protocolConfig.rules.find((r) => r.serviceId === cfg?.id);
       return {
         id: serviceId(s.id), musicServiceId: s.id, monthKey: month, date: s.date,
-        kind: s.kind as ProtocolServiceKind, label: s.label,
-        targetTeamSize: cfg?.targetTeamSize ?? rule?.defaultTeamSize ?? 10,
+        kind: s.kind as ProtocolServiceKind, label: s.label, time: s.time ?? null,
+        targetTeamSize: rule?.teamSizeOverrides[s.date] ?? rule?.defaultTeamSize ?? 10,
       };
     })
     .sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
-  const rules = buildRulesFromConfig(protocolConfig.rules, protocolConfig.dutyPolicy, planRow?.relaxTuesday ?? false);
-  return { month, planned, planRow, rosterRows: rows, roster: members, slotRows, slots: slotRows.map(slotOf), services, rules, choirUnits, unitsOnService, kindOf: (u: string) => kindById.get(u) };
+  const rules = buildRulesFromConfig(
+    protocolConfig.rules,
+    protocolConfig.dutyPolicy,
+    planRow?.relaxTuesday ?? false,
+    protocolConfig.services,
+  );
+  return { month, planned, planRow, protocolConfig, rosterRows: rows, roster: members, slotRows, slots: slotRows.map(slotOf), services, rules, choirUnits, unitsOnService, kindOf: (u: string) => kindById.get(u) };
 }
 type Ctx = Awaited<ReturnType<typeof monthCtx>>;
 
@@ -161,10 +167,21 @@ function staleOf(c: Ctx): string[] {
   return out.sort();
 }
 
-async function ensurePlan(month: string): Promise<PlanRow> {
+async function ensurePlan(month: string, configVersionId?: string | null): Promise<PlanRow> {
   const found = ((await prisma.protocolPlan.findMany()) as PlanRow[]).find((p) => p.monthKey === month);
-  if (found) return found;
-  return (await prisma.protocolPlan.create({ data: { monthKey: month, status: 'OPEN', version: 0, notesJson: '[]', overridesJson: '[]', updatedAt: new Date() } })) as PlanRow;
+  if (found) {
+    if (!found.configVersionId && configVersionId) {
+      return (await prisma.protocolPlan.update({
+        where: { id: found.id }, data: { configVersionId, updatedAt: new Date() },
+      })) as PlanRow;
+    }
+    return found;
+  }
+  const config = await loadProtocolConfig();
+  return (await prisma.protocolPlan.create({ data: {
+    monthKey: month, status: 'OPEN', version: 0, notesJson: '[]', overridesJson: '[]',
+    configVersionId: configVersionId ?? config.version?.id ?? null, updatedAt: new Date(),
+  } })) as PlanRow;
 }
 const setPlan = async (id: string, data: Record<string, unknown>) => prisma.protocolPlan.update({ where: { id }, data: { ...data, updatedAt: new Date() } });
 
@@ -390,10 +407,11 @@ async function generateMonth(req: AuthedRequest, res: Res, g: { me: string }, mo
       },
     });
   }
-  const plan = await ensurePlan(month);
+  const plan = await ensurePlan(month, c.protocolConfig.version?.id);
   await setPlan(plan.id, {
     status: 'DRAFT', generatedAt: new Date(), notesJson: JSON.stringify(warnings), musicVersionBuiltOn: c.planned!.version,
     musicSnapshotJson: JSON.stringify(snapshotOf(c)), musicStaleNotified: false, overridesJson: '[]', submittedAt: null, submittedById: null,
+    configVersionId: c.protocolConfig.version?.id ?? null,
   });
   await audit(g.me, 'PROTOCOL_TEAMS_BUILT', `Built the teams for ${month}`, { month, slots: slots.length });
   res.json({ ok: true, slots: slots.length });
@@ -413,9 +431,9 @@ protocolRouter.post('/months/:month/slots', requireAuth, async (req: AuthedReque
   if (!svc) return fail(res, 404, 'NO_SERVICE', 'No such service');
   const why = whyNot(c, svc, parsed.data.personId);
   if (why) return fail(res, 409, why, 'This person cannot be put on that service');
-  await ensurePlan(month);
+  await ensurePlan(month, c.protocolConfig.version?.id);
   await prisma.protocolSlot.create({ data: { monthKey: month, serviceId: svc.id, personId: parsed.data.personId, source: 'MANUAL', role: 'MEMBER', slotKind: monthlyLoad(c, parsed.data.personId) >= c.rules.softMax ? 'EXTRA' : 'REGULAR' } });
-  const plan = await ensurePlan(month);
+  const plan = await ensurePlan(month, c.protocolConfig.version?.id);
   if (plan.status === 'OPEN') await setPlan(plan.id, { status: 'DRAFT' });
   await audit(g.me, 'PROTOCOL_SLOT_ADD', `Added ${parsed.data.personId} to ${svc.label}`, { month, serviceId: svc.id, personId: parsed.data.personId });
   res.status(201).json({ ok: true });
@@ -496,7 +514,7 @@ protocolRouter.post('/months/:month/overrides', requireAuth, async (req: AuthedR
   if (!issue) return fail(res, 404, 'NOT_FOUND', 'No such issue');
   if (!issue.canOverride) return fail(res, 409, 'NOT_OVERRIDABLE', 'Only the Music clashes can be overridden');
   const next = [...overridesOf(c).filter((o) => o.issueKey !== issue.key), { issueKey: issue.key, reason: parsed.data.reason, byPersonId: g.me, at: new Date().toISOString() }];
-  await setPlan((await ensurePlan(month)).id, { overridesJson: JSON.stringify(next) });
+  await setPlan((await ensurePlan(month, c.protocolConfig.version?.id)).id, { overridesJson: JSON.stringify(next) });
   await audit(g.me, 'PROTOCOL_OVERRIDE', `Allowed: ${issue.message}`, { month, key: issue.key, reason: parsed.data.reason });
   res.json({ ok: true });
 });
@@ -509,7 +527,7 @@ protocolRouter.post('/months/:month/relax', requireAuth, async (req: AuthedReque
   if (!parsed.success || (parsed.data.on && (parsed.data.reason ?? '').length < REASON_MIN)) return fail(res, 400, 'REASON', 'Give a reason of at least five characters');
   const c = await monthCtx(month);
   if (!editable(c.planRow)) return fail(res, 409, 'LOCKED', 'Return the month to draft first');
-  const plan = await ensurePlan(month);
+  const plan = await ensurePlan(month, c.protocolConfig.version?.id);
   await setPlan(plan.id, parsed.data.on
     ? { relaxTuesday: true, relaxReason: parsed.data.reason, relaxedById: g.me, relaxedAt: new Date() }
     : { relaxTuesday: false, relaxReason: null, relaxedById: null, relaxedAt: null });
@@ -570,7 +588,10 @@ protocolRouter.post('/months/:month/publish', requireAuth, async (req: AuthedReq
   if (staleOf(c).length) return fail(res, 409, 'MUSIC_CHANGED', 'Music changed since the teams were built');
   if (blockingOf(c).length) return fail(res, 409, 'BLOCKING', 'There are still blocking issues');
   const version = c.planRow.version + 1;
-  await prisma.protocolHistory.create({ data: { monthKey: month, version, publishedAt: new Date(), publishedById: g.me, slotsJson: JSON.stringify(c.slots), notesJson: c.planRow.notesJson } });
+  await prisma.protocolHistory.create({ data: {
+    monthKey: month, version, publishedAt: new Date(), publishedById: g.me, slotsJson: JSON.stringify(c.slots),
+    notesJson: c.planRow.notesJson, configVersionId: c.planRow.configVersionId ?? null,
+  } });
   await setPlan(c.planRow.id, { status: 'PUBLISHED', version, reviewedAt: new Date(), reviewedById: g.me, publishedAt: new Date(), publishedById: g.me });
   for (const id of new Set(c.slots.map((s) => s.personId))) await tell(id, 'FOR_INFORMATION', `Your Protocol duties for ${month}`, 'The month is published. Open My duties to see your services.', `protocol:published:${month}:${version}`);
   await tellOffice('COORDINATOR', 'FOR_INFORMATION', `Protocol teams for ${month} published`, `Version ${version} is out.`, `protocol:publishedc:${month}:${version}`);
@@ -582,9 +603,9 @@ protocolRouter.get('/months/:month/history', requireAuth, async (req: AuthedRequ
   const g = await gateRead(req, res);
   const month = g && monthParam(req, res);
   if (!g || !month) return;
-  const rows = ((await prisma.protocolHistory.findMany()) as Array<{ monthKey: string; version: number; publishedAt: Date | string; publishedById: string; slotsJson: string }>).filter((h) => h.monthKey === month);
+  const rows = ((await prisma.protocolHistory.findMany()) as Array<{ monthKey: string; version: number; publishedAt: Date | string; publishedById: string; slotsJson: string; configVersionId?: string | null }>).filter((h) => h.monthKey === month);
   const nm = await names(rows.map((r) => r.publishedById));
-  res.json({ versions: rows.sort((a, b) => b.version - a.version).map((r) => ({ version: r.version, publishedAt: iso(r.publishedAt), by: nm.get(r.publishedById) ?? r.publishedById, slots: parse<unknown[]>(r.slotsJson, []).length })) });
+  res.json({ versions: rows.sort((a, b) => b.version - a.version).map((r) => ({ version: r.version, publishedAt: iso(r.publishedAt), by: nm.get(r.publishedById) ?? r.publishedById, slots: parse<unknown[]>(r.slotsJson, []).length, configVersionId: r.configVersionId ?? null })) });
 });
 
 /* ───────────── Service life: mine, excuses, fill-ins, swaps ───────────── */
@@ -913,4 +934,3 @@ protocolRouter.get('/reports', requireAuth, async (req: AuthedRequest, res) => {
     }).sort((a, b) => String(a.date).localeCompare(String(b.date))),
   });
 });
-

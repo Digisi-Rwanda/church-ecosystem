@@ -77,7 +77,9 @@ function nid(prefix: string): string {
 export function buildMusicCalendar(
   startMonthKey: string,
   horizon: MusicHorizon = 'MONTH',
+  configServices?: readonly Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired'>[],
 ): MusicServiceSlot[] {
+  if (configServices) return buildConfiguredMusicCalendar(startMonthKey, horizon, configServices);
   const services: MusicServiceSlot[] = [];
   for (const periodKey of periodKeysForHorizon(startMonthKey, horizon)) {
     const [y, m] = periodKey.split('-').map(Number);
@@ -101,6 +103,7 @@ export function buildMusicCalendar(
         date,
         kind: 'SS1',
         label: `${MUSIC_SERVICE_LABELS.SS1} · ${date}`,
+        musicRequired: true, protocolRequired: true,
       });
       services.push({
         id: nid('msvc'),
@@ -108,6 +111,7 @@ export function buildMusicCalendar(
         date,
         kind: 'SS2',
         label: `${MUSIC_SERVICE_LABELS.SS2} · ${date}`,
+        musicRequired: true, protocolRequired: true,
       });
     }
     for (const d of tuesdays) {
@@ -118,6 +122,7 @@ export function buildMusicCalendar(
         date,
         kind: 'TUESDAY',
         label: `${MUSIC_SERVICE_LABELS.TUESDAY} · ${date}`,
+        musicRequired: true, protocolRequired: true,
       });
     }
     for (const d of fridays) {
@@ -128,6 +133,7 @@ export function buildMusicCalendar(
         date,
         kind: 'FRIDAY',
         label: `${MUSIC_SERVICE_LABELS.FRIDAY} · ${date}`,
+        musicRequired: true, protocolRequired: false,
       });
     }
     if (lastSaturday > 0) {
@@ -138,6 +144,7 @@ export function buildMusicCalendar(
         date,
         kind: 'IGABURO',
         label: `${MUSIC_SERVICE_LABELS.IGABURO} · ${date}`,
+        musicRequired: true, protocolRequired: true,
       });
     }
   }
@@ -150,6 +157,69 @@ export function buildMusicCalendar(
       ? kindOrder(a.kind) - kindOrder(b.kind)
       : a.date.localeCompare(b.date),
   );
+}
+
+function buildConfiguredMusicCalendar(
+  startMonthKey: string,
+  horizon: MusicHorizon,
+  configServices: readonly Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired'>[],
+): MusicServiceSlot[] {
+  const kindByCode: Record<string, MusicServiceKind> = {
+    ss1: 'SS1', ss2: 'SS2', tuesday: 'TUESDAY', friday: 'FRIDAY', igaburo: 'IGABURO',
+  };
+  const enabled = configServices.filter((service) => service.active);
+  const unsupported = enabled.find((service) => !kindByCode[service.code.toLowerCase()]);
+  if (unsupported) throw new Error(`Unsupported scheduling service code: ${unsupported.code}`);
+  const slots: MusicServiceSlot[] = [];
+  for (const periodKey of periodKeysForHorizon(startMonthKey, horizon)) {
+    const [year, month] = periodKey.split('-').map(Number);
+    const days = daysInMonth(year, month);
+    for (const service of enabled) {
+      const kind = kindByCode[service.code.toLowerCase()];
+      const dates = new Set<string>();
+      if (service.recurrence === 'SELECTED_DATES' || service.recurrence === 'CUSTOM') {
+        for (const date of service.selectedDates) if (date.startsWith(`${periodKey}-`)) dates.add(date);
+        if (service.recurrence === 'CUSTOM' && service.selectedDates.length === 0) {
+          throw new Error(`Custom recurrence for ${service.code} requires selected dates`);
+        }
+      } else if (service.recurrence === 'MONTHLY') {
+        if (service.selectedDates.length) {
+          for (const date of service.selectedDates) if (date.startsWith(`${periodKey}-`)) dates.add(date);
+        } else if (kind === 'IGABURO' && service.weekday === null) {
+          for (let day = days; day >= 1; day--) {
+            if (weekdayUtc(year, month, day) === 6) {
+              dates.add(isoDate(year, month, day));
+              break;
+            }
+          }
+        } else if (service.weekday !== null) {
+          for (let day = 1; day <= days; day++) {
+            if (weekdayUtc(year, month, day) === service.weekday) {
+              dates.add(isoDate(year, month, day));
+              break;
+            }
+          }
+        }
+      } else if (service.weekday !== null) {
+        for (let day = 1; day <= days; day++) {
+          if (weekdayUtc(year, month, day) === service.weekday) dates.add(isoDate(year, month, day));
+        }
+      } else {
+        throw new Error(`Weekly recurrence for ${service.code} requires a weekday`);
+      }
+
+      for (const date of dates) {
+        slots.push({
+          id: stableServiceId(date, kind), periodKey, date, kind,
+          label: `${service.name} · ${date}`, time: service.time,
+          musicRequired: service.musicRequired, protocolRequired: service.protocolRequired,
+        });
+      }
+    }
+  }
+  return slots.sort((a, b) => a.date === b.date
+    ? kindOrder(a.kind) - kindOrder(b.kind)
+    : a.date.localeCompare(b.date));
 }
 
 function kindOrder(k: MusicServiceKind): number {
@@ -950,6 +1020,9 @@ export type MusicServicePolicy = {
   minCount: number | null;
   maxCount: number | null;
   requireAll: boolean;
+  frequencyTarget: number | null;
+  frequencyCounting: 'ASSIGNMENTS' | 'DISTINCT_DATES';
+  frequencyKind: 'MINIMUM' | 'TARGET' | 'MAXIMUM';
 };
 
 /** Map (serviceCode, unitKind) → policy. Falls back to the legacy rules when no config. */
@@ -958,29 +1031,34 @@ export function servicePolicyFor(
   unitKind: string,
   policies: CategoryServicePolicyView[],
   categories: ChoirCategoryView[],
+  services: SchedulingServiceView[] = [],
 ): MusicServicePolicy {
   const cat = categories.find((c) => c.code === unitKind);
+  const service = services.find((s) => s.code.toUpperCase() === serviceCode.toUpperCase());
   const pol = policies.find(
-    (p) => p.categoryId === cat?.id && p.serviceId === serviceCode,
+    (p) => p.active && p.categoryId === cat?.id && p.serviceId === service?.id,
   );
   if (!pol) {
     // Legacy defaults: PRIMARY eligible everywhere, CHILDREN only SS1, WORSHIP only TUESDAY
     if (unitKind === 'CHILDREN') return serviceCode === 'SS1'
-      ? { eligible: true, minCount: null, maxCount: 3, requireAll: false }
-      : { eligible: false, minCount: null, maxCount: 0, requireAll: false };
+      ? { eligible: true, minCount: null, maxCount: 3, requireAll: false, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET' }
+      : { eligible: false, minCount: null, maxCount: 0, requireAll: false, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET' };
     if (unitKind === 'WORSHIP') return serviceCode === 'TUESDAY'
-      ? { eligible: true, minCount: null, maxCount: null, requireAll: true }
-      : { eligible: false, minCount: null, maxCount: 0, requireAll: false };
+      ? { eligible: true, minCount: null, maxCount: null, requireAll: true, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET' }
+      : { eligible: false, minCount: null, maxCount: 0, requireAll: false, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET' };
     if (unitKind === 'SECONDARY') return ['SS1', 'SS2'].includes(serviceCode)
-      ? { eligible: true, minCount: null, maxCount: 1, requireAll: false }
-      : { eligible: false, minCount: null, maxCount: 0, requireAll: false };
-    return { eligible: true, minCount: null, maxCount: null, requireAll: false };
+      ? { eligible: true, minCount: null, maxCount: 1, requireAll: false, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET' }
+      : { eligible: false, minCount: null, maxCount: 0, requireAll: false, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET' };
+    return { eligible: true, minCount: null, maxCount: null, requireAll: false, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET' };
   }
   return {
     eligible: pol.eligible,
     minCount: pol.minCount,
     maxCount: pol.maxCount,
     requireAll: pol.requireAll,
+    frequencyTarget: pol.frequencyTarget,
+    frequencyCounting: pol.frequencyCounting,
+    frequencyKind: pol.frequencyKind,
   };
 }
 
@@ -1000,46 +1078,68 @@ export function validateConfigPolicies(input: {
   policies: CategoryServicePolicyView[];
   categories: ChoirCategoryView[];
   serviceByCode: Map<string, SchedulingServiceView>;
+  choirLinks?: Map<string, string[]>;
 }): { ok: boolean; warnings: string[]; reason?: string } {
   const warnings: string[] = [];
-  const unitById = new Map(input.units.map((u) => [u.id, u]));
-  const svcById = new Map(input.services.map((s) => [s.id, s]));
   const byService = groupBy(input.assignments, (a) => a.serviceId);
+  const frequencyCounts = new Map<string, { assignments: number; dates: Set<string> }>();
+  const serviceConfigs = [...input.serviceByCode.values()];
+  const categoriesByUnit = new Map(input.units.map((unit) => {
+    const linked = input.choirLinks?.get(unit.id);
+    const categoryIds = linked?.length
+      ? linked
+      : input.categories.filter((category) => category.code === unit.kind).map((category) => category.id);
+    return [unit.id, categoryIds];
+  }));
 
-  for (const s of input.services) {
-    const svc = input.serviceByCode.get(s.kind);
-    const units = byService[s.id] ?? [];
-    // Group by unit kind
-    const byKind = new Map<string, string[]>();
-    for (const a of units) {
-      const kind = unitById.get(a.unitId)?.kind;
-      if (!kind) continue;
-      const arr = byKind.get(kind) ?? [];
-      arr.push(a.unitId);
-      byKind.set(kind, arr);
-    }
-    for (const [kind, ids] of byKind) {
-      const pol = servicePolicyFor(svc?.code ?? s.kind, kind, input.policies, input.categories);
-      if (!pol.eligible) {
-        return { ok: false, warnings, reason: `${kind} is not eligible for ${s.label}` };
+  for (const serviceSlot of input.services) {
+    const serviceConfig = input.serviceByCode.get(serviceSlot.kind);
+    if (!serviceConfig) continue;
+    const assignedAssignments = byService[serviceSlot.id] ?? [];
+    for (const category of input.categories) {
+      const assigned = assignedAssignments
+        .filter((assignment) => categoriesByUnit.get(assignment.unitId)?.includes(category.id))
+        .map((assignment) => assignment.unitId);
+      const policy = servicePolicyFor(serviceConfig.code, category.code, input.policies, input.categories, serviceConfigs);
+      if (!policy.eligible && assigned.length) {
+        return { ok: false, warnings, reason: `${category.code} is not eligible for ${serviceSlot.label}` };
       }
-      if (pol.maxCount !== null && ids.length > pol.maxCount) {
-        return { ok: false, warnings, reason: `${s.label}: ${kind} has ${ids.length}, max ${pol.maxCount}` };
+      if (policy.maxCount !== null && assigned.length > policy.maxCount) {
+        return { ok: false, warnings, reason: `${serviceSlot.label}: ${category.code} has ${assigned.length}, max ${policy.maxCount}` };
       }
-      if (pol.minCount !== null && ids.length < pol.minCount) {
-        return { ok: false, warnings, reason: `${s.label}: ${kind} has ${ids.length}, min ${pol.minCount}` };
+      if (policy.minCount !== null && assigned.length < policy.minCount) {
+        return { ok: false, warnings, reason: `${serviceSlot.label}: ${category.code} has ${assigned.length}, min ${policy.minCount}` };
       }
-    }
-    // requireAll: every active unit of this kind must be on the service
-    for (const [kind, ids] of byKind) {
-      const pol = servicePolicyFor(svc?.code ?? s.kind, kind, input.policies, input.categories);
-      if (pol.requireAll) {
-        const active = input.units.filter((u) => u.kind === kind && u.active !== false);
-        const missing = active.filter((u) => !ids.includes(u.id));
+      if (policy.requireAll) {
+        const active = input.units.filter((unit) =>
+          unit.active !== false && categoriesByUnit.get(unit.id)?.includes(category.id));
+        const missing = active.filter((unit) => !assigned.includes(unit.id));
         if (missing.length) {
-          warnings.push(`${s.date}: ${kind} ${missing.map((u) => u.name).join(', ')} missing (requireAll)`);
+          warnings.push(`${serviceSlot.date}: ${category.code} ${missing.map((unit) => unit.name).join(', ')} missing (requireAll)`);
         }
       }
+      const configPolicy = input.policies.find((row) =>
+        row.active && row.categoryId === category.id && row.serviceId === serviceConfig.id);
+      if (configPolicy?.frequencyTarget !== null && configPolicy?.frequencyTarget !== undefined) {
+        const totals = frequencyCounts.get(configPolicy.id) ?? { assignments: 0, dates: new Set<string>() };
+        totals.assignments += assigned.length;
+        if (assigned.length) totals.dates.add(serviceSlot.date);
+        frequencyCounts.set(configPolicy.id, totals);
+      }
+    }
+  }
+  for (const policy of input.policies) {
+    if (!policy.active || policy.frequencyTarget === null) continue;
+    const totals = frequencyCounts.get(policy.id) ?? { assignments: 0, dates: new Set<string>() };
+    const count = policy.frequencyCounting === 'DISTINCT_DATES' ? totals.dates.size : totals.assignments;
+    if (policy.frequencyKind === 'MINIMUM' && count < policy.frequencyTarget) {
+      return { ok: false, warnings, reason: `Frequency minimum for ${policy.categoryId} is ${policy.frequencyTarget}; found ${count}` };
+    }
+    if (policy.frequencyKind === 'MAXIMUM' && count > policy.frequencyTarget) {
+      return { ok: false, warnings, reason: `Frequency maximum for ${policy.categoryId} is ${policy.frequencyTarget}; found ${count}` };
+    }
+    if (policy.frequencyKind === 'TARGET' && count !== policy.frequencyTarget) {
+      warnings.push(`Frequency target for ${policy.categoryId} is ${policy.frequencyTarget}; found ${count}`);
     }
   }
   return { ok: true, warnings };

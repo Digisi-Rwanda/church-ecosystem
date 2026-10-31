@@ -22,6 +22,12 @@ import {
   fetchProtocolServiceRules,
   fetchSchedulingServices,
   retireSchedulingService,
+  updateCategoryServicePolicy,
+  updateChoirCategory,
+  updateChoirCategoryLink,
+  updateProtocolDutyPolicy,
+  updateProtocolServiceRule,
+  updateSchedulingService,
 } from './frontDoorApi';
 
 describe('scheduling configuration API paths', () => {
@@ -57,6 +63,24 @@ describe('scheduling configuration API paths', () => {
     ]);
   });
 
+  it('passes the selected configuration version through every row-list request', async () => {
+    await fetchSchedulingServices('sys-music', false, 'music-draft');
+    await fetchChoirCategories('sys-music', false, 'music-draft');
+    await fetchCategoryServicePolicies('sys-music', 'music-draft');
+    await fetchChoirCategoryLinks('sys-music', 'music-draft');
+    await fetchProtocolServiceRules('sys-protocol', 'protocol-draft');
+    await fetchProtocolDutyPolicy('sys-protocol', 'protocol-draft');
+
+    expect(vi.mocked(apiFetch).mock.calls.map(([path]) => path)).toEqual([
+      '/api/scheduling/config/services?systemId=sys-music&configVersionId=music-draft',
+      '/api/scheduling/config/categories?systemId=sys-music&configVersionId=music-draft',
+      '/api/scheduling/config/policies?systemId=sys-music&configVersionId=music-draft',
+      '/api/scheduling/config/links?systemId=sys-music&configVersionId=music-draft',
+      '/api/scheduling/config/protocol/rules?systemId=sys-protocol&configVersionId=protocol-draft',
+      '/api/scheduling/config/protocol/policy?systemId=sys-protocol&configVersionId=protocol-draft',
+    ]);
+  });
+
   it('uses the registered POST endpoints for configuration writes', async () => {
     const body = { systemId: 'sys-music' };
     await createConfigVersion(body);
@@ -77,6 +101,26 @@ describe('scheduling configuration API paths', () => {
       ['/api/scheduling/config/protocol/rules', { method: 'POST', body }],
       ['/api/scheduling/config/protocol/policy', { method: 'POST', body }],
       ['/api/scheduling/config/services/service%2Fid/retire', { method: 'POST', body: {} }],
+    ]);
+  });
+
+  it('sends draft-scoped PATCH requests for every editable row type', async () => {
+    const versionId = 'draft-1';
+    const patch = { active: false };
+    await updateSchedulingService('service/1', versionId, patch);
+    await updateChoirCategory('category/1', versionId, patch);
+    await updateCategoryServicePolicy('policy/1', versionId, patch);
+    await updateChoirCategoryLink('link/1', versionId, patch);
+    await updateProtocolServiceRule('rule/1', versionId, patch);
+    await updateProtocolDutyPolicy('duty/1', versionId, patch);
+
+    expect(vi.mocked(apiFetch).mock.calls).toEqual([
+      ['/api/scheduling/config/services/service%2F1', { method: 'PATCH', body: { configVersionId: versionId, patch } }],
+      ['/api/scheduling/config/categories/category%2F1', { method: 'PATCH', body: { configVersionId: versionId, patch } }],
+      ['/api/scheduling/config/policies/policy%2F1', { method: 'PATCH', body: { configVersionId: versionId, patch } }],
+      ['/api/scheduling/config/links/link%2F1', { method: 'PATCH', body: { configVersionId: versionId, patch } }],
+      ['/api/scheduling/config/protocol/rules/rule%2F1', { method: 'PATCH', body: { configVersionId: versionId, patch } }],
+      ['/api/scheduling/config/protocol/policy/duty%2F1', { method: 'PATCH', body: { configVersionId: versionId, patch } }],
     ]);
   });
 });

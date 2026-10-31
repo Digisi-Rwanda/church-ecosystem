@@ -39,6 +39,9 @@ export interface MusicServiceSlot {
   date: string;
   kind: MusicServiceKind;
   label: string;
+  time?: string | null;
+  musicRequired?: boolean;
+  protocolRequired?: boolean;
 }
 
 export interface MusicAssignment {

@@ -1,9 +1,10 @@
 /** The old Protocol team engine, ported to the server: its original tests, with the unit kinds passed in. */
 import { describe, expect, it } from 'vitest';
 import {
-  PROTOCOL_SCORE_POINTS, buildProtocolTeams, canServeKind, musicConflictCode, rankLeaderCandidates, scoreAttendanceRow, validateProtocolTeamsDetailed,
+  PROTOCOL_SCORE_POINTS, buildProtocolTeams, buildRulesFromConfig, canServeKind, musicConflictCode, musicRequirements, rankLeaderCandidates, scoreAttendanceRow, validateProtocolTeamsDetailed,
 } from '../src/protocol/engine';
 import type { ProtocolRosterMember, ProtocolSchedulingRules, ProtocolService, ProtocolTeamSlot } from '../src/protocol/types';
+import type { ProtocolServiceRuleView, SchedulingServiceView } from '../src/scheduling/types';
 
 const kindOf = (u: string) => (u.includes('worship') ? 'WORSHIP' : 'PRIMARY');
 const member = { personId: 'p1' } as ProtocolRosterMember;
@@ -37,6 +38,34 @@ describe('musicConflictCode', () => {
     expect(musicConflictCode(m, s, mine, new Map([['m1', new Set(['gamma'])]]), true, true, kindOf)).toBeUndefined();
     expect(musicConflictCode(m, s, mine, new Map([['m1', new Set(['delta'])]]), true, true, kindOf)).toBe('CHOIR_NOT_SCHEDULED');
     expect(musicConflictCode(m, s, mine, new Map([['m1', new Set(['delta'])]]), false, false, kindOf)).toBeUndefined();
+  });
+});
+
+describe('versioned Protocol service rules', () => {
+  const service = (id: string, code: string): SchedulingServiceView => ({
+    id, systemId: 'sys-music', code, name: code, kind: 'SERVICE', weekday: null, time: null,
+    recurrence: 'WEEKLY', selectedDates: [], active: true, effectiveFrom: '2026-01-01T00:00:00.000Z',
+    effectiveTo: null, musicRequired: true, protocolRequired: true, maxChoirs: 3, targetTeamSize: 10,
+    configVersionId: 'calendar-v1', displayOrder: 0, supersedesId: null, createdByPersonId: 'leader',
+    createdAt: '2026-01-01T00:00:00.000Z',
+  });
+  const rule = (serviceId: string, requireChoir: boolean, requireWorship: boolean, relaxableKinds: string[]): ProtocolServiceRuleView => ({
+    id: `rule-${serviceId}`, systemId: 'sys-protocol', serviceId, active: true, required: true,
+    defaultTeamSize: 10, teamSizeOverrides: {}, requireChoir, requireWorship, relaxableKinds,
+    configVersionId: 'protocol-v1', effectiveFrom: '2026-01-01T00:00:00.000Z', effectiveTo: null,
+    supersedesId: null, createdByPersonId: 'leader', createdAt: '2026-01-01T00:00:00.000Z',
+  });
+
+  it('uses the rule for each service and only relaxes configured kinds', () => {
+    const ss1 = service('service-ss1', 'ss1');
+    const tuesday = service('service-tuesday', 'tuesday');
+    const rules = buildRulesFromConfig([
+      rule(ss1.id, false, true, []),
+      rule(tuesday.id, true, true, ['TUESDAY']),
+    ], null, true, [ss1, tuesday]);
+    expect(musicRequirements(rules, 'SS1')).toEqual({ choir: false, worship: true });
+    expect(musicRequirements(rules, 'TUESDAY')).toEqual({ choir: false, worship: false });
+    expect(musicRequirements(rules, 'IGABURO')).toEqual({ choir: true, worship: true });
   });
 });
 
