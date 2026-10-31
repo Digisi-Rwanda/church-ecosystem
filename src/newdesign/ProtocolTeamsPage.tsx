@@ -1,4 +1,6 @@
-import { useState, type ReactNode } from 'react';
+import { schedulingError } from './schedulingForms';
+import { useFrontDoor } from './FrontDoorContext';
+import { useRef, useState, type ReactNode } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   acknowledgeProtocolMusic, addProtocolSlot, approveProtocolRoles, fetchProtocolHistory, fetchProtocolMonth, fetchProtocolRoster, generateProtocolTeams, overrideProtocolIssue, publishProtocolMonth,
@@ -191,14 +193,19 @@ export function ProtocolTeamsPage() {
   const data = useLoad(() => fetchProtocolMonth(month), `protocol-month|${month}`);
   const history = useLoad(() => fetchProtocolHistory(month), `protocol-history|${month}`);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const actionLock = useRef(false);
+  const { capabilities } = useFrontDoor();
+  const canReadConfig = !!capabilities?.systems.find(row=>row.id==='sys-protocol')?.own?.find(row=>row.key==='config')?.letters.includes('R');
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [allowing, setAllowing] = useState<string | null>(null);
   const [relax, setRelax] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [picked, setPicked] = useState<{ month: string; tab: PTab } | null>(null);
   const act: Act = (job) => {
-    setError('');
-    job().then(() => { data.reload(); history.reload(); setAllowing(null); }).catch((err: unknown) => setError(t(protocolErrorKey(errorCode(err)) as 'door.people.actionFailed')));
+    if (actionLock.current) return;
+    actionLock.current = true; setBusy(true); setError('');
+    job().then(() => { data.reload(); history.reload(); setAllowing(null); }).catch((err: unknown) => setError(schedulingError(err) ?? t(protocolErrorKey(errorCode(err)) as 'door.people.actionFailed'))).finally(()=>{ actionLock.current=false; setBusy(false); });
   };
   const v = data.data;
   const blocking = v ? openBlocking(v.issues) : 0;
@@ -336,7 +343,7 @@ export function ProtocolTeamsPage() {
             <span className="pt-bar-actions">
               {returnBtn}
               <button type="button" className="btn secondary" onClick={() => pdf('confirmed')}>{t('door.sch.pdf')}</button>
-              {v.can.review && <button type="button" className="btn" onClick={() => act(() => publishProtocolMonth(month))}>{t('door.sch.publishTeams')}</button>}
+              {v.can.review && <button type="button" className="btn" disabled={busy || blocking > 0 || !!v.stale.length || v.music?.state !== 'PUBLISHED'} onClick={() => act(() => publishProtocolMonth(month))}>{t('door.sch.publishTeams')}</button>}
             </span>
           </div>
           {grid(false)}
@@ -370,8 +377,27 @@ export function ProtocolTeamsPage() {
       <PageHeader id="door-teams-title" title={t('door.own.teams')} meta={switcher} actions={<ViewSwitch value={layout} onChange={setLayout} />} />
       {error && <p className="door-error" role="alert">{error}</p>}
       <Tabs items={tabs} value={tab} onChange={go} label={t('door.own.teams')} />
-      <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>{body}</LoadState>
-      {v && editSvc && <TeamEditor svc={editSvc} month={month} view={v} act={act} onClose={() => setEditing(null)} />}
+      <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>
+        {v && <>
+          <p className="muted">{t('door.scheduling.teamHelp')}</p>
+          <nav className="door-row">{canReadConfig && <Link className="btn ghost sm" to="/s/sys-protocol/config">{t('door.scheduling.setup')}</Link>}<Link className="btn ghost sm" to="/s/sys-protocol/roster">{t('door.sch.editRoster')}</Link><Link className="btn ghost sm" to="/s/sys-protocol/mine">{t('door.own.mine')}</Link></nav>
+          <p className="muted">{t('door.scheduling.pinned', {version:v.configVersionId ?? '—'})}</p>
+          {v.notes.length > 0 && <details className="panel pt-more"><summary>{t('door.protocol.more')}</summary><ul>{v.notes.map((note,index)=><li key={index}>{note}</li>)}</ul></details>}
+          <DutyDistribution view={v} />
+        </>}
+        <fieldset className="scheduling-workspace-actions" disabled={busy} aria-busy={busy}>{body}</fieldset>
+      </LoadState>
+      {v?.can.edit && editSvc && <TeamEditor svc={editSvc} month={month} view={v} act={act} onClose={() => setEditing(null)} />}
     </section>
   );
+}
+
+function DutyDistribution({ view }: { view: ProtocolMonthView }) {
+  const t = useT();
+  return <details className="panel pt-more"><summary>{t('door.scheduling.duties')}</summary>
+    <p>{t('door.scheduling.target',{count:view.rules.target})}</p><p className="muted">{t('door.scheduling.dutiesHelp')}</p>
+    <div className="scheduling-table-scroll"><table><thead><tr><th>{t('door.scheduling.people')}</th><th>{t('door.scheduling.current')}</th><th>{t('door.scheduling.previous')}</th><th>{t('door.scheduling.fillins')}</th></tr></thead><tbody>
+      {view.roster.map(member=><tr key={member.personId}><th scope="row">{member.name}</th><td>{member.load}</td><td>{member.previousDuties ?? '—'}</td><td>{view.services.flatMap(service=>service.team).filter(slot=>slot.personId===member.personId && slot.slotKind==='FILL_IN').length}</td></tr>)}
+    </tbody></table></div>
+  </details>;
 }

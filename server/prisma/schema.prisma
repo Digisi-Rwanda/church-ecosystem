@@ -1401,8 +1401,11 @@ model ProtocolPlan {
   /// stays reproducible and stale-detection can compare config versions.
   configVersionId   String?
   configVersion     ConfigVersion? @relation(fields: [configVersionId], references: [id])
+  /// The exact shared Music calendar/category version used by this plan.
+  musicConfigVersionId String?
 
   @@index([configVersionId])
+  @@index([musicConfigVersionId])
 }
 
 /// A person on a service's team. Removed rows are deleted from the working plan; published versions keep a snapshot.
@@ -1437,9 +1440,12 @@ model ProtocolHistory {
   /// The Protocol rules version used to generate and publish this snapshot.
   configVersionId String?
   configVersion ConfigVersion? @relation(fields: [configVersionId], references: [id])
+  /// The exact shared Music calendar/category version used by this snapshot.
+  musicConfigVersionId String?
 
   @@unique([monthKey, version])
   @@index([configVersionId])
+  @@index([musicConfigVersionId])
 }
 
 /// Present, half present, excused or absent: one row per person per service.
@@ -2135,6 +2141,7 @@ model ConfigVersion {
   choirCategories    ChoirCategory[]
   categoryServicePolicies CategoryServicePolicy[]
   choirCategoryLinks ChoirCategoryLink[]
+  musicFixedAssignments MusicFixedAssignment[]
   protocolServiceRules ProtocolServiceRule[]
   protocolDutyPolicies ProtocolDutyPolicy[]
 
@@ -2213,6 +2220,7 @@ model CategoryServicePolicy {
   frequencyTarget   Int?     // null = no fixed target
   frequencyCounting String   @default("ASSIGNMENTS") // ASSIGNMENTS | DISTINCT_DATES
   frequencyKind     String   @default("TARGET")    // MINIMUM | TARGET | MAXIMUM
+  frequencyPeriod   String?  // MONTH | QUARTER | HALF_YEAR | YEAR
   planningMode      String   @default("ROTATION")  // ROTATION | FIXED | MANUAL
   /// Minimum number of this category required on the service (legacy: Tuesday=1 primary, Igaburo=2 primaries).
   minCount          Int?
@@ -2223,6 +2231,7 @@ model CategoryServicePolicy {
   /// The config version this row belongs to (snapshot integrity).
   configVersionId   String?
   configVersion     ConfigVersion? @relation(fields: [configVersionId], references: [id])
+  fixedAssignments  MusicFixedAssignment[]
   effectiveFrom     DateTime @default(now())
   effectiveTo       DateTime?
   supersedesId      String?
@@ -2240,8 +2249,8 @@ model ChoirCategoryLink {
   systemId             String
   choirId              String   // references MusicChoir.id
   categoryId           String
-  eligibleOverrideJson String   @default("{}")       // { eligible: boolean }
-  frequencyOverrideJson String  @default("{}")       // per-service overrides
+  eligibleOverrideJson String   @default("{}")       // { serviceCode: boolean }, scoped to this linked choir
+  frequencyOverrideJson String  @default("{}")       // { serviceCode: { frequencyTarget, frequencyCounting, frequencyKind, frequencyPeriod } }
   active               Boolean  @default(true)
   effectiveFrom        DateTime @default(now())
   effectiveTo          DateTime?
@@ -2255,6 +2264,41 @@ model ChoirCategoryLink {
   @@unique([systemId, choirId, configVersionId])
   @@index([systemId, categoryId])
   @@index([configVersionId])
+}
+
+/// Explicit choir designations used by FIXED category/service policies.
+model MusicFixedAssignment {
+  id                       String   @id @default(cuid())
+  systemId                 String
+  configVersionId          String
+  categoryServicePolicyId  String
+  choirId                  String
+  displayOrder             Int      @default(0)
+  createdByPersonId        String
+  createdAt                DateTime @default(now())
+  configVersion            ConfigVersion @relation(fields: [configVersionId], references: [id])
+  categoryServicePolicy   CategoryServicePolicy @relation(fields: [categoryServicePolicyId], references: [id])
+
+  @@unique([systemId, categoryServicePolicyId, choirId])
+  @@index([systemId, configVersionId])
+  @@index([categoryServicePolicyId])
+}
+
+/// Music-specific, date-scoped unavailability; serviceCode null means all services that date.
+model MusicChoirUnavailability {
+  id                 String   @id @default(cuid())
+  systemId           String
+  choirId            String
+  serviceDate        String   // YYYY-MM-DD
+  serviceCode        String?
+  reason             String?
+  active             Boolean  @default(true)
+  recordedByPersonId String
+  recordedAt         DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  @@index([systemId, choirId, serviceDate, active])
+  @@index([systemId, serviceDate, serviceCode, active])
 }
 
 /// Protocol staffing rule for one service.

@@ -24,11 +24,11 @@ describe('music helpers', () => {
 
 describe('schedule helpers', () => {
   const svc = (id: string, kind: ScheduleService['kind'], month: string, units: string[] = []): ScheduleService => ({ id, periodKey: month, date: `${month}-01`, kind, label: id, units: units.map((u) => ({ unitId: u, name: u, kind: 'PRIMARY' as const })) });
-  it('offers only choirs that may serve and are not already there', () => {
+  it('offers unassigned choirs and leaves configured eligibility to the server', () => {
     const units = [{ id: 'a', kind: 'PRIMARY' as const }, { id: 'k', kind: 'CHILDREN' as const }, { id: 'w', kind: 'WORSHIP' as const }];
-    expect(addableUnits(units, svc('x', 'SS1', '2026-10', ['a'])).map((u) => u.id)).toEqual(['k']);
-    expect(addableUnits(units, svc('x', 'TUESDAY', '2026-10')).map((u) => u.id)).toEqual(['a', 'w']);
-    expect(addableUnits(units, svc('x', 'SS2', '2026-10')).map((u) => u.id)).toEqual(['a']);
+    expect(addableUnits(units, svc('x', 'SS1', '2026-10', ['a'])).map((u) => u.id)).toEqual(['k', 'w']);
+    expect(addableUnits(units, svc('x', 'TUESDAY', '2026-10')).map((u) => u.id)).toEqual(['a', 'k', 'w']);
+    expect(addableUnits(units, svc('x', 'SS2', '2026-10')).map((u) => u.id)).toEqual(['a', 'k', 'w']);
   });
   it('filters a draft by month', () => {
     const all = [svc('a', 'SS1', '2026-10'), svc('b', 'SS1', '2026-11')];

@@ -18,8 +18,9 @@ import type {
   SchedulingServiceApi,
 } from '../api/frontDoorApi';
 import type { MessageKey } from '../i18n/messages/en';
+import type { MessageParams } from '../i18n/translate';
 
-type TFn = (k: MessageKey) => string;
+type TFn = (k: MessageKey, params?: MessageParams) => string;
 
 const WEEKDAY_KEYS = [
   'door.caring.weekday.0',
@@ -37,6 +38,8 @@ export const CONFIG_TABS = [
   'categories',
   'policies',
   'links',
+  'fixed',
+  'availability',
   'protocol',
   'duty',
   'versions',
@@ -79,7 +82,7 @@ export const serviceSummary = (s: SchedulingServiceApi, t: TFn): string => {
   if (when.length) when.push('·');
   when.push(t(recurrenceKey(s.recurrence)));
   if (when.length) parts.push(when.join(' '));
-  parts.push(s.active ? t('door.config.service.active') : t('door.music.retire'));
+  parts.push(s.active ? t('door.config.service.active') : t('door.config.service.inactive'));
   return parts.join(' · ');
 };
 
@@ -89,22 +92,39 @@ export const categorySummary = (c: ChoirCategoryApi): string => c.description ||
 /** One line for a policy row. */
 export const policySummary = (p: CategoryServicePolicyApi, t: TFn): string => {
   const parts: string[] = [
-    t('door.config.policy.eligible') + ':',
-    p.eligible ? t('door.config.policy.kind') : t('door.config.policy.kind'),
-    t(frequencyKindKey(p.frequencyKind)),
+    t('door.config.policy.eligibility', {
+      value: t(p.eligible ? 'door.config.form.yes' : 'door.config.form.no'),
+    }),
   ];
-  if (p.frequencyTarget !== null) parts.push(String(p.frequencyTarget));
-  parts.push('·', t(planningModeKey(p.planningMode)));
-  return parts.join(' ');
+  const frequencyKind = t(frequencyKindKey(p.frequencyKind));
+  const frequencyCounting = t(frequencyCountingKey(p.frequencyCounting));
+  parts.push(p.frequencyTarget === null
+    ? `${frequencyKind} (${frequencyCounting})`
+    : t('door.config.policy.frequencySummary', {
+      kind: frequencyKind,
+      count: p.frequencyTarget,
+      counting: frequencyCounting,
+    }));
+  if (p.minCount !== null) parts.push(t('door.config.policy.minValue', { count: p.minCount }));
+  if (p.maxCount !== null) parts.push(t('door.config.policy.maxValue', { count: p.maxCount }));
+  if (p.requireAll) parts.push(t('door.config.policy.requireAll'));
+  if (p.frequencyPeriod) parts.push(t(("door.config.period." + p.frequencyPeriod) as MessageKey));
+  parts.push(t(planningModeKey(p.planningMode)));
+  return parts.join(' · ');
 };
 
 /** One line for a choir ↔ category link row. */
-export const linkSummary = (l: ChoirCategoryLinkApi, t: TFn): string =>
-  `${l.choirId} → ${l.categoryId} · ${l.active ? t('door.config.service.active') : t('door.music.retire')}`;
+export const linkSummary = (
+  l: ChoirCategoryLinkApi,
+  t: TFn,
+  choirName = t('door.config.nameUnavailable.choir'),
+  categoryName = t('door.config.nameUnavailable.category'),
+): string =>
+  `${choirName} → ${categoryName} · ${l.active ? t('door.config.service.active') : t('door.config.service.inactive')}`;
 
 /** One line for a protocol rule row. */
 export const ruleSummary = (r: ProtocolServiceRuleApi, t: TFn): string =>
-  `${r.serviceId} · ${t('door.config.protocol.defaultTeamSize')}: ${r.defaultTeamSize} · ${r.required ? t('door.config.protocol.required') : t('door.config.protocol.rule')}`;
+  `${r.serviceCode ?? t('door.config.nameUnavailable.service')} · ${t('door.config.protocol.defaultTeamSize')}: ${r.defaultTeamSize}`;
 
 /** One line for a config version row. */
 export const versionSummary = (v: ConfigVersionApi, t: TFn): string =>

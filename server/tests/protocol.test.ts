@@ -18,6 +18,25 @@ const now = new Date();
 const MONTH = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1)).toISOString().slice(0, 7);
 const TEAM = Array.from({ length: 24 }, (_, i) => `t${i + 1}`);
 
+async function configureProtocolTeamSize(defaultTeamSize: number, overrideDate: string, overrideTeamSize: number) {
+  const store = await import('../src/scheduling/store.js');
+  const calendar = await store.getActiveConfigVersion('sys-music');
+  if (!calendar) throw new Error('Music calendar configuration is missing');
+  const service = await store.getSchedulingServiceByCode('sys-music', 'ss1', calendar.id);
+  if (!service) throw new Error('Sunday 1 is missing from the Music calendar');
+  const protocol = await store.createConfigVersion({
+    systemId: 'sys-protocol', version: 1, label: 'Protocol v1', status: 'ACTIVE', createdByPersonId: COORD,
+  });
+  await store.createProtocolServiceRule({
+    systemId: 'sys-protocol', serviceId: service.id, configVersionId: protocol.id,
+    required: true, defaultTeamSize, teamSizeOverrides: { [overrideDate]: overrideTeamSize },
+    requireChoir: false, requireWorship: false, relaxableKinds: [], createdByPersonId: COORD,
+  });
+  for (const other of fake.__db.schedulingService.filter((row: any) => row.configVersionId === calendar.id && row.id !== service.id && row.protocolRequired)) {
+    await store.createProtocolServiceRule({ systemId: 'sys-protocol', serviceId: other.id, configVersionId: protocol.id, required: false, createdByPersonId: COORD });
+  }
+}
+
 beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;
@@ -34,12 +53,79 @@ beforeEach(async () => {
   app = createApp();
 });
 
-/** Music confirms (and optionally publishes) the month with the old engine; Protocol plans against it. */
-async function musicReady(publish = false) {
+/** Music confirms (and optionally publishes) a versioned month; Protocol plans against it. */
+async function musicReady(publish = false, includeProtocolConfig = true) {
+  const store = await import('../src/scheduling/store.js');
+  const config = await store.createConfigVersion({
+    systemId: 'sys-music', version: 1, label: 'Music calendar v1', status: 'ACTIVE', createdByPersonId: MUSIC,
+  });
+  const serviceRows = [
+    ['ss1', 'Sunday 1', 0, 'WEEKLY', true],
+    ['ss2', 'Sunday 2', 0, 'WEEKLY', true],
+    ['tuesday', 'Tuesday', 2, 'WEEKLY', true],
+    ['friday', 'Friday', 5, 'WEEKLY', false],
+    ['igaburo', 'Igaburo', null, 'MONTHLY', true],
+  ] as const;
+  const services = new Map<string, { id: string }>();
+  for (const [code, name, weekday, recurrence, protocolRequired] of serviceRows) {
+    const service = await store.createSchedulingService({
+      systemId: 'sys-music', code, name, weekday, recurrence, musicRequired: true, protocolRequired,
+      maxChoirs: 3, configVersionId: config.id, createdByPersonId: MUSIC,
+    });
+    services.set(code, service);
+  }
+  const categories = new Map<string, string>();
+  for (const [code, name] of [
+    ['PRIMARY', 'Primary Choir'],
+    ['SECONDARY', 'Secondary Choir'],
+    ['CHILDREN', 'Children’s Choir'],
+    ['WORSHIP', 'Worship Team'],
+  ]) {
+    const category = await store.createChoirCategory({
+      systemId: 'sys-music', code, name, configVersionId: config.id, createdByPersonId: MUSIC,
+    });
+    categories.set(code, category.id);
+  }
   for (const [name, role] of [['Ijwi', 'PRIMARY'], ['Bethel', 'PRIMARY'], ['Elim', 'PRIMARY'], ['Integuza', 'PRIMARY'], ['Beulah', 'SECONDARY'], ['Yerusalemu', 'SECONDARY'], ['Hope', 'CHILDREN'], ['Worship', 'WORSHIP']]) {
-    await post(MUSIC, '/api/music/choirs', { name, role });
+    const created = await post(MUSIC, '/api/music/choirs', { name, role });
+    await store.createChoirCategoryLink({
+      systemId: 'sys-music', choirId: created.body.id, categoryId: categories.get(role)!,
+      configVersionId: config.id, createdByPersonId: MUSIC,
+    });
+  }
+  const requiredByService: Record<string, Partial<Record<string, number>>> = {
+    ss1: { PRIMARY: 2, CHILDREN: 1 },
+    ss2: { PRIMARY: 2, CHILDREN: 1 },
+    tuesday: { PRIMARY: 1, WORSHIP: 1 },
+    friday: { PRIMARY: 1 },
+    igaburo: { PRIMARY: 1, SECONDARY: 1 },
+  };
+  for (const [code, service] of services) {
+    for (const [categoryCode, categoryId] of categories) {
+      const count = requiredByService[code]?.[categoryCode] ?? 0;
+      await store.createCategoryServicePolicy({
+        systemId: 'sys-music', categoryId, serviceId: service.id, eligible: count > 0,
+        minCount: count, maxCount: count, planningMode: 'ROTATION',
+        configVersionId: config.id, createdByPersonId: MUSIC,
+      });
+    }
+  }
+  if (includeProtocolConfig) {
+    const protocol = await store.createConfigVersion({
+      systemId: 'sys-protocol', version: 1, label: 'Protocol rules v1',
+      status: 'ACTIVE', createdByPersonId: COORD,
+    });
+    for (const [code, service] of services) {
+      if (!serviceRows.find(([serviceCode]) => serviceCode === code)?.[4]) continue;
+      await store.createProtocolServiceRule({
+        systemId: 'sys-protocol', serviceId: service.id, configVersionId: protocol.id,
+        required: true, defaultTeamSize: 10, requireChoir: true, requireWorship: true,
+        relaxableKinds: [], createdByPersonId: COORD,
+      });
+    }
   }
   const d = await post(MUSIC, '/api/music/schedule/drafts/generate', { horizon: 'MONTH', start: MONTH });
+  expect(d.status, JSON.stringify(d.body)).toBe(201);
   expect((await post(MUSIC, `/api/music/schedule/drafts/${d.body.id}/confirm`, {})).status).toBe(200);
   if (publish) expect((await post(MUSIC, '/api/music/schedule/months/publish', { months: [MONTH] })).status).toBe(200);
 }
@@ -68,7 +154,35 @@ describe('the roster', () => {
   });
 });
 
-describe('building the teams on the old engine', () => {
+describe('building teams from versioned Protocol rules', () => {
+  it('resolves lowercase configured service codes, defaults and date overrides in generated teams', async () => {
+    await musicReady(true, false);
+    const monthRow = fake.__db.musicMonth.find((m: any) => m.periodKey === MONTH);
+    const sundayDates = JSON.parse(monthRow.servicesJson)
+      .filter((service: any) => service.kind === 'SS1')
+      .map((service: any) => service.date);
+    await configureProtocolTeamSize(4, sundayDates[0], 2);
+    await joinRoster();
+
+    const generated = await post(COORD, `/api/protocol/months/${MONTH}/generate`);
+    expect(generated.status, JSON.stringify(generated.body)).toBe(200);
+    const ss1 = (await month()).services.filter((service: any) => service.kind === 'SS1');
+    const override = ss1.find((service: any) => service.date === sundayDates[0]);
+    const configuredDefault = ss1.find((service: any) => service.date !== sundayDates[0]);
+    expect(override).toMatchObject({ target: 2 });
+    expect(override.team).toHaveLength(2);
+    expect(configuredDefault).toMatchObject({ target: 4 });
+    expect(configuredDefault.team).toHaveLength(4);
+  });
+
+  it('refuses generation when no Protocol policy version is active', async () => {
+    await musicReady(true, false);
+    await joinRoster();
+    const response = await post(COORD, `/api/protocol/months/${MONTH}/generate`);
+    expect(response.status).toBe(409);
+    expect(response.body.code).toBe('NO_PROTOCOL_CONFIG');
+  });
+
   it('waits for Music, then builds teams that satisfy the rules', async () => {
     await joinRoster();
     expect((await month()).step).toBe('WAIT_MUSIC');
@@ -119,6 +233,12 @@ describe('review and publish', () => {
   const submit = () => post(COORD, `/api/protocol/months/${MONTH}/submit`);
   it('the Coordinator submits, the President publishes, never the submitter, only once Music is published', async () => {
     await built(false);
+    const plan = fake.__db.protocolPlan.find((row: any) => row.monthKey === MONTH);
+    const musicMonth = fake.__db.musicMonth.find((row: any) => row.periodKey === MONTH);
+    expect(plan).toMatchObject({
+      configVersionId: expect.any(String),
+      musicConfigVersionId: musicMonth.configVersionId,
+    });
     expect((await submit()).status).toBe(200);
     expect((await month()).step).toBe('WAIT_PRESIDENT');
     expect((await post(COORD, `/api/protocol/months/${MONTH}/publish`)).status).toBe(403);
@@ -128,7 +248,12 @@ describe('review and publish', () => {
     expect(ok.status).toBe(200);
     expect(ok.body.version).toBe(1);
     expect((await month()).step).toBe('DONE');
-    expect((await get(PRES, `/api/protocol/months/${MONTH}/history`)).body.versions).toHaveLength(1);
+    const versions = (await get(PRES, `/api/protocol/months/${MONTH}/history`)).body.versions;
+    expect(versions).toHaveLength(1);
+    expect(versions[0]).toMatchObject({
+      configVersionId: plan.configVersionId,
+      musicConfigVersionId: plan.musicConfigVersionId,
+    });
     expect((await post(COORD, `/api/protocol/months/${MONTH}/generate`)).body.code).toBe('LOCKED');
   });
   it('the President can return it to draft; the Coordinator can reopen a published month, and republishing makes version 2', async () => {
@@ -156,6 +281,16 @@ describe('review and publish', () => {
     await post(PRES, `/api/protocol/months/${MONTH}/return`);
     await post(COORD, `/api/protocol/months/${MONTH}/acknowledge-music`);
     expect((await month()).stale).toEqual([]);
+  });
+  it('does not acknowledge or publish a plan against a different Music configuration version', async () => {
+    await built();
+    await submit();
+    const row = fake.__db.musicMonth.find((item: any) => item.periodKey === MONTH);
+    row.configVersionId = 'different-music-config';
+    const current = await month();
+    expect(current.stale).toContain('MUSIC_CONFIGURATION_VERSION_CHANGED');
+    expect((await post(COORD, `/api/protocol/months/${MONTH}/acknowledge-music`)).body.code).toBe('MUSIC_CONFIG_CHANGED');
+    expect((await post(PRES, `/api/protocol/months/${MONTH}/publish`)).body.code).toBe('MUSIC_CHANGED');
   });
   it('Music clashes block until the Coordinator allows them with a reason; other issues cannot be allowed', async () => {
     await musicReady(true);
@@ -279,5 +414,30 @@ describe('attendance, scores and the service report', () => {
     expect((await put(member, `/api/protocol/services/${svc.id}/report`, {})).status).toBe(403);
     expect((await get(PRES, `/api/protocol/reports?month=${MONTH}`)).body.reports[0].challenges).toBe('Late start');
     expect((await get('p-member', `/api/protocol/reports?month=${MONTH}`)).status).toBe(404);
+  });
+});
+
+
+describe('published history in generation routes', () => {
+  it('uses earlier published duties to break monthly ties and excludes voluntary fill-ins', async () => {
+    await musicReady(true, false);
+    const calendar = JSON.parse(fake.__db.musicMonth.find((row: any) => row.periodKey === MONTH).servicesJson);
+    const date = calendar.find((row: any) => row.kind === 'SS1').date;
+    await configureProtocolTeamSize(1, date, 1);
+    await joinRoster();
+    const [y, m] = MONTH.split('-').map(Number);
+    const previous = new Date(Date.UTC(y, m - 2, 1)).toISOString().slice(0, 7);
+    fake.__db.protocolHistory.push({ id: 'history-fairness', monthKey: previous, version: 1,
+      slotsJson: JSON.stringify([
+        { id: 'old-regular', serviceId: 'old-service', personId: 't1', slotKind: 'REGULAR' },
+        { id: 'old-voluntary', serviceId: 'old-service', personId: 't10', slotKind: 'FILL_IN' },
+      ]),
+    });
+    const generated = await post(COORD, '/api/protocol/months/' + MONTH + '/generate');
+    expect(generated.status, JSON.stringify(generated.body)).toBe(200);
+    const first = (await month()).services.find((row: any) => row.kind === 'SS1');
+    expect(first.team).toHaveLength(1);
+    expect(first.team[0].personId).toBe('t10');
+    expect(fake.__db.protocolHistory.find((row: any) => row.id === 'history-fairness').version).toBe(1);
   });
 });

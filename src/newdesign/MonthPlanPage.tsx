@@ -1,6 +1,11 @@
+import { Link } from 'react-router-dom';
+import { MusicBulletin } from './Bulletins.tsx';
+import type { ScheduleRuleContext } from '../api/frontDoorApi';
+import { policySummary } from './config';
+import { ConfirmDialog, StatusChip } from './kit';
 import { useState } from 'react';
 import {
-  confirmScheduleDraft, discardScheduleDraft, editScheduleDraft, editScheduleMonth, fetchScheduleDraft, fetchScheduleLog, fetchScheduleMonth, fetchScheduleState,
+  publishScheduleDraft, confirmScheduleDraft, discardScheduleDraft, editScheduleDraft, editScheduleMonth, fetchScheduleDraft, fetchScheduleLog, fetchScheduleMonth, fetchScheduleState,
   generateScheduleDraft, publishScheduleMonths, type MusicHorizonKey, type ScheduleEdit, type ScheduleService, type ScheduleState,
 } from '../api/frontDoorApi';
 import { SelectField } from '../components/ui/Field';
@@ -26,7 +31,7 @@ function ServiceCard({ svc, onEdit }: { svc: ScheduleService; onEdit?: () => voi
     <li className="pt-card">
       <div className="pt-card-head">
         <DateTile date={svc.date} />
-        <div className="pt-card-title"><strong>{t(`door.music.kind.${svc.kind}` as 'door.music.kind.SS1')}</strong></div>
+        <div className="pt-card-title"><strong>{svc.label}</strong></div>
       </div>
       {svc.units.length === 0 ? (
         <p className="muted">{t('door.music.noChoirYet')}</p>
@@ -36,11 +41,12 @@ function ServiceCard({ svc, onEdit }: { svc: ScheduleService; onEdit?: () => voi
             <li key={u.unitId} className="pt-person">
               <span className="pt-avatar" aria-hidden>{u.name.slice(0, 2).toUpperCase()}</span>
               <span className="pt-name">{u.name}</span>
-              <span className="pt-tag">{t(`door.music.role.${u.kind}` as 'door.music.role.PRIMARY')}</span>
+              <span className="pt-tag">{u.category ?? t('door.config.nameUnavailable.category')}</span>
             </li>
           ))}
         </ul>
       )}
+      {svc.requirements?.map((rule, index) => <p className="muted" key={index}><StatusChip tone={(rule.minimum !== null && rule.assigned < rule.minimum) || (rule.maximum !== null && rule.assigned > rule.maximum) ? 'warn' : 'neutral'}>{rule.categoryName}: {t('door.scheduling.requirementCount', {count:rule.assigned, minimum:rule.minimum ?? '—', maximum:rule.maximum ?? '—'})}</StatusChip></p>)}
       {onEdit && <button type="button" className="btn secondary sm" onClick={onEdit}>{t('door.sch.edit')}</button>}
     </li>
   );
@@ -50,19 +56,21 @@ function ServiceCard({ svc, onEdit }: { svc: ScheduleService; onEdit?: () => voi
 function EditPanel({ svc, units, edit, onClose }: { svc: ScheduleService; units: Units; edit: Edit; onClose: () => void }) {
   const t = useT();
   const day = useShortDay();
+  const [pending,setPending]=useState(false), [error,setError]=useState('');
+  const runEdit = async (change: ScheduleEdit) => { if (pending) return; setPending(true); setError(''); try { await edit(change); } catch(reason) { setError(scheduleErrorText(reason) ?? t(musicErrorKey(errorCode(reason)) as 'door.people.actionFailed')); } finally {setPending(false);} };
   const free = addableUnits(units, svc);
   return (
     <SidePanel open title={`${day(svc.date)} � ${t(`door.music.kind.${svc.kind}` as 'door.music.kind.SS1')}`} onClose={onClose}>
-      <div className="pt-edit">
+      <div className="pt-edit">{error && <p className="door-error" role="alert">{error}</p>}<fieldset className="scheduling-workspace-actions" disabled={pending} aria-busy={pending}>
         <ul className="pt-edit-list">
           {svc.units.map((u) => {
-            const swaps = free.filter((x) => x.kind === u.kind);
+            const swaps = free;
             return (
               <li key={u.unitId} className="pt-edit-row">
                 <span className="pt-avatar" aria-hidden>{u.name.slice(0, 2).toUpperCase()}</span>
                 <span className="pt-edit-name"><strong>{u.name}</strong></span>
                 {swaps.length > 0 && (
-                  <SelectField label={t('door.music.sched.replaceWith')} name={`r-${svc.id}-${u.unitId}`} value="" onChange={(e) => e.target.value && void edit({ serviceId: svc.id, action: 'replace', unitId: u.unitId, toUnitId: e.target.value })}>
+                  <SelectField label={t('door.music.sched.replaceWith')} name={`r-${svc.id}-${u.unitId}`} value="" onChange={(e) => e.target.value && void runEdit({ serviceId: svc.id, action: 'replace', unitId: u.unitId, toUnitId: e.target.value })}>
                     <option value="">{t('door.gov.meeting.choose')}</option>
                     {swaps.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </SelectField>
@@ -79,7 +87,7 @@ function EditPanel({ svc, units, edit, onClose }: { svc: ScheduleService; units:
           </SelectField>
         )}
         <button type="button" className="btn" onClick={onClose}>{t('door.protocol.panel.done')}</button>
-      </div>
+      </fieldset></div>
     </SidePanel>
   );
 }
@@ -91,17 +99,18 @@ function Services({ services, months, units, edit, view }: { services: ScheduleS
   const [editing, setEditing] = useState<string | null>(null);
   const cur = services.find((s) => s.id === editing);
   const rows: ScheduleRow[] = months.flatMap((m) => servicesOfMonth(services, m)).map((s) => ({
-    id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), names: s.units.map((u) => ({ name: u.name, tag: t(`door.music.role.${u.kind}` as 'door.music.role.PRIMARY') })),
-    onEdit: edit ? () => setEditing(s.id) : undefined,
+    id: s.id, date: s.date, title: s.label, names: s.units.map((u) => ({ name: u.name, tag: u.category ?? t('door.config.nameUnavailable.category') })),
+    onEdit: edit && s.musicRequired !== false ? () => setEditing(s.id) : undefined,
   }));
   return (
     <>
+      {view === 'bulletin' && months.map(month => <MusicBulletin key={month} month={month} services={servicesOfMonth(services, month).map(s => ({ id:s.id, date:s.date, kind:s.kind, names:s.units.map(u=>u.name) }))} />)}
       {view === 'list' && <ScheduleList rows={rows} />}
       {view === 'cards' && months.map((m) => (
         <div key={m} className="pt-month-block">
           {months.length > 1 && <h3>{monthName(m)}</h3>}
           <ul className="pt-grid">
-            {servicesOfMonth(services, m).map((s) => <ServiceCard key={s.id} svc={s} onEdit={edit ? () => setEditing(s.id) : undefined} />)}
+            {servicesOfMonth(services, m).map((s) => <ServiceCard key={s.id} svc={s} onEdit={edit && s.musicRequired !== false ? () => setEditing(s.id) : undefined} />)}
           </ul>
         </div>
       ))}
@@ -157,11 +166,13 @@ function DraftBody({ id, state, onDone, show, view }: { id: string; state: Sched
   const day = useShortDay();
   const monthName = useMonthName();
   const draft = useLoad(() => fetchScheduleDraft(id), `music-draft|${id}`);
+  const [pending, setPending] = useState(false);
+  const [replacing, setReplacing] = useState(false);
   const [live, setLive] = useState<string[]>([]);
   const d = draft.data;
   const open = (d?.months ?? []).filter((m) => m.decided !== 'PUBLISHED').map((m) => m.periodKey);
-  const run = async (job: () => Promise<unknown>, to?: Tab) => { try { await job(); onDone(to); } catch (err) { show(err); } };
-  const edit: Edit = async (e) => { try { setLive((await editScheduleDraft(id, e)).warnings); draft.reload(); } catch (err) { show(err); } };
+  const run = async (job: () => Promise<unknown>, to?: Tab) => { if (pending) return; setPending(true); try { await job(); onDone(to); } catch (err) { show(err); } finally { setPending(false); } };
+  const edit: Edit = async (e) => { try { setLive((await editScheduleDraft(id, e)).warnings); draft.reload(); } catch (err) { show(err); throw err; } };
   const pdf = () => {
     if (!d) return;
     if (view === 'bulletin') {
@@ -181,9 +192,11 @@ function DraftBody({ id, state, onDone, show, view }: { id: string; state: Sched
             <span className="pt-bar-actions">
               <button type="button" className="btn ghost sm" onClick={() => void run(() => discardScheduleDraft(id))}>{t('door.sch.discard')}</button>
               <button type="button" className="btn secondary" onClick={pdf}>{t('door.sch.pdf')}</button>
-              <button type="button" className="btn" disabled={open.length === 0} onClick={() => void run(() => confirmScheduleDraft(id, open), 'confirmed')}>{t('door.sch.confirm')}</button>
+              <button type="button" className="btn" disabled={pending || open.length === 0 || d.validation?.ok === false} onClick={() => void run(() => confirmScheduleDraft(id, open), 'confirmed')}>{t('door.sch.confirm')}</button>
             </span>
           </div>
+          <RuleContext value={d} />
+          {d.months.some(m=>m.decided === "PUBLISHED") && <><p className="muted">{t("door.scheduling.replaceHelp")}</p><button className="btn secondary" disabled={pending || d.validation?.ok === false} onClick={()=>setReplacing(true)}>{t("door.scheduling.replace")}</button><ConfirmDialog open={replacing} title={t("door.scheduling.replace")} body={t("door.scheduling.replaceHelp")} busy={pending} onCancel={()=>setReplacing(false)} onConfirm={()=>void run(()=>publishScheduleDraft(id), "published")} /></>}
           <Notes list={live.length ? live : d.warnings} />
           <Services services={d.services} months={d.months.map((m) => m.periodKey)} units={state.units} edit={edit} view={view} />
         </>
@@ -199,7 +212,7 @@ function MonthBody({ month, mode, state, onDone, show, view }: { month: string; 
   const monthName = useMonthName();
   const data = useLoad(() => fetchScheduleMonth(month), `music-month|${month}`);
   const m = data.data;
-  const edit: Edit = async (e) => { try { await editScheduleMonth(month, e); data.reload(); onDone(); } catch (err) { show(err); } };
+  const edit: Edit = async (e) => { try { await editScheduleMonth(month, e); data.reload(); onDone(); } catch (err) { show(err); throw err; } };
   const pdf = () => {
     if (!m) return;
     if (view === 'bulletin') {
@@ -218,9 +231,11 @@ function MonthBody({ month, mode, state, onDone, show, view }: { month: string; 
             <span><strong>{monthName(month)}</strong> <span className="muted">v{m.version}</span></span>
             <span className="pt-bar-actions">
               <button type="button" className="btn secondary" onClick={pdf}>{t('door.sch.pdf')}</button>
-              {mode === 'confirmed' && m.canWrite && <button type="button" className="btn" onClick={async () => { try { await publishScheduleMonths([month]); onDone('published'); } catch (err) { show(err); } }}>{t('door.sch.publish')}</button>}
+              {mode === 'confirmed' && m.state === 'CONFIRMED' && m.canWrite && <button disabled={m.validation?.ok === false} type="button" className="btn" onClick={async () => { try { await publishScheduleMonths([month]); onDone('published'); } catch (err) { show(err); } }}>{t('door.sch.publish')}</button>}
             </span>
           </div>
+          <StatusChip>{t("door.scheduling.savedState", { state: t(mode === "published" ? "door.sch.tab.published" : "door.sch.tab.confirmed") })}</StatusChip>
+          {m.canWrite && <RuleContext value={m} />}
           <Notes list={m.warnings} />
           <Services services={m.services} months={[month]} units={state.units} edit={m.canWrite ? edit : undefined} view={view} />
           {m.canWrite && <ChangeLog month={month} />}
@@ -285,6 +300,7 @@ export function MonthPlanPage() {
         actions={<ViewSwitch value={view} onChange={setView} />}
         primary={canWrite ? <button type="button" className="btn" onClick={() => setBuilding(true)}>{t('door.sch.build')}</button> : undefined}
       />
+      {canWrite && <p className="muted">{t("door.scheduling.workflow")} <Link to="/s/sys-music/config">{t("door.scheduling.setup")}</Link></p>}
       {error && <p className="door-error" role="alert">{error}</p>}
       <LoadState loading={state.loading} failed={state.failed} retry={state.reload}>
         {s && (
@@ -315,4 +331,14 @@ export function MonthPlanPage() {
       </SidePanel>
     </section>
   );
+}
+
+function RuleContext({ value }: { value: ScheduleRuleContext }) {
+  const t = useT();
+  return <details className="panel pt-more"><summary>{t('door.scheduling.rules')}</summary>
+    <p className="muted">{t('door.scheduling.pinned', {version:value.configLabel ?? value.configVersionId ?? '—'})}</p>
+    <p>{t('door.scheduling.manual')}</p>
+    {value.validation?.reason && <p className="door-error" role="alert">{value.validation.reason}</p>}
+    {value.rules?.length ? <ul className="door-list">{value.rules.filter(row=>row.active).map(row=><li key={row.id}><strong>{row.categoryName} · {row.serviceCode}</strong><p className="muted">{policySummary(row,t)}</p></li>)}</ul> : <p className="muted">{t('door.scheduling.noContext')}</p>}
+  </details>;
 }

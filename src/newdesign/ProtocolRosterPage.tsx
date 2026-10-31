@@ -1,3 +1,4 @@
+import { schedulingError } from "./schedulingForms";
 import { useParams } from 'react-router-dom';
 import { ImportLink } from './imports/ImportLink';
 import { useState } from 'react';
@@ -84,7 +85,7 @@ export function ProtocolRosterPage() {
       data.reload();
       scores.reload();
     } catch (err) {
-      setError(t(protocolErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+      setError(schedulingError(err) ?? t(protocolErrorKey(errorCode(err)) as 'door.people.actionFailed'));
     }
   };
   const points = new Map((scores.data?.scores ?? []).map((s) => [s.personId, s]));

@@ -18,7 +18,7 @@ const ERROR_KEYS: Record<string, string> = {
   NOT_CONFIRMED: 'door.music.err.notConfirmed',
 };
 /** Codes where the server's own sentence says exactly which rule or choir is meant, so it is shown as it is. */
-const SERVER_TEXT = new Set(['ENGINE', 'RULE', 'PUBLISHED', 'EMPTY']);
+const SERVER_TEXT = new Set(['ENGINE', 'RULE', 'PUBLISHED', 'EMPTY', 'CONFIG', 'NO_CONFIG', 'CONFIG_INVALID', 'NOT_MUSIC_SERVICE']);
 export const scheduleErrorText = (err: unknown): string | null => {
   const body = err instanceof ApiError ? (err.body as { code?: string; error?: string } | undefined) : undefined;
   return body?.code && SERVER_TEXT.has(body.code) && body.error ? body.error : null;
@@ -47,5 +47,5 @@ export const servicesOfMonth = (services: ScheduleService[], month: string): Sch
 
 /** Choirs that may be added to a service: not already on it, and whose kind the service allows. */
 export function addableUnits<T extends { id: string; kind: ChoirRole }>(units: T[], service: ScheduleService): T[] {
-  return units.filter((u) => !service.units.some((x) => x.unitId === u.id) && mayServe(u.kind, service.kind));
+  return units.filter((u) => !service.units.some((x) => x.unitId === u.id) );
 }

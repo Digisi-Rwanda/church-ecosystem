@@ -1646,8 +1646,8 @@ export async function removeChoirMember(id: string, personId: string): Promise<v
   await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/members/${encodeURIComponent(personId)}`, { method: 'DELETE' });
 }
 export type MusicHorizonKey = 'MONTH' | 'QUARTER' | 'HALF' | 'YEAR';
-export type ScheduleUnitRef = { unitId: string; name: string; kind: ChoirRole };
-export type ScheduleService = { id: string; periodKey: string; date: string; kind: MusicServiceKind; label: string; units: ScheduleUnitRef[] };
+export type ScheduleUnitRef = { unitId: string; name: string; kind: ChoirRole; category?: string | null };
+export type ScheduleService = { id: string; periodKey: string; date: string; kind: MusicServiceKind; label: string; musicRequired?: boolean; protocolRequired?: boolean; requirements?: Array<{ categoryName: string; assigned: number; minimum: number | null; maximum: number | null }>; units: ScheduleUnitRef[] };
 export type ScheduleState = {
   canWrite: boolean;
   months: Array<{ periodKey: string; state: 'CONFIRMED' | 'PUBLISHED'; version: number; confirmedAt: string | null; publishedAt: string | null; updatedAt: string | null }>;
@@ -1655,8 +1655,9 @@ export type ScheduleState = {
   options: Record<string, Array<{ value: string; label: string }>>;
   units: Array<{ id: string; name: string; kind: ChoirRole }>;
 };
-export type ScheduleDraftView = { id: string; label: string; horizon: MusicHorizonKey; warnings: string[]; months: Array<{ periodKey: string; decided: 'CONFIRMED' | 'PUBLISHED' | null }>; services: ScheduleService[] };
-export type ScheduleMonthView = { canWrite: boolean; periodKey: string; state: 'CONFIRMED' | 'PUBLISHED'; version: number; warnings: string[]; services: ScheduleService[] };
+export type ScheduleRuleContext = { configVersionId?: string | null; configLabel?: string | null; rules?: Array<CategoryServicePolicyApi & { categoryName: string; serviceCode: string }>; validation?: { ok: boolean; reason?: string; warnings: string[] } | null };
+export type ScheduleDraftView = ScheduleRuleContext & { id: string; label: string; horizon: MusicHorizonKey; warnings: string[]; months: Array<{ periodKey: string; decided: 'CONFIRMED' | 'PUBLISHED' | null }>; services: ScheduleService[] };
+export type ScheduleMonthView = ScheduleRuleContext & { canWrite: boolean; periodKey: string; state: 'CONFIRMED' | 'PUBLISHED'; version: number; warnings: string[]; services: ScheduleService[] };
 export type ScheduleEdit = { serviceId: string; action: 'add' | 'remove' | 'replace'; unitId: string; toUnitId?: string | null };
 export type ScheduleLogEntry = { id: string; at: string; periodKey: string; stage: string; action: string; version: number; by: string; summary: string; changes: string[] };
 const MS = `${MU}/schedule`;
@@ -1794,9 +1795,9 @@ export type ProtocolIssueView = {
   key: string; code: string; severity: 'BLOCKING' | 'WARNING'; message: string; serviceId: string | null; personId: string | null; overridden: boolean; canOverride: boolean;
 };
 export type ProtocolMonthView = {
-  month: string; step: ProtocolStep; status: 'OPEN' | 'DRAFT' | 'REVIEW' | 'PUBLISHED'; version: number; music: { state: 'CONFIRMED' | 'PUBLISHED'; version: number } | null;
+  month: string; step: ProtocolStep; status: 'OPEN' | 'DRAFT' | 'REVIEW' | 'PUBLISHED'; version: number; configVersionId?: string | null; musicConfigVersionId?: string | null; music: { state: 'CONFIRMED' | 'PUBLISHED'; version: number; configVersionId?: string | null } | null;
   builtOnMusicVersion: number | null; stale: string[]; notes: string[]; relax: { tuesday: boolean; reason: string | null }; rules: { target: number; hardMax: number; teamSize: number };
-  services: ProtocolServiceView[]; issues: ProtocolIssueView[]; overrides: Array<{ issueKey: string; reason: string; at: string }>; roster: Array<{ personId: string; name: string; load: number }>;
+  services: ProtocolServiceView[]; issues: ProtocolIssueView[]; overrides: Array<{ issueKey: string; reason: string; at: string }>; roster: Array<{ personId: string; name: string; load: number; previousDuties?: number }>;
   can: { build: boolean; edit: boolean; reopen: boolean; review: boolean };
 };
 export type ProtocolDuty = {
@@ -2105,7 +2106,7 @@ export type ChoirCategoryApi = {
 export type CategoryServicePolicyApi = {
   id: string; systemId: string; categoryId: string; serviceId: string; eligible: boolean; active: boolean;
   frequencyTarget: number | null; frequencyCounting: FrequencyCounting; frequencyKind: FrequencyKind;
-  planningMode: PlanningMode; minCount: number | null; maxCount: number | null; requireAll: boolean;
+  frequencyPeriod?: 'MONTH' | 'QUARTER' | 'HALF_YEAR' | 'YEAR' | null; planningMode: PlanningMode; minCount: number | null; maxCount: number | null; requireAll: boolean;
   configVersionId: string | null; effectiveFrom: string; effectiveTo: string | null;
   supersedesId: string | null; createdByPersonId: string; createdAt: string;
 };
@@ -2187,3 +2188,12 @@ export const updateProtocolServiceRule = (id: string, configVersionId: string, p
 export const updateProtocolDutyPolicy = (id: string, configVersionId: string, patch: object) =>
   apiFetch(`${SC}/protocol/policy/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
 export const retireSchedulingService = (id: string) => apiFetch(`${SC}/services/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });
+
+export type MusicFixedAssignmentApi = { id: string; choirId: string; categoryServicePolicyId: string; configVersionId: string };
+export type MusicAvailabilityApi = { id: string; choirId: string; serviceDate: string; serviceCode: string | null; reason: string | null };
+export const fetchMusicFixedAssignments = (versionId: string) => scGet<{ assignments: MusicFixedAssignmentApi[] }>('/fixed-assignments', 'sys-music', { configVersionId: versionId });
+export const addMusicFixedAssignment = (body: object) => scPost('/fixed-assignments', { ...body, systemId: 'sys-music' });
+export const removeMusicFixedAssignment = (id: string, configVersionId: string) => apiFetch(SC + '/fixed-assignments/' + encodeURIComponent(id), { method: 'DELETE', body: { configVersionId } });
+export const fetchMusicAvailability = (date = '') => scGet<{ availability: MusicAvailabilityApi[] }>('/availability', 'sys-music', date ? { serviceDate: date } : {});
+export const addMusicAvailability = (body: object) => scPost('/availability', { ...body, systemId: 'sys-music' });
+export const removeMusicAvailability = (id: string) => apiFetch(SC + '/availability/' + encodeURIComponent(id), { method: 'DELETE' });

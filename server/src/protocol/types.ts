@@ -281,6 +281,9 @@ export interface ProtocolSchedulingRules {
   softMax: number;
   /** Absolute max including one Extra (preferTarget + 1). */
   hardMax: number;
+  extraDutyPolicy?: 'ALLOW_WHEN_SHORT' | 'NEVER' | 'ALWAYS';
+  duplicateSameDayAllowed?: boolean;
+  leadershipPriorities?: string[];
   defaultTeamSize: number;
   /**
    * When true, choir members may only be placed on services where Music

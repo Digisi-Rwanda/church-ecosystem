@@ -26,6 +26,7 @@ export type ServiceKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
 
 export type FrequencyCounting = 'ASSIGNMENTS' | 'DISTINCT_DATES';
 export type FrequencyKind = 'MINIMUM' | 'TARGET' | 'MAXIMUM';
+export type FrequencyPeriod = 'MONTH' | 'QUARTER' | 'HALF_YEAR' | 'YEAR';
 export type PlanningMode = 'ROTATION' | 'FIXED' | 'MANUAL';
 export type Recurrence = 'WEEKLY' | 'MONTHLY' | 'SELECTED_DATES' | 'CUSTOM';
 
@@ -86,6 +87,7 @@ export interface CategoryServicePolicyView {
   frequencyTarget: number | null;
   frequencyCounting: FrequencyCounting;
   frequencyKind: FrequencyKind;
+  frequencyPeriod: FrequencyPeriod | null;
   planningMode: PlanningMode;
   minCount: number | null;
   maxCount: number | null;
@@ -112,6 +114,30 @@ export interface ChoirCategoryLinkView {
   supersedesId: string | null;
   createdByPersonId: string;
   createdAt: string;
+}
+
+export interface MusicFixedAssignmentView {
+  id: string;
+  systemId: string;
+  configVersionId: string;
+  categoryServicePolicyId: string;
+  choirId: string;
+  displayOrder: number;
+  createdByPersonId: string;
+  createdAt: string;
+}
+
+export interface MusicChoirUnavailabilityView {
+  id: string;
+  systemId: string;
+  choirId: string;
+  serviceDate: string;
+  serviceCode: string | null;
+  reason: string | null;
+  active: boolean;
+  recordedByPersonId: string;
+  recordedAt: string;
+  updatedAt: string;
 }
 
 export interface ProtocolServiceRuleView {
@@ -227,6 +253,7 @@ export interface CategoryServicePolicyCreateInput {
   frequencyTarget?: number | null;
   frequencyCounting?: FrequencyCounting;
   frequencyKind?: FrequencyKind;
+  frequencyPeriod?: FrequencyPeriod | null;
   planningMode?: PlanningMode;
   minCount?: number | null;
   maxCount?: number | null;
@@ -300,6 +327,7 @@ export const toPolicyView = (r: CategoryServicePolicy): CategoryServicePolicyVie
   eligible: r.eligible, frequencyTarget: r.frequencyTarget,
   frequencyCounting: r.frequencyCounting as FrequencyCounting,
   frequencyKind: r.frequencyKind as FrequencyKind,
+  frequencyPeriod: r.frequencyPeriod as FrequencyPeriod | null,
   planningMode: r.planningMode as PlanningMode,
   minCount: r.minCount, maxCount: r.maxCount, requireAll: r.requireAll,
   configVersionId: r.configVersionId,

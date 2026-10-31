@@ -113,6 +113,13 @@ const WHO: Array<{ who: string; home: string }> = [
   { who: 'p-youth-member', home: 'sys-youth' },
 ];
 
+// Each identity is a separate client. The exhaustive sweep must exercise authorization,
+// rather than pass because the shared API rate limit hides later responses.
+const clientHeaders = (who: string) => ({
+  ...bearer(who),
+  'X-Forwarded-For': '192.0.2.' + (WHO.findIndex(person => person.who === who) + 1 || 250),
+});
+
 describe('firm walls between systems', () => {
   const all = routes().filter((r) => !isPublic(r.path));
   const urls = (r: RouteDef): string[] => {
@@ -130,7 +137,8 @@ describe('firm walls between systems', () => {
       for (const r of all.filter((x) => x.method === 'get')) {
         for (const u of urls(r)) {
           for (const q of ['', ...foreign.map((s) => `?systemId=${s}&unitId=ou-${s}&orgUnitId=ou-${s}&year=2026&month=2026-10`)]) {
-            const res = await request(srv).get(u + q).set(bearer(who));
+            const res = await request(srv).get(u + q).set(clientHeaders(who));
+            expect(res.status, who + ' GET ' + u + q + ' must reach authorization').not.toBe(429);
             const text = JSON.stringify(res.body ?? {});
             for (const s of foreign) if (text.includes(mark(s))) leaks.push(`${who} (${home}) GET ${u.replace(/leak-[a-z]+/,"ID")} shows ${s}`);
           }
@@ -152,7 +160,8 @@ describe('firm walls between systems', () => {
           // restore a deleted item (recovery is theirs), nothing else.
           if (target === home || (who === 'p-admin' && /\/restore$/.test(u))) continue;
           const snap = JSON.stringify(fake.__db);
-          const res = await request(srv)[r.method](u).set(bearer(who)).send({ ...body, systemId: PRIVATE_SYSTEMS.find((s) => s !== home) });
+          const res = await request(srv)[r.method](u).set(clientHeaders(who)).send({ ...body, systemId: PRIVATE_SYSTEMS.find((s) => s !== home) });
+          expect(res.status, who + ' ' + r.method.toUpperCase() + ' ' + u + ' must reach authorization').not.toBe(429);
           if (JSON.stringify(fake.__db) !== snap) {
             // Only the person's own home system may change; anything else is a breach.
             const touched = PRIVATE_SYSTEMS.filter((s) => s !== home).some((s) => JSON.stringify(fake.__db).split(mark(s)).length !== snap.split(mark(s)).length);
@@ -170,7 +179,8 @@ describe('firm walls between systems', () => {
   it('control: the Church Leader still reaches other systems', async () => {
     const seen = new Set<string>();
     for (const r of all.filter((x) => x.method === 'get' && !x.path.includes(':'))) {
-      const res = await request(srv).get(`${r.path}?systemId=sys-deacon`).set(bearer('p-pastor'));
+      const res = await request(srv).get(`${r.path}?systemId=sys-deacon`).set(clientHeaders('p-pastor'));
+      expect(res.status, r.path + ' must reach authorization').not.toBe(429);
       if (JSON.stringify(res.body ?? {}).includes(mark('sys-deacon'))) seen.add(r.path);
     }
     expect(seen.size).toBeGreaterThanOrEqual(5);

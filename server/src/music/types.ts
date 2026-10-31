@@ -3,12 +3,7 @@
  * Units map to choir org units + worship team.
  */
 
-export type MusicServiceKind =
-  | 'SS1'
-  | 'SS2'
-  | 'TUESDAY'
-  | 'FRIDAY'
-  | 'IGABURO';
+export type MusicServiceKind = string;
 
 export type MusicUnitKind =
   | 'PRIMARY'
@@ -42,6 +37,8 @@ export interface MusicServiceSlot {
   time?: string | null;
   musicRequired?: boolean;
   protocolRequired?: boolean;
+  /** Total choir capacity from the pinned service configuration. */
+  maxChoirs?: number;
 }
 
 export interface MusicAssignment {
@@ -130,7 +127,7 @@ export interface MusicScheduleNotification {
   readAt?: string;
 }
 
-export const MUSIC_SERVICE_LABELS: Record<MusicServiceKind, string> = {
+export const MUSIC_SERVICE_LABELS: Record<string, string> = {
   SS1: 'Sunday Service 1',
   SS2: 'Sunday Service 2',
   TUESDAY: 'Tuesday Service',

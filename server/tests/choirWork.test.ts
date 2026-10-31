@@ -101,7 +101,7 @@ describe('sponsorship', () => {
   it('validates amounts and dates; ended sponsors take no pledges; singers see nothing', async () => {
     const s = await sponsor();
     expect((await post(LEADER, `/api/choir/sponsors/${s}/pledges`, { amount: 0, pledgedOn: '2026-10-01' })).body.code).toBe('AMOUNT');
-    expect((await post(LEADER, `/api/choir/sponsors/${s}/pledges`, { amount: 100, pledgedOn: '2026-10-30' })).body.code).toBe('BAD_DATE');
+    expect((await post(LEADER, `/api/choir/sponsors/${s}/pledges`, { amount: 100, pledgedOn: TOMORROW })).body.code).toBe('BAD_DATE');
     expect((await post(LEADER, `/api/choir/sponsors/${s}/end`)).status).toBe(200);
     expect((await post(LEADER, `/api/choir/sponsors/${s}/pledges`, { amount: 100, pledgedOn: '2026-10-01' })).body.code).toBe('WRONG_STATE');
     expect((await get('p-choir-member', '/api/choir/sponsors?choirId=ch-elim')).status).toBe(404);

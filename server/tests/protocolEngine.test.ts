@@ -4,7 +4,7 @@ import {
   PROTOCOL_SCORE_POINTS, buildProtocolTeams, buildRulesFromConfig, canServeKind, musicConflictCode, musicRequirements, rankLeaderCandidates, scoreAttendanceRow, validateProtocolTeamsDetailed,
 } from '../src/protocol/engine';
 import type { ProtocolRosterMember, ProtocolSchedulingRules, ProtocolService, ProtocolTeamSlot } from '../src/protocol/types';
-import type { ProtocolServiceRuleView, SchedulingServiceView } from '../src/scheduling/types';
+import type { ProtocolDutyPolicyView, ProtocolServiceRuleView, SchedulingServiceView } from '../src/scheduling/types';
 
 const kindOf = (u: string) => (u.includes('worship') ? 'WORSHIP' : 'PRIMARY');
 const member = { personId: 'p1' } as ProtocolRosterMember;
@@ -67,6 +67,19 @@ describe('versioned Protocol service rules', () => {
     expect(musicRequirements(rules, 'TUESDAY')).toEqual({ choir: false, worship: false });
     expect(musicRequirements(rules, 'IGABURO')).toEqual({ choir: true, worship: true });
   });
+  it('applies Protocol-only duty, duplicate-service and leadership settings', () => {
+    const duty = {
+      preferTarget: 2, softMax: 2, hardMax: 3, extraDutyPolicy: 'NEVER',
+      duplicateSameDayAllowed: true, musicCompatibilityRequired: false,
+      leadershipPriorities: ['PRESIDENT', 'COORDINATOR'],
+    } as ProtocolDutyPolicyView;
+    const configured = buildRulesFromConfig([], duty);
+    expect(configured).toMatchObject({
+      preferTarget: 2, hardMax: 3, extraDutyPolicy: 'NEVER',
+      duplicateSameDayAllowed: true, requireChoirOnService: false,
+      leadershipPriorities: ['PRESIDENT', 'COORDINATOR'],
+    });
+  });
 });
 
 describe('Extra (4th) duties and a nearly full roster', () => {
@@ -104,6 +117,29 @@ describe('Extra (4th) duties and a nearly full roster', () => {
     const r = run(Array.from({ length: 30 }, (_, i) => person(i)));
     expect(r.shortServices.length).toBeGreaterThan(0);
     expect(r.maxDuties).toBeLessThanOrEqual(rules.hardMax);
+  });
+  it('uses published service history to break monthly assignment ties fairly', () => {
+    const one = svc2('one', '2026-10-04', 'SS1');
+    const candidates = [person(1), person(2)];
+    const result = buildProtocolTeams({
+      services: [{ ...one, targetTeamSize: 1 }],
+      roster: candidates,
+      rules: { ...rules, preferTarget: 1, hardMax: 1 },
+      choirUnits: new Map(), unitsOnService: new Map(), kindOf,
+      historyLoad: new Map([['p1', 4], ['p2', 0]]),
+    });
+    expect(result.slots.map((slot) => slot.personId)).toEqual(['p2']);
+  });
+  it('does not use extras when Protocol policy forbids extra duties', () => {
+    const one = svc2('one', '2026-10-04', 'SS1');
+    const result = buildProtocolTeams({
+      services: [{ ...one, targetTeamSize: 2 }],
+      roster: [person(1)],
+      rules: { ...rules, preferTarget: 1, hardMax: 4, extraDutyPolicy: 'NEVER' },
+      choirUnits: new Map(), unitsOnService: new Map(), kindOf,
+    });
+    expect(result.slots).toHaveLength(1);
+    expect(result.warnings.join(' ')).toMatch(/only 1\/2 eligible/);
   });
   it('nobody serves both Sunday services on one day, and each team has a recommended leader and vice leader', () => {
     const r = run(Array.from({ length: 45 }, (_, i) => person(i)));

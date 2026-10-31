@@ -57,10 +57,12 @@ describe('music engine: the church lineup', () => {
     expect(services.find((s) => s.kind === 'IGABURO')).toMatchObject({ musicRequired: false, protocolRequired: true });
     expect(services.some((s) => s.kind === 'FRIDAY')).toBe(false);
   });
-  it('rejects calendar entries the fixed scheduling engines do not support', () => {
-    expect(() => buildMusicCalendar('2026-03', 'MONTH', [
+  it('preserves configured service codes outside the legacy set', () => {
+    const services = buildMusicCalendar('2026-03', 'MONTH', [
       { code: 'special', name: 'Special Service', weekday: 0, time: '09:00', recurrence: 'WEEKLY', selectedDates: [], active: true, musicRequired: true, protocolRequired: true },
-    ])).toThrow(/Unsupported scheduling service code/);
+    ]);
+    expect(services.length).toBeGreaterThan(0);
+    expect(services.every((service) => service.kind === 'SPECIAL')).toBe(true);
   });
   it('a retired choir is never scheduled, but stays valid in history', () => {
     const units = DEFAULT.map((u) => (u.id === 'mu-elim' ? { ...u, active: false } : u));
@@ -100,6 +102,7 @@ describe('music engine: versioned category policies', () => {
   const policy = (updates: Partial<CategoryServicePolicyView>): CategoryServicePolicyView => ({
     id: 'policy-v1', systemId: 'sys-music', categoryId: category.id, serviceId: service.id,
     eligible: true, active: true, frequencyTarget: null, frequencyCounting: 'ASSIGNMENTS', frequencyKind: 'TARGET',
+    frequencyPeriod: null,
     planningMode: 'ROTATION', minCount: null, maxCount: null, requireAll: false, configVersionId: 'music-v1',
     effectiveFrom: '2026-01-01T00:00:00.000Z', effectiveTo: null, supersedesId: null,
     createdByPersonId: 'leader', createdAt: '2026-01-01T00:00:00.000Z', ...updates,
@@ -113,6 +116,7 @@ describe('music engine: versioned category policies', () => {
     policies: [configPolicy],
     categories: [category],
     serviceByCode: new Map([['SS1', service]]),
+    choirLinks: new Map([['primary-choir', [category.id]]]),
   });
 
   it('resolves policy service references through the versioned service id', () => {
@@ -120,9 +124,93 @@ describe('music engine: versioned category policies', () => {
   });
 
   it('enforces frequency minima and reports target shortfalls', () => {
-    expect(validate(policy({ frequencyTarget: 2, frequencyKind: 'MINIMUM' })).reason).toMatch(/Frequency minimum/);
-    expect(validate(policy({ frequencyTarget: 2, frequencyKind: 'TARGET' })).warnings).toHaveLength(1);
-    expect(validate(policy({ frequencyTarget: 1, frequencyKind: 'MINIMUM' })).ok).toBe(true);
+    expect(validate(policy({ frequencyTarget: 2, frequencyPeriod: 'MONTH', frequencyKind: 'MINIMUM' })).reason).toMatch(/Frequency minimum/);
+    expect(validate(policy({ frequencyTarget: 2, frequencyPeriod: 'MONTH', frequencyKind: 'TARGET' })).warnings).toHaveLength(1);
+    expect(validate(policy({ frequencyTarget: 1, frequencyPeriod: 'MONTH', frequencyKind: 'MINIMUM' })).ok).toBe(true);
+  });
+
+  it('requires explicit membership and a complete period for frequency validation', () => {
+    const configPolicy = policy({ frequencyTarget: 1, frequencyPeriod: 'QUARTER' });
+    expect(validateConfigPolicies({
+      services: [slot], assignments: [{ id: 'assignment', serviceId: slot.id, unitId: 'primary-choir', source: 'ENGINE' }],
+      units, policies: [configPolicy], categories: [category],
+      serviceByCode: new Map([['SS1', service]]),
+    }).reason).toMatch(/explicit choir-category link/);
+    expect(validate(configPolicy).reason).toMatch(/complete quarter period/);
+  });
+
+  it('rejects duplicate choir assignments and requireAll omissions', () => {
+    const duplicate = validateConfigPolicies({
+      services: [slot],
+      assignments: [
+        { id: 'assignment-1', serviceId: slot.id, unitId: 'primary-choir', source: 'ENGINE' },
+        { id: 'assignment-2', serviceId: slot.id, unitId: 'primary-choir', source: 'MANUAL' },
+      ],
+      units, policies: [policy({})], categories: [category],
+      serviceByCode: new Map([['SS1', service]]),
+      choirLinks: new Map([['primary-choir', [category.id]]]),
+    });
+    expect(duplicate.reason).toMatch(/only once/);
+
+    const requireAll = validateConfigPolicies({
+      services: [slot], assignments: [{ id: 'assignment', serviceId: slot.id, unitId: 'primary-choir', source: 'ENGINE' }],
+      units: [...units, { id: 'second-choir', kind: 'PRIMARY', name: 'Second choir' }],
+      policies: [policy({ requireAll: true })], categories: [category],
+      serviceByCode: new Map([['SS1', service]]),
+      choirLinks: new Map([['primary-choir', [category.id]], ['second-choir', [category.id]]]),
+    });
+    expect(requireAll.reason).toMatch(/requires every eligible linked choir/);
+  });
+
+  it('uses the configured service-wide capacity', () => {
+    const result = validateConfigPolicies({
+      services: [slot],
+      assignments: [{ id: 'assignment', serviceId: slot.id, unitId: 'primary-choir', source: 'ENGINE' }],
+      units, policies: [policy({})], categories: [category],
+      serviceByCode: new Map([['SS1', { ...service, maxChoirs: 0 }]]),
+      choirLinks: new Map([['primary-choir', [category.id]]]),
+    });
+    expect(result.reason).toMatch(/maximum is 0/);
+  });
+
+  it('counts assignment and distinct-date frequency separately within the named period', () => {
+    const second = { id: 'primary-choir-2', kind: 'PRIMARY' as const, name: 'Second primary' };
+    const assignments = [
+      { id: 'assignment-1', serviceId: slot.id, unitId: 'primary-choir', source: 'ENGINE' as const },
+      { id: 'assignment-2', serviceId: slot.id, unitId: second.id, source: 'ENGINE' as const },
+    ];
+    const links = new Map([
+      ['primary-choir', [category.id]],
+      [second.id, [category.id]],
+    ]);
+    const common = {
+      services: [slot], assignments, units: [...units, second], categories: [category],
+      serviceByCode: new Map([['SS1', service]]), choirLinks: links,
+    };
+    expect(validateConfigPolicies({
+      ...common, policies: [policy({ frequencyTarget: 2, frequencyPeriod: 'MONTH', frequencyKind: 'MINIMUM' })],
+    }).ok).toBe(true);
+    expect(validateConfigPolicies({
+      ...common, policies: [policy({
+        frequencyTarget: 2, frequencyPeriod: 'MONTH', frequencyCounting: 'DISTINCT_DATES', frequencyKind: 'MINIMUM',
+      })],
+    }).reason).toMatch(/Frequency minimum/);
+  });
+
+  it('allows the same choir in different service occurrences', () => {
+    const secondService: SchedulingServiceView = { ...service, id: 'service-ss2-v1', code: 'ss2' };
+    const secondSlot = { ...slot, id: 'music-ss2', kind: 'SS2' as const };
+    const result = validateConfigPolicies({
+      services: [slot, secondSlot],
+      assignments: [
+        { id: 'assignment-1', serviceId: slot.id, unitId: 'primary-choir', source: 'ENGINE' },
+        { id: 'assignment-2', serviceId: secondSlot.id, unitId: 'primary-choir', source: 'ENGINE' },
+      ],
+      units, policies: [policy({})], categories: [category],
+      serviceByCode: new Map([['SS1', service], ['SS2', secondService]]),
+      choirLinks: new Map([['primary-choir', [category.id]]]),
+    });
+    expect(result.ok).toBe(true);
   });
 });
 

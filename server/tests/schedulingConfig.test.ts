@@ -182,6 +182,39 @@ describe('scheduling config store — versioning / supersession', () => {
     expect(draftPolicy).toMatchObject({ categoryId: draftCategory.id, serviceId: draftService.id });
     expect(draftLink.categoryId).toBe(draftCategory.id);
   });
+
+  it('clones frequency scope and fixed designations without changing the prior snapshot', async () => {
+    const active = await createVersion('sys-music', 1, 'ACTIVE');
+    const service = await S.createSchedulingService({
+      systemId: 'sys-music', code: 'ss1', name: 'Sunday', musicRequired: true,
+      configVersionId: active.id, createdByPersonId: LEADER,
+    });
+    const category = await S.createChoirCategory({
+      systemId: 'sys-music', code: 'primary', name: 'Primary', configVersionId: active.id, createdByPersonId: LEADER,
+    });
+    const policy = await S.createCategoryServicePolicy({
+      systemId: 'sys-music', categoryId: category.id, serviceId: service.id, configVersionId: active.id,
+      planningMode: 'FIXED', frequencyTarget: 2, frequencyPeriod: 'QUARTER', createdByPersonId: LEADER,
+    });
+    await S.createChoirCategoryLink({
+      systemId: 'sys-music', choirId: 'choir-1', categoryId: category.id, configVersionId: active.id, createdByPersonId: LEADER,
+    });
+    fake.__db.musicFixedAssignment.push({
+      id: 'fixed-old', systemId: 'sys-music', configVersionId: active.id,
+      categoryServicePolicyId: policy.id, choirId: 'choir-1', displayOrder: 0,
+      createdByPersonId: LEADER, createdAt: new Date(),
+    });
+
+    const draft = await S.cloneActiveConfigVersion('sys-music', { label: 'Music rules draft', createdByPersonId: LEADER });
+    const copiedPolicy = (await S.listCategoryServicePolicies('sys-music', draft.id))[0];
+    const copiedAssignment = fake.__db.musicFixedAssignment.find((row: any) => row.configVersionId === draft.id);
+    expect(copiedPolicy.frequencyPeriod).toBe('QUARTER');
+    expect(copiedPolicy.id).not.toBe(policy.id);
+    expect(copiedAssignment).toMatchObject({
+      categoryServicePolicyId: copiedPolicy.id, choirId: 'choir-1', configVersionId: draft.id,
+    });
+    expect(fake.__db.musicFixedAssignment.find((row: any) => row.id === 'fixed-old')?.configVersionId).toBe(active.id);
+  });
 });
 
 describe('scheduling configuration loaders — version pinning', () => {
@@ -341,7 +374,7 @@ describe('scheduling config routes — idempotency', () => {
     const svcs = await S.listSchedulingServices('sys-music', false, version.id);
     const catId = cats[0].id;
     const svcId = svcs[0].id;
-    const body = { systemId: 'sys-music', categoryId: catId, serviceId: svcId, configVersionId: version.id, eligible: true, frequencyTarget: 1, createdByPersonId: MUSIC_LEADER };
+    const body = { systemId: 'sys-music', categoryId: catId, serviceId: svcId, configVersionId: version.id, eligible: true, frequencyTarget: 1, frequencyPeriod: 'MONTH', createdByPersonId: MUSIC_LEADER };
     const r1 = await post(MUSIC_LEADER, configPath('sys-music', '/policies'), body);
     expect(r1.status).toBe(201);
     const id1 = r1.body.policy;
@@ -353,6 +386,131 @@ describe('scheduling config routes — idempotency', () => {
 });
 
 describe('scheduling config routes — draft row editing', () => {
+  it('rejects inconsistent counts and frequency targets without an explicit period', async () => {
+    const version = await createVersion('sys-music', 1);
+    const category = await S.createChoirCategory({
+      systemId: 'sys-music', code: 'primary', name: 'Primary', configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    const service = await S.createSchedulingService({
+      systemId: 'sys-music', code: 'ss1', name: 'Sunday', configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    const inverted = await post(MUSIC_LEADER, configPath('sys-music', '/policies'), {
+      systemId: 'sys-music', configVersionId: version.id, categoryId: category.id, serviceId: service.id,
+      minCount: 2, maxCount: 1,
+    });
+    expect(inverted.status).toBe(400);
+    expect(inverted.body.code).toBe('CONFIG_RULES');
+
+    const missingPeriod = await post(MUSIC_LEADER, configPath('sys-music', '/policies'), {
+      systemId: 'sys-music', configVersionId: version.id, categoryId: category.id, serviceId: service.id,
+      frequencyTarget: 2,
+    });
+    expect(missingPeriod.status).toBe(400);
+    expect(missingPeriod.body.issues.join(' ')).toMatch(/month, quarter/);
+  });
+
+  it('rejects a second category link for the same choir in one draft', async () => {
+    const version = await createVersion('sys-music', 1);
+    const first = await S.createChoirCategory({
+      systemId: 'sys-music', code: 'primary', name: 'Primary', configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    const second = await S.createChoirCategory({
+      systemId: 'sys-music', code: 'secondary', name: 'Secondary', configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    fake.__db.musicChoir.push({ id: 'choir-1', name: 'Choir One', role: 'PRIMARY', active: true });
+    const firstLink = await post(MUSIC_LEADER, configPath('sys-music', '/links'), {
+      systemId: 'sys-music', configVersionId: version.id, choirId: 'choir-1', categoryId: first.id,
+    });
+    expect(firstLink.status).toBe(201);
+    const secondLink = await post(MUSIC_LEADER, configPath('sys-music', '/links'), {
+      systemId: 'sys-music', configVersionId: version.id, choirId: 'choir-1', categoryId: second.id,
+    });
+    expect(secondLink.status).toBe(409);
+    expect(secondLink.body.code).toBe('DUPLICATE_MEMBERSHIP');
+    expect(fake.__db.choirCategoryLink).toHaveLength(1);
+  });
+
+  it('rejects untyped or unscoped individual overrides', async () => {
+    const version = await createVersion('sys-music', 1);
+    const category = await S.createChoirCategory({
+      systemId: 'sys-music', code: 'primary', name: 'Primary', configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    const service = await S.createSchedulingService({
+      systemId: 'sys-music', code: 'ss1', name: 'Sunday', configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    await S.createCategoryServicePolicy({
+      systemId: 'sys-music', categoryId: category.id, serviceId: service.id, configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    fake.__db.musicChoir.push({ id: 'choir-1', name: 'Choir One', role: 'PRIMARY', active: true });
+    const invalidShape = await post(MUSIC_LEADER, configPath('sys-music', '/links'), {
+      systemId: 'sys-music', configVersionId: version.id, choirId: 'choir-1', categoryId: category.id,
+      eligibleOverride: { ss1: 'yes' },
+    });
+    expect(invalidShape.status).toBe(400);
+
+    const missingFrequencyScope = await post(MUSIC_LEADER, configPath('sys-music', '/links'), {
+      systemId: 'sys-music', configVersionId: version.id, choirId: 'choir-1', categoryId: category.id,
+      frequencyOverride: { ss1: { frequencyTarget: 2 } },
+    });
+    expect(missingFrequencyScope.status).toBe(400);
+    expect(missingFrequencyScope.body.code).toBe('CONFIG_OVERRIDE');
+  });
+
+  it('requires and persists explicit designations for FIXED rules', async () => {
+    const version = await createVersion('sys-music', 1);
+    const service = await S.createSchedulingService({
+      systemId: 'sys-music', code: 'ss1', name: 'Sunday', musicRequired: true,
+      configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    const category = await S.createChoirCategory({
+      systemId: 'sys-music', code: 'primary', name: 'Primary', configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    const policy = await S.createCategoryServicePolicy({
+      systemId: 'sys-music', categoryId: category.id, serviceId: service.id, configVersionId: version.id,
+      planningMode: 'FIXED', createdByPersonId: LEADER,
+    });
+    fake.__db.musicChoir.push({ id: 'choir-1', name: 'Choir One', role: 'PRIMARY', active: true });
+    await S.createChoirCategoryLink({
+      systemId: 'sys-music', choirId: 'choir-1', categoryId: category.id, configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    const incomplete = await post(MUSIC_LEADER, `/api/scheduling/config/versions/${version.id}/activate`);
+    expect(incomplete.status).toBe(409);
+    expect(incomplete.body.code).toBe('CONFIG_INVALID');
+
+    const designation = await post(MUSIC_LEADER, configPath('sys-music', '/fixed-assignments'), {
+      systemId: 'sys-music', configVersionId: version.id, categoryServicePolicyId: policy.id, choirId: 'choir-1',
+    });
+    expect(designation.status).toBe(201);
+    expect(designation.body.assignment).toMatchObject({ choirId: 'choir-1', configVersionId: version.id });
+    const activated = await post(MUSIC_LEADER, `/api/scheduling/config/versions/${version.id}/activate`);
+    expect(activated.status).toBe(200);
+  });
+
+  it('records Music choir unavailability with the authenticated actor and preserves cleared records', async () => {
+    const version = await createVersion('sys-music', 1, 'ACTIVE');
+    await S.createSchedulingService({
+      systemId: 'sys-music', code: 'ss1', name: 'Sunday', musicRequired: true,
+      configVersionId: version.id, createdByPersonId: LEADER,
+    });
+    fake.__db.musicChoir.push({ id: 'choir-1', name: 'Choir One', role: 'PRIMARY', active: true });
+    const path = '/api/scheduling/config/availability?systemId=sys-music';
+    const created = await post(MUSIC_LEADER, path, {
+      systemId: 'sys-music', choirId: 'choir-1', serviceDate: '2027-03-14', serviceCode: 'SS1', reason: 'Travel',
+    });
+    expect(created.status).toBe(201);
+    expect(created.body.availability).toMatchObject({
+      serviceCode: 'ss1', reason: 'Travel', recordedByPersonId: MUSIC_LEADER,
+    });
+    const duplicate = await post(MUSIC_LEADER, path, {
+      systemId: 'sys-music', choirId: 'choir-1', serviceDate: '2027-03-14', reason: 'Unavailable all day',
+    });
+    expect(duplicate.status).toBe(409);
+    const cleared = await request(app).delete(`/api/scheduling/config/availability/${created.body.availability.id}`)
+      .set(bearer(MUSIC_LEADER));
+    expect(cleared.status).toBe(200);
+    expect(fake.__db.musicChoirUnavailability[0].active).toBe(false);
+  });
+
   it('creates editor rows with creator identity taken from the authenticated actor', async () => {
     const musicDraftResponse = await post(MUSIC_LEADER, configPath('sys-music', '/versions'), {
       systemId: 'sys-music', version: 1, label: 'Music draft',
@@ -427,7 +585,7 @@ describe('scheduling config routes — draft row editing', () => {
     });
     expect(policyCreate.status).toBe(201);
     const policyPatch = await request(app).patch(`/api/scheduling/config/policies/${policyCreate.body.policy}`).set(bearer(MUSIC_LEADER))
-      .send({ configVersionId: musicDraft.id, patch: { planningMode: 'MANUAL', frequencyTarget: 2 } });
+      .send({ configVersionId: musicDraft.id, patch: { planningMode: 'MANUAL', frequencyTarget: 2, frequencyPeriod: 'MONTH' } });
     expect(policyPatch.status).toBe(200);
     expect(policyPatch.body.policy).toMatchObject({ planningMode: 'MANUAL', frequencyTarget: 2 });
 

@@ -79,7 +79,11 @@ export function musicConflictCode(
   requireWorship: boolean = requireChoir,
   kindOf: UnitKindOf = () => undefined,
 ): 'CHOIR_NOT_SCHEDULED' | 'WORSHIP_NOT_SCHEDULED' | undefined {
-  const mine = [...(choirUnits.get(member.personId) ?? [])].filter((u) =>
+  const allMine = [...(choirUnits.get(member.personId) ?? [])];
+  if ((requireChoir || requireWorship) && allMine.some((unitId) => !kindOf(unitId))) {
+    return 'CHOIR_NOT_SCHEDULED';
+  }
+  const mine = allMine.filter((u) =>
     kindOf(u) === 'WORSHIP' ? requireWorship : requireChoir,
   );
   if (mine.length === 0) return undefined;
@@ -150,11 +154,14 @@ export function rankLeaderCandidates(
   personIds: string[],
   rosterByPerson: Map<string, ProtocolRosterMember>,
   leadCount: Map<string, number> = new Map(),
+  priorities?: string[],
 ): string[] {
+  const priority = new Map((priorities ?? []).map((office, index) => [office.toUpperCase(), index]));
   return [...personIds].sort((a, b) => {
-    const d =
-      OFFICE_RANK(rosterByPerson.get(a)?.office ?? 'MEMBER') -
-      OFFICE_RANK(rosterByPerson.get(b)?.office ?? 'MEMBER');
+    const officeA = rosterByPerson.get(a)?.office ?? 'MEMBER';
+    const officeB = rosterByPerson.get(b)?.office ?? 'MEMBER';
+    const d = (priority.get(officeA) ?? OFFICE_RANK(officeA)) -
+      (priority.get(officeB) ?? OFFICE_RANK(officeB));
     if (d !== 0) return d;
     const l = (leadCount.get(a) ?? 0) - (leadCount.get(b) ?? 0);
     if (l !== 0) return l;
@@ -167,12 +174,14 @@ function pickLeaders(
   team: ProtocolTeamSlot[],
   rosterByPerson: Map<string, ProtocolRosterMember>,
   leadCount: Map<string, number>,
+  priorities?: string[],
 ): ProtocolTeamSlot[] {
   if (team.length === 0) return team;
   const [tl, vtl] = rankLeaderCandidates(
     team.map((s) => s.personId),
     rosterByPerson,
     leadCount,
+    priorities,
   );
   if (tl) leadCount.set(tl, (leadCount.get(tl) ?? 0) + 1);
   if (vtl) leadCount.set(vtl, (leadCount.get(vtl) ?? 0) + 1);
@@ -192,8 +201,10 @@ export function buildProtocolTeams(input: {
   choirUnits: ChoirUnitsByPerson;
   unitsOnService: UnitsOnService;
   kindOf: UnitKindOf;
+  historyLoad?: Map<string, number>;
 }): { slots: ProtocolTeamSlot[]; warnings: string[] } {
   const { services, roster, rules, choirUnits, unitsOnService, kindOf } = input;
+  const historyLoad = input.historyLoad ?? new Map<string, number>();
   const warnings: string[] = [];
   const slots: ProtocolTeamSlot[] = [];
   const serviceById = new Map(services.map((s) => [s.id, s]));
@@ -209,7 +220,7 @@ export function buildProtocolTeams(input: {
 
   for (const service of ordered) {
     const sameDaySs1 = new Set(
-      slots
+      (rules.duplicateSameDayAllowed ? [] : slots)
         .filter((s) => {
           const svc = serviceById.get(s.serviceId);
           return (
@@ -245,8 +256,6 @@ export function buildProtocolTeams(input: {
         kindOf,
       );
     });
-    const byLoad = (load: (id: string) => number) => (a: ProtocolRosterMember, b: ProtocolRosterMember) =>
-      load(a.personId) - load(b.personId) || a.personId.localeCompare(b.personId);
     const official = (id: string) => officialLoad(id, slots, serviceById, service.monthKey);
     // Official + Extra duties already given this month (the hard maximum counts both).
     const total = (id: string) =>
@@ -257,16 +266,24 @@ export function buildProtocolTeams(input: {
     // First, people still under the monthly target (fewest duties first).
     const picked = canTake
       .filter((m) => official(m.personId) < rules.preferTarget)
-      .sort(byLoad(official))
+      .sort((a, b) =>
+        official(a.personId) - official(b.personId) ||
+        (historyLoad.get(a.personId) ?? 0) - (historyLoad.get(b.personId) ?? 0) ||
+        a.personId.localeCompare(b.personId),
+      )
       .slice(0, need);
     // Extra (4th) duties only when nobody who can take this service is still under
     // the target and the team is short. Decided here, after the under-target people
     // have been placed, and only among people who can actually take this service
     // (someone who cannot serve it must not block Extras for everyone else).
-    if (picked.length < need) {
+    if (picked.length < need && rules.extraDutyPolicy !== 'NEVER') {
       const extras = canTake
         .filter((m) => official(m.personId) >= rules.preferTarget && total(m.personId) < rules.hardMax)
-        .sort(byLoad(total))
+        .sort((a, b) =>
+          total(a.personId) - total(b.personId) ||
+          (historyLoad.get(a.personId) ?? 0) - (historyLoad.get(b.personId) ?? 0) ||
+          a.personId.localeCompare(b.personId),
+        )
         .slice(0, need - picked.length);
       picked.push(...extras);
     }
@@ -299,7 +316,7 @@ export function buildProtocolTeams(input: {
       alreadyOnThisService.add(m.personId);
     }
 
-    const withLeaders = pickLeaders(teamSlots, rosterByPerson, leadCount);
+    const withLeaders = pickLeaders(teamSlots, rosterByPerson, leadCount, rules.leadershipPriorities);
     for (let i = 0; i < teamSlots.length; i++) {
       const idx = slots.findIndex((s) => s.id === teamSlots[i]!.id);
       if (idx >= 0) slots[idx] = withLeaders[i]!;
@@ -404,6 +421,17 @@ export function validateProtocolTeamsDetailed(input: {
     }
     for (const slot of team) {
       const ids = { serviceId: service.id, personId: slot.personId };
+      if (slot.slotKind === 'EXTRA' && input.rules.extraDutyPolicy === 'NEVER') {
+        issues.push(
+          issue(
+            'OVER_MAX',
+            'BLOCKING',
+            `${service.label}: extra duties are not allowed by Protocol policy.`,
+            ids,
+          ),
+        );
+      }
+
       const member = rosterByPerson.get(slot.personId);
       if (!member) {
         issues.push(
@@ -460,7 +488,7 @@ export function validateProtocolTeamsDetailed(input: {
     }
   }
 
-  for (const svc of input.services.filter((s) => s.kind === 'SS2')) {
+  for (const svc of input.services.filter((s) => s.kind === 'SS2' && !input.rules.duplicateSameDayAllowed)) {
     const ss1 = input.services.find(
       (s) => s.date === svc.date && s.kind === 'SS1',
     );
@@ -566,7 +594,7 @@ export function buildRulesFromConfig(
   relaxTuesday = false,
   services: SchedulingServiceView[] = [],
 ): ProtocolSchedulingRules {
-  const dp = dutyPolicy ?? { preferTarget: 3, softMax: 3, hardMax: 4 };
+  const dp = dutyPolicy ?? { preferTarget: 3, softMax: 3, hardMax: 4, extraDutyPolicy: 'ALLOW_WHEN_SHORT' as const, leadershipPriorities: [] };
   const serviceRequirements: NonNullable<ProtocolSchedulingRules['serviceRequirements']> = {};
   const protocolKinds: readonly ProtocolServiceKind[] = ['SS1', 'SS2', 'TUESDAY', 'IGABURO'];
   for (const rule of rules) {
@@ -583,20 +611,24 @@ export function buildRulesFromConfig(
     preferTarget: dp.preferTarget,
     softMax: dp.softMax,
     hardMax: dp.hardMax,
+    extraDutyPolicy: dutyPolicy?.extraDutyPolicy ?? 'ALLOW_WHEN_SHORT',
+    duplicateSameDayAllowed: dutyPolicy?.duplicateSameDayAllowed ?? false,
+    leadershipPriorities: dutyPolicy?.leadershipPriorities ?? [],
     defaultTeamSize: 10,
-    requireChoirOnService: true,
-    requireWorshipOnService: true,
+    requireChoirOnService: dutyPolicy?.musicCompatibilityRequired ?? true,
+    requireWorshipOnService: dutyPolicy?.musicCompatibilityRequired ?? true,
     relaxChoirOnKinds: relaxTuesday ? ['TUESDAY'] : [],
     serviceRequirements,
   };
 }
 
-/** Look up the configured target team size for a service code. */
+/** Resolve Protocol-only team-size settings without consulting shared Music policy. */
 export function targetTeamSizeFor(
   service: ProtocolService,
   services: SchedulingServiceView[],
-  rule: ProtocolServiceRuleView | undefined,
+  rules: ProtocolServiceRuleView[],
 ): number {
-  const svc = services.find((s) => s.code === service.kind);
-  return svc?.targetTeamSize ?? rule?.defaultTeamSize ?? 10;
+  const svc = services.find((s) => s.code.toUpperCase() === service.kind.toUpperCase());
+  const rule = svc ? rules.find((r) => r.serviceId === svc.id) : undefined;
+  return rule?.teamSizeOverrides[service.date] ?? rule?.defaultTeamSize ?? 10;
 }

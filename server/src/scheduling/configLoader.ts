@@ -18,6 +18,8 @@ import type {
   ChoirCategoryLinkView,
   ChoirCategoryView,
   ConfigVersionView,
+  MusicChoirUnavailabilityView,
+  MusicFixedAssignmentView,
   ProtocolDutyPolicyView,
   ProtocolServiceRuleView,
   SchedulingServiceView,
@@ -33,6 +35,11 @@ export type LoadedMusicConfig = {
   policies: CategoryServicePolicyView[];
   /** choirId -> categoryIds the choir belongs to */
   choirLinks: Map<string, string[]>;
+  /** choirId -> service-code eligibility exceptions */
+  choirEligibilityOverrides: Map<string, Record<string, unknown>>;
+  links: ChoirCategoryLinkView[];
+  fixedAssignments: MusicFixedAssignmentView[];
+  unavailability: MusicChoirUnavailabilityView[];
 };
 
 export type LoadedProtocolConfig = {
@@ -56,19 +63,26 @@ async function activeVersion(systemId: string, versionId?: string): Promise<Conf
 export async function loadMusicConfig(versionId?: string): Promise<LoadedMusicConfig> {
   const version = await activeVersion(SYSTEM_MUSIC, versionId);
   if (versionId && !version) throw new Error(`Music configuration version ${versionId} was not found`);
-  if (!version) return { version: null, services: [], categories: [], policies: [], choirLinks: new Map() };
+  if (!version) return {
+    version: null, services: [], categories: [], policies: [], choirLinks: new Map(),
+    choirEligibilityOverrides: new Map(), links: [], fixedAssignments: [], unavailability: [],
+  };
   const versionFilter = { systemId: SYSTEM_MUSIC, configVersionId: version.id, active: true };
-  const [services, categories, policies, links] = await Promise.all([
+  const [services, categories, policies, links, fixedAssignments, unavailability] = await Promise.all([
     prisma.schedulingService.findMany({ where: versionFilter }),
     prisma.choirCategory.findMany({ where: versionFilter }),
     prisma.categoryServicePolicy.findMany({ where: versionFilter }),
     prisma.choirCategoryLink.findMany({ where: versionFilter }),
+    prisma.musicFixedAssignment.findMany({ where: { systemId: SYSTEM_MUSIC, configVersionId: version.id } }),
+    prisma.musicChoirUnavailability.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
   ]);
   const choirLinks = new Map<string, string[]>();
+  const choirEligibilityOverrides = new Map<string, Record<string, unknown>>();
   for (const l of links) {
     const arr = choirLinks.get(l.choirId) ?? [];
     arr.push(l.categoryId);
     choirLinks.set(l.choirId, arr);
+    choirEligibilityOverrides.set(l.choirId, toLinkView(l).eligibleOverride);
   }
   return {
     version,
@@ -76,6 +90,30 @@ export async function loadMusicConfig(versionId?: string): Promise<LoadedMusicCo
     categories: categories.map(toCategoryView),
     policies: policies.map(toPolicyView),
     choirLinks,
+    choirEligibilityOverrides,
+    links: links.map(toLinkView),
+    fixedAssignments: fixedAssignments.map((row) => ({
+      id: row.id,
+      systemId: row.systemId,
+      configVersionId: row.configVersionId,
+      categoryServicePolicyId: row.categoryServicePolicyId,
+      choirId: row.choirId,
+      displayOrder: row.displayOrder,
+      createdByPersonId: row.createdByPersonId,
+      createdAt: row.createdAt.toISOString(),
+    })),
+    unavailability: unavailability.map((row) => ({
+      id: row.id,
+      systemId: row.systemId,
+      choirId: row.choirId,
+      serviceDate: row.serviceDate,
+      serviceCode: row.serviceCode,
+      reason: row.reason,
+      active: row.active,
+      recordedByPersonId: row.recordedByPersonId,
+      recordedAt: row.recordedAt.toISOString(),
+      updatedAt: row.updatedAt.toISOString(),
+    })),
   };
 }
 

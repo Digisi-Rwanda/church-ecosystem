@@ -16,7 +16,7 @@ import type {
   ProtocolServiceRuleCreateInput, ProtocolDutyPolicyCreateInput, ConfigVersionCreateInput,
   SchedulingServiceView, ChoirCategoryView, CategoryServicePolicyView, ChoirCategoryLinkView,
   ProtocolServiceRuleView, ProtocolDutyPolicyView, ConfigVersionView,
-  ConfigStatus, ServiceKind, FrequencyCounting, FrequencyKind, PlanningMode, Recurrence,
+  ConfigStatus, ServiceKind, FrequencyCounting, FrequencyKind, FrequencyPeriod, PlanningMode, Recurrence,
   SystemId,
 } from './types.js';
 import { parseJson, stringifyJson } from './types.js';
@@ -104,13 +104,14 @@ export async function cloneActiveConfigVersion(
       },
     });
 
-    const [services, categories, policies, links, rules, dutyPolicies] = await Promise.all([
+    const [services, categories, policies, links, rules, dutyPolicies, fixedAssignments] = await Promise.all([
       tx.schedulingService.findMany({ where: { systemId, configVersionId: active.id } }),
       tx.choirCategory.findMany({ where: { systemId, configVersionId: active.id } }),
       tx.categoryServicePolicy.findMany({ where: { systemId, configVersionId: active.id } }),
       tx.choirCategoryLink.findMany({ where: { systemId, configVersionId: active.id } }),
       tx.protocolServiceRule.findMany({ where: { systemId, configVersionId: active.id } }),
       tx.protocolDutyPolicy.findMany({ where: { systemId, configVersionId: active.id } }),
+      tx.musicFixedAssignment.findMany({ where: { systemId, configVersionId: active.id } }),
     ]);
 
     const serviceIdMap = new Map<string, string>();
@@ -133,22 +134,39 @@ export async function cloneActiveConfigVersion(
       } });
       categoryIdMap.set(row.id, copy.id);
     }
-    for (const row of policies) await tx.categoryServicePolicy.create({ data: {
-      systemId,
-      categoryId: categoryIdMap.get(row.categoryId) ?? row.categoryId,
-      serviceId: serviceIdMap.get(row.serviceId) ?? row.serviceId,
-      eligible: row.eligible, active: row.active,
-      frequencyTarget: row.frequencyTarget, frequencyCounting: row.frequencyCounting, frequencyKind: row.frequencyKind,
-      planningMode: row.planningMode, minCount: row.minCount, maxCount: row.maxCount, requireAll: row.requireAll,
-      configVersionId: version.id, effectiveFrom: now, effectiveTo: null, supersedesId: row.id,
-      createdByPersonId: input.createdByPersonId,
-    } });
+    const policyIdMap = new Map<string, string>();
+    for (const row of policies) {
+      const copy = await tx.categoryServicePolicy.create({ data: {
+        systemId,
+        categoryId: categoryIdMap.get(row.categoryId) ?? row.categoryId,
+        serviceId: serviceIdMap.get(row.serviceId) ?? row.serviceId,
+        eligible: row.eligible, active: row.active,
+        frequencyTarget: row.frequencyTarget, frequencyCounting: row.frequencyCounting, frequencyKind: row.frequencyKind,
+        frequencyPeriod: row.frequencyPeriod,
+        planningMode: row.planningMode, minCount: row.minCount, maxCount: row.maxCount, requireAll: row.requireAll,
+        configVersionId: version.id, effectiveFrom: now, effectiveTo: null, supersedesId: row.id,
+        createdByPersonId: input.createdByPersonId,
+      } });
+      policyIdMap.set(row.id, copy.id);
+    }
     for (const row of links) await tx.choirCategoryLink.create({ data: {
       systemId, choirId: row.choirId, categoryId: categoryIdMap.get(row.categoryId) ?? row.categoryId,
       eligibleOverrideJson: row.eligibleOverrideJson,
       frequencyOverrideJson: row.frequencyOverrideJson, active: row.active, effectiveFrom: now, effectiveTo: null,
       configVersionId: version.id, supersedesId: row.id, createdByPersonId: input.createdByPersonId,
     } });
+    for (const row of fixedAssignments) {
+      const policyId = policyIdMap.get(row.categoryServicePolicyId);
+      if (!policyId) continue;
+      await tx.musicFixedAssignment.create({ data: {
+        systemId,
+        configVersionId: version.id,
+        categoryServicePolicyId: policyId,
+        choirId: row.choirId,
+        displayOrder: row.displayOrder,
+        createdByPersonId: input.createdByPersonId,
+      } });
+    }
     for (const row of rules) await tx.protocolServiceRule.create({ data: {
       systemId, serviceId: serviceIdMap.get(row.serviceId) ?? row.serviceId,
       active: row.active, required: row.required, defaultTeamSize: row.defaultTeamSize,
@@ -355,6 +373,7 @@ export async function createCategoryServicePolicy(input: CategoryServicePolicyCr
       frequencyTarget: input.frequencyTarget ?? null,
       frequencyCounting: input.frequencyCounting ?? 'ASSIGNMENTS',
       frequencyKind: input.frequencyKind ?? 'TARGET',
+      frequencyPeriod: input.frequencyPeriod ?? null,
       planningMode: input.planningMode ?? 'ROTATION',
       minCount: input.minCount ?? null,
       maxCount: input.maxCount ?? null,
@@ -379,7 +398,7 @@ export async function updateCategoryServicePolicy(
   id: string,
   patch: Partial<Pick<CategoryServicePolicyCreateInput,
     'categoryId' | 'serviceId' | 'eligible' | 'active' | 'frequencyTarget' | 'frequencyCounting' |
-    'frequencyKind' | 'planningMode' | 'minCount' | 'maxCount' | 'requireAll'>>,
+    'frequencyKind' | 'frequencyPeriod' | 'planningMode' | 'minCount' | 'maxCount' | 'requireAll'>>,
 ): Promise<CategoryServicePolicyView> {
   const r = await prisma.categoryServicePolicy.update({ where: { id }, data: patch });
   return toPolicyView(r);
@@ -491,7 +510,7 @@ export async function createProtocolServiceRule(input: ProtocolServiceRuleCreate
       teamSizeOverridesJson: stringifyJson(input.teamSizeOverrides),
       requireChoir: input.requireChoir ?? true,
       requireWorship: input.requireWorship ?? true,
-      relaxableKindsJson: stringifyJson(input.relaxableKinds),
+      relaxableKindsJson: stringifyJson(input.relaxableKinds ?? []),
       active: input.active ?? true,
       configVersionId: input.configVersionId ?? null,
       effectiveFrom: input.effectiveFrom ? new Date(input.effectiveFrom) : new Date(),
@@ -667,6 +686,7 @@ export function toPolicyView(r: any): CategoryServicePolicyView {
     eligible: r.eligible, frequencyTarget: r.frequencyTarget,
     frequencyCounting: r.frequencyCounting as FrequencyCounting,
     frequencyKind: r.frequencyKind as FrequencyKind,
+    frequencyPeriod: r.frequencyPeriod as FrequencyPeriod | null,
     planningMode: r.planningMode as PlanningMode,
     minCount: r.minCount, maxCount: r.maxCount, requireAll: r.requireAll,
     configVersionId: r.configVersionId,

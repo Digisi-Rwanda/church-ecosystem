@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { schedulingError } from "./schedulingForms";
+import { useRef, useState } from 'react';
 import {
   answerProtocolFillIn, answerProtocolSwap, decideProtocolAbsence, fetchProtocolMine, fetchProtocolServiceReport, markProtocolAttendance, offerProtocolFillIn, proposeProtocolSwap,
   requestProtocolAbsence, saveProtocolServiceReport, type ProtocolAttendanceStatus, type ProtocolLeading, type ProtocolMine, type ProtocolReportParts,
@@ -111,14 +112,17 @@ export function ProtocolMinePage() {
   const { locale } = useI18n();
   const data = useLoad(fetchProtocolMine, 'protocol-mine');
   const [error, setError] = useState('');
+  const actionLock = useRef(false);
   const [reasons, setReasons] = useState<Record<string, string>>({});
   const [asking, setAsking] = useState('');
   const [swapService, setSwapService] = useState('');
   const [swapTarget, setSwapTarget] = useState('');
-  const fail = (err: unknown) => setError(t(protocolErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+  const fail = (err: unknown) => setError(schedulingError(err) ?? t(protocolErrorKey(errorCode(err)) as 'door.people.actionFailed'));
   const act: Act = (job) => {
+    if (actionLock.current) return;
+    actionLock.current = true;
     setError('');
-    job().then(() => data.reload()).catch(fail);
+    job().then(() => data.reload()).catch(fail).finally(() => { actionLock.current = false; });
   };
   const today = new Date().toISOString().slice(0, 10);
   const dayName = (iso: string) => new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeZone: 'UTC' }).format(new Date(`${iso}T00:00:00Z`));
@@ -164,6 +168,7 @@ export function ProtocolMinePage() {
                         <strong>{dayName(d.date)}</strong>
                         <span className="door-chip">{t(`door.music.kind.${d.kind}` as 'door.music.kind.SS1')}</span>
                         {d.role !== 'MEMBER' && <span className="door-chip">{t(`door.protocol.role.${d.role}` as 'door.protocol.role.MEMBER')}</span>}
+                        {d.slotKind === 'FILL_IN' && <span className="door-chip">{t('door.protocol.slot.FILL_IN')}</span>}
                         {d.attendance && <span className="door-chip">{t(`door.protocol.att.${d.attendance}` as 'door.protocol.att.PRESENT')}</span>}
                         {d.absence && <span className="door-chip">{t(`door.protocol.absence.${d.absence}` as 'door.protocol.absence.PENDING')}</span>}
                       </div>

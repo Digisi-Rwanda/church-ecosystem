@@ -1,3 +1,4 @@
+import { lazy } from 'react';
 import { Navigate, Route } from 'react-router-dom';
 import {
   AccessPage,
@@ -63,12 +64,12 @@ import {
   WorkPage,
 } from './pages';
 import { DoorSchedulingConfigPage } from './pages';
-import { GovernanceLayout } from './GovernanceLayout';
+const GovernanceLayout = lazy(() => import('./GovernanceLayout').then(m => ({ default: m.GovernanceLayout })));
 import { NewDesignLayout, RequireSignedIn } from './NewDesignGuards';
-import { NewSignInPage } from './NewSignInPage';
-import { PeopleLayout } from './PeopleLayout';
+const NewSignInPage = lazy(() => import('./NewSignInPage').then(m => ({ default: m.NewSignInPage })));
+const PeopleLayout = lazy(() => import('./PeopleLayout').then(m => ({ default: m.PeopleLayout })));
 import { PortalLayout } from './PortalLayout';
-import { SystemFrame } from './SystemFrame';
+const SystemFrame = lazy(() => import('./SystemFrame').then(m => ({ default: m.SystemFrame })));
 
 
 /**

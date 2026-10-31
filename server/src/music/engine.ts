@@ -7,6 +7,8 @@ import type {
   MusicServiceKind,
   MusicServiceSlot,
 } from './types.js';
+import { frequencyBucket, monthsInFrequencyBucket } from '../scheduling/musicConfigRules.js';
+import type { FrequencyPeriod } from '../scheduling/types.js';
 import { MUSIC_SERVICE_LABELS } from './types.js';
 import type {
   CategoryServicePolicyView,
@@ -77,7 +79,7 @@ function nid(prefix: string): string {
 export function buildMusicCalendar(
   startMonthKey: string,
   horizon: MusicHorizon = 'MONTH',
-  configServices?: readonly Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired'>[],
+  configServices?: readonly Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired' | 'maxChoirs'>[],
 ): MusicServiceSlot[] {
   if (configServices) return buildConfiguredMusicCalendar(startMonthKey, horizon, configServices);
   const services: MusicServiceSlot[] = [];
@@ -162,20 +164,18 @@ export function buildMusicCalendar(
 function buildConfiguredMusicCalendar(
   startMonthKey: string,
   horizon: MusicHorizon,
-  configServices: readonly Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired'>[],
+  configServices: readonly Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired' | 'maxChoirs'>[],
 ): MusicServiceSlot[] {
-  const kindByCode: Record<string, MusicServiceKind> = {
-    ss1: 'SS1', ss2: 'SS2', tuesday: 'TUESDAY', friday: 'FRIDAY', igaburo: 'IGABURO',
-  };
   const enabled = configServices.filter((service) => service.active);
-  const unsupported = enabled.find((service) => !kindByCode[service.code.toLowerCase()]);
-  if (unsupported) throw new Error(`Unsupported scheduling service code: ${unsupported.code}`);
+  const duplicate = enabled.find((service, index) =>
+    enabled.findIndex((candidate) => candidate.code.toLowerCase() === service.code.toLowerCase()) !== index);
+  if (duplicate) throw new Error(`The service code ${duplicate.code} is duplicated in this configuration.`);
   const slots: MusicServiceSlot[] = [];
   for (const periodKey of periodKeysForHorizon(startMonthKey, horizon)) {
     const [year, month] = periodKey.split('-').map(Number);
     const days = daysInMonth(year, month);
     for (const service of enabled) {
-      const kind = kindByCode[service.code.toLowerCase()];
+      const kind = service.code.toUpperCase();
       const dates = new Set<string>();
       if (service.recurrence === 'SELECTED_DATES' || service.recurrence === 'CUSTOM') {
         for (const date of service.selectedDates) if (date.startsWith(`${periodKey}-`)) dates.add(date);
@@ -213,6 +213,7 @@ function buildConfiguredMusicCalendar(
           id: stableServiceId(date, kind), periodKey, date, kind,
           label: `${service.name} · ${date}`, time: service.time,
           musicRequired: service.musicRequired, protocolRequired: service.protocolRequired,
+          maxChoirs: service.maxChoirs,
         });
       }
     }
@@ -223,14 +224,8 @@ function buildConfiguredMusicCalendar(
 }
 
 function kindOrder(k: MusicServiceKind): number {
-  const o: Record<MusicServiceKind, number> = {
-    SS1: 0,
-    SS2: 1,
-    TUESDAY: 2,
-    FRIDAY: 3,
-    IGABURO: 4,
-  };
-  return o[k];
+  const order: Record<string, number> = { SS1: 0, SS2: 1, TUESDAY: 2, FRIDAY: 3, IGABURO: 4 };
+  return order[k] ?? 10;
 }
 
 type Rng = () => number;
@@ -813,24 +808,30 @@ export function validateSchedule(
   const activeWorship = activeMusicUnits('WORSHIP', units);
 
   // Every assigned choir must exist in the catalog (active or retired).
+  const serviceChoirKeys = new Set<string>();
   for (const a of assignments) {
     if (!unitById.has(a.unitId)) {
       return { ok: false, warnings, reason: `Unknown choir ${a.unitId}` };
     }
+    const key = `${a.serviceId}|${a.unitId}`;
+    if (serviceChoirKeys.has(key)) {
+      return { ok: false, warnings, reason: `${nameOf(a.unitId)} can be assigned only once to the same service.` };
+    }
+    serviceChoirKeys.add(key);
   }
 
-  // Max 3 choirs on main
+  // Use the capacity stored with the service occurrence; keep three only for legacy calendars.
   for (const s of services) {
-    const units = byService[s.id] ?? [];
-    if (s.kind === 'SS1' || s.kind === 'SS2') {
-      if (units.length > MAX_CHOIRS_PER_MAIN_SERVICE) {
-        return {
-          ok: false,
-          warnings,
-          reason: `${s.label} has more than ${MAX_CHOIRS_PER_MAIN_SERVICE} choirs`,
-        };
-      }
+    const serviceAssignments = byService[s.id] ?? [];
+    const maxChoirs = s.maxChoirs ?? MAX_CHOIRS_PER_MAIN_SERVICE;
+    if (serviceAssignments.length > maxChoirs) {
+      return {
+        ok: false,
+        warnings,
+        reason: `${s.label} has ${serviceAssignments.length} choirs; the maximum is ${maxChoirs}.`,
+      };
     }
+    const units = serviceAssignments;
     if (s.kind === 'TUESDAY') {
       const choirs = units.filter(
         (u) => unitById.get(u.unitId)?.kind !== 'WORSHIP',
@@ -1079,29 +1080,61 @@ export function validateConfigPolicies(input: {
   categories: ChoirCategoryView[];
   serviceByCode: Map<string, SchedulingServiceView>;
   choirLinks?: Map<string, string[]>;
+  choirEligibilityOverrides?: Map<string, Record<string, unknown>>;
 }): { ok: boolean; warnings: string[]; reason?: string } {
   const warnings: string[] = [];
   const byService = groupBy(input.assignments, (a) => a.serviceId);
-  const frequencyCounts = new Map<string, { assignments: number; dates: Set<string> }>();
+  const frequencyCounts = new Map<string, Map<string, { assignments: number; dates: Set<string> }>>();
   const serviceConfigs = [...input.serviceByCode.values()];
-  const categoriesByUnit = new Map(input.units.map((unit) => {
-    const linked = input.choirLinks?.get(unit.id);
-    const categoryIds = linked?.length
-      ? linked
-      : input.categories.filter((category) => category.code === unit.kind).map((category) => category.id);
-    return [unit.id, categoryIds];
-  }));
+  const categoriesByUnit = input.choirLinks ?? new Map<string, string[]>();
+  const unitById = new Map(input.units.map((unit) => [unit.id, unit]));
+  const linkCountByUnit = new Map<string, number>();
+  for (const [unitId, categoryIds] of categoriesByUnit) {
+    linkCountByUnit.set(unitId, categoryIds.length);
+  }
+  const seenAssignments = new Set<string>();
+
+  for (const assignment of input.assignments) {
+    const key = `${assignment.serviceId}|${assignment.unitId}`;
+    if (seenAssignments.has(key)) {
+      return { ok: false, warnings, reason: `${unitById.get(assignment.unitId)?.name ?? assignment.unitId} can be assigned only once to the same service.` };
+    }
+    seenAssignments.add(key);
+    if (linkCountByUnit.get(assignment.unitId) !== 1) {
+      return {
+        ok: false,
+        warnings,
+        reason: `${unitById.get(assignment.unitId)?.name ?? assignment.unitId} needs exactly one explicit choir-category link before it can be scheduled.`,
+      };
+    }
+  }
 
   for (const serviceSlot of input.services) {
     const serviceConfig = input.serviceByCode.get(serviceSlot.kind);
     if (!serviceConfig) continue;
     const assignedAssignments = byService[serviceSlot.id] ?? [];
+    const distinctAssigned = new Set(assignedAssignments.map((assignment) => assignment.unitId));
+    if (distinctAssigned.size > serviceConfig.maxChoirs) {
+      return {
+        ok: false,
+        warnings,
+        reason: `${serviceSlot.label} has ${distinctAssigned.size} choirs; the maximum is ${serviceConfig.maxChoirs}.`,
+      };
+    }
     for (const category of input.categories) {
       const assigned = assignedAssignments
         .filter((assignment) => categoriesByUnit.get(assignment.unitId)?.includes(category.id))
         .map((assignment) => assignment.unitId);
-      const policy = servicePolicyFor(serviceConfig.code, category.code, input.policies, input.categories, serviceConfigs);
-      if (!policy.eligible && assigned.length) {
+      const policy = servicePolicyFor(serviceSlot.kind, category.code, input.policies, input.categories, serviceConfigs);
+      const configPolicy = input.policies.find((row) =>
+        row.active && row.categoryId === category.id && row.serviceId === serviceConfig.id);
+      const ineligibleAssignment = assigned.find((unitId) => {
+        const overrides = input.choirEligibilityOverrides?.get(unitId);
+        const key = overrides && Object.keys(overrides).find((code) => code.toLowerCase() === serviceConfig.code.toLowerCase());
+        const override = key === undefined ? undefined : overrides?.[key];
+        return typeof override === 'boolean' ? !override : !policy.eligible;
+      });
+      if (ineligibleAssignment) {
         return { ok: false, warnings, reason: `${category.code} is not eligible for ${serviceSlot.label}` };
       }
       if (policy.maxCount !== null && assigned.length > policy.maxCount) {
@@ -1111,35 +1144,64 @@ export function validateConfigPolicies(input: {
         return { ok: false, warnings, reason: `${serviceSlot.label}: ${category.code} has ${assigned.length}, min ${policy.minCount}` };
       }
       if (policy.requireAll) {
-        const active = input.units.filter((unit) =>
-          unit.active !== false && categoriesByUnit.get(unit.id)?.includes(category.id));
+        const active = input.units.filter((unit) => {
+          if (unit.active === false || !categoriesByUnit.get(unit.id)?.includes(category.id)) return false;
+          const overrides = input.choirEligibilityOverrides?.get(unit.id) ?? {};
+          const key = Object.keys(overrides).find((code) => code.toLowerCase() === serviceConfig.code.toLowerCase());
+          const override = key === undefined ? undefined : overrides[key];
+          return typeof override === 'boolean' ? override : policy.eligible;
+        });
         const missing = active.filter((unit) => !assigned.includes(unit.id));
         if (missing.length) {
-          warnings.push(`${serviceSlot.date}: ${category.code} ${missing.map((unit) => unit.name).join(', ')} missing (requireAll)`);
+          return {
+            ok: false,
+            warnings,
+            reason: `${serviceSlot.date}: ${category.code} requires every eligible linked choir; missing ${missing.map((unit) => unit.name).join(', ')}.`,
+          };
         }
       }
-      const configPolicy = input.policies.find((row) =>
-        row.active && row.categoryId === category.id && row.serviceId === serviceConfig.id);
       if (configPolicy?.frequencyTarget !== null && configPolicy?.frequencyTarget !== undefined) {
-        const totals = frequencyCounts.get(configPolicy.id) ?? { assignments: 0, dates: new Set<string>() };
+        const period = configPolicy.frequencyPeriod;
+        if (!period || !['MONTH', 'QUARTER', 'HALF_YEAR', 'YEAR'].includes(period)) {
+          return { ok: false, warnings, reason: `${category.name} needs a valid frequency period before this schedule can be checked.` };
+        }
+        const bucket = frequencyBucket(serviceSlot.periodKey, period as FrequencyPeriod);
+        const policyBuckets = frequencyCounts.get(configPolicy.id) ?? new Map<string, { assignments: number; dates: Set<string> }>();
+        const totals = policyBuckets.get(bucket) ?? { assignments: 0, dates: new Set<string>() };
         totals.assignments += assigned.length;
         if (assigned.length) totals.dates.add(serviceSlot.date);
-        frequencyCounts.set(configPolicy.id, totals);
+        policyBuckets.set(bucket, totals);
+        frequencyCounts.set(configPolicy.id, policyBuckets);
       }
     }
   }
+  const periodMonths = [...new Set(input.services.map((service) => service.periodKey))];
   for (const policy of input.policies) {
-    if (!policy.active || policy.frequencyTarget === null) continue;
-    const totals = frequencyCounts.get(policy.id) ?? { assignments: 0, dates: new Set<string>() };
-    const count = policy.frequencyCounting === 'DISTINCT_DATES' ? totals.dates.size : totals.assignments;
-    if (policy.frequencyKind === 'MINIMUM' && count < policy.frequencyTarget) {
-      return { ok: false, warnings, reason: `Frequency minimum for ${policy.categoryId} is ${policy.frequencyTarget}; found ${count}` };
-    }
-    if (policy.frequencyKind === 'MAXIMUM' && count > policy.frequencyTarget) {
-      return { ok: false, warnings, reason: `Frequency maximum for ${policy.categoryId} is ${policy.frequencyTarget}; found ${count}` };
-    }
-    if (policy.frequencyKind === 'TARGET' && count !== policy.frequencyTarget) {
-      warnings.push(`Frequency target for ${policy.categoryId} is ${policy.frequencyTarget}; found ${count}`);
+    if (!policy.active || policy.frequencyTarget === null || policy.frequencyTarget === undefined) continue;
+    const period = policy.frequencyPeriod;
+    if (!period || !['MONTH', 'QUARTER', 'HALF_YEAR', 'YEAR'].includes(period)) continue;
+    const buckets = [...new Set(periodMonths.map((month) => frequencyBucket(month, period as FrequencyPeriod)))];
+    const totalsByBucket = frequencyCounts.get(policy.id) ?? new Map<string, { assignments: number; dates: Set<string> }>();
+    for (const bucket of buckets) {
+      const requiredMonths = monthsInFrequencyBucket(bucket, period as FrequencyPeriod);
+      if (requiredMonths.some((month) => !periodMonths.includes(month))) {
+        return {
+          ok: false,
+          warnings,
+          reason: `The schedule must include the complete ${period.toLowerCase().replace('_', '-')} period (${requiredMonths[0]} to ${requiredMonths.at(-1)}) to check this frequency rule.`,
+        };
+      }
+      const totals = totalsByBucket.get(bucket) ?? { assignments: 0, dates: new Set<string>() };
+      const count = policy.frequencyCounting === 'DISTINCT_DATES' ? totals.dates.size : totals.assignments;
+      if (policy.frequencyKind === 'MINIMUM' && count < policy.frequencyTarget) {
+        return { ok: false, warnings, reason: `Frequency minimum for ${policy.categoryId} is ${policy.frequencyTarget} in ${bucket}; found ${count}` };
+      }
+      if (policy.frequencyKind === 'MAXIMUM' && count > policy.frequencyTarget) {
+        return { ok: false, warnings, reason: `Frequency maximum for ${policy.categoryId} is ${policy.frequencyTarget} in ${bucket}; found ${count}` };
+      }
+      if (policy.frequencyKind === 'TARGET' && count !== policy.frequencyTarget) {
+        warnings.push(`Frequency target for ${policy.categoryId} is ${policy.frequencyTarget} in ${bucket}; found ${count}`);
+      }
     }
   }
   return { ok: true, warnings };

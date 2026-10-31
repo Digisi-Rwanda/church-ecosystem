@@ -8,7 +8,7 @@ import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
-import { loadProtocolConfig } from '../scheduling/configLoader.js';
+import { loadMusicConfig, loadProtocolConfig } from '../scheduling/configLoader.js';
 import { notifySafely } from '../lib/notify.js';
 import { officeOf } from '../lib/offices.js';
 import { getPlanned, loadChoirs } from '../music/store.js';
@@ -40,6 +40,7 @@ interface PlanRow {
   reviewedAt?: Date | string | null; reviewedById?: string | null; publishedAt?: Date | string | null; publishedById?: string | null; musicVersionBuiltOn?: number | null;
   musicSnapshotJson?: string | null; musicStaleNotified?: boolean; overridesJson: string; relaxTuesday: boolean; relaxReason?: string | null; relaxedById?: string | null; relaxedAt?: Date | string | null;
   configVersionId?: string | null;
+  musicConfigVersionId?: string | null;
 }
 interface SlotRow { id: string; monthKey: string; serviceId: string; personId: string; source: string; role: string; recommendedRole?: string | null; roleStatus?: string | null; slotKind: string; replacedPersonId?: string | null }
 interface PersonRow { id: string; fullName: string; status?: string; archivedAt?: Date | string | null }
@@ -98,13 +99,44 @@ const serviceId = (musicId: string) => `${SERVICE_PREFIX}${musicId}`;
 const monthOfService = (sid: string) => /(\d{4}-\d{2})-\d{2}/.exec(sid)?.[1] ?? '';
 const snapKey = (date: string, kind: string) => `${date}|${kind}`;
 
+async function publishedHistoryLoad(excludeMonth: string): Promise<Map<string, number>> {
+  const rows = (await prisma.protocolHistory.findMany()) as Array<{
+    monthKey: string; version: number; slotsJson: string;
+  }>;
+  const latest = new Map<string, typeof rows[number]>();
+  for (const row of rows) {
+    if (row.monthKey === excludeMonth || row.monthKey > excludeMonth) continue;
+    const prior = latest.get(row.monthKey);
+    if (!prior || row.version > prior.version) latest.set(row.monthKey, row);
+  }
+  const load = new Map<string, number>();
+  for (const row of latest.values()) {
+    const counted = new Set<string>();
+    for (const slot of parse<ProtocolTeamSlot[]>(row.slotsJson, [])) {
+      if (slot.slotKind === 'FILL_IN') continue;
+      const key = `${slot.serviceId}|${slot.personId}`;
+      if (counted.has(key)) continue;
+      counted.add(key);
+      load.set(slot.personId, (load.get(slot.personId) ?? 0) + 1);
+    }
+  }
+  return load;
+}
+
 async function monthCtx(month: string) {
   const planned = await getPlanned(month);
   const planRow = ((await prisma.protocolPlan.findMany()) as PlanRow[]).find((p) => p.monthKey === month) ?? null;
   const { rows, members } = await rosterMembers();
   const slotRows = ((await prisma.protocolSlot.findMany()) as SlotRow[]).filter((s) => s.monthKey === month);
-  const choirs = await loadChoirs();
-  const kindById = new Map(choirs.map((c) => [c.id, c.role]));
+  const musicConfigVersionId = planRow?.musicConfigVersionId ?? planned?.configVersionId ?? undefined;
+  const musicConfig = await loadMusicConfig(musicConfigVersionId);
+  const categoryCodeById = new Map(musicConfig.categories.map((category) => [category.id, category.code]));
+  const linksByChoir = new Map<string, string[]>();
+  for (const link of musicConfig.links.filter((row) => row.active)) {
+    const categoryCode = categoryCodeById.get(link.categoryId);
+    if (categoryCode) linksByChoir.set(link.choirId, [...(linksByChoir.get(link.choirId) ?? []), categoryCode]);
+  }
+  const kindById = new Map([...linksByChoir].filter(([, codes]) => codes.length === 1).map(([choirId, codes]) => [choirId, codes[0]!]));
   const choirUnits = new Map<string, Set<string>>();
   for (const m of (await prisma.musicChoirMember.findMany()) as Array<{ choirId: string; personId: string; status: string }>) {
     if (m.status !== 'ACTIVE') continue;
@@ -117,27 +149,43 @@ async function monthCtx(month: string) {
     unitsOnService.get(a.serviceId)!.add(a.unitId);
   }
   // Load the active scheduling configuration (Phase 3 integration).
-  const protocolConfig = await loadProtocolConfig(planRow?.configVersionId ?? undefined, planned?.configVersionId ?? undefined);
+  const protocolConfig = await loadProtocolConfig(planRow?.configVersionId ?? undefined, musicConfigVersionId);
+  const unsupportedServices = (planned?.services ?? [])
+    .filter((service) => service.protocolRequired !== false && !(KINDS as readonly string[]).includes(service.kind))
+    .map((service) => service.kind);
   const services: ProtocolService[] = (planned?.services ?? [])
-    .filter((s) => s.protocolRequired !== false && (KINDS as readonly string[]).includes(s.kind))
+    .filter((service) => {
+      if (service.protocolRequired === false || !(KINDS as readonly string[]).includes(service.kind)) return false;
+      const definition = protocolConfig.services.find((row) => row.code.toUpperCase() === service.kind.toUpperCase());
+      const rule = definition && protocolConfig.rules.find((row) => row.serviceId === definition.id);
+      return rule?.required ?? true;
+    })
     .map((s) => {
-      // Use configured target team size when available; fall back to 10.
-      const cfg = protocolConfig.services.find((cs) => cs.code === s.kind);
-      const rule = protocolConfig.rules.find((r) => r.serviceId === cfg?.id);
-      return {
+      const service: ProtocolService = {
         id: serviceId(s.id), musicServiceId: s.id, monthKey: month, date: s.date,
         kind: s.kind as ProtocolServiceKind, label: s.label, time: s.time ?? null,
-        targetTeamSize: rule?.teamSizeOverrides[s.date] ?? rule?.defaultTeamSize ?? 10,
+        targetTeamSize: 10,
+      };
+      return {
+        ...service,
+        targetTeamSize: targetTeamSizeFor(service, protocolConfig.services, protocolConfig.rules),
       };
     })
     .sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
+  const missingProtocolRules = services
+    .filter((service) => {
+      const definition = protocolConfig.services.find((row) => row.code.toUpperCase() === service.kind.toUpperCase());
+      return !definition || !protocolConfig.rules.some((row) => row.serviceId === definition.id);
+    })
+    .map((service) => service.label);
   const rules = buildRulesFromConfig(
     protocolConfig.rules,
     protocolConfig.dutyPolicy,
     planRow?.relaxTuesday ?? false,
     protocolConfig.services,
   );
-  return { month, planned, planRow, protocolConfig, rosterRows: rows, roster: members, slotRows, slots: slotRows.map(slotOf), services, rules, choirUnits, unitsOnService, kindOf: (u: string) => kindById.get(u) };
+  const historyLoad = await publishedHistoryLoad(month);
+  return { month, planned, planRow, protocolConfig, musicConfig, musicConfigVersionId, unsupportedServices, missingProtocolRules, historyLoad, rosterRows: rows, roster: members, slotRows, slots: slotRows.map(slotOf), services, rules, choirUnits, unitsOnService, kindOf: (u: string) => kindById.get(u) };
 }
 type Ctx = Awaited<ReturnType<typeof monthCtx>>;
 
@@ -158,21 +206,39 @@ const snapshotOf = (c: Ctx) => {
 };
 function staleOf(c: Ctx): string[] {
   const base = parse<Record<string, string[]> | null>(c.planRow?.musicSnapshotJson, null);
-  if (!base) return [];
-  const now = snapshotOf(c);
   const out: string[] = [];
-  for (const k of new Set([...Object.keys(base), ...Object.keys(now)])) {
-    if (JSON.stringify(base[k] ?? null) !== JSON.stringify(now[k] ?? null)) out.push(k);
+  if (base) {
+    const now = snapshotOf(c);
+    for (const k of new Set([...Object.keys(base), ...Object.keys(now)])) {
+      if (JSON.stringify(base[k] ?? null) !== JSON.stringify(now[k] ?? null)) out.push(k);
+    }
+  }
+  if (c.planRow?.musicConfigVersionId &&
+      c.planned?.configVersionId &&
+      c.planRow.musicConfigVersionId !== c.planned.configVersionId) {
+    out.push('MUSIC_CONFIGURATION_VERSION_CHANGED');
+  }
+  if (c.planRow && c.planRow.status !== 'OPEN' && !c.planRow.musicConfigVersionId) {
+    out.push('MUSIC_CONFIGURATION_VERSION_UNPINNED');
   }
   return out.sort();
 }
 
-async function ensurePlan(month: string, configVersionId?: string | null): Promise<PlanRow> {
+async function ensurePlan(
+  month: string,
+  configVersionId?: string | null,
+  musicConfigVersionId?: string | null,
+): Promise<PlanRow> {
   const found = ((await prisma.protocolPlan.findMany()) as PlanRow[]).find((p) => p.monthKey === month);
   if (found) {
-    if (!found.configVersionId && configVersionId) {
+    if (found.status === 'OPEN' && ((!found.configVersionId && configVersionId) || (!found.musicConfigVersionId && musicConfigVersionId))) {
       return (await prisma.protocolPlan.update({
-        where: { id: found.id }, data: { configVersionId, updatedAt: new Date() },
+        where: { id: found.id },
+        data: {
+          ...(!found.configVersionId && configVersionId ? { configVersionId } : {}),
+          ...(!found.musicConfigVersionId && musicConfigVersionId ? { musicConfigVersionId } : {}),
+          updatedAt: new Date(),
+        },
       })) as PlanRow;
     }
     return found;
@@ -180,7 +246,9 @@ async function ensurePlan(month: string, configVersionId?: string | null): Promi
   const config = await loadProtocolConfig();
   return (await prisma.protocolPlan.create({ data: {
     monthKey: month, status: 'OPEN', version: 0, notesJson: '[]', overridesJson: '[]',
-    configVersionId: configVersionId ?? config.version?.id ?? null, updatedAt: new Date(),
+    configVersionId: configVersionId ?? config.version?.id ?? null,
+    musicConfigVersionId: musicConfigVersionId ?? null,
+    updatedAt: new Date(),
   } })) as PlanRow;
 }
 const setPlan = async (id: string, data: Record<string, unknown>) => prisma.protocolPlan.update({ where: { id }, data: { ...data, updatedAt: new Date() } });
@@ -196,7 +264,11 @@ function whyNot(c: Ctx, svc: ProtocolService, personId: string, ignoreSlotId?: s
   if (!canServeKind(m, svc.kind, svc.date) || m.unavailableDates.includes(svc.date)) return 'CANNOT_SERVE';
   const svcById = new Map(c.services.map((s) => [s.id, s]));
   const sunday = (k: string) => k === 'SS1' || k === 'SS2';
-  if (sunday(svc.kind) && others.some((s) => s.personId === personId && s.slotKind !== 'FILL_IN' && svcById.get(s.serviceId)?.date === svc.date && sunday(svcById.get(s.serviceId)!.kind))) return 'DOUBLE_SUNDAY';
+  if (!c.rules.duplicateSameDayAllowed && sunday(svc.kind) &&
+      others.some((s) => s.personId === personId && s.slotKind !== 'FILL_IN' &&
+        svcById.get(s.serviceId)?.date === svc.date && sunday(svcById.get(s.serviceId)!.kind))) {
+    return 'DOUBLE_SUNDAY';
+  }
   if (others.filter((s) => s.personId === personId && s.slotKind === 'REGULAR' || s.personId === personId && s.slotKind === 'EXTRA').length >= c.rules.hardMax) return 'OVER_MAX';
   return null;
 }
@@ -352,7 +424,8 @@ protocolRouter.get('/months/:month', requireAuth, async (req: AuthedRequest, res
   for (const s of c.slots) if (s.slotKind !== 'FILL_IN') count.set(s.personId, (count.get(s.personId) ?? 0) + 1);
   const status = c.planRow?.status ?? 'OPEN';
   res.json({
-    month, step: stepOf(c), status, version: c.planRow?.version ?? 0, music: planned ? { state: planned.state, version: planned.version } : null,
+    month, step: stepOf(c), status, version: c.planRow?.version ?? 0, music: planned ? { state: planned.state, version: planned.version, configVersionId: planned.configVersionId ?? null } : null,
+    configVersionId: c.planRow?.configVersionId ?? null, musicConfigVersionId: c.musicConfigVersionId ?? null,
     builtOnMusicVersion: c.planRow?.musicVersionBuiltOn ?? null, stale, notes: parse<string[]>(c.planRow?.notesJson, []),
     relax: { tuesday: c.planRow?.relaxTuesday ?? false, reason: c.planRow?.relaxReason ?? null },
     rules: { target: c.rules.preferTarget, hardMax: c.rules.hardMax, teamSize: c.rules.defaultTeamSize },
@@ -364,7 +437,7 @@ protocolRouter.get('/months/:month', requireAuth, async (req: AuthedRequest, res
     })),
     issues: issues.map((i) => ({ key: i.key, code: i.code, severity: i.severity, message: i.message, serviceId: i.serviceId ?? null, personId: i.personId ?? null, overridden: i.overridden, canOverride: i.canOverride })),
     overrides: overridesOf(c),
-    roster: c.roster.filter((r) => r.status === 'ACTIVE').map((r) => ({ personId: r.personId, name: nm.get(r.personId) ?? r.personId, load: count.get(r.personId) ?? 0 })).sort((a, b) => a.name.localeCompare(b.name)),
+    roster: c.roster.filter((r) => r.status === 'ACTIVE').map((r) => ({ personId: r.personId, name: nm.get(r.personId) ?? r.personId, load: count.get(r.personId) ?? 0, previousDuties: c.historyLoad.get(r.personId) ?? 0 })).sort((a, b) => a.name.localeCompare(b.name)),
     can: {
       build: isCoordinator(g.me, g.data) && editable(c.planRow) && !!planned,
       edit: isCoordinator(g.me, g.data) && editable(c.planRow),
@@ -394,10 +467,21 @@ async function generateMonth(req: AuthedRequest, res: Res, g: { me: string }, mo
   void req;
   const c = await monthCtx(month);
   if (!needMusic(c, res)) return;
+  if (!c.protocolConfig.version) return fail(res, 409, 'NO_PROTOCOL_CONFIG', 'Activate a Protocol configuration version before building teams.');
+  if (!c.musicConfigVersionId) return fail(res, 409, 'NO_MUSIC_CONFIG', 'The Music schedule has no pinned configuration version. Rebuild it from a versioned Music draft first.');
+  if (c.unsupportedServices.length) {
+    return fail(res, 409, 'UNSUPPORTED_SERVICE', `Protocol is enabled for unsupported service codes: ${c.unsupportedServices.join(', ')}. Update the Protocol service rules before building teams.`);
+  }
+  if (c.missingProtocolRules.length) {
+    return fail(res, 409, 'PROTOCOL_RULE_MISSING', `Add Protocol team rules for: ${c.missingProtocolRules.join(', ')}.`);
+  }
   if (!editable(c.planRow)) return fail(res, 409, 'LOCKED', 'Return the month to draft first');
   const active = c.roster.filter((r) => r.status === 'ACTIVE');
   if (!active.length) return fail(res, 409, 'NO_ROSTER', 'Add people to the roster first');
-  const { slots, warnings } = buildProtocolTeams({ services: c.services, roster: active, rules: c.rules, choirUnits: c.choirUnits, unitsOnService: c.unitsOnService, kindOf: c.kindOf });
+  const { slots, warnings } = buildProtocolTeams({
+    services: c.services, roster: active, rules: c.rules, choirUnits: c.choirUnits,
+    unitsOnService: c.unitsOnService, kindOf: c.kindOf, historyLoad: c.historyLoad,
+  });
   await prisma.protocolSlot.deleteMany({ where: { monthKey: month } });
   for (const s of slots) {
     await prisma.protocolSlot.create({
@@ -407,11 +491,12 @@ async function generateMonth(req: AuthedRequest, res: Res, g: { me: string }, mo
       },
     });
   }
-  const plan = await ensurePlan(month, c.protocolConfig.version?.id);
+  const plan = await ensurePlan(month, c.protocolConfig.version.id, c.musicConfigVersionId);
   await setPlan(plan.id, {
     status: 'DRAFT', generatedAt: new Date(), notesJson: JSON.stringify(warnings), musicVersionBuiltOn: c.planned!.version,
     musicSnapshotJson: JSON.stringify(snapshotOf(c)), musicStaleNotified: false, overridesJson: '[]', submittedAt: null, submittedById: null,
     configVersionId: c.protocolConfig.version?.id ?? null,
+    musicConfigVersionId: c.musicConfigVersionId,
   });
   await audit(g.me, 'PROTOCOL_TEAMS_BUILT', `Built the teams for ${month}`, { month, slots: slots.length });
   res.json({ ok: true, slots: slots.length });
@@ -431,9 +516,9 @@ protocolRouter.post('/months/:month/slots', requireAuth, async (req: AuthedReque
   if (!svc) return fail(res, 404, 'NO_SERVICE', 'No such service');
   const why = whyNot(c, svc, parsed.data.personId);
   if (why) return fail(res, 409, why, 'This person cannot be put on that service');
-  await ensurePlan(month, c.protocolConfig.version?.id);
+  await ensurePlan(month, c.protocolConfig.version?.id, c.musicConfigVersionId);
   await prisma.protocolSlot.create({ data: { monthKey: month, serviceId: svc.id, personId: parsed.data.personId, source: 'MANUAL', role: 'MEMBER', slotKind: monthlyLoad(c, parsed.data.personId) >= c.rules.softMax ? 'EXTRA' : 'REGULAR' } });
-  const plan = await ensurePlan(month, c.protocolConfig.version?.id);
+  const plan = await ensurePlan(month, c.protocolConfig.version?.id, c.musicConfigVersionId);
   if (plan.status === 'OPEN') await setPlan(plan.id, { status: 'DRAFT' });
   await audit(g.me, 'PROTOCOL_SLOT_ADD', `Added ${parsed.data.personId} to ${svc.label}`, { month, serviceId: svc.id, personId: parsed.data.personId });
   res.status(201).json({ ok: true });
@@ -514,7 +599,7 @@ protocolRouter.post('/months/:month/overrides', requireAuth, async (req: AuthedR
   if (!issue) return fail(res, 404, 'NOT_FOUND', 'No such issue');
   if (!issue.canOverride) return fail(res, 409, 'NOT_OVERRIDABLE', 'Only the Music clashes can be overridden');
   const next = [...overridesOf(c).filter((o) => o.issueKey !== issue.key), { issueKey: issue.key, reason: parsed.data.reason, byPersonId: g.me, at: new Date().toISOString() }];
-  await setPlan((await ensurePlan(month, c.protocolConfig.version?.id)).id, { overridesJson: JSON.stringify(next) });
+  await setPlan((await ensurePlan(month, c.protocolConfig.version?.id, c.musicConfigVersionId)).id, { overridesJson: JSON.stringify(next) });
   await audit(g.me, 'PROTOCOL_OVERRIDE', `Allowed: ${issue.message}`, { month, key: issue.key, reason: parsed.data.reason });
   res.json({ ok: true });
 });
@@ -527,7 +612,7 @@ protocolRouter.post('/months/:month/relax', requireAuth, async (req: AuthedReque
   if (!parsed.success || (parsed.data.on && (parsed.data.reason ?? '').length < REASON_MIN)) return fail(res, 400, 'REASON', 'Give a reason of at least five characters');
   const c = await monthCtx(month);
   if (!editable(c.planRow)) return fail(res, 409, 'LOCKED', 'Return the month to draft first');
-  const plan = await ensurePlan(month, c.protocolConfig.version?.id);
+  const plan = await ensurePlan(month, c.protocolConfig.version?.id, c.musicConfigVersionId);
   await setPlan(plan.id, parsed.data.on
     ? { relaxTuesday: true, relaxReason: parsed.data.reason, relaxedById: g.me, relaxedAt: new Date() }
     : { relaxTuesday: false, relaxReason: null, relaxedById: null, relaxedAt: null });
@@ -541,6 +626,12 @@ protocolRouter.post('/months/:month/acknowledge-music', requireAuth, async (req:
   if (!g || !month) return;
   const c = await monthCtx(month);
   if (!c.planRow || !c.planned) return fail(res, 409, 'NO_MUSIC', 'Nothing to confirm');
+  if (!c.planRow.musicConfigVersionId) {
+    return fail(res, 409, 'MUSIC_CONFIG_UNPINNED', 'Rebuild the Protocol teams against a versioned Music schedule before acknowledging changes.');
+  }
+  if (c.planned.configVersionId && c.planRow.musicConfigVersionId !== c.planned.configVersionId) {
+    return fail(res, 409, 'MUSIC_CONFIG_CHANGED', 'The Music configuration version changed. Rebuild the Protocol teams before continuing.');
+  }
   await setPlan(c.planRow.id, { musicSnapshotJson: JSON.stringify(snapshotOf(c)), musicVersionBuiltOn: c.planned.version, musicStaleNotified: false });
   res.json({ ok: true });
 });
@@ -551,6 +642,9 @@ protocolRouter.post('/months/:month/submit', requireAuth, async (req: AuthedRequ
   if (!g || !month) return;
   const c = await monthCtx(month);
   if (!c.planRow || c.planRow.status !== 'DRAFT' || !c.slots.length) return fail(res, 409, 'NOT_DRAFT', 'Build the teams first');
+  if (!c.planRow.configVersionId || !c.planRow.musicConfigVersionId) {
+    return fail(res, 409, 'CONFIG_UNPINNED', 'Rebuild the teams from pinned Protocol and Music configuration versions before review.');
+  }
   if (blockingOf(c).length) return fail(res, 409, 'BLOCKING', 'Fix or allow the blocking issues first');
   await setPlan(c.planRow.id, { status: 'REVIEW', submittedAt: new Date(), submittedById: g.me });
   await tellOffice('PRESIDENT', 'WAITING_FOR_ME', `Protocol teams for ${month}`, 'The Coordinator sent the teams for your review.', `protocol:review:${month}:${c.planRow.version}`);
@@ -583,6 +677,9 @@ protocolRouter.post('/months/:month/publish', requireAuth, async (req: AuthedReq
   const presidentActive = c.roster.some((r) => r.office === 'PRESIDENT' && r.status === 'ACTIVE');
   if (!mayReview(g.me, g.data, presidentActive)) return fail(res, 403, 'FORBIDDEN', 'Only the President reviews and publishes');
   if (!c.planRow || c.planRow.status !== 'REVIEW') return fail(res, 409, 'NOT_IN_REVIEW', 'Nothing waiting for review');
+  if (!c.planRow.configVersionId || !c.planRow.musicConfigVersionId) {
+    return fail(res, 409, 'CONFIG_UNPINNED', 'This plan has no pinned Protocol and Music configuration versions. Rebuild the teams before publishing.');
+  }
   if (c.planRow.submittedById === g.me) return fail(res, 409, 'SAME_PERSON', 'The reviewer must not be the person who sent it');
   if (!c.planned || c.planned.state !== 'PUBLISHED') return fail(res, 409, 'MUSIC_NOT_PUBLISHED', 'Music must publish the month first');
   if (staleOf(c).length) return fail(res, 409, 'MUSIC_CHANGED', 'Music changed since the teams were built');
@@ -591,6 +688,7 @@ protocolRouter.post('/months/:month/publish', requireAuth, async (req: AuthedReq
   await prisma.protocolHistory.create({ data: {
     monthKey: month, version, publishedAt: new Date(), publishedById: g.me, slotsJson: JSON.stringify(c.slots),
     notesJson: c.planRow.notesJson, configVersionId: c.planRow.configVersionId ?? null,
+    musicConfigVersionId: c.planRow.musicConfigVersionId ?? null,
   } });
   await setPlan(c.planRow.id, { status: 'PUBLISHED', version, reviewedAt: new Date(), reviewedById: g.me, publishedAt: new Date(), publishedById: g.me });
   for (const id of new Set(c.slots.map((s) => s.personId))) await tell(id, 'FOR_INFORMATION', `Your Protocol duties for ${month}`, 'The month is published. Open My duties to see your services.', `protocol:published:${month}:${version}`);
@@ -603,9 +701,16 @@ protocolRouter.get('/months/:month/history', requireAuth, async (req: AuthedRequ
   const g = await gateRead(req, res);
   const month = g && monthParam(req, res);
   if (!g || !month) return;
-  const rows = ((await prisma.protocolHistory.findMany()) as Array<{ monthKey: string; version: number; publishedAt: Date | string; publishedById: string; slotsJson: string; configVersionId?: string | null }>).filter((h) => h.monthKey === month);
+  const rows = ((await prisma.protocolHistory.findMany()) as Array<{
+    monthKey: string; version: number; publishedAt: Date | string; publishedById: string;
+    slotsJson: string; configVersionId?: string | null; musicConfigVersionId?: string | null;
+  }>).filter((h) => h.monthKey === month);
   const nm = await names(rows.map((r) => r.publishedById));
-  res.json({ versions: rows.sort((a, b) => b.version - a.version).map((r) => ({ version: r.version, publishedAt: iso(r.publishedAt), by: nm.get(r.publishedById) ?? r.publishedById, slots: parse<unknown[]>(r.slotsJson, []).length, configVersionId: r.configVersionId ?? null })) });
+  res.json({ versions: rows.sort((a, b) => b.version - a.version).map((r) => ({
+    version: r.version, publishedAt: iso(r.publishedAt), by: nm.get(r.publishedById) ?? r.publishedById,
+    slots: parse<unknown[]>(r.slotsJson, []).length, configVersionId: r.configVersionId ?? null,
+    musicConfigVersionId: r.musicConfigVersionId ?? null,
+  })) });
 });
 
 /* ───────────── Service life: mine, excuses, fill-ins, swaps ───────────── */
@@ -722,7 +827,7 @@ protocolRouter.post('/absences/:id/decide', requireAuth, async (req: AuthedReque
 const sundayDouble = (c: Ctx, svc: ProtocolService, personId: string) => {
   const sunday = (k: string) => k === 'SS1' || k === 'SS2';
   const byId = new Map(c.services.map((s) => [s.id, s]));
-  return sunday(svc.kind) && c.slots.some((s) => s.personId === personId && s.slotKind !== 'FILL_IN' && s.serviceId !== svc.id && byId.get(s.serviceId)?.date === svc.date && sunday(byId.get(s.serviceId)!.kind));
+  return !c.rules.duplicateSameDayAllowed && sunday(svc.kind) && c.slots.some((s) => s.personId === personId && s.slotKind !== 'FILL_IN' && s.serviceId !== svc.id && byId.get(s.serviceId)?.date === svc.date && sunday(byId.get(s.serviceId)!.kind));
 };
 /** The checks the old fill-in and swap flows skipped: roster, days, Music, same-day Sunday, the monthly maximum. */
 function whyCannotTake(c: Ctx, svc: ProtocolService, personId: string, leaving?: string): string | null {
