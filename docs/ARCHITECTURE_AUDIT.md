@@ -38,7 +38,7 @@ Suggestion: introduce a **repository seam** per aggregate. A page asks a hook (`
 | Mission lifecycle (approve, start, close) | `missionService.ts` 2,906 lines | `mission/lifecycle.ts` 767 lines |
 | Finance access | `financeAccess.ts` 121 | `policy/financeAccess.ts` 100 |
 
-The files are not copies (the permissions files differ in 193 lines), so they will drift. One parity test guards grants only; lifecycle has none.
+The files are not copies (the permissions files differ in 193 lines), so they will drift, and in fact had: see section 10. Parity tests now cover grants (about 2,300 synthetic people) and every program transition.
 
 Suggestion: **one rules package, imported by both**. Move the pure rules (no database, no DOM) into a shared workspace package (`packages/rules`) and import it from `src/` and `server/src/`. The server stays the authority; the SPA uses the same functions to decide what to show. This also deletes code. Until then, extend the parity test to lifecycle transitions.
 
@@ -166,3 +166,23 @@ Each step is independently shippable and leaves the tests green.
 | `ErrorBoundary` on every page, lazy-loaded pages | Done |
 | Playwright browser smoke test | Not done: needs a new dependency and a test account on a deployed environment |
 | Postgres service container in CI | Not done: the integration suites use an in-memory database by design; running them on Postgres needs a small adapter |
+
+## 10. Step 3 status (rules that exist twice)
+
+**What was done.** Before merging the two copies, I measured whether they still agree, with two new tests:
+
+- `server/tests/parity.matrix.test.ts`: about 2,300 synthetic people (every system, role, office, membership type, assignment and task window, active and ended) must receive exactly the same grants from the app's engine and the server's.
+- `server/tests/parity.lifecycle.test.ts`: every program operation (submit, approve, start, pause, begin and abandon close) from every starting status must give the same allowed/refused result and end state on both sides.
+
+**What they found** (all fixed, all now guarded):
+
+| Drift | Effect | Fixed on |
+| --- | --- | --- |
+| Deacon Coordinator and President got "assign within Deacon" in the app but not on the server | The assign button would be shown and then refused with 403 | server |
+| The server ignored a task's start and end dates when deciding access | A task not yet started or already ended still granted access (and system entry when flagged) on the server, while the app refused. Too permissive | server |
+| The app let anyone pause a program in any state, including an ENDED one | Re-opened finished programs in the browser; the server already refused | app |
+
+**What was not done, and why.** I did not merge the copies into one shared package. The two sides use different data shapes (the app's 2,041-line types file and browser arrays; the server's minimal types and database rows), so a merge means rewriting both access paths, and the server is deployed from its own folder on Render, so a shared folder changes the build. That is a larger change than it looks and carries real deployment risk. The tests deliver most of the value now: any future change to one copy that is not made in the other fails the build. Revisit the shared package when People moves to the server (roadmap step 4), because both sides get rebuilt then anyway.
+
+**Still unguarded:** event and project lifecycles, and the scope-approval chain. Extend `parity.lifecycle.test.ts` the same way when those are next touched.
+

@@ -14,7 +14,7 @@ export const bearer = (personId: string) => ({ Authorization: `Bearer ${tokenFor
 /** Seeds people + positions so each persona has a known privilege level. */
 export function seedWorld(db: Record<string, any[]>) {
   const add = (m: string, rows: any[]) => db[m].push(...rows);
-  for (const k of ['churchSystem','person','membership','position','fundAccessGrant','workTask','assignment','fund','program','churchEvent','churchProject','auditEvent','missionShare','contribution','eventRegistration','programEnrollment','programActivity'])
+  for (const k of ['churchSystem','person','membership','position','workTask','assignment','program','churchEvent','churchProject','auditEvent','missionShare','contribution','eventRegistration','programEnrollment','programActivity'])
     db[k] ??= [];
   add('churchSystem', SYSTEMS.map((id) => ({ id })));
   const people = ['p-pastor','p-treasurer','p-member','p-outsider','p-choir-leader','p-youth-leader','p-choir-member','p-youth-member'];
@@ -30,15 +30,5 @@ export function seedWorld(db: Record<string, any[]>) {
     { id: 'pos-treas', personId: 'p-treasurer', systemId: 'sys-finance', title: 'Church Treasurer', systemRole: 'CHURCH_TREASURER', grantsAllSystems: false, status: 'ACTIVE', startDate: new Date('2019-01-01') },
     { id: 'pos-choir', personId: 'p-choir-leader', systemId: 'sys-choir', title: 'Choir Leader', ministryOffice: 'PRESIDENT', grantsAllSystems: false, status: 'ACTIVE', startDate: new Date('2021-01-01') },
     { id: 'pos-youth', personId: 'p-youth-leader', systemId: 'sys-youth', title: 'Youth Leader', ministryOffice: 'PRESIDENT', grantsAllSystems: false, status: 'ACTIVE', startDate: new Date('2021-01-01') },
-  ]);
-  add('fund', [
-    { id: 'fund-general', name: 'General', code: 'GEN', kind: 'GENERAL', orgUnitId: 'ou-f', ownerSystemId: 'sys-main', status: 'ACTIVE', currency: 'RWF' },
-    { id: 'fund-choir', name: 'Choir', code: 'CH', kind: 'MINISTRY', orgUnitId: 'ou-c', ownerSystemId: 'sys-choir', status: 'ACTIVE', currency: 'RWF' },
-    { id: 'fund-youth', name: 'Youth', code: 'YT', kind: 'MINISTRY', orgUnitId: 'ou-y', ownerSystemId: 'sys-youth', status: 'ACTIVE', currency: 'RWF' },
-  ]);
-  add('fundAccessGrant', [
-    { id: 'fg1', fundId: 'fund-general', personId: 'p-treasurer', action: 'MANAGE', grantedByPersonId: 'p-pastor', reason: 't', status: 'ACTIVE', startDate: new Date('2019-01-01') },
-    { id: 'fg2', fundId: 'fund-choir', personId: 'p-choir-leader', action: 'MANAGE', grantedByPersonId: 'p-choir-leader', reason: 't', status: 'ACTIVE', startDate: new Date('2021-01-01') },
-    { id: 'fg3', fundId: 'fund-youth', personId: 'p-youth-leader', action: 'MANAGE', grantedByPersonId: 'p-youth-leader', reason: 't', status: 'ACTIVE', startDate: new Date('2021-01-01') },
   ]);
 }

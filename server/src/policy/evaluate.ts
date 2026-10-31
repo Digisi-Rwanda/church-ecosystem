@@ -25,7 +25,6 @@ export async function authorizePerson(input: {
   systemId: SystemId;
   resource: Resource;
   action: Action;
-  fundId?: string;
   now?: Date;
 }): Promise<AuthzDecision> {
   const grants = await grantsForPerson(input.personId, input.now);
@@ -35,7 +34,6 @@ export async function authorizePerson(input: {
       systemId: input.systemId,
       resource: input.resource,
       action: input.action,
-      fundId: input.fundId,
       now: input.now,
     },
     grants,

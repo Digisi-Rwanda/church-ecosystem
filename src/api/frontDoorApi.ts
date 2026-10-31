@@ -1,0 +1,2189 @@
+import type { AccessLetter, ModuleKey, OfficeCode, SharedBlock, UnitKind } from '../../server/src/shared/vocabulary';
+import { apiMe, type ApiMeResponse } from './authApi';
+import { ApiError, apiFetch } from './client';
+
+export type PortalSystem = {
+  id: string;
+  code: string;
+  name: string;
+  shortName: string;
+  basePath: string;
+  /** The person's role in that system, e.g. "Choir Leader" or "Member". */
+  role: string;
+  unreadCount: number;
+};
+
+/** A system's own blocks after the six shared ones. */
+export type OwnBlock = 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves' | 'config';
+
+export type Capabilities = {
+  personId: string;
+  offices: Array<{ id: string; systemId: string | null; title: string; code: OfficeCode | null }>;
+  systems: Array<{ id: string; blocks: Record<SharedBlock, AccessLetter[]>; own?: Array<{ key: OwnBlock; letters: AccessLetter[]; variant?: string }> }>;
+  blockOrder: SharedBlock[];
+};
+
+export async function fetchPortal(): Promise<PortalSystem[]> {
+  const res = await apiFetch<{ systems: PortalSystem[] }>('/api/portal');
+  return res.systems;
+}
+
+export async function fetchCapabilities(): Promise<Capabilities> {
+  return apiFetch<Capabilities>('/api/me/capabilities');
+}
+
+/**
+ * A church leader or catechist works in Central Administration only. The server already answers that way;
+ * this keeps the shell right even when an older server is still deployed.
+ */
+export function limitToCentral<T extends { systems: PortalSystem[]; capabilities: Capabilities }>(b: T): T {
+  const codes = b.capabilities.offices.map((o) => o.code).filter((c): c is OfficeCode => c !== null);
+  const only = codes.length > 0 && codes.every((c) => c === 'CHURCH_LEADER' || c === 'CATECHIST');
+  if (!only) return b;
+  return {
+    ...b,
+    systems: b.systems.filter((x) => x.id === 'sys-main'),
+    capabilities: { ...b.capabilities, systems: b.capabilities.systems.filter((x) => x.id === 'sys-main') },
+  };
+}
+
+/** Who is signed in, their systems and what they may do: the three things the shell needs, in one answer. */
+export type Bootstrap = {
+  me: ApiMeResponse;
+  portal: { systems: PortalSystem[] };
+  capabilities: Capabilities;
+};
+
+/**
+ * One request for the shell's data. A server that does not have it yet (an older deployment) answers
+ * with a plain not found, and the three separate requests are made instead, so the two can be deployed in any order.
+ */
+export async function fetchBootstrap(): Promise<{ me: ApiMeResponse; systems: PortalSystem[]; capabilities: Capabilities }> {
+  try {
+    const b = await apiFetch<Bootstrap>('/api/me/bootstrap');
+    return limitToCentral({ me: b.me, systems: b.portal.systems, capabilities: b.capabilities });
+  } catch (e) {
+    if (!(e instanceof ApiError) || e.status !== 404) throw e;
+  }
+  const [me, systems, capabilities] = await Promise.all([apiMe(), fetchPortal(), fetchCapabilities()]);
+  return limitToCentral({ me, systems, capabilities });
+}
+
+/* ── People, units and offices (slice 1.2) ── */
+
+export type PersonStatus = 'ACTIVE' | 'INACTIVE' | 'VISITOR';
+
+/** A person as the server shows them to this viewer; fields the viewer may not see are simply absent. */
+export type DirectoryPerson = {
+  id: string;
+  fullName: string;
+  preferredName?: string | null;
+  memberCode?: string | null;
+  status: PersonStatus;
+  phone?: string | null;
+  email?: string | null;
+  archivedAt?: string | null;
+  archivedReason?: string | null;
+  dateOfBirth?: string | null;
+  gender?: string | null;
+  address?: string | null;
+  nationalId?: string | null;
+  joinedChurchOn?: string | null;
+  pastoralNotes?: string | null;
+};
+
+export type UnitRecord = {
+  id: string;
+  name: string;
+  type: string;
+  kind: 'CENTRAL' | 'MINISTRY' | 'ORGANISATION' | 'TEAM';
+  code: string | null;
+  parentId: string | null;
+  description: string | null;
+  systemId: string | null;
+  leaderPersonId: string | null;
+};
+
+export type MembershipRecord = {
+  id: string;
+  personId: string;
+  label: string;
+  orgUnitId: string | null;
+  systemId: string | null;
+  status: string;
+  startDate: string;
+  endDate?: string | null;
+};
+
+export type OfficeRecord = {
+  id: string;
+  personId: string;
+  title: string;
+  office: OfficeCode | null;
+  orgUnitId: string | null;
+  systemId: string | null;
+  status: string;
+  startDate: string;
+  endDate?: string | null;
+};
+
+export type Structure = {
+  units: UnitRecord[];
+  memberships: MembershipRecord[];
+  offices: OfficeRecord[];
+};
+
+/** One page of the directory with the exact number of matches, so every person can be reached. */
+export async function fetchPeoplePage(opts: { q?: string; status?: string; archived?: boolean; systemId?: string; limit: number; offset: number }): Promise<{ people: DirectoryPerson[]; total: number }> {
+  const qs = new URLSearchParams({ limit: String(opts.limit), offset: String(opts.offset) });
+  if (opts.q) qs.set('q', opts.q);
+  if (opts.status) qs.set('status', opts.status);
+  if (opts.archived) qs.set('archived', 'true');
+  if (opts.systemId) qs.set('systemId', opts.systemId);
+  const res = await apiFetch<{ people: DirectoryPerson[]; total?: number }>(`/api/people?${qs}`);
+  return { people: res.people, total: res.total ?? res.people.length };
+}
+
+export async function fetchPeople(opts: { q?: string; status?: string; archived?: boolean; ids?: string[]; systemId?: string } = {}): Promise<DirectoryPerson[]> {
+  const qs = new URLSearchParams();
+  if (opts.q) qs.set('q', opts.q);
+  if (opts.status) qs.set('status', opts.status);
+  if (opts.archived) qs.set('archived', 'true');
+  if (opts.ids?.length) qs.set('ids', opts.ids.join(','));
+  if (opts.systemId) qs.set('systemId', opts.systemId);
+  const res = await apiFetch<{ people: DirectoryPerson[] }>(`/api/people${qs.size ? `?${qs}` : ''}`);
+  return res.people;
+}
+
+/** The filters the People directory understands; the server refuses any the viewer may not use. */
+export type PeopleCriteria = {
+  q?: string; status?: PersonStatus[]; unitIds?: string[]; gender?: 'MALE' | 'FEMALE'; ageMin?: number; ageMax?: number;
+  baptismYearsMin?: number; employmentStatus?: string[]; sector?: string[]; employedYearsMin?: number;
+  educationMin?: string; educationIs?: string[]; educationField?: string; childrenMin?: number; childrenMax?: number;
+  marital?: Array<'SINGLE' | 'MARRIED' | 'WIDOWED'>; callingName?: string; callingUnitId?: string;
+};
+export type PeopleCriterionKey = keyof PeopleCriteria;
+export type PeopleFilterOptions = { criteria: PeopleCriterionKey[]; units: Array<{ id: string; name: string }>; sectors: string[]; education: string[]; marital: string[] };
+export type SearchedPerson = DirectoryPerson & { marital?: 'SINGLE' | 'MARRIED' | 'WIDOWED'; children?: number };
+export const fetchPeopleFilterOptions = (systemId?: string): Promise<PeopleFilterOptions> =>
+  apiFetch(`/api/people/filter-options${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+export const searchPeople = (b: { criteria: PeopleCriteria; systemId?: string; archived?: boolean; limit?: number; offset?: number }): Promise<{ total: number; offset: number; people: SearchedPerson[] }> =>
+  apiFetch('/api/people/search', { method: 'POST', body: b });
+
+/** What the server offers this viewer to filter a list by: fields, the operators each takes, choices, limits and units in reach. */
+export type FilterValuePart = { key: string; kind: 'text' | 'unit' | 'choice' | 'choices' | 'number'; choices?: string[]; min?: number; max?: number };
+export type FieldSchema = {
+  key: string; type: 'text' | 'choice' | 'ordinal' | 'number' | 'date' | 'boolean' | 'multi' | 'records'; operators: string[];
+  choices?: string[]; comparable?: string[]; min?: number; max?: number; sortable: boolean; unitValued?: boolean; parts?: FilterValuePart[];
+};
+export type FilterLimits = { conditions: number; groups: number; listValues: number; stringLength: number; pageSize: number; defaultPageSize: number };
+export type FilterSchema = { fields: FieldSchema[]; sortable: string[]; limits: FilterLimits; units: Array<{ id: string; name: string }>; defaultSort: { field: string; dir: 'asc' | 'desc' } };
+export type PeopleSearchResult = { total: number; offset: number; limit: number; people: SearchedPerson[]; page: { limit: number; offset: number; hasMore: boolean } };
+export const fetchPeopleFilterSchema = (systemId?: string): Promise<FilterSchema> =>
+  apiFetch(`/api/people/filter-schema${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+/** The grouped search: `{ q, systemId, archived, match: { all, anyGroups }, sort, page }`. The server checks every part again. */
+export const searchPeopleFiltered = (body: Record<string, unknown>): Promise<PeopleSearchResult> => apiFetch('/api/people/search', { method: 'POST', body });
+
+export async function fetchPerson(id: string): Promise<DirectoryPerson> {
+  const res = await apiFetch<{ person: DirectoryPerson }>(`/api/people/${encodeURIComponent(id)}`);
+  return res.person;
+}
+
+/** The organisation as one system sees it: pass the system so only its own part comes back. */
+export async function fetchStructure(systemId?: string): Promise<Structure> {
+  const res = await apiFetch<{
+    orgUnits: UnitRecord[];
+    memberships: MembershipRecord[];
+    positions: OfficeRecord[];
+  }>(`/api/participation/records${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+  return { units: res.orgUnits, memberships: res.memberships, offices: res.positions };
+}
+
+export type NewPerson = {
+  fullName: string;
+  phone?: string;
+  email?: string;
+  dateOfBirth?: string;
+  nationalId?: string;
+  confirmDuplicate?: boolean;
+  /** The unit's system the person is added from: they also become a member of that unit. */
+  systemId?: string;
+};
+
+export async function createPerson(body: NewPerson): Promise<DirectoryPerson> {
+  const res = await apiFetch<{ person: DirectoryPerson }>('/api/people', { method: 'POST', body });
+  return res.person;
+}
+
+export type PersonEdit = Partial<{ fullName: string; phone: string | null; email: string | null; dateOfBirth: string | null; gender: string | null; address: string | null; nationalId: string | null; joinedChurchOn: string | null }>;
+export async function updatePerson(id: string, body: PersonEdit): Promise<void> {
+  await apiFetch(`/api/people/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+}
+
+export async function archivePerson(id: string, reason?: string): Promise<DirectoryPerson> {
+  const res = await apiFetch<{ person: DirectoryPerson }>(`/api/people/${encodeURIComponent(id)}/archive`, {
+    method: 'POST',
+    body: { reason },
+  });
+  return res.person;
+}
+
+export async function unarchivePerson(id: string): Promise<DirectoryPerson> {
+  const res = await apiFetch<{ person: DirectoryPerson }>(`/api/people/${encodeURIComponent(id)}/unarchive`, {
+    method: 'POST',
+    body: {},
+  });
+  return res.person;
+}
+
+/* ── Access by letters (slice 1.3) ── */
+
+export type AccessPowers = {
+  canAppoint: boolean;
+  canAppointLeader: boolean;
+  canReadAppointments: boolean;
+  canReadAudit: boolean;
+  canExplainOthers: boolean;
+  canSeeAllDelegations: boolean;
+};
+
+export type AppointmentRow = {
+  id: string;
+  personId: string;
+  personName: string;
+  memberCode: string | null;
+  office: OfficeCode;
+  title: string;
+  orgUnitId: string | null;
+  unitName: string | null;
+  unitCode: string | null;
+  systemId: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: string;
+  live: boolean;
+  endsSoon: boolean;
+};
+
+export async function fetchAppointments(
+  opts: { unitId?: string; ended?: boolean; systemId?: string } = {},
+): Promise<AccessPowers & { appointments: AppointmentRow[] }> {
+  const qs = new URLSearchParams();
+  if (opts.unitId) qs.set('unitId', opts.unitId);
+  if (opts.ended) qs.set('ended', 'true');
+  if (opts.systemId) qs.set('systemId', opts.systemId);
+  return apiFetch(`/api/access/appointments${qs.size ? `?${qs}` : ''}`);
+}
+
+export type NewAppointment = {
+  personId: string;
+  orgUnitId: string;
+  office: OfficeCode;
+  endDate?: string | null;
+};
+
+export async function appointOffice(body: NewAppointment): Promise<void> {
+  await apiFetch('/api/access/appointments', { method: 'POST', body });
+}
+
+export async function endAppointment(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/access/appointments/${encodeURIComponent(id)}/end`, { method: 'POST', body: { reason } });
+}
+
+export async function setAppointmentTerm(id: string, endDate: string | null): Promise<void> {
+  await apiFetch(`/api/access/appointments/${encodeURIComponent(id)}/term`, { method: 'POST', body: { endDate } });
+}
+
+export type Vacancy = {
+  unitId: string;
+  unitName: string;
+  unitCode: string | null;
+  kind: UnitKind;
+  office: OfficeCode;
+  reason: 'EMPTY' | 'ENDS_SOON';
+  endsOn?: string;
+  holderName?: string | null;
+};
+
+export type VacancyReport = {
+  vacancies: Vacancy[];
+  conflicts: Array<{ unitId: string; unitName: string; office: OfficeCode; positionIds: string[] }>;
+  administrators: { count: number; minimum: number };
+};
+
+export async function fetchVacancies(systemId?: string): Promise<VacancyReport> {
+  return apiFetch(`/api/access/vacancies${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+}
+
+export type LetterSource = {
+  letter: AccessLetter;
+  from: string;
+  via: 'OFFICE' | 'DELEGATION' | 'MEMBER';
+  office?: OfficeCode;
+};
+
+export type AccessExplanation = {
+  person: { id: string; name: string; code: string | null };
+  offices: Array<{ id: string; office: OfficeCode; title: string; systemId: string | null; orgUnitId: string | null; endDate: string | null }>;
+  delegated: Array<{ delegationId: string; office: OfficeCode; fromPersonId: string }>;
+  systems: Array<{
+    id: string;
+    name: string;
+    letters: Record<ModuleKey, AccessLetter[]>;
+    why: Record<ModuleKey, LetterSource[]>;
+  }>;
+};
+
+export async function fetchMyAccess(): Promise<AccessExplanation & { powers: AccessPowers }> {
+  return apiFetch('/api/access/me');
+}
+
+export async function fetchAccessOf(personId: string): Promise<AccessExplanation> {
+  return apiFetch(`/api/access/explain/${encodeURIComponent(personId)}`);
+}
+
+export type RuleMatrix = {
+  letters: Array<{ letter: AccessLetter; name: string; meaning: string }>;
+  modules: Array<{ key: ModuleKey; letters: AccessLetter[] }>;
+  offices: Array<{
+    code: OfficeCode;
+    title: string;
+    scope: 'CHURCH' | 'UNIT';
+    sole: boolean;
+    letters: Partial<Record<ModuleKey, AccessLetter[]>>;
+  }>;
+  member: Partial<Record<ModuleKey, AccessLetter[]>>;
+  limits: { minAdministrators: number; delegationMaxDays: number };
+};
+
+export async function fetchRuleMatrix(): Promise<RuleMatrix> {
+  return apiFetch('/api/access/matrix');
+}
+
+export type DelegationRow = {
+  id: string;
+  positionId: string;
+  fromPersonId: string;
+  fromName: string;
+  toPersonId: string;
+  toName: string;
+  letters: Partial<Record<ModuleKey, AccessLetter[]>>;
+  note: string | null;
+  startDate: string | null;
+  endDate: string | null;
+  status: string;
+  live: boolean;
+};
+
+export type DelegationList = {
+  canSeeAll: boolean;
+  given: DelegationRow[];
+  received: DelegationRow[];
+  all?: DelegationRow[];
+  limits: { maxDays: number };
+};
+
+export async function fetchDelegations(all = false): Promise<DelegationList> {
+  return apiFetch(`/api/access/delegations${all ? '?all=true' : ''}`);
+}
+
+export type NewDelegation = {
+  positionId: string;
+  toPersonId: string;
+  letters: Partial<Record<ModuleKey, AccessLetter[]>>;
+  endDate: string;
+  note?: string;
+};
+
+export async function lendLetters(body: NewDelegation): Promise<void> {
+  await apiFetch('/api/access/delegations', { method: 'POST', body });
+}
+
+export async function revokeDelegation(id: string): Promise<void> {
+  await apiFetch(`/api/access/delegations/${encodeURIComponent(id)}/revoke`, { method: 'POST', body: {} });
+}
+
+export type AuditEntry = {
+  id: string;
+  at: string | null;
+  action: string;
+  detail: string;
+  actorName: string | null;
+};
+
+export async function fetchAuditTrail(limit = 50): Promise<AuditEntry[]> {
+  const res = await apiFetch<{ events: AuditEntry[] }>(`/api/access/audit?limit=${limit}`);
+  return res.events;
+}
+
+/* ── Notifications and preferences (slice 1.4) ── */
+
+export type NoticeKind = 'WAITING_FOR_ME' | 'FOR_INFORMATION';
+
+export type NoticeItem = {
+  key: string;
+  kind: NoticeKind;
+  title: string;
+  body: string | null;
+  href: string | null;
+  systemId: string;
+  createdAt: string;
+  read: boolean;
+  important: boolean;
+};
+
+export type NoticeCounts = {
+  waiting: { total: number; unread: number };
+  info: { total: number; unread: number };
+  unread: number;
+  bySystem: Record<string, number>;
+};
+
+export async function fetchNotices(opts: { tab?: 'waiting' | 'info'; system?: string } = {}): Promise<{ items: NoticeItem[]; counts: NoticeCounts }> {
+  const qs = new URLSearchParams();
+  if (opts.tab) qs.set('tab', opts.tab);
+  if (opts.system) qs.set('system', opts.system);
+  return apiFetch(`/api/notifications${qs.size ? `?${qs}` : ''}`);
+}
+
+export async function fetchNoticeSummary(system?: string): Promise<{ counts: NoticeCounts; urgent: NoticeItem[] }> {
+  return apiFetch(`/api/notifications/summary${system ? `?system=${encodeURIComponent(system)}` : ''}`);
+}
+
+export async function markNoticesRead(body: { keys?: string[]; all?: boolean; tab?: 'waiting' | 'info'; system?: string }): Promise<number> {
+  const res = await apiFetch<{ marked: number }>('/api/notifications/read', { method: 'POST', body });
+  return res.marked;
+}
+
+export async function markNoticesUnread(keys: string[]): Promise<void> {
+  await apiFetch('/api/notifications/unread', { method: 'POST', body: { keys } });
+}
+
+export type DigestChannel = 'OFF' | 'EMAIL' | 'SMS' | 'WHATSAPP';
+export type Preferences = { language: string | null; theme: 'light' | 'dark' | null; mutedSystems: string[]; digestChannel?: DigestChannel };
+
+export async function fetchPreferences(): Promise<Preferences> {
+  return apiFetch('/api/me/preferences');
+}
+
+export async function savePreferences(body: Partial<Preferences>): Promise<Preferences> {
+  return apiFetch('/api/me/preferences', { method: 'PUT', body });
+}
+
+/* ── System settings (slice 3.18): the preferences of one system ── */
+
+export type SystemDetails = { displayName: string; meetingDay: string; place: string; contactLine: string };
+export type GoalPer = 'MEMBER' | 'TEAM';
+export type PaymentMethod = 'CASH' | 'MOMO' | 'BANK';
+export const PAYMENT_METHODS: readonly PaymentMethod[] = ['CASH', 'MOMO', 'BANK'];
+export type MoneyType = { code: string; name: string; goalAmount?: number; goalPer?: GoalPer };
+export type DonationType = { code: string; name: string };
+export type SystemMoneyOptions = { types: MoneyType[]; donationTypes: DonationType[]; methods: PaymentMethod[] };
+export type SystemSettings = {
+  systemId: string;
+  details: SystemDetails;
+  money: SystemMoneyOptions;
+  canEditDetails: boolean;
+  canEditMoney: boolean;
+  updatedAt: string | null;
+};
+
+export async function fetchSystemSettings(systemId: string): Promise<SystemSettings> {
+  return apiFetch(`/api/system-settings/${encodeURIComponent(systemId)}`);
+}
+
+export async function saveSystemDetails(systemId: string, body: SystemDetails): Promise<SystemSettings> {
+  return apiFetch(`/api/system-settings/${encodeURIComponent(systemId)}/details`, { method: 'PUT', body });
+}
+
+export async function saveSystemMoney(systemId: string, body: SystemMoneyOptions): Promise<SystemSettings> {
+  return apiFetch(`/api/system-settings/${encodeURIComponent(systemId)}/money`, { method: 'PUT', body });
+}
+
+/* ── Announcements (slice 1.5) ── */
+
+export type AudienceKind = 'WHOLE_CHURCH' | 'SYSTEM' | 'OFFICE';
+
+export type Audience = { kind: AudienceKind; systemId?: string; office?: OfficeCode };
+
+export type AnnouncementItem = {
+  id: string;
+  title: string;
+  body: string;
+  audience: { kind: AudienceKind; systemId: string | null; systemName: string | null; office: OfficeCode | null };
+  authorId: string;
+  authorName: string;
+  publishedAt: string | null;
+  expiresAt: string | null;
+  editedAt?: string | null;
+  read: boolean;
+  mine: boolean;
+  canWithdraw: boolean;
+};
+
+export type AnnouncementOptions = {
+  wholeChurch: boolean;
+  offices: OfficeCode[];
+  systems: Array<{ id: string; name: string; shortName: string }>;
+  limits: { titleMax: number; bodyMax: number };
+};
+
+export async function fetchAnnouncements(): Promise<{ items: AnnouncementItem[]; unread: number }> {
+  return apiFetch('/api/announcements');
+}
+
+export async function fetchAnnouncementSummary(): Promise<{ unread: number; latest: AnnouncementItem[] }> {
+  return apiFetch('/api/announcements/summary');
+}
+
+export async function fetchAnnouncementOptions(): Promise<AnnouncementOptions> {
+  return apiFetch('/api/announcements/options');
+}
+
+export async function postAnnouncement(body: { title: string; body: string; audience: Audience; expiresAt?: string }): Promise<void> {
+  await apiFetch('/api/announcements', { method: 'POST', body });
+}
+
+export async function withdrawAnnouncement(id: string, reason?: string): Promise<void> {
+  await apiFetch(`/api/announcements/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: reason ? { reason } : {} });
+}
+
+export async function editAnnouncement(id: string, body: { title: string; body: string; expiresAt: string | null }): Promise<void> {
+  await apiFetch(`/api/announcements/${encodeURIComponent(id)}`, { method: 'PATCH', body });
+}
+
+export async function markAnnouncementsRead(body: { ids?: string[]; all?: boolean }): Promise<number> {
+  const res = await apiFetch<{ marked: number }>('/api/announcements/read', { method: 'POST', body });
+  return res.marked;
+}
+
+/* ── Settings (slice 2.1) ── */
+
+export type TypeItem = { code: string; name: string };
+export type ChurchProfile = { name: string; shortName: string; address: string; phone: string; email: string };
+
+export type SettingValues = {
+  'church.profile': ChurchProfile;
+  'church.language': 'en' | 'rw' | 'fr';
+  'letters.types': TypeItem[];
+  'meetings.types': TypeItem[];
+  'access.termReminderDays': number;
+  'access.delegationMaxDays': number;
+  'moves.rules': MoveRules;
+};
+
+export type MoveRules = { childMaxAge: number; youthMaxAge: number; elderlyFromAge: number; adultTrigger: 'AGE' | 'MARRIAGE' | 'EITHER' };
+export type SettingKey = keyof SettingValues;
+
+export type SettingRow = {
+  key: SettingKey;
+  value: SettingValues[SettingKey];
+  isDefault: boolean;
+  defaultValue: SettingValues[SettingKey];
+  updatedAt: string | null;
+  updatedByName: string | null;
+};
+
+export async function fetchSettings(): Promise<{ canChange: boolean; settings: SettingRow[] }> {
+  return apiFetch('/api/settings');
+}
+
+export async function saveSetting(key: SettingKey, value: unknown): Promise<void> {
+  await apiFetch(`/api/settings/${encodeURIComponent(key)}`, { method: 'PUT', body: { value } });
+}
+
+export async function resetSetting(key: SettingKey): Promise<void> {
+  await apiFetch(`/api/settings/${encodeURIComponent(key)}`, { method: 'DELETE' });
+}
+
+/* ── Due to move ── */
+
+export type MoveReason = 'AGE_YOUTH' | 'AGE_ADULT' | 'AGE_ELDERLY' | 'MARRIAGE';
+export type DueToMove = { personId: string; fullName: string; age: number | null; reason: MoveReason; toSystemId: string; toName: string };
+
+export async function fetchDueToMove(systemId: string): Promise<{ canConfirm: boolean; rules: MoveRules; due: DueToMove[] }> {
+  return apiFetch(`/api/moves?systemId=${encodeURIComponent(systemId)}`);
+}
+
+export async function confirmMove(body: { personId: string; fromSystemId: string; toSystemId: string }): Promise<void> {
+  await apiFetch('/api/moves/confirm', { method: 'POST', body });
+}
+
+/* ── Governance (slice 2.2) ── */
+
+export type MeetingStatus = 'PLANNED' | 'HELD' | 'CANCELLED';
+export type DecisionStatus = 'DRAFT' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN';
+
+export type MeetingItem = {
+  id: string;
+  orgUnitId: string;
+  unitName: string;
+  systemId: string;
+  typeCode: string;
+  typeName: string;
+  title: string;
+  scheduledAt: string | null;
+  location: string | null;
+  status: MeetingStatus;
+  decisionCount: number;
+  canWrite: boolean;
+};
+
+export type DecisionItem = {
+  id: string;
+  meetingId: string | null;
+  meetingTitle: string | null;
+  orgUnitId: string;
+  unitName: string;
+  systemId: string;
+  title: string;
+  detail: string;
+  status: DecisionStatus;
+  createdAt: string | null;
+  authorName: string;
+  decidedAt: string | null;
+  decidedByName: string | null;
+  rejectReason: string | null;
+  owner: { id: string; name: string } | null;
+  dueDate: string | null;
+  taskId: string | null;
+  canApprove: boolean;
+  canWithdraw: boolean;
+};
+
+export type GovernanceOptions = {
+  units: Array<{ id: string; name: string; code: string | null; kind: string | null; systemId: string }>;
+  meetingTypes: TypeItem[];
+  limits: { titleMax: number; textMax: number };
+};
+
+export type MeetingDetail = MeetingItem & {
+  agenda: string;
+  minutes: string;
+  createdByName: string;
+  heldAt: string | null;
+  cancelledReason: string | null;
+  attendees: Array<{ id: string; name: string }>;
+};
+
+export async function fetchGovernanceOptions(): Promise<GovernanceOptions> {
+  return apiFetch('/api/governance/options');
+}
+
+export async function fetchMeetings(opts: { systemId?: string; unitId?: string; status?: MeetingStatus } = {}): Promise<MeetingItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ meetings: MeetingItem[] }>(`/api/governance/meetings${qs.size ? `?${qs}` : ''}`);
+  return res.meetings;
+}
+
+export async function fetchMeeting(id: string): Promise<{ meeting: MeetingDetail; decisions: DecisionItem[] }> {
+  return apiFetch(`/api/governance/meetings/${encodeURIComponent(id)}`);
+}
+
+export type NewMeeting = { orgUnitId: string; typeCode: string; title?: string; scheduledAt: string; location?: string; agenda?: string };
+
+export async function planMeeting(body: NewMeeting): Promise<string> {
+  const res = await apiFetch<{ meeting: { id: string } }>('/api/governance/meetings', { method: 'POST', body });
+  return res.meeting.id;
+}
+
+export async function markMeetingHeld(id: string, body: { minutes?: string; attendeeIds?: string[] }): Promise<void> {
+  await apiFetch(`/api/governance/meetings/${encodeURIComponent(id)}/held`, { method: 'POST', body });
+}
+
+export async function cancelMeeting(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/governance/meetings/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } });
+}
+
+export async function fetchDecisions(opts: { systemId?: string; unitId?: string; status?: DecisionStatus; q?: string } = {}): Promise<DecisionItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ decisions: DecisionItem[] }>(`/api/governance/decisions${qs.size ? `?${qs}` : ''}`);
+  return res.decisions;
+}
+
+export type NewDecision = {
+  meetingId?: string;
+  orgUnitId?: string;
+  title: string;
+  detail?: string;
+  work?: { ownerPersonId?: string; dueDate?: string };
+};
+
+export async function draftDecision(body: NewDecision): Promise<void> {
+  await apiFetch('/api/governance/decisions', { method: 'POST', body });
+}
+
+export async function approveDecision(id: string): Promise<void> {
+  await apiFetch(`/api/governance/decisions/${encodeURIComponent(id)}/approve`, { method: 'POST', body: {} });
+}
+
+export async function rejectDecision(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/governance/decisions/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason } });
+}
+
+export async function withdrawDecision(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/governance/decisions/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: { reason } });
+}
+
+
+/* ───────────── Letters desk (slice 2.3) ───────────── */
+
+export type LetterStatus = 'DRAFT' | 'DELIVERED' | 'WITHDRAWN';
+export type DeliveryMethod = 'HAND' | 'POST' | 'EMAIL' | 'OTHER';
+
+export type LetterItem = {
+  id: string;
+  reference: string;
+  orgUnitId: string;
+  unitName: string;
+  systemId: string;
+  typeCode: string;
+  typeName: string;
+  subject: string;
+  recipientName: string;
+  status: LetterStatus;
+  createdAt: string | null;
+  authorName: string;
+  printed: boolean;
+  deliveredOn: string | null;
+  canEdit: boolean;
+  canSend: boolean;
+  canWithdraw: boolean;
+};
+
+export type LetterDetail = LetterItem & {
+  body: string;
+  recipientNote: string;
+  printedAt: string | null;
+  printedByName: string | null;
+  deliveredAt: string | null;
+  deliveredByName: string | null;
+  deliveryMethod: DeliveryMethod | null;
+  deliveryNote: string;
+  withdrawnReason: string | null;
+};
+
+export type LetterOptions = {
+  units: Array<{ id: string; name: string; code: string | null; kind: string | null; systemId: string }>;
+  letterTypes: Array<{ code: string; name: string }>;
+  deliveryMethods: DeliveryMethod[];
+  limits: { subjectMax: number; bodyMax: number };
+};
+
+export type LetterPrint = {
+  reference: string;
+  church: { name: string; shortName: string; address: string; phone: string; email?: string };
+  unitName: string;
+  date: string;
+  typeName: string;
+  recipientName: string;
+  recipientNote: string;
+  subject: string;
+  body: string;
+};
+
+export type LetterDraft = { orgUnitId: string; typeCode: string; subject: string; body: string; recipientName: string; recipientNote?: string };
+
+export async function fetchLetterOptions(): Promise<LetterOptions> {
+  return apiFetch('/api/letters/options');
+}
+
+export async function fetchLetters(opts: { systemId?: string; unitId?: string; status?: LetterStatus; q?: string } = {}): Promise<LetterItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ letters: LetterItem[] }>(`/api/letters${qs.size ? `?${qs}` : ''}`);
+  return res.letters;
+}
+
+export async function fetchLetter(id: string): Promise<LetterDetail> {
+  const res = await apiFetch<{ letter: LetterDetail }>(`/api/letters/${encodeURIComponent(id)}`);
+  return res.letter;
+}
+
+export async function draftLetter(input: LetterDraft): Promise<string> {
+  const res = await apiFetch<{ letter: { id: string } }>('/api/letters', { method: 'POST', body: input });
+  return res.letter.id;
+}
+
+export async function editLetter(id: string, input: Pick<LetterDraft, 'subject' | 'body' | 'recipientName' | 'recipientNote'>): Promise<void> {
+  await apiFetch(`/api/letters/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+
+export async function printLetter(id: string): Promise<LetterPrint> {
+  const res = await apiFetch<{ print: LetterPrint }>(`/api/letters/${encodeURIComponent(id)}/print`, { method: 'POST', body: {} });
+  return res.print;
+}
+
+export async function deliverLetter(id: string, input: { method: DeliveryMethod; deliveredOn: string; note?: string }): Promise<void> {
+  await apiFetch(`/api/letters/${encodeURIComponent(id)}/deliver`, { method: 'POST', body: input });
+}
+
+export async function withdrawLetter(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/letters/${encodeURIComponent(id)}/withdraw`, { method: 'POST', body: { reason } });
+}
+
+/* ───────────── Central Administration home (slice 2.4) ───────────── */
+
+export type UrgentKind = 'DECISION_TO_APPROVE' | 'MEETING_OVERDUE' | 'LETTER_TO_DELIVER' | 'LETTER_TO_PRINT' | 'VACANCY' | 'TERM_ENDING';
+
+export type UrgentItem = {
+  key: string;
+  kind: UrgentKind;
+  systemId: string;
+  systemName: string;
+  unitName: string;
+  subject: string;
+  id: string | null;
+  at: string | null;
+};
+
+export type OversightRow = {
+  systemId: string;
+  name: string;
+  units: number;
+  plannedMeetings: number;
+  overdueMeetings: number;
+  decisionsWaiting: number;
+  lettersOpen: number;
+  vacancies: number;
+};
+
+export type CentralOverview = { urgent: UrgentItem[]; urgentTotal: number; oversight: OversightRow[]; reports: ReceivedReport[]; reportsLate?: LateReport[] };
+
+export async function fetchCentralOverview(): Promise<CentralOverview> {
+  return apiFetch('/api/central/overview');
+}
+
+/* ───────────── Schedule (slice 3.1) ───────────── */
+
+export type PlanStatus = 'DRAFT' | 'CONFIRMED' | 'PUBLISHED';
+export type SlotKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
+export type AssignmentStatus = 'ASSIGNED' | 'DECLINED' | 'REPLACED';
+
+export type ScheduleAssignment = {
+  id: string;
+  personId: string;
+  personName: string;
+  role: string;
+  status: AssignmentStatus;
+  declineReason: string | null;
+  mine: boolean;
+};
+
+export type ScheduleSlot = {
+  id: string;
+  title: string;
+  kind: SlotKind;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  notes: string | null;
+  churchWide: boolean;
+  assignments: ScheduleAssignment[];
+};
+
+export type UnitPlan = {
+  unitId: string;
+  unitName: string;
+  plan: { id: string; status: PlanStatus; confirmedAt: string | null; publishedAt: string | null } | null;
+  slots: ScheduleSlot[];
+};
+
+/** An approved activity on its own day(s); a repeat is expanded for the month asked for. Read-only on the schedule. */
+export type ScheduleActivity = {
+  planId: string; title: string; planType: 'PROGRAM' | 'EVENT' | 'PROJECT'; unitId: string; unitName: string; systemId: string;
+  date: string; startTime: string | null; endTime: string | null; location: string | null; status: string;
+};
+export type MonthView = { month: string; systemId: string; canWrite: boolean; canConfirm: boolean; canPublish: boolean; units: UnitPlan[]; activities: ScheduleActivity[] };
+export type ScheduleOptions = {
+  units: Array<{ id: string; name: string; systemId: string }>;
+  kinds: SlotKind[];
+  limits: { titleMax: number; roleMax: number; noteMax: number };
+};
+export type SlotInput = {
+  title: string;
+  kind: SlotKind;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  notes: string | null;
+  churchWide: boolean;
+};
+export type ChurchSlot = { id: string; title: string; kind: SlotKind; startsAt: string; endsAt: string | null; location: string | null; unitName: string };
+export type Duty = {
+  assignmentId: string;
+  role: string;
+  slotId: string;
+  title: string;
+  kind: SlotKind;
+  startsAt: string;
+  endsAt: string | null;
+  location: string | null;
+  systemId: string;
+  unitName: string;
+};
+
+export const fetchScheduleOptions = (): Promise<ScheduleOptions> => apiFetch('/api/schedule/options');
+export const fetchMonth = (systemId: string, month: string): Promise<MonthView> =>
+  apiFetch(`/api/schedule/month?systemId=${encodeURIComponent(systemId)}&month=${encodeURIComponent(month)}`);
+export async function fetchChurchCalendar(month: string): Promise<ChurchSlot[]> {
+  const res = await apiFetch<{ slots: ChurchSlot[] }>(`/api/schedule/church?month=${encodeURIComponent(month)}`);
+  return res.slots;
+}
+/** The church calendar of a month: the published slots marked for the whole church, and the approved activities everyone may see. */
+export async function fetchChurchMonth(month: string): Promise<{ slots: ChurchSlot[]; activities: ScheduleActivity[] }> {
+  const res = await apiFetch<{ slots: ChurchSlot[]; activities?: ScheduleActivity[] }>(`/api/schedule/church?month=${encodeURIComponent(month)}`);
+  return { slots: res.slots, activities: res.activities ?? [] };
+}
+export async function fetchMyDuties(): Promise<Duty[]> {
+  const res = await apiFetch<{ duties: Duty[] }>('/api/schedule/mine');
+  return res.duties;
+}
+export async function addSlot(unitId: string, input: SlotInput): Promise<void> {
+  await apiFetch('/api/schedule/slots', { method: 'POST', body: { unitId, ...input } });
+}
+export async function editSlot(id: string, input: SlotInput): Promise<void> {
+  await apiFetch(`/api/schedule/slots/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function removeSlot(id: string): Promise<void> {
+  await apiFetch(`/api/schedule/slots/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function assignToSlot(slotId: string, personId: string, role: string): Promise<void> {
+  await apiFetch(`/api/schedule/slots/${encodeURIComponent(slotId)}/assign`, { method: 'POST', body: { personId, role } });
+}
+export async function removeAssignment(id: string): Promise<void> {
+  await apiFetch(`/api/schedule/assignments/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function declineAssignment(id: string, reason: string): Promise<void> {
+  await apiFetch(`/api/schedule/assignments/${encodeURIComponent(id)}/decline`, { method: 'POST', body: { reason } });
+}
+export async function replaceAssignment(id: string, personId: string): Promise<void> {
+  await apiFetch(`/api/schedule/assignments/${encodeURIComponent(id)}/replace`, { method: 'POST', body: { personId } });
+}
+export async function movePlan(id: string, action: 'confirm' | 'publish' | 'reopen'): Promise<void> {
+  await apiFetch(`/api/schedule/plans/${encodeURIComponent(id)}/${action}`, { method: 'POST', body: {} });
+}
+
+/* ───────────── Light work (slice 3.2) ───────────── */
+
+export type WorkStatus = 'TODO' | 'IN_PROGRESS' | 'DONE' | 'CANCELLED';
+export type WorkVisibility = 'PERSONS' | 'UNIT' | 'SYSTEM' | 'CHURCH';
+
+export type WorkItem = {
+  id: string;
+  title: string;
+  description: string;
+  ownerId: string;
+  ownerName: string;
+  helpers: Array<{ id: string; name: string }>;
+  systemId: string;
+  orgUnitId: string | null;
+  unitName: string;
+  status: WorkStatus;
+  visibility: WorkVisibility;
+  dueDate: string | null;
+  overdue: boolean;
+  outcomeNote: string | null;
+  contextLabel: string | null;
+  mine: boolean;
+  canManage: boolean;
+  canMove: boolean;
+  canDelete: boolean;
+  planId: string | null;
+  canUpgrade: boolean;
+};
+
+export type WorkOptions = {
+  units: Array<{ id: string; name: string; systemId: string }>;
+  systems?: string[];
+  visibilities: WorkVisibility[];
+  limits: { titleMax: number; textMax: number; noteMax: number; helpersMax: number };
+};
+
+export type WorkInput = {
+  title: string;
+  description: string | null;
+  ownerId: string;
+  helperIds: string[];
+  dueDate: string | null;
+  visibility: WorkVisibility;
+};
+
+export type DeletedWork = { id: string; title: string; status: WorkStatus; systemId: string; unitName: string; ownerName: string; deletedAt: string | null; deletedByName: string };
+
+export const fetchWorkOptions = (): Promise<WorkOptions> => apiFetch('/api/work/options');
+export async function fetchWork(opts: { systemId?: string; view?: 'mine' | 'all'; status?: 'open' | 'all' | WorkStatus; q?: string } = {}): Promise<WorkItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ items: WorkItem[] }>(`/api/work${qs.size ? `?${qs}` : ''}`);
+  return res.items;
+}
+export async function createWork(unitId: string, input: WorkInput): Promise<WorkItem> {
+  const res = await apiFetch<{ work: WorkItem }>('/api/work', { method: 'POST', body: { unitId, ...input } });
+  return res.work;
+}
+/** A to-do for me (`SELF`), or a task with a due time for someone else (`OTHER`). */
+export async function createTask(mode: 'SELF' | 'OTHER', systemId: string, input: Omit<WorkInput, 'ownerId'> & { ownerId: string | null }): Promise<WorkItem> {
+  const res = await apiFetch<{ work: WorkItem }>('/api/work', { method: 'POST', body: { mode, systemId, ...input } });
+  return res.work;
+}
+export async function editWork(id: string, input: WorkInput): Promise<void> {
+  await apiFetch(`/api/work/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function moveWork(id: string, status: WorkStatus, note?: string): Promise<void> {
+  await apiFetch(`/api/work/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status, note } });
+}
+export const upgradeWork = (id: string): Promise<{ planId: string }> => apiFetch(`/api/work/${encodeURIComponent(id)}/upgrade`, { method: 'POST', body: {} });
+export async function deleteWork(id: string): Promise<void> {
+  await apiFetch(`/api/work/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function fetchDeletedWork(): Promise<DeletedWork[]> {
+  const res = await apiFetch<{ items: DeletedWork[] }>('/api/work/deleted');
+  return res.items;
+}
+export async function restoreWork(id: string): Promise<void> {
+  await apiFetch(`/api/work/${encodeURIComponent(id)}/restore`, { method: 'POST', body: {} });
+}
+
+/* ───────────── Full work (slice 3.3) ───────────── */
+
+export type WorkPlanStatus = 'DRAFT' | 'PENDING_APPROVAL' | 'SETUP' | 'RUNNING' | 'PAUSED' | 'CLOSING' | 'ENDED' | 'CANCELLED';
+
+/** The five states people see: Draft, Waiting, Approved, Done, Cancelled. */
+export type ActivityState = 'DRAFT' | 'WAITING' | 'APPROVED' | 'DONE' | 'CANCELLED';
+export type TimingKind = 'DATE' | 'RANGE' | 'REPEAT';
+export type RepeatRule = { kind: 'WEEKLY'; days: number[] } | { kind: 'MONTHLY'; nth: number; day: number };
+export type DateChange = { fromStart: string | null; fromEnd: string | null; toStart: string | null; toEnd: string | null; at: string };
+
+export type PlanFlags = {
+  canSetTiming: boolean; canClearReview: boolean;
+  canEdit: boolean; canSubmit: boolean; canWithdraw: boolean; canApprove: boolean; canReopen: boolean; canStart: boolean; canClose: boolean;
+  canPause: boolean; canResume: boolean; canRenew: boolean; canCheckMoney: boolean; canSuspend: boolean; canUnsuspend: boolean; canEditTeam: boolean;
+  canCancel: boolean; canDelete: boolean; canNote: boolean; canCheck: boolean; canAddCheck: boolean; canCompose: boolean; canPublish: boolean;
+  canManageRegistration: boolean; canMarkAttendance: boolean; canMilestone: boolean; canTickMilestone: boolean;
+  canLink: boolean; canGovern: boolean; canReview: boolean; canMeasure: boolean;
+};
+
+export type PlanType = 'PROGRAM' | 'EVENT' | 'PROJECT';
+export const PLAN_TYPES: readonly PlanType[] = ['PROGRAM', 'EVENT', 'PROJECT'];
+
+export const PROGRAM_KINDS = ['ONGOING', 'FIXED_TERM', 'COHORT', 'SEASONAL', 'CASE'] as const;
+export const CASE_TYPES = ['SICK_CARE', 'NEEDY', 'MARRIAGE'] as const;
+export type CaseType = (typeof CASE_TYPES)[number];
+export type ProgramKind = (typeof PROGRAM_KINDS)[number];
+export const PURPOSE_TAGS = ['MINISTRY', 'CAPACITY', 'COMMUNITY', 'OPERATIONS'] as const;
+export type PurposeTag = (typeof PURPOSE_TAGS)[number];
+/** What a program kind adds to the schedule: years, a recurring schedule, a cohort pattern or an annual month. */
+export type KindInput = {
+  startYear?: number | null; endYear?: number | null; schedule: string;
+  cohort?: { frequency: string; duration: string; schedule: string; target: number | null } | null; annualMonth?: number | null; caseType?: CaseType | null;
+};
+export type KindView = KindInput & { yearsRemaining: number | null; preparedYear?: number | null };
+
+export type PlanItem = PlanFlags & {
+  planType: PlanType;
+  programKind: ProgramKind | null; purposeTag: PurposeTag | null; hasMoney: boolean; kind: KindView | null;
+  id: string; title: string; status: WorkPlanStatus; systemId: string; orgUnitId: string; unitName: string; leaderId: string; leaderName: string;
+  startsOn: string | null; endsOn: string | null; visibility: WorkVisibility; beyondUnit: boolean; mine: boolean; waitingLevel: string | null;
+  state: ActivityState; timingKind: TimingKind; startTime: string | null; endTime: string | null; repeat: RepeatRule | null; reviewDue: boolean;
+};
+
+export type PlanDetail = PlanItem & {
+  fundraising: boolean; fundTarget: number | null; doneAt: string | null; settledAt: string | null;
+  aim: string; needs: string; location: string; createdByName: string; details: Record<string, string>;
+  team: Array<{ personId: string; name: string; role: string }>;
+  levels: Array<{ levelKey: 'UNIT' | 'TREASURER' | 'CATECHIST' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null; note: string | null }>;
+  rejectedReason: string | null; cancelReason: string | null; dateChange: DateChange | null;
+  suspension: { at: string | null; byName: string; note: string } | null;
+  notes: Array<{ id: string; authorName: string; text: string; at: string | null }>;
+  checks: Array<{ id: string; label: string; done: boolean; doneAt: string | null }>;
+  report: { planningSummary: string; executionSummary: string; outcome: string; composedAt: string | null; publishedAt: string | null; frozen: boolean };
+  milestones: Array<{ id: string; title: string; dueOn: string | null; done: boolean; doneAt: string | null }>;
+  registration: PlanRegistration | null;
+  parent: PlanBrief | null;
+  children: PlanBrief[];
+  program: ProgramView | null;
+};
+export type PlanBrief = { id: string; title: string; planType: PlanType; status: WorkPlanStatus };
+export type ReviewDecision = 'CONTINUE' | 'ADJUST' | 'CONCLUDE';
+export type ProgramView = {
+  steering: Array<{ personId: string; name: string; role: string }>;
+  reviews: Array<{ id: string; heldOn: string | null; summary: string; decision: ReviewDecision; byName: string }>;
+  indicators: Array<{
+    id: string; name: string; unit: string; target: number; current: number | null; percent: number | null;
+    readings: Array<{ value: number; at: string | null; note: string; byName: string }>;
+  }>;
+};
+export type PlanRegistration = {
+  open: boolean; capacity: number | null; count: number; attended: number; spotsLeft: number | null; canRegister: boolean;
+  mine: { id: string } | null; publicToken: string | null; formUrl: string | null; checkinOpen: boolean;
+  items: Array<{ id: string; name: string; phone: string; source: 'MEMBER' | 'STAFF' | 'PUBLIC'; attended: boolean }>;
+};
+
+export type PlanInput = {
+  title: string; aim: string; needs: string | null; location: string | null; startsOn: string | null; endsOn: string | null;
+  leaderId?: string; team: Array<{ personId: string; role: string }>; beyondUnit: boolean; visibility: WorkVisibility; planType?: PlanType;
+  timingKind?: TimingKind; startTime?: string | null; endTime?: string | null; repeat?: RepeatRule | null;
+  fundraising?: boolean; fundTarget?: number | null;
+  programKind?: ProgramKind | null; purposeTag?: PurposeTag | null; hasMoney?: boolean; kind?: KindInput | null;
+};
+export type PlanTiming = { timingKind: TimingKind; startsOn: string | null; endsOn: string | null; startTime: string | null; endTime: string | null; repeat: RepeatRule | null; location?: string | null };
+export type PlanOptions = {
+  units: Array<{ id: string; name: string; systemId: string }>;
+  visibilities: WorkVisibility[];
+  limits: { titleMax: number; textMax: number; noteMax: number; teamMax: number; roleMax: number; checksMax: number };
+};
+
+const P = '/api/work-plans';
+const planBody = async (p: Promise<{ plan: PlanDetail }>): Promise<PlanDetail> => (await p).plan;
+export const savePlanDetails = (id: string, details: Record<string, string>) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/details`, { method: 'PUT', body: { details } }));
+export const fetchPlanOptions = (): Promise<PlanOptions> => apiFetch(`${P}/options`);
+/** A plan in the table view: the list item plus its money and approval steps. */
+export type BoardItem = PlanItem & {
+  amount: number; perMonth: boolean; createdByName: string; aim: string; files: number;
+  levels: Array<{ levelKey: 'UNIT' | 'TREASURER' | 'CATECHIST' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; at: string | null }>;
+};
+/** Files attached to an activity: small ones, kept with it. */
+export type PlanFileItem = { id: string; name: string; mime: string; size: number; uploadedByName: string; uploadedAt: string | null };
+export const fetchPlanFiles = (planId: string): Promise<{ canWrite: boolean; items: PlanFileItem[] }> => apiFetch(`${P}/${encodeURIComponent(planId)}/files`);
+export async function uploadPlanFile(planId: string, b: { name: string; mime: string; data: string }): Promise<void> {
+  await apiFetch(`${P}/${encodeURIComponent(planId)}/files`, { method: 'POST', body: b });
+}
+export const fetchPlanFile = (planId: string, fileId: string): Promise<{ name: string; mime: string; data: string }> => apiFetch(`${P}/${encodeURIComponent(planId)}/files/${encodeURIComponent(fileId)}/file`);
+export async function deletePlanFile(planId: string, fileId: string): Promise<void> {
+  await apiFetch(`${P}/${encodeURIComponent(planId)}/files/${encodeURIComponent(fileId)}`, { method: 'DELETE' });
+}
+export async function fetchPlanTable(opts: { systemId: string; status: string; type?: PlanType }): Promise<BoardItem[]> {
+  const qs = new URLSearchParams({ systemId: opts.systemId, view: 'all', status: opts.status, board: '1' });
+  if (opts.type) qs.set('type', opts.type);
+  const res = await apiFetch<{ items: BoardItem[] }>(`${P}?${qs}`);
+  return res.items;
+}
+export async function fetchPlans(opts: { systemId?: string; view?: 'mine' | 'all'; status?: string; q?: string; type?: PlanType } = {}): Promise<PlanItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  const res = await apiFetch<{ items: PlanItem[] }>(`${P}${qs.size ? `?${qs}` : ''}`);
+  return res.items;
+}
+export const fetchPlan = (id: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}`));
+export const createPlan = (unitId: string, input: PlanInput) => planBody(apiFetch(P, { method: 'POST', body: { unitId, ...input } }));
+export const editPlan = (id: string, input: PlanInput) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}`, { method: 'PATCH', body: input }));
+export async function deletePlan(id: string): Promise<void> {
+  await apiFetch(`${P}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export const planStep = (id: string, step: 'submit' | 'withdraw' | 'reopen' | 'start' | 'close' | 'pause' | 'resume' | 'renew' | 'publish' | 'approve', body: object = {}) =>
+  planBody(apiFetch(`${P}/${encodeURIComponent(id)}/${step}`, { method: 'POST', body }));
+export const setPlanTiming = (id: string, t: PlanTiming) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/timing`, { method: 'PATCH', body: t }));
+export const reviewSeen = (id: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/review-seen`, { method: 'POST', body: {} }));
+export const rejectPlan = (id: string, reason: string, target: 'CREATOR' | 'PREVIOUS' = 'CREATOR') => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/reject`, { method: 'POST', body: { reason, target } }));
+export const setPlanTeam = (id: string, team: Array<{ personId: string; role: string }>) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/team`, { method: 'PUT', body: { team } }));
+export const suspendPlan = (id: string, note: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/suspend`, { method: 'POST', body: { note } }));
+export const unsuspendPlan = (id: string, note?: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/unsuspend`, { method: 'POST', body: note ? { note } : {} }));
+export const cancelPlan = (id: string, reason: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: { reason } }));
+export const addPlanNote = (id: string, text: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/notes`, { method: 'POST', body: { text } }));
+export const addPlanCheck = (id: string, label: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks`, { method: 'POST', body: { label } }));
+export const tickPlanCheck = (id: string, checkId: string, done: boolean) =>
+  planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'PATCH', body: { done } }));
+export const editPlanCheck = (id: string, checkId: string, label: string) =>
+  planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'PATCH', body: { label } }));
+export const removePlanCheck = (id: string, checkId: string) => planBody(apiFetch(`${P}/${encodeURIComponent(id)}/checks/${encodeURIComponent(checkId)}`, { method: 'DELETE' }));
+export const saveReport = (id: string, body: { planningSummary: string; executionSummary: string; outcome: string }) =>
+  planBody(apiFetch(`${P}/${encodeURIComponent(id)}/report`, { method: 'PUT', body }));
+const pid = (id: string) => encodeURIComponent(id);
+export const addMilestone = (id: string, title: string, dueOn: string | null) => planBody(apiFetch(`${P}/${pid(id)}/milestones`, { method: 'POST', body: { title, dueOn } }));
+export const tickMilestone = (id: string, mid: string, done: boolean) => planBody(apiFetch(`${P}/${pid(id)}/milestones/${pid(mid)}`, { method: 'PATCH', body: { done } }));
+export const removeMilestone = (id: string, mid: string) => planBody(apiFetch(`${P}/${pid(id)}/milestones/${pid(mid)}`, { method: 'DELETE' }));
+export const setRegistration = (id: string, body: { open?: boolean; capacity?: number | null; publicLink?: boolean; formUrl?: string | null }) =>
+  planBody(apiFetch(`${P}/${pid(id)}/registration`, { method: 'PATCH', body }));
+export const registerMyself = (id: string) => planBody(apiFetch(`${P}/${pid(id)}/register`, { method: 'POST', body: {} }));
+export const cancelMyRegistration = (id: string) => planBody(apiFetch(`${P}/${pid(id)}/register`, { method: 'DELETE' }));
+export const addGuest = (id: string, name: string, phone: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations`, { method: 'POST', body: { name, phone: phone || null } }));
+export const registerMember = (id: string, personId: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations`, { method: 'POST', body: { personId } }));
+export const markAttended = (id: string, rid: string, attended: boolean) => planBody(apiFetch(`${P}/${pid(id)}/registrations/${pid(rid)}`, { method: 'PATCH', body: { attended } }));
+export const removeGuest = (id: string, rid: string) => planBody(apiFetch(`${P}/${pid(id)}/registrations/${pid(rid)}`, { method: 'DELETE' }));
+
+export const fetchParentOptions = async (id: string): Promise<PlanBrief[]> => (await apiFetch<{ items: PlanBrief[] }>(`${P}/${pid(id)}/parent-options`)).items;
+export const setParent = (id: string, parentId: string | null) => planBody(apiFetch(`${P}/${pid(id)}/parent`, { method: 'PATCH', body: { parentId } }));
+export const setSteering = (id: string, members: Array<{ personId: string; role: string }>) => planBody(apiFetch(`${P}/${pid(id)}/steering`, { method: 'PUT', body: { members } }));
+export const addReview = (id: string, body: { heldOn: string; summary: string; decision: ReviewDecision }) => planBody(apiFetch(`${P}/${pid(id)}/reviews`, { method: 'POST', body }));
+export const addIndicator = (id: string, body: { name: string; unit: string; target: number }) => planBody(apiFetch(`${P}/${pid(id)}/indicators`, { method: 'POST', body }));
+export const removeIndicator = (id: string, iid: string) => planBody(apiFetch(`${P}/${pid(id)}/indicators/${pid(iid)}`, { method: 'DELETE' }));
+export const addReading = (id: string, iid: string, value: number, note: string) => planBody(apiFetch(`${P}/${pid(id)}/indicators/${pid(iid)}/readings`, { method: 'POST', body: { value, note: note || null } }));
+
+export type PublicEvent = { title: string; aim: string; location: string; startsOn: string | null; endsOn: string | null; open: boolean; full: boolean; formUrl: string | null; checkin: boolean };
+export const fetchPublicEvent = async (token: string): Promise<PublicEvent> =>
+  (await apiFetch<{ event: PublicEvent }>(`/api/public/events/${pid(token)}`, { auth: false })).event;
+export const registerPublic = (token: string, body: { name: string; phone: string; website?: string }) =>
+  apiFetch<{ ok: true }>(`/api/public/events/${pid(token)}`, { method: 'POST', body, auth: false });
+
+export async function fetchDeletedPlans(): Promise<DeletedWork[]> {
+  const res = await apiFetch<{ items: DeletedWork[] }>(`${P}/deleted`);
+  return res.items;
+}
+export async function restorePlan(id: string): Promise<void> {
+  await apiFetch(`${P}/${encodeURIComponent(id)}/restore`, { method: 'POST', body: {} });
+}
+
+// ── Money and Collections (slice 3.4) ───────────────────────────────────────────
+export type MoneyEntryKind = 'INCOME' | 'SPENDING';
+export type MoneyStatus = 'RECORDED' | 'PENDING_APPROVAL' | 'APPROVED' | 'REJECTED' | 'VOIDED';
+export type MoneyOptions = {
+  units: Array<{ id: string; name: string; systemId: string }>;
+  categories: string[];
+  limits: { nameMax: number; noteMax: number; amountMax: number };
+};
+export type MoneyAccountItem = {
+  id: string; name: string; status: 'ACTIVE' | 'CLOSED'; orgUnitId: string; unitName: string;
+  income: number; spent: number; pending: number; balance: number;
+};
+export type MoneyAccounts = { canRecord: boolean; canApprove: boolean; accounts: MoneyAccountItem[] };
+export type MoneyEntryItem = {
+  id: string; accountId: string; accountName: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note: string;
+  status: MoneyStatus; recordedByName: string; recordedAt: string | null; decidedByName: string | null; decisionNote: string | null; planId: string | null; planTitle: string | null; lineId?: string | null;
+  canDecide: boolean; canVoid: boolean;
+};
+export type MoneyEntryInput = { accountId: string; kind: MoneyEntryKind; amount: number; occurredOn: string; category: string; note?: string | null; planId?: string | null; lineId?: string | null };
+const M = '/api/money';
+export const fetchMoneyOptions = (): Promise<MoneyOptions> => apiFetch(`${M}/options`);
+export const fetchMoneyAccounts = (systemId: string): Promise<MoneyAccounts> => apiFetch(`${M}/accounts?systemId=${encodeURIComponent(systemId)}`);
+export async function fetchMoneyEntries(opts: { systemId: string; accountId?: string; status?: string; kind?: string; month?: string; planId?: string }): Promise<MoneyEntryItem[]> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  return (await apiFetch<{ entries: MoneyEntryItem[] }>(`${M}/entries?${qs}`)).entries;
+}
+export async function openMoneyAccount(unitId: string, name: string): Promise<void> {
+  await apiFetch(`${M}/accounts`, { method: 'POST', body: { unitId, name } });
+}
+export async function closeMoneyAccount(id: string): Promise<void> {
+  await apiFetch(`${M}/accounts/${encodeURIComponent(id)}/close`, { method: 'POST', body: {} });
+}
+export async function recordMoneyEntry(input: MoneyEntryInput): Promise<void> {
+  await apiFetch(`${M}/entries`, { method: 'POST', body: input });
+}
+export async function decideMoneyEntry(id: string, approve: boolean, reason?: string): Promise<void> {
+  await apiFetch(`${M}/entries/${encodeURIComponent(id)}/${approve ? 'approve' : 'reject'}`, { method: 'POST', body: { reason } });
+}
+export async function voidMoneyEntry(id: string, reason: string): Promise<void> {
+  await apiFetch(`${M}/entries/${encodeURIComponent(id)}/void`, { method: 'POST', body: { reason } });
+}
+
+// ── Money block, Module 5 (slice 3.19) ─────────────────────────────────────────
+export type BudgetKind = 'INCOME' | 'SPENDING';
+const qs = (o: Record<string, string | number>) => new URLSearchParams(Object.entries(o).map(([k, v]) => [k, String(v)])).toString();
+
+export type FundingKind = 'CONTRIBUTION' | 'DONATION' | 'OTHER';
+export type BudgetActivity = { id: string; title: string; amount: number; status: string; dueMonth: string | null; planId: string | null; fundingKind: FundingKind | null; fundingCode: string | null; fundingNote: string | null };
+export type BudgetLineItem = { id: string; kind: BudgetKind; category: string; planned: number; setAside: number; derived: boolean; note: string; committed: number; actual: number; activities: BudgetActivity[] };
+export type FundingRowView = { kind: FundingKind | 'NONE'; code: string | null; name?: string | null; planned: number; count: number };
+export type BudgetDecisionStatus = 'SUBMITTED' | 'APPROVED' | 'RETURNED' | 'WITHDRAWN';
+export type BudgetView = {
+  year: number; status: 'DRAFT' | 'SUBMITTED' | 'APPROVED'; approvedAt: string | null; canWrite: boolean; canApprove: boolean; categories: string[];
+  lines: BudgetLineItem[]; totals: { income: number; spending: number; net: number };
+  unlinked: { count: number; amount: number };
+  funding: FundingRowView[]; activitiesCount: number;
+  submission: { status: BudgetDecisionStatus; submittedAt: string | null; submittedByName: string; decidedAt: string | null; decidedByName: string | null; decisionNote: string | null } | null;
+  canSubmit: boolean; canWithdraw: boolean; isCentral: boolean;
+};
+export const fetchBudget = (systemId: string, year: number): Promise<BudgetView> => apiFetch(`${M}/budget?${qs({ systemId, year })}`);
+export async function saveBudgetLine(b: { systemId: string; year: number; kind: BudgetKind; category: string; planned: number; note?: string | null }): Promise<void> {
+  await apiFetch(`${M}/budget/lines`, { method: 'PUT', body: b });
+}
+export async function submitBudget(systemId: string, year: number): Promise<void> {
+  await apiFetch(`${M}/budget/submit`, { method: 'POST', body: { systemId, year } });
+}
+export type BudgetTotals = { incomePlanned: number; incomeActual: number; spendingPlanned: number; spendingCommitted: number; spendingActual: number };
+export type ChurchBudget = {
+  year: number;
+  systems: Array<{
+    systemId: string; name: string; own: boolean; submittedAt: string | null; submittedByName: string; totals: BudgetTotals;
+    status: string; decisionNote: string | null; decidedByName: string | null; canDecide: boolean; funding: FundingRowView[];
+    lines: Array<{ kind: BudgetKind; category: string; planned: number; committed: number; actual: number }>;
+    activities: Array<{ title: string; category: string; dueMonth: string | null; amount: number; status: string; planTitle: string | null; fundingKind?: string | null; fundingCode?: string | null }>;
+  }>;
+  missing: Array<{ systemId: string; name: string }>;
+  totals: BudgetTotals;
+  byCategory: Array<{ kind: BudgetKind; category: string; planned: number; committed: number; actual: number }>;
+  funding: FundingRowView[];
+};
+/** Central's view of the budgets the systems sent, with the church-wide totals. */
+export const fetchChurchBudget = (year: number): Promise<ChurchBudget> => apiFetch(`${M}/budget/church?${qs({ systemId: 'sys-main', year })}`);
+export async function decideBudget(systemId: string, year: number, approve: boolean, reason?: string): Promise<void> {
+  await apiFetch(`${M}/budget/decide`, { method: 'POST', body: { systemId, year, approve, reason: reason || null } });
+}
+export async function setBudgetApproval(systemId: string, year: number, approve: boolean): Promise<void> {
+  await apiFetch(`${M}/budget/${approve ? 'approve' : 'reopen'}`, { method: 'POST', body: { systemId, year } });
+}
+
+export type MoneyPlanStatus = 'PLANNED' | 'DONE' | 'DROPPED';
+export type MoneyPlanItemView = { id: string; title: string; amount: number; dueMonth: string; category: string; status: MoneyPlanStatus; note: string; planId: string | null; planTitle: string | null; fundingKind: FundingKind | ''; fundingCode: string; fundingNote: string };
+export type MoneyPlanView = {
+  year: number; canWrite: boolean; locked: boolean; budgetStatus: 'DRAFT' | 'SUBMITTED' | 'APPROVED'; categories: string[]; budgetCategories: string[];
+  fundingTypes: Array<{ code: string; name: string }>; items: MoneyPlanItemView[]; totals: { planned: number; done: number; budgetSpending: number };
+};
+export const fetchMoneyPlan = (systemId: string, year: number): Promise<MoneyPlanView> => apiFetch(`${M}/plan?${qs({ systemId, year })}`);
+export type FundingInput = { fundingKind?: FundingKind | null; fundingCode?: string | null; fundingNote?: string | null };
+export async function addMoneyPlanItem(b: { systemId: string; year: number; title: string; amount: number; dueMonth?: string | null; category?: string | null; note?: string | null; planId?: string | null } & FundingInput): Promise<void> {
+  await apiFetch(`${M}/plan`, { method: 'POST', body: b });
+}
+export async function changeMoneyPlanItem(id: string, b: Partial<{ title: string; amount: number; dueMonth: string | null; category: string | null; note: string | null; status: MoneyPlanStatus; planId: string | null }> & FundingInput): Promise<void> {
+  await apiFetch(`${M}/plan/${encodeURIComponent(id)}`, { method: 'PATCH', body: b });
+}
+
+export type PlanLink = { id: string; title: string; planType: string; status: string };
+export const fetchPlanLinks = async (systemId: string): Promise<PlanLink[]> => (await apiFetch<{ plans: PlanLink[] }>(`${M}/plan-links?${qs({ systemId })}`)).plans;
+
+export type AccountingRowView = { kind: BudgetKind; category: string; planned: number; actual: number; difference: number };
+export type AccountingSideView = { rows: AccountingRowView[]; planned: number; actual: number };
+export type AccountingView = { year: number; budgetStatus: 'DRAFT' | 'SUBMITTED' | 'APPROVED'; income: AccountingSideView; spending: AccountingSideView; net: { planned: number; actual: number } };
+export const fetchAccounting = (systemId: string, year: number): Promise<AccountingView> => apiFetch(`${M}/accounting?${qs({ systemId, year })}`);
+
+export type ListLevel = 'TEAM' | 'UNIT';
+export type ListStatus = 'DRAFT' | 'SUBMITTED' | 'COMBINED' | 'APPROVED' | 'RETURNED';
+export type ContributionLineView = { id: string; name: string; personId: string | null; memberCode?: string | null; team: string | null; amount: number };
+export type ContributionListView = {
+  id: string; level: ListLevel; typeCode: string; typeName: string; month: string; teamName: string | null; status: ListStatus; fromTeams: number;
+  createdByName: string; decisionNote: string | null; total: number; lines: ContributionLineView[];
+  goals: Array<{ label: string; total: number; goal: number; met: boolean }>; goal: { amount: number; per?: 'MEMBER' | 'TEAM' } | null;
+  canEdit: boolean; canSubmit: boolean; canReturn: boolean; canApprove: boolean;
+  decidedOn?: string | null; canAddMore?: boolean; canRecall?: boolean;
+};
+export type ContributionLists = { canWrite: boolean; canApprove: boolean; types: Array<{ code: string; name: string }>; teams: Array<{ id: string; name: string }>; lists: ContributionListView[] };
+export const fetchContributionLists = (systemId: string, month = ''): Promise<ContributionLists> => apiFetch(`${M}/lists?${qs({ systemId, ...(month ? { month } : {}) })}`);
+export async function startContributionList(b: { systemId: string; level: ListLevel; typeCode: string; month: string; teamUnitId?: string | null; purpose?: string }): Promise<string> {
+  return (await apiFetch<{ id: string }>(`${M}/lists`, { method: 'POST', body: b })).id;
+}
+export async function saveContributionLines(id: string, lines: Array<{ name: string; personId?: string | null; team?: string | null; amount: number }>): Promise<void> {
+  await apiFetch(`${M}/lists/${encodeURIComponent(id)}`, { method: 'PUT', body: { lines } });
+}
+export async function moveContributionList(id: string, step: 'submit' | 'approve' | 'return' | 'recall', reason?: string): Promise<void> {
+  await apiFetch(`${M}/lists/${encodeURIComponent(id)}/${step}`, { method: 'POST', body: { reason } });
+}
+/** Add people to a list; a list already with the President or approved goes back to the President. */
+export async function addContributionLines(id: string, lines: Array<{ name: string; personId?: string | null; team?: string | null; amount: number }>): Promise<{ sentAgain: boolean }> {
+  return apiFetch(`${M}/lists/${encodeURIComponent(id)}/lines`, { method: 'POST', body: { lines } });
+}
+export async function combineContributionLists(systemId: string, typeCode: string, month: string): Promise<number> {
+  return (await apiFetch<{ combined: number }>(`${M}/lists/combine`, { method: 'POST', body: { systemId, typeCode, month } })).combined;
+}
+
+export type DonationView = { typeCode: string | null; typeName: string | null; id: string; donorName: string; amount: number; receivedOn: string; note: string; status: 'PENDING' | 'APPROVED' | 'REJECTED'; recordedByName: string; decisionNote: string | null; canDecide: boolean };
+export type DonationsView = { canRecord: boolean; canApprove: boolean; donationTypes: DonationType[]; donations: DonationView[] };
+export const fetchDonations = (systemId: string): Promise<DonationsView> => apiFetch(`${M}/donations?${qs({ systemId })}`);
+export async function recordDonation(b: { systemId: string; accountId: string; donorName: string; amount: number; receivedOn: string; note?: string | null; donorPersonId?: string | null; typeCode?: string | null; purpose?: string }): Promise<void> {
+  await apiFetch(`${M}/donations`, { method: 'POST', body: b });
+}
+export async function decideDonation(id: string, approve: boolean, reason?: string): Promise<void> {
+  await apiFetch(`${M}/donations/${encodeURIComponent(id)}/${approve ? 'approve' : 'reject'}`, { method: 'POST', body: { reason } });
+}
+
+export type MyContributionView = {
+  year: number; grandTotal: number; teams: Array<{ id: string; name: string }>;
+  types: Array<{ code: string; name: string; total: number; goal: number | null; goalPer: 'MEMBER' | 'TEAM' | null; reached: boolean | null }>;
+  history: Array<{ id: string; month: string; typeName: string; amount: number; status: ListStatus; team: string | null }>;
+};
+export const fetchMyContribution = (systemId: string, year: number): Promise<MyContributionView> => apiFetch(`${M}/mine?${qs({ systemId, year })}`);
+
+export type MoneyReportView = AccountingView & {
+  months: Array<{ month: string; income: number; spending: number }>;
+  contributions: Array<{ code: string; name: string; approved: number; inProgress: number }>;
+  donations: { approved: number; waiting: number };
+  plan: { items: number; planned: number; done: number };
+  byPlan: Array<{ planId: string; title: string; planned: number; income: number; spending: number; pending: number }>;
+};
+export const fetchMoneyReport = (systemId: string, year: number): Promise<MoneyReportView> => apiFetch(`${M}/report?${qs({ systemId, year })}`);
+
+export type CollectionKind = 'SERVICE' | 'EVENT';
+export type CollectionItem = {
+  id: string; kind: CollectionKind; title: string; heldOn: string; startsAt: string | null; tithe: number; offering: number; other: number; total: number;
+  note: string; status: 'ACTIVE' | 'VOIDED'; voidReason: string | null; recordedByName: string;
+};
+export type CollectionTotals = { tithe: number; offering: number; other: number; all: number; count: number };
+export type CollectionMonth = { month: string; tithe: number; offering: number; other: number; total: number; count: number };
+export type CollectionsView = {
+  year: number; years: number[]; items: CollectionItem[]; totals: CollectionTotals; byMonth: CollectionMonth[]; canWrite: boolean; limits: { noteMax: number; amountMax: number };
+};
+export type CollectionInput = { kind: CollectionKind; title: string; heldOn: string; startsAt?: string | null; tithe: number; offering: number; other: number; note?: string | null };
+const C = '/api/collections';
+export const fetchCollections = (year: number): Promise<CollectionsView> => apiFetch(`${C}?year=${year}`);
+export async function recordCollection(input: CollectionInput): Promise<void> {
+  await apiFetch(C, { method: 'POST', body: input });
+}
+export async function changeCollection(id: string, input: CollectionInput): Promise<void> {
+  await apiFetch(`${C}/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function voidCollection(id: string, reason: string): Promise<void> {
+  await apiFetch(`${C}/${encodeURIComponent(id)}/void`, { method: 'POST', body: { reason } });
+}
+
+// ── Reports (slice 3.5) ─────────────────────────────────────────────────────────
+export type ReportKind = 'MEETINGS' | 'ATTENDANCE' | 'MONEY' | 'COLLECTIONS' | 'PEOPLE_LIST' | 'WORK_PLANS' | 'BAPTISMS' | 'MARRIAGES' | 'YEARLY_BUDGET' | 'ACTION_PLAN';
+export type ReportCellType = 'text' | 'date' | 'money' | 'number' | 'code' | 'percent';
+export type ReportCell = string | number | null;
+export type ReportSnapshot = {
+  version: 1; kind: ReportKind; periodKey: string; unitName: string;
+  summary: Array<{ key: string; value: ReportCell; type: ReportCellType }>;
+  tables: Array<{ key: string; columns: Array<{ key: string; type: ReportCellType }>; rows: ReportCell[][] }>;
+};
+export type ReportItem = {
+  id: string; systemId: string; unitName: string; kind: ReportKind; periodKey: string; title: string; status: 'DRAFT' | 'PUBLISHED';
+  composedByName: string; composedAt: string | null; publishedByName: string | null; publishedAt: string | null; canPublish: boolean; canEdit: boolean;
+};
+export type ReportDetail = ReportItem & { snapshot: ReportSnapshot | null };
+export type ReportOptions = {
+  units: Array<{ id: string; name: string; systemId: string; kinds: ReportKind[] }>;
+  kinds: ReportKind[];
+  /** The parts of each report that can be left in or out. */
+  sections?: Partial<Record<ReportKind, string[]>>;
+  schedulerUnits: Array<{ id: string; name: string; systemId: string }>;
+};
+export type ReportScheduleItem = { id: string; systemId: string; orgUnitId: string; unitName: string; kind: ReportKind; dueDay: number; periodKey: string; dueOn: string; state: 'RECEIVED' | 'DUE' | 'LATE' };
+export type ReceivedReport = { id: string; systemId: string; unitName: string; kind: ReportKind; periodKey: string; publishedAt: string | null };
+export type LateReport = { scheduleId: string; systemId: string; unitName: string; kind: ReportKind; periodKey: string; dueOn: string };
+const R = '/api/reports';
+export const fetchReportOptions = (): Promise<ReportOptions> => apiFetch(`${R}/options`);
+export async function fetchReports(opts: { systemId: string; kind?: string; period?: string; status?: string }): Promise<{ reports: ReportItem[]; canCompose: boolean }> {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(opts)) if (v) qs.set(k, v);
+  return apiFetch(`${R}?${qs}`);
+}
+export async function fetchReport(id: string): Promise<ReportDetail> {
+  return (await apiFetch<{ report: ReportDetail }>(`${R}/${encodeURIComponent(id)}`)).report;
+}
+export const composeReport = (input: { unitId: string; kind: ReportKind; periodKey: string; sections?: string[] }): Promise<{ id: string }> => apiFetch(R, { method: 'POST', body: input });
+export async function reportStep(id: string, step: 'refresh' | 'publish'): Promise<void> {
+  await apiFetch(`${R}/${encodeURIComponent(id)}/${step}`, { method: 'POST', body: {} });
+}
+export async function discardReport(id: string): Promise<void> {
+  await apiFetch(`${R}/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export const fetchReportSchedules = (systemId: string): Promise<{ schedules: ReportScheduleItem[]; canSchedule: boolean }> => apiFetch(`${R}/schedules?systemId=${encodeURIComponent(systemId)}`);
+export async function addReportSchedule(input: { unitId: string; kind: ReportKind; dueDay: number }): Promise<void> {
+  await apiFetch(`${R}/schedules`, { method: 'POST', body: input });
+}
+export async function stopReportSchedule(id: string): Promise<void> {
+  await apiFetch(`${R}/schedules/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+// ── Person 360 (slice 3.6) ──────────────────────────────────────────────────────
+export type P360Section = 'CONTACT' | 'EMPLOYMENT' | 'EDUCATION' | 'CALLING' | 'FAMILY' | 'BAPTISM' | 'MARRIAGE';
+export type P360Record = {
+  id: string; section: P360Section; data: Record<string, string | number>; status: 'CURRENT' | 'SUPERSEDED' | 'VOIDED';
+  recordedByName: string; recordedAt: string | null; voidReason: string | null; voidedByName: string | null; relatedName: string; unitName?: string; programName: string; canChange: boolean;
+};
+export type P360Person = {
+  id: string; fullName: string; memberCode: string | null; status: string; archived: boolean; dateOfBirth: string | null; gender: string | null;
+  joinedChurchOn: string | null; phone: string | null; email: string | null; address: string | null; nationalId: string | null;
+};
+export type P360View = { person: P360Person; read: P360Section[]; write: P360Section[]; records: P360Record[] };
+export type P360Cohort = { id: string; name: string; cohortLabel: string; learners: Array<{ personId: string; name: string; baptised: boolean }> };
+const P3 = '/api/person360';
+export type P360Document = { id: string; name: string; mime: string; size: number; note: string; uploadedByName: string; uploadedAt: string | null };
+export const fetchP360Documents = (personId: string): Promise<{ canWrite: boolean; items: P360Document[] }> => apiFetch(`${P3}/${encodeURIComponent(personId)}/documents`);
+export async function uploadP360Document(personId: string, b: { name: string; mime: string; data: string }): Promise<void> {
+  await apiFetch(`${P3}/${encodeURIComponent(personId)}/documents`, { method: 'POST', body: b });
+}
+export const fetchP360DocumentFile = (id: string): Promise<{ name: string; mime: string; data: string }> => apiFetch(`${P3}/documents/${encodeURIComponent(id)}/file`);
+export async function deleteP360Document(id: string): Promise<void> {
+  await apiFetch(`${P3}/documents/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export const fetchP360Access = (): Promise<{ read: P360Section[]; write: P360Section[]; allowed: boolean; leader?: boolean }> => apiFetch(`${P3}/access`);
+export type P360Participation = {
+  year: number; totals: { given: number; pledged: number }; more: boolean;
+  items: Array<{ id: string; kind: 'CONTRIBUTION' | 'DONATION' | 'SPONSORSHIP' | 'CLAIM'; amount: number; day: string; system: string | null; label: string; status: string }>;
+};
+export const fetchP360Participation = (personId: string): Promise<P360Participation> => apiFetch(`${P3}/${encodeURIComponent(personId)}/participation`);
+export const fetchP360 = (personId: string): Promise<P360View> => apiFetch(`${P3}/${encodeURIComponent(personId)}`);
+export async function addP360Record(personId: string, section: P360Section, data: Record<string, string | number>): Promise<void> {
+  await apiFetch(`${P3}/${encodeURIComponent(personId)}/records`, { method: 'POST', body: { section, data } });
+}
+export async function changeP360Record(id: string, data: Record<string, string | number>): Promise<void> {
+  await apiFetch(`${P3}/records/${encodeURIComponent(id)}`, { method: 'PATCH', body: { data } });
+}
+export async function voidP360Record(id: string, reason: string): Promise<void> {
+  await apiFetch(`${P3}/records/${encodeURIComponent(id)}/void`, { method: 'POST', body: { reason } });
+}
+export async function fetchP360History(id: string): Promise<P360Record[]> {
+  return (await apiFetch<{ history: P360Record[] }>(`${P3}/records/${encodeURIComponent(id)}/history`)).history;
+}
+export async function fetchP360Cohorts(): Promise<P360Cohort[]> {
+  return (await apiFetch<{ cohorts: P360Cohort[] }>(`${P3}/cohorts`)).cohorts;
+}
+export const recordBaptismCohort = (input: { programId: string; date: string; place?: string; baptisedBy?: string; personIds: string[] }): Promise<{ created: number; skipped: number }> =>
+  apiFetch(`${P3}/baptism-cohort`, { method: 'POST', body: input });
+
+// ── Groups (slice 3.8) ──────────────────────────────────────────────────────────
+export type GroupKind = 'FELLOWSHIP' | 'CLASS' | 'AGE_GROUP';
+export type GroupOptions = { units: Array<{ id: string; name: string; systemId: string; kind: GroupKind }>; limits: { nameMax: number; meetsMax: number; noteMax: number } };
+export type GroupListItem = { id: string; name: string; status: 'ACTIVE' | 'CLOSED'; unitName: string; ageFrom: number | null; ageTo: number | null; meetsOn: string; leaderName: string; members: number; lastSessionOn: string | null };
+export type GroupDetail = {
+  group: { id: string; name: string; kind: GroupKind; systemId: string; status: 'ACTIVE' | 'CLOSED'; unitName: string; ageFrom: number | null; ageTo: number | null; meetsOn: string; leaderId: string | null; leaderName: string; canWrite: boolean };
+  members: Array<{ personId: string; name: string; joinedOn: string; age: number | null; outsideAge: boolean; came: number; of: number; rate: number }>;
+  sessions: Array<{ id: string; heldOn: string; present: number; note: string; names: string[] }>;
+};
+export type GroupInput = { name: string; leaderId?: string | null; ageFrom?: number | null; ageTo?: number | null; meetsOn?: string | null };
+const G = '/api/groups';
+export const fetchGroupOptions = (): Promise<GroupOptions> => apiFetch(`${G}/options`);
+export const fetchGroups = (systemId: string): Promise<{ kind: GroupKind; canWrite: boolean; groups: GroupListItem[] }> => apiFetch(`${G}?systemId=${encodeURIComponent(systemId)}`);
+export const fetchGroup = (id: string): Promise<GroupDetail> => apiFetch(`${G}/${encodeURIComponent(id)}`);
+export const createGroup = (unitId: string, input: GroupInput): Promise<{ id: string }> => apiFetch(G, { method: 'POST', body: { unitId, ...input } });
+export async function editGroup(id: string, input: GroupInput): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function closeGroup(id: string): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}/close`, { method: 'POST', body: {} });
+}
+export async function addGroupMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}/members`, { method: 'POST', body: { personId } });
+}
+export async function removeGroupMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}/members/${encodeURIComponent(personId)}`, { method: 'DELETE' });
+}
+export async function recordGroupSession(id: string, input: { heldOn: string; presentIds: string[]; note?: string | null }): Promise<void> {
+  await apiFetch(`${G}/${encodeURIComponent(id)}/sessions`, { method: 'POST', body: input });
+}
+
+// ── Caring ministries (slice 3.9) ───────────────────────────────────────────────
+export type CouplePairItem = { id: string; aId: string; aName: string; bId: string; bName: string; marriedOn: string | null };
+export type VisitItem = { id: string; elderId: string; elderName: string; visitedOn: string; visitorNames: string[]; note: string };
+export type WatchItem = { id: string; name: string; weekday: number; startTime: string; endTime: string; members: Array<{ personId: string; name: string }> };
+const CARE = '/api/caring';
+export const fetchCouples = (): Promise<{ canWrite: boolean; pairs: CouplePairItem[] }> => apiFetch(`${CARE}/couples`);
+export async function addCouple(input: { aId: string; bId: string; marriedOn?: string | null }): Promise<void> {
+  await apiFetch(`${CARE}/couples`, { method: 'POST', body: input });
+}
+export async function endCouple(id: string): Promise<void> {
+  await apiFetch(`${CARE}/couples/${encodeURIComponent(id)}/end`, { method: 'POST', body: {} });
+}
+export const fetchVisits = (): Promise<{ visits: VisitItem[] }> => apiFetch(`${CARE}/visits`);
+export async function recordVisit(input: { elderId: string; visitedOn: string; visitorIds: string[]; note?: string | null }): Promise<void> {
+  await apiFetch(`${CARE}/visits`, { method: 'POST', body: input });
+}
+export const fetchWatches = (): Promise<{ canWrite: boolean; watches: WatchItem[] }> => apiFetch(`${CARE}/watches`);
+export async function createWatch(input: { name: string; weekday: number; startTime: string; endTime: string }): Promise<void> {
+  await apiFetch(`${CARE}/watches`, { method: 'POST', body: input });
+}
+export async function closeWatch(id: string): Promise<void> {
+  await apiFetch(`${CARE}/watches/${encodeURIComponent(id)}/close`, { method: 'POST', body: {} });
+}
+export async function addWatchMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${CARE}/watches/${encodeURIComponent(id)}/members`, { method: 'POST', body: { personId } });
+}
+export async function removeWatchMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${CARE}/watches/${encodeURIComponent(id)}/members/${encodeURIComponent(personId)}`, { method: 'DELETE' });
+}
+
+// ── Evangelism (slice 3.10) ─────────────────────────────────────────────────────
+export type ContactStatus = 'NEW' | 'FOLLOWING' | 'JOINED' | 'CLOSED';
+export type ContactItem = { id: string; fullName: string; phone: string; howMet: string; metOn: string; status: ContactStatus; assignedToId: string | null; assignedName: string; lastFollowUpOn: string | null; nextOn: string | null; overdue: boolean };
+export type ContactDetail = {
+  contact: { id: string; fullName: string; phone: string; howMet: string; metOn: string; status: ContactStatus; note: string; assignedToId: string | null; assignedName: string; canWrite: boolean };
+  followUps: Array<{ id: string; doneOn: string; note: string; nextOn: string | null; byName: string }>;
+};
+export type ContactInput = { fullName: string; phone?: string | null; howMet?: string | null; metOn?: string | null; assignedToId?: string | null; note?: string | null };
+export type PulpitSlotItem = { id: string; serviceOn: string; theme: string; bibleText: string; status: 'PLANNED' | 'DONE' | 'CANCELLED'; preacherId: string | null; guestId: string | null; preacherName: string; isGuest: boolean };
+export type GuestItem = { id: string; name: string; church: string; phone: string; note: string; visits: number; lastVisitOn: string | null };
+export type PulpitSlotInput = { serviceOn?: string; personId?: string | null; guestId?: string | null; theme?: string | null; bibleText?: string | null; status?: 'PLANNED' | 'DONE' | 'CANCELLED' };
+const EV = '/api/evangelism';
+export const fetchContacts = (status = ''): Promise<{ canWrite: boolean; contacts: ContactItem[] }> => apiFetch(`${EV}/contacts${status ? `?status=${status}` : ''}`);
+export const fetchContact = (id: string): Promise<ContactDetail> => apiFetch(`${EV}/contacts/${encodeURIComponent(id)}`);
+export const createContact = (input: ContactInput): Promise<{ id: string }> => apiFetch(`${EV}/contacts`, { method: 'POST', body: input });
+export async function followUpContact(id: string, input: { doneOn: string; note: string; nextOn?: string | null }): Promise<void> {
+  await apiFetch(`${EV}/contacts/${encodeURIComponent(id)}/followups`, { method: 'POST', body: input });
+}
+export async function setContactStatus(id: string, status: ContactStatus): Promise<void> {
+  await apiFetch(`${EV}/contacts/${encodeURIComponent(id)}/status`, { method: 'POST', body: { status } });
+}
+export async function assignContact(id: string, personId: string | null): Promise<void> {
+  await apiFetch(`${EV}/contacts/${encodeURIComponent(id)}/assign`, { method: 'POST', body: { personId } });
+}
+export const fetchPulpit = (): Promise<{ canWrite: boolean; canSeeGuests: boolean; slots: PulpitSlotItem[] }> => apiFetch(`${EV}/pulpit/slots`);
+export async function createPulpitSlot(input: PulpitSlotInput): Promise<void> {
+  await apiFetch(`${EV}/pulpit/slots`, { method: 'POST', body: input });
+}
+export async function changePulpitSlot(id: string, input: PulpitSlotInput): Promise<void> {
+  await apiFetch(`${EV}/pulpit/slots/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export const fetchGuests = (): Promise<{ canWrite: boolean; guests: GuestItem[] }> => apiFetch(`${EV}/pulpit/guests`);
+export async function createGuest(input: { name: string; church?: string | null; phone?: string | null; note?: string | null }): Promise<void> {
+  await apiFetch(`${EV}/pulpit/guests`, { method: 'POST', body: input });
+}
+export async function archiveGuest(id: string): Promise<void> {
+  await apiFetch(`${EV}/pulpit/guests/${encodeURIComponent(id)}/archive`, { method: 'POST', body: {} });
+}
+
+// ── Music ministry (slice 3.12) ─────────────────────────────────────────────────
+export type ChoirRole = 'PRIMARY' | 'SECONDARY' | 'CHILDREN' | 'WORSHIP';
+export type MusicServiceKind = 'SS1' | 'SS2' | 'TUESDAY' | 'FRIDAY' | 'IGABURO';
+export type ChoirItem = { id: string; name: string; role: ChoirRole; active: boolean; members: number; canWrite: boolean };
+export type ChoirDetail = { choir: { id: string; name: string; role: ChoirRole; active: boolean; canWrite: boolean }; members: Array<{ personId: string; name: string; joinedOn: string }> };
+export type OversightView = {
+  month: string; planStatus: 'CONFIRMED' | 'PUBLISHED' | null;
+  choirs: Array<{ id: string; name: string; role: ChoirRole; members: number; services: number; days: string[]; noMembers: boolean; notScheduled: boolean }>;
+  emptyServices: Array<{ id: string; serviceOn: string; kind: MusicServiceKind }>;
+};
+const MU = '/api/music';
+/** Music sees the register of every choir; a choir system (or Worship) passes its id to see only its own. */
+export const fetchChoirs = (systemId?: string): Promise<{ canManage: boolean; choirs: ChoirItem[] }> => apiFetch(`${MU}/choirs${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+export const fetchChoir = (id: string): Promise<ChoirDetail> => apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`);
+export async function createChoir(input: { name: string; role: ChoirRole }): Promise<void> {
+  await apiFetch(`${MU}/choirs`, { method: 'POST', body: input });
+}
+export async function editChoir(id: string, input: { name: string; role: ChoirRole }): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function deleteChoir(id: string): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function setChoirActive(id: string, active: boolean): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/active`, { method: 'POST', body: { active } });
+}
+export async function addChoirMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/members`, { method: 'POST', body: { personId } });
+}
+export async function removeChoirMember(id: string, personId: string): Promise<void> {
+  await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/members/${encodeURIComponent(personId)}`, { method: 'DELETE' });
+}
+export type MusicHorizonKey = 'MONTH' | 'QUARTER' | 'HALF' | 'YEAR';
+export type ScheduleUnitRef = { unitId: string; name: string; kind: ChoirRole };
+export type ScheduleService = { id: string; periodKey: string; date: string; kind: MusicServiceKind; label: string; units: ScheduleUnitRef[] };
+export type ScheduleState = {
+  canWrite: boolean;
+  months: Array<{ periodKey: string; state: 'CONFIRMED' | 'PUBLISHED'; version: number; confirmedAt: string | null; publishedAt: string | null; updatedAt: string | null }>;
+  drafts: Array<{ id: string; label: string; horizon: MusicHorizonKey; startMonth: string; months: string[]; warnings: number }>;
+  options: Record<string, Array<{ value: string; label: string }>>;
+  units: Array<{ id: string; name: string; kind: ChoirRole }>;
+};
+export type ScheduleDraftView = { id: string; label: string; horizon: MusicHorizonKey; warnings: string[]; months: Array<{ periodKey: string; decided: 'CONFIRMED' | 'PUBLISHED' | null }>; services: ScheduleService[] };
+export type ScheduleMonthView = { canWrite: boolean; periodKey: string; state: 'CONFIRMED' | 'PUBLISHED'; version: number; warnings: string[]; services: ScheduleService[] };
+export type ScheduleEdit = { serviceId: string; action: 'add' | 'remove' | 'replace'; unitId: string; toUnitId?: string | null };
+export type ScheduleLogEntry = { id: string; at: string; periodKey: string; stage: string; action: string; version: number; by: string; summary: string; changes: string[] };
+const MS = `${MU}/schedule`;
+export const fetchScheduleState = (): Promise<ScheduleState> => apiFetch(`${MS}/state`);
+export const fetchScheduleDraft = (id: string): Promise<ScheduleDraftView> => apiFetch(`${MS}/drafts/${encodeURIComponent(id)}`);
+export const fetchScheduleMonth = (month: string): Promise<ScheduleMonthView> => apiFetch(`${MS}/months/${encodeURIComponent(month)}`);
+export const fetchScheduleLog = (month?: string): Promise<{ entries: ScheduleLogEntry[] }> => apiFetch(`${MS}/log${month ? `?month=${encodeURIComponent(month)}` : ''}`);
+export async function generateScheduleDraft(horizon: MusicHorizonKey, start: string): Promise<{ id: string; warnings: string[] }> {
+  return apiFetch(`${MS}/drafts/generate`, { method: 'POST', body: { horizon, start } });
+}
+export async function editScheduleDraft(id: string, edit: ScheduleEdit): Promise<{ warnings: string[] }> {
+  return apiFetch(`${MS}/drafts/${encodeURIComponent(id)}/edit`, { method: 'POST', body: edit });
+}
+export async function discardScheduleDraft(id: string): Promise<void> {
+  await apiFetch(`${MS}/drafts/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+export async function confirmScheduleDraft(id: string, months?: string[]): Promise<void> {
+  await apiFetch(`${MS}/drafts/${encodeURIComponent(id)}/confirm`, { method: 'POST', body: { months } });
+}
+export async function publishScheduleDraft(id: string): Promise<void> {
+  await apiFetch(`${MS}/drafts/${encodeURIComponent(id)}/publish`, { method: 'POST', body: {} });
+}
+export async function publishScheduleMonths(months: string[]): Promise<void> {
+  await apiFetch(`${MS}/months/publish`, { method: 'POST', body: { months } });
+}
+export async function editScheduleMonth(month: string, edit: ScheduleEdit): Promise<{ warnings: string[]; version: number }> {
+  return apiFetch(`${MS}/months/${encodeURIComponent(month)}/edit`, { method: 'POST', body: edit });
+}
+export const fetchMusicOversight = (month: string): Promise<OversightView> => apiFetch(`${MU}/oversight?month=${month}`);
+
+// ── Choir work (slice 3.13) ─────────────────────────────────────────────────────
+export type RehearsalView = {
+  canWrite: boolean;
+  members: Array<{ personId: string; name: string; came: number; of: number; rate: number }>;
+  rehearsals: Array<{ id: string; heldOn: string; present: number; note: string }>;
+};
+export type SongItem = { id: string; title: string; composer: string; songKey: string; lastSungOn: string | null };
+export type PledgeItem = { id: string; amount: number; pledgedOn: string; receivedOn: string | null; note: string; status: 'PLEDGED' | 'RECEIVED' };
+export type SponsorItem = { id: string; name: string; kind: 'PERSON' | 'ORGANISATION'; contact: string; pledges: PledgeItem[] };
+const CW = '/api/choir';
+const q = (choirId: string) => `choirId=${encodeURIComponent(choirId)}`;
+export const fetchChoirChoices = (forRepertoire = false, systemId?: string): Promise<{ choirs: Array<{ id: string; name: string }> }> => {
+  const qs = [forRepertoire ? 'for=repertoire' : '', systemId ? `systemId=${encodeURIComponent(systemId)}` : ''].filter(Boolean).join('&');
+  return apiFetch(`${CW}/choirs${qs ? `?${qs}` : ''}`);
+};
+export const fetchRehearsals = (choirId: string): Promise<RehearsalView> => apiFetch(`${CW}/rehearsals?${q(choirId)}`);
+export async function recordRehearsal(input: { choirId: string; heldOn: string; presentIds: string[]; note?: string | null }): Promise<void> {
+  await apiFetch(`${CW}/rehearsals`, { method: 'POST', body: input });
+}
+export const fetchSongs = (choirId: string): Promise<{ canWrite: boolean; songs: SongItem[] }> => apiFetch(`${CW}/songs?${q(choirId)}`);
+export async function addSong(input: { choirId: string; title: string; composer?: string | null; songKey?: string | null }): Promise<void> {
+  await apiFetch(`${CW}/songs`, { method: 'POST', body: input });
+}
+export async function markSongSung(id: string, day: string): Promise<void> {
+  await apiFetch(`${CW}/songs/${encodeURIComponent(id)}/sung`, { method: 'POST', body: { day } });
+}
+export async function retireSong(id: string): Promise<void> {
+  await apiFetch(`${CW}/songs/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });
+}
+export const fetchSponsors = (choirId: string): Promise<{ canWrite: boolean; totals: { pledged: number; received: number }; sponsors: SponsorItem[] }> => apiFetch(`${CW}/sponsors?${q(choirId)}`);
+export async function addSponsor(input: { choirId: string; name: string; kind: 'PERSON' | 'ORGANISATION'; contact?: string | null; personId?: string | null }): Promise<void> {
+  await apiFetch(`${CW}/sponsors`, { method: 'POST', body: input });
+}
+export async function endSponsor(id: string): Promise<void> {
+  await apiFetch(`${CW}/sponsors/${encodeURIComponent(id)}/end`, { method: 'POST', body: {} });
+}
+export async function addPledge(sponsorId: string, input: { amount: number; pledgedOn: string; note?: string | null }): Promise<void> {
+  await apiFetch(`${CW}/sponsors/${encodeURIComponent(sponsorId)}/pledges`, { method: 'POST', body: input });
+}
+export async function receivePledge(id: string, day: string): Promise<void> {
+  await apiFetch(`${CW}/pledges/${encodeURIComponent(id)}/received`, { method: 'POST', body: { day } });
+}
+export async function cancelPledge(id: string): Promise<void> {
+  await apiFetch(`${CW}/pledges/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
+}
+
+/* ─── Home dashboards (slice 3.14) ─── */
+export interface GlanceTile { key: string; value: number; format: 'count' | 'rwf'; tone?: 'warn'; href?: string }
+export interface GlanceSeries { key: string; format: 'count' | 'rwf'; points: Array<{ label: string; value: number }> }
+export const fetchGlance = (systemId: string): Promise<{ systemId: string; tiles: GlanceTile[]; series: GlanceSeries[] }> =>
+  apiFetch(`/api/glance?systemId=${encodeURIComponent(systemId)}`);
+
+/* ─── Leader dashboard ─── */
+export type DashPoint = { label: string; value: number };
+export type DashKpi = { key: 'members' | 'attendance' | 'giving' | 'money' | 'units' | 'reports' | 'work' | 'done' | 'activities'; value: number; format: 'count' | 'rwf'; trend: number | null; href?: string; tone?: 'late' | 'ok'; prev?: number | null; spark?: number[] };
+export type DashByUnit = { year: number; types: string[]; units: Array<{ systemId: string; name: string; byType: Record<string, number>; own: number; donations: number; total: number }> };
+export type Dashboard = {
+  systemId: string;
+  central: boolean;
+  range?: number;
+  kpis: DashKpi[];
+  attention?: Array<{ key: string; count: number; href: string; title: string }>;
+  workSeries?: Array<{ key: 'created' | 'done'; points: DashPoint[] }>;
+  byUnit?: DashByUnit | null;
+  attendance: DashPoint[] | null;
+  joinedSeries?: DashPoint[] | null;
+  second: { kind: 'giving' | 'money'; series: Array<{ key: 'giving' | 'income' | 'spent'; points: DashPoint[] }> } | null;
+  /** Each part appears only when this person's access opens it. */
+  overview: {
+    people?: { members: number; joinedThisMonth: number; units: number };
+    work?: { overdue?: number; doneThisMonth?: number; openTasks: number; plansRunning: number; plansWaiting: number; plansDraft: number };
+    schedule?: { next: Array<{ id: string; title: string; kind: string; startsAt: string | null }> };
+    money?: { balance: number; incomeMonth: number; spentMonth: number; pendingCount: number; pendingAmount: number; plannedYear: number; spentYear: number };
+    governance?: { nextMeeting: { id: string; title: string; at: string | null } | null; decisionsWaiting: number; lettersOpen: number };
+    monthPlan?: { planned: boolean; next: Array<{ date: string; kind: string; choirs: string[] }> };
+    choirs?: { count: number; members: number; list: Array<{ name: string; members: number }> };
+  };
+  events: Array<{ id: string; title: string; startsOn: string | null; planType: string; href: string }>;
+  /** null = this person's access does not open that part, so the page leaves it out. */
+  members: Array<{ personId: string; name: string; joinedOn: string; href: string }> | null;
+  reports: Array<{ id: string; title: string; kind: string; periodKey: string; late: boolean; href: string }> | null;
+  work: Array<{ id: string; title: string; status: string; at: string | null; href: string }>;
+};
+export const fetchDashboard = (systemId: string, range = 6): Promise<Dashboard> => apiFetch(`/api/dashboard?systemId=${encodeURIComponent(systemId)}&range=${range}`);
+
+// ── Protocol (slice 3.16): the old team engine ─────────────────────────────────
+export type ProtocolOffice = 'PRESIDENT' | 'VP' | 'SECRETARY' | 'TREASURER' | 'COORDINATOR' | 'MEMBER';
+export type ProtocolServeDays = 'SUNDAY' | 'TUESDAY' | 'BOTH';
+export type ProtocolKind = 'SS1' | 'SS2' | 'TUESDAY' | 'IGABURO';
+export type ProtocolRosterStatus = 'ACTIVE' | 'INACTIVE' | 'LEAVE';
+export type ProtocolRole = 'MEMBER' | 'TEAM_LEADER' | 'VICE_LEADER';
+export type ProtocolAttendanceStatus = 'PRESENT' | 'HALF_PRESENT' | 'EXCUSED' | 'ABSENT';
+export type ProtocolStep = 'WAIT_MUSIC' | 'BUILD' | 'SEND' | 'WAIT_PRESIDENT' | 'DONE';
+export type ProtocolMemberRow = {
+  id: string; personId: string; name: string; office: ProtocolOffice; serveDays: ProtocolServeDays; status: ProtocolRosterStatus; unavailableDates: string[];
+  allowedServiceKinds: ProtocolKind[]; onlyServices: Array<{ date: string; kind: ProtocolKind }>; notes: string; choirs: string[];
+};
+export type ProtocolRosterPatch = Partial<{
+  office: ProtocolOffice; serveDays: ProtocolServeDays; status: ProtocolRosterStatus; unavailableDates: string[]; allowedServiceKinds: ProtocolKind[];
+  onlyServices: Array<{ date: string; kind: ProtocolKind }>; notes: string;
+}>;
+export type ProtocolTeamEntry = { id: string; personId: string; name: string; role: ProtocolRole; recommendedRole: ProtocolRole | null; slotKind: 'REGULAR' | 'EXTRA' | 'FILL_IN'; source: string; load: number };
+export type ProtocolServiceView = { id: string; date: string; kind: ProtocolKind; label: string; target: number; music: string[]; team: ProtocolTeamEntry[] };
+export type ProtocolIssueView = {
+  key: string; code: string; severity: 'BLOCKING' | 'WARNING'; message: string; serviceId: string | null; personId: string | null; overridden: boolean; canOverride: boolean;
+};
+export type ProtocolMonthView = {
+  month: string; step: ProtocolStep; status: 'OPEN' | 'DRAFT' | 'REVIEW' | 'PUBLISHED'; version: number; music: { state: 'CONFIRMED' | 'PUBLISHED'; version: number } | null;
+  builtOnMusicVersion: number | null; stale: string[]; notes: string[]; relax: { tuesday: boolean; reason: string | null }; rules: { target: number; hardMax: number; teamSize: number };
+  services: ProtocolServiceView[]; issues: ProtocolIssueView[]; overrides: Array<{ issueKey: string; reason: string; at: string }>; roster: Array<{ personId: string; name: string; load: number }>;
+  can: { build: boolean; edit: boolean; reopen: boolean; review: boolean };
+};
+export type ProtocolDuty = {
+  serviceId: string; date: string; kind: ProtocolKind; label: string; role: ProtocolRole; slotKind: string; attendance: ProtocolAttendanceStatus | null; absence: string | null;
+  swapOffers: Array<{ id: string; from: string }>;
+};
+export type ProtocolLeading = {
+  serviceId: string; date: string; kind: ProtocolKind; label: string;
+  team: Array<{ personId: string; name: string; role: ProtocolRole; slotKind: string; attendance: ProtocolAttendanceStatus | null; absence: { id: string; status: string; reason: string } | null }>;
+  fillIns: Array<{ id: string; excused: string; candidate: string; status: string }>;
+};
+export type ProtocolMine = {
+  duties: ProtocolDuty[]; leading: ProtocolLeading[]; fillInOffers: Array<{ id: string; serviceId: string; excused: string }>;
+  absencesToDecide: Array<{ id: string; serviceId: string; person: string; reason: string }>;
+  others: Array<{ serviceId: string; date: string; kind: ProtocolKind; label: string; team: Array<{ personId: string; name: string }> }>;
+  pool: Array<{ personId: string; name: string }>;
+};
+export type ProtocolReportParts = { challenges: string; solutions: string; issues: string; recommendations: string };
+export type ProtocolReportItem = ProtocolReportParts & { serviceId: string; date: string; kind: string; label: string; author: string; submittedAt: string | null };
+const PR = '/api/protocol';
+const prPost = async (path: string, body: object = {}): Promise<{ id?: string; version?: number }> => apiFetch(`${PR}${path}`, { method: 'POST', body });
+export const fetchProtocolRoster = (): Promise<{ canWrite: boolean; members: ProtocolMemberRow[] }> => apiFetch(`${PR}/roster`);
+export const addProtocolMember = (personId: string, office: ProtocolOffice = 'MEMBER', serveDays: ProtocolServeDays = 'BOTH') => prPost('/roster', { personId, office, serveDays });
+export async function patchProtocolMember(id: string, patch: ProtocolRosterPatch): Promise<void> {
+  await apiFetch(`${PR}/roster/${id}`, { method: 'PATCH', body: patch });
+}
+export const fetchProtocolMonths = (): Promise<{ months: Array<{ month: string; music: string | null; status: string; version: number }> }> => apiFetch(`${PR}/months`);
+export const fetchProtocolMonth = (month: string): Promise<ProtocolMonthView> => apiFetch(`${PR}/months/${month}`);
+export const generateProtocolTeams = (month: string) => prPost(`/months/${month}/generate`);
+export const addProtocolSlot = (month: string, serviceId: string, personId: string) => prPost(`/months/${month}/slots`, { serviceId, personId });
+export async function removeProtocolSlot(month: string, id: string): Promise<void> {
+  await apiFetch(`${PR}/months/${month}/slots/${id}`, { method: 'DELETE' });
+}
+export const replaceProtocolSlot = (month: string, id: string, personId: string) => prPost(`/months/${month}/slots/${id}/replace`, { personId });
+export const setProtocolRole = (month: string, id: string, role: ProtocolRole) => prPost(`/months/${month}/slots/${id}/role`, { role });
+export const approveProtocolRoles = (month: string) => prPost(`/months/${month}/roles/approve`);
+export const overrideProtocolIssue = (month: string, issueKey: string, reason: string) => prPost(`/months/${month}/overrides`, { issueKey, reason });
+export const relaxProtocolTuesday = (month: string, on: boolean, reason?: string) => prPost(`/months/${month}/relax`, { on, reason });
+export const acknowledgeProtocolMusic = (month: string) => prPost(`/months/${month}/acknowledge-music`);
+export const submitProtocolMonth = (month: string) => prPost(`/months/${month}/submit`);
+export const returnProtocolMonth = (month: string) => prPost(`/months/${month}/return`);
+export const publishProtocolMonth = (month: string) => prPost(`/months/${month}/publish`);
+export const fetchProtocolHistory = (month: string): Promise<{ versions: Array<{ version: number; publishedAt: string; by: string; slots: number }> }> => apiFetch(`${PR}/months/${month}/history`);
+export const fetchProtocolMine = (): Promise<ProtocolMine> => apiFetch(`${PR}/mine`);
+export const requestProtocolAbsence = (serviceId: string, reason: string) => prPost('/absences', { serviceId, reason });
+export const decideProtocolAbsence = (id: string, decision: 'EXCUSE' | 'DENY') => prPost(`/absences/${id}/decide`, { decision });
+export const offerProtocolFillIn = (serviceId: string, excusedPersonId: string, candidatePersonId: string) => prPost('/fillins', { serviceId, excusedPersonId, candidatePersonId });
+export const answerProtocolFillIn = (id: string, accept: boolean) => prPost(`/fillins/${id}/respond`, { accept });
+export const proposeProtocolSwap = (serviceId: string, targetPersonId: string) => prPost('/swaps', { serviceId, targetPersonId });
+export const answerProtocolSwap = (id: string, accept: boolean) => prPost(`/swaps/${id}/respond`, { accept });
+export const markProtocolAttendance = (serviceId: string, personId: string, status: ProtocolAttendanceStatus) => prPost(`/services/${serviceId}/attendance`, { personId, status });
+export const fetchProtocolScores = (month?: string): Promise<{ scores: Array<{ personId: string; name: string; points: number; services: number; absent: number }> }> =>
+  apiFetch(`${PR}/scores${month ? `?month=${month}` : ''}`);
+export const fetchProtocolServiceReport = (serviceId: string): Promise<{ service: { id: string; date: string; kind: string; label: string }; canWrite: boolean; report: (ProtocolReportParts & { submittedAt: string | null }) | null }> =>
+  apiFetch(`${PR}/services/${serviceId}/report`);
+export async function saveProtocolServiceReport(serviceId: string, parts: ProtocolReportParts): Promise<void> {
+  await apiFetch(`${PR}/services/${serviceId}/report`, { method: 'PUT', body: parts });
+}
+export const fetchProtocolReports = (month: string): Promise<{ month: string; reports: ProtocolReportItem[] }> => apiFetch(`${PR}/reports?month=${month}`);
+
+// ── Administrator console and people tools (phase 3) ───────────────────────────
+export type AdminOverview = {
+  administrators: { count: number; minimum: number };
+  accounts: number; people: number; withoutAccount: number; locked: number;
+  health: { db: 'ok' | 'error'; env: string; time: string };
+  backup: null | { lastAt: string };
+};
+export type AdminAccount = {
+  personId: string; name: string; memberCode: string | null; username: string; status: string; locked: boolean;
+  createdAt: string | null; passwordChangedAt: string | null; offices: string[];
+};
+export type AdminEvent = { id: string; at: string | null; action: string; detail: string; actorName: string | null };
+export const fetchAdminOverview = (): Promise<AdminOverview> => apiFetch('/api/admin/overview');
+export const fetchAdminAccounts = (q: string): Promise<{ accounts: AdminAccount[]; total: number }> => apiFetch(`/api/admin/accounts?q=${encodeURIComponent(q)}`);
+export const createAdminAccount = (input: { personId: string; username: string }): Promise<{ username: string; temporaryPassword: string }> =>
+  apiFetch('/api/admin/accounts', { method: 'POST', body: input });
+export const resetAdminPassword = (personId: string): Promise<{ username: string; temporaryPassword: string }> =>
+  apiFetch(`/api/admin/accounts/${encodeURIComponent(personId)}/reset-password`, { method: 'POST', body: {} });
+export async function unlockAdminAccount(personId: string): Promise<void> {
+  await apiFetch(`/api/admin/accounts/${encodeURIComponent(personId)}/unlock`, { method: 'POST', body: {} });
+}
+export async function fetchAdminAudit(limit = 50): Promise<AdminEvent[]> {
+  return (await apiFetch<{ events: AdminEvent[] }>(`/api/admin/audit?limit=${limit}`)).events;
+}
+
+export type ImportRow = { line: number; fullName: string; state: 'OK' | 'DUPLICATE' | 'ERROR'; message?: string; matches?: string[] };
+export type ImportResult = { committed: boolean; created?: number; summary: { ok: number; duplicates: number; errors: number }; rows: ImportRow[] };
+export const importPeople = (rows: Array<Record<string, string>>, commit: boolean): Promise<ImportResult> =>
+  apiFetch('/api/people-tools/import', { method: 'POST', body: { rows, commit } });
+export type DuplicateGroup = { key: string; people: Array<{ id: string; fullName: string; memberCode: string | null }> };
+export const fetchDuplicates = (): Promise<{ groups: DuplicateGroup[]; total: number }> => apiFetch('/api/people-tools/duplicates');
+export type UpcomingDay = { personId: string; name: string; memberCode: string | null; kind: 'BIRTHDAY' | 'ANNIVERSARY'; day: string; years: number };
+export async function fetchUpcoming(days = 30): Promise<UpcomingDay[]> {
+  return (await apiFetch<{ events: UpcomingDay[] }>(`/api/people-tools/upcoming?days=${days}`)).events;
+}
+
+export type PortalSummary = {
+  reports: Array<{ id: string; systemId: string; unitName: string; kind: ReportKind; periodKey: string; publishedAt: string | null }>;
+  people: Array<{ systemId: string; members: number }>;
+};
+/** What the Portal's People and Reports pages show, across the systems the person may read. */
+export const fetchPortalSummary = (): Promise<PortalSummary> => apiFetch('/api/portal/summary');
+
+
+// ---- Funds and the money on an activity (slices 3 and 4) ----
+export type FundPot = {
+  id: string; kind: 'CONTRIBUTION' | 'DONATION'; code: string; purposeKind: 'UNRESTRICTED' | 'ACTIVITY' | 'CATEGORY'; label: string; name: string;
+  secured: number; awaiting: number; pledged: number; earmarked: number; spent: number; reserved: number; available: number;
+};
+export type SourceTag = 'DONATION' | 'CONTRIBUTION' | 'GRANT' | 'SPONSOR' | 'OTHER';
+export type IncomeState = 'PLEDGED' | 'AWAITING' | 'SECURED' | 'FULFILLED' | 'CANCELLED';
+export type IncomeRecordView = {
+  id: string; kind: 'CONTRIBUTION' | 'DONATION'; sourceTag: SourceTag; purpose: string; purposeKind: 'UNRESTRICTED' | 'ACTIVITY' | 'CATEGORY'; purposeLabel: string;
+  label: string; amount: number; status: IncomeState; note: string | null; expectedOn: string | null; receivedOn: string | null; recordedByName: string; canApprove: boolean;
+};
+export type FundTotals = { secured: number; pledged: number; awaiting: number; earmarked: number; spent: number; reserved: number; available: number };
+export type FundsView = {
+  systemId: string; canRecord: boolean; canApprove: boolean; pots: FundPot[];
+  groups: Array<FundTotals & { kind: 'CONTRIBUTION' | 'DONATION'; buckets: FundPot[] }>;
+  totals: FundTotals; uncovered: number;
+  purposes: { activities: Array<{ id: string; title: string }>; categories: string[] };
+  records: IncomeRecordView[];
+};
+export type IncomeInput = { systemId: string; sourceTag: SourceTag; label: string; amount: number; purpose?: string; status: 'PLEDGED' | 'SECURED'; expectedOn?: string; receivedOn?: string; note?: string };
+export type ApprovalKind = 'ACTIVITY' | 'AMENDMENT' | 'CONTRIBUTION_LIST' | 'DONATION' | 'SPENDING' | 'INCOME';
+export type ApprovalItem = { key: string; kind: ApprovalKind; id: string; systemId: string; title: string; amount: number | null; waitingFor: string; from: string; since: string; href: string; mine: boolean; planType?: string; date?: string | null };
+export const fetchApprovals = (systemId?: string) => apiFetch<{ items: ApprovalItem[]; counts: { all: number; mine: number } }>(`/api/approvals${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+export type OversightItem = {
+  id: string; systemId: string; title: string; description: string; planType: string; date: string | null; amount: number; categories: string[]; attachments: number;
+  catechist: 'APPROVED' | 'PENDING' | 'SKIPPED'; status: string; waitingFor: string | null; href: string; canDecide: boolean; canSuspend: boolean;
+};
+export const fetchOversight = (systemId?: string) => apiFetch<{ enabled: boolean; items: OversightItem[] }>(`/api/approvals/oversight${systemId ? `?systemId=${encodeURIComponent(systemId)}` : ''}`);
+export const fetchFunds = (systemId: string) => apiFetch<FundsView>(`/api/funds?systemId=${encodeURIComponent(systemId)}`);
+export const recordIncome = (input: IncomeInput) => apiFetch('/api/funds/income', { method: 'POST', body: input });
+export const incomeReceived = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/received`, { method: 'POST', body: {} });
+export const incomeApprove = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/approve`, { method: 'POST', body: {} });
+export const incomeDecline = (id: string, reason: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/decline`, { method: 'POST', body: { reason } });
+export const incomeCancel = (id: string) => apiFetch(`/api/funds/income/${encodeURIComponent(id)}/cancel`, { method: 'POST', body: {} });
+
+export type MoneyLineView = { id: string; milestoneId: string | null; title: string; amount: number; category: string | null; note: string | null; checkState: 'VERIFIED' | 'MODIFIED' | null; spent: number; remaining: number };
+export type PhaseView = { id: string | null; title: string; planned: number; spent: number; remaining: number; lines: number };
+export type BurnView = { months: number; elapsed: number; spent: number; planned: number; perMonth: number; projected: number; runway: number | null; pace: 'NONE' | 'ON_TRACK' | 'FAST' | 'SLOW' };
+export type ActivityMoney = {
+  planId: string; status: string; planType: string; open: boolean; planned: number; earmarked: number; gap: number;
+  phases: PhaseView[] | null; burn: BurnView | null;
+  canEdit: boolean; canLogExpense: boolean; canVerify: boolean; canCheck: boolean; allVerified: boolean;
+  lines: MoneyLineView[]; sources: Array<{ kind: string; code: string; amount: number; potId: string }>; pots: FundPot[];
+  check: { result: 'CHECKED' | 'FLAGGED'; note: string | null; at: string; byName: string } | null;
+  locked: boolean;
+  cycle: { kind: BudgetCycle | null; cycles: number | null; explicit: number | null; allowance: number; multiplier: number; ongoing: boolean; repeat: boolean; problem: string | null };
+  canSetCycle: boolean; actual: number; over: number; perCycle: Array<{ key: string; spent: number; allowance: number; over: number }>;
+  canRequestAmendment: boolean; canWithdrawAmendment: boolean; pendingAmendment: AmendmentView | null; amendments: AmendmentView[];
+  fundraising: FundraisingView | null; settlement: SettlementView | null;
+};
+export type FundraisingView = {
+  target: number; projectedNet: number; revenueTotal: number; revenueWaiting: number;
+  revenue: Array<{ id: string; label: string; amount: number; receivedOn: string; status: 'PENDING' | 'CONFIRMED'; canConfirm: boolean; canRemove: boolean }>;
+  canLogRevenue: boolean; net: number | null; outcome: 'PROFIT' | 'DEFICIT' | 'EVEN' | null;
+};
+export type SettlementView = {
+  spent: number; earmarked: number; returns: Array<{ kind: string; code: string; amount: number }>; canLateInvoice: boolean;
+  doneAt: string; due: string; days: number; settled: boolean; open: boolean; canFinalize: boolean; toRelease: number; closedWithLateAdjustment: boolean;
+  result: { released: number; spent: number; earmarked: number; why: 'TREASURER' | 'PERIOD'; at: string } | null;
+};
+export type BudgetCycle = 'PER_OCCURRENCE' | 'MONTHLY' | 'QUARTERLY';
+export type AmendScope = 'MONEY' | 'GENERAL' | 'TEAM';
+export type AmendmentView = {
+  scope: AmendScope; changes: { keys: string[]; set: Record<string, unknown> } | null;
+  levels: Array<{ levelKey: 'UNIT' | 'TREASURER' | 'CATECHIST' | 'CHURCH'; label: string; status: 'PENDING' | 'APPROVED'; byName: string | null; note: string | null }>;
+  id: string; kind: 'TRANSFER' | 'INCREASE' | 'CHANGE'; status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'WITHDRAWN'; oldTotal: number; newTotal: number; justification: string;
+  requestedByName: string; requestedAt: string; decidedByName: string | null; decisionNote: string | null; reviewed: boolean;
+  lines: Array<{ id?: string | null; title: string; amount: number }>; sources: Array<{ kind: string; code: string; amount: number }>; canDecide: boolean;
+};
+const PM = (id: string) => `/api/work-plans/${encodeURIComponent(id)}`;
+export const fetchActivityMoney = (id: string) => apiFetch<ActivityMoney>(`${PM(id)}/money`);
+export const addMoneyLine = (id: string, line: { title: string; amount: number; category?: string; milestoneId?: string | null }) => apiFetch<ActivityMoney>(`${PM(id)}/lines`, { method: 'POST', body: line });
+export const editMoneyLine = (id: string, lineId: string, line: { title?: string; amount?: number; milestoneId?: string | null }) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}`, { method: 'PATCH', body: line });
+export const removeMoneyLine = (id: string, lineId: string) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}`, { method: 'DELETE' });
+export const setMoneySources = (id: string, sources: Array<{ kind: string; code: string; amount: number }>) => apiFetch<ActivityMoney>(`${PM(id)}/sources`, { method: 'PUT', body: { sources } });
+export const verifyMoneyLine = (id: string, lineId: string, verified: boolean) => apiFetch<ActivityMoney>(`${PM(id)}/lines/${encodeURIComponent(lineId)}/verify`, { method: 'POST', body: { verified } });
+export const answerMoneyCheck = (id: string, result: 'CHECKED' | 'FLAGGED', note?: string) => apiFetch<ActivityMoney>(`${PM(id)}/money-check`, { method: 'POST', body: { result, note } });
+export const fetchMoneyQueue = () => apiFetch<{ items: Array<{ id: string; systemId: string; title: string; planned: number }> }>('/api/work-plans/money-queue');
+
+export type AmendChanges = Partial<{ title: string; aim: string; needs: string | null; location: string | null; startsOn: string | null; endsOn: string | null; timingKind: TimingKind; startTime: string | null; endTime: string | null; fundraising: boolean; fundTarget: number | null; leaderId: string }>;
+export const requestAmendment = (id: string, input: { justification: string; lines?: Array<{ id?: string | null; title: string; amount: number; category?: string | null }>; sources?: Array<{ kind: string; code: string; amount: number }>; changes?: AmendChanges }) =>
+  apiFetch<ActivityMoney>(`${PM(id)}/amendments`, { method: 'POST', body: input });
+export const decideAmendment = (id: string, aid: string, what: 'approve' | 'reject' | 'withdraw', body: object = {}) =>
+  apiFetch<ActivityMoney>(`${PM(id)}/amendments/${encodeURIComponent(aid)}/${what}`, { method: 'POST', body });
+export const setBudgetCycle = (id: string, input: { cycle: BudgetCycle; cycles?: number | null; confirm?: boolean }) => apiFetch<ActivityMoney>(`${PM(id)}/cycle`, { method: 'PUT', body: input });
+export type TransferToReview = { id: string; planId: string; systemId: string; title: string; justification: string; oldTotal: number; newTotal: number; decidedByName: string; decidedAt: string | null };
+export const fetchTransfersReview = () => apiFetch<{ items: TransferToReview[] }>('/api/work-plans/transfers-review');
+export const markTransferReviewed = (aid: string) => apiFetch(`/api/work-plans/amendments/${encodeURIComponent(aid)}/reviewed`, { method: 'POST', body: {} });
+export const logRevenue = (id: string, input: { label: string; amount: number; receivedOn?: string }) => apiFetch(`${PM(id)}/revenue`, { method: 'POST', body: input });
+export const confirmRevenue = (id: string, rid: string) => apiFetch(`${PM(id)}/revenue/${encodeURIComponent(rid)}/confirm`, { method: 'POST', body: {} });
+export const removeRevenue = (id: string, rid: string) => apiFetch(`${PM(id)}/revenue/${encodeURIComponent(rid)}`, { method: 'DELETE' });
+export const finalizeSettlement = (id: string) => apiFetch<{ ok: true; released: number }>(`${PM(id)}/finalize`, { method: 'POST', body: {} });
+
+export const checkinPublic = (token: string, body: { phone: string; name?: string; website?: string }) =>
+  apiFetch<{ ok: true; name: string; walkIn: boolean }>(`/api/public/events/${pid(token)}/checkin`, { method: 'POST', body, auth: false });
+
+/** The yearly life of a program: the Church Leader's review and the President's funding of the next year. */
+export type ReviewDecision2 = 'CONTINUE' | 'PREPARE' | 'CLOSE' | 'END_EARLY' | 'SKIP';
+export type AnnualReviewView = {
+  year: number; kind: ProgramKind; hasMoney: boolean; endYear: number | null; yearsRemaining: number | null;
+  canReview: boolean; canFund: boolean; options: ReviewDecision2[];
+  actuals: { budget: number; spent: number; unspent: number; overspent: number };
+  needsFunding: { year: number; amount: number } | null;
+  years: Array<{ year: number; status: 'ACTIVE' | 'CLOSED' | 'SKIPPED'; budget: number; spent: number | null; returned: number | null; attendance: number | null; decision: string | null; note: string | null }>;
+};
+export const fetchAnnualReview = (planId: string): Promise<AnnualReviewView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/annual-review`);
+export const doAnnualReview = (planId: string, body: { decision: ReviewDecision2; nextBudget?: number | null; note?: string | null; attendance?: number | null }): Promise<AnnualReviewView> =>
+  apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/annual-review`, { method: 'POST', body });
+export const fundNextYear = (planId: string, sources: Array<{ kind: string; code: string; amount: number }>): Promise<AnnualReviewView> =>
+  apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/annual-review/funding`, { method: 'PUT', body: { sources } });
+
+/** Cohorts of a cohort-based program. */
+export type CohortItem = { id: string; name: string; startsOn: string; endsOn: string; target: number | null; enrolled: number; graduated: number | null; budget: number; spent: number; notes: string; closedAt: string | null };
+export type CohortsView = {
+  hasMoney: boolean; canManage: boolean; canStart: boolean; unallocated: number;
+  pattern: { frequency: string; duration: string; schedule: string; target: number | null };
+  current: (CohortItem & { progress: number; ended: boolean }) | null; past: CohortItem[];
+};
+const CP = (id: string) => `/api/work-plans/${encodeURIComponent(id)}/cohorts`;
+export const fetchCohorts = (planId: string): Promise<CohortsView> => apiFetch(CP(planId));
+export const startCohort = (planId: string, b: { name: string; startsOn: string; endsOn: string; target: number | null; budget: number }): Promise<CohortsView> => apiFetch(CP(planId), { method: 'POST', body: b });
+export const setCohortEnrolled = (planId: string, cohortId: string, enrolled: number): Promise<CohortsView> => apiFetch(`${CP(planId)}/${encodeURIComponent(cohortId)}`, { method: 'PATCH', body: { enrolled } });
+export const closeCohort = (planId: string, cohortId: string, b: { graduated: number; notes: string | null }): Promise<CohortsView> => apiFetch(`${CP(planId)}/${encodeURIComponent(cohortId)}/close`, { method: 'POST', body: b });
+
+/** The seasonal cycle of a seasonal program. */
+export type SeasonView = { phase: 'PREPARING' | 'ACTIVE'; year: number; month: number; nextYear: number; preparedYear: number | null; canPrepare: boolean; closedYearWaiting: boolean; tasks: string[] };
+export const fetchSeason = (planId: string): Promise<SeasonView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/season`);
+export const prepareSeason = (planId: string, tasks?: string[]): Promise<SeasonView> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/season/prepare`, { method: 'POST', body: tasks ? { tasks } : {} });
+
+/** Cases of a case-based program (Sick Care, Needy Support). */
+export type CaseStatus = 'PENDING' | 'VERIFIED' | 'APPROVED' | 'FOLLOW_UP' | 'CLOSED';
+export type CaseRowView = { id: string; name: string; unitId: string; unitName: string; issue: string; gap: number; approved: number; disbursed: number; status: CaseStatus; condition: string | null; outcome: string | null; at: string | null; awaiting?: 'CATECHIST' | 'CHURCH_LEADER' | null };
+export type CaseBatchCase = { id: string; name: string; gap: number; approved: number };
+export type CasesView = {
+  caseType: CaseType; live: boolean; manager: boolean;
+  budget: { cap: number; spent: number; committed: number; remaining: number };
+  counts: { total: number; active: number; pending: number; closed: number };
+  canRegister: boolean; myUnits: Array<{ id: string; name: string }>;
+  canReview: boolean; pendingByUnit: Array<{ unitId: string; unitName: string; cases: Array<{ id: string; name: string; gap: number }> }>;
+  toAllocate: Array<{ batchId: string; unitName: string; amount: number; cases: CaseBatchCase[] }>;
+  toPay: Array<{ batchId: string; unitName: string; mode: 'PER_CASE' | 'BLOCK'; amount: number; cases: CaseBatchCase[] }>;
+  rows: CaseRowView[];
+};
+export type CaseDetail = {
+  id: string; name: string; contact: string; issue: string; unitId: string; unitName: string; caseType: CaseType;
+  capacity: number; need: number; gap: number; approved: number; disbursed: number; status: CaseStatus; condition: string | null; outcome: string | null; closeNote: string | null;
+  canProgress: boolean; canClose: boolean; marriage?: MarriageBlock | null; events: Array<{ id: string; kind: string; text: string; at: string | null; byId: string }>;
+};
+export type CaseOutcome = 'RESOLVED' | 'RECOVERED' | 'PASSED' | 'CANCELLED' | 'MARRIED';
+export type MarriageItem = { id: string; place: string; date: string; time: string; status: 'SCHEDULED' | 'DONE' | 'CANCELLED' };
+export type MarriageChange = { kind: 'POSTPONE' | 'CANCEL'; reason: string; newDate: string | null; newTime: string | null; status: 'REQUESTED' | 'CONFIRMED' };
+export type MarriageBlock = {
+  p1Unit: string; p1Name: string; p1Contact: string; p2Name: string; p2Church: string; p2Contact: string; date: string; time: string; place: string; certificateFileId: string | null;
+  status: CaseStatus; awaiting: 'CATECHIST' | 'CHURCH_LEADER' | null; hasMoney: boolean;
+  announcements: MarriageItem[]; meetings: MarriageItem[]; change: MarriageChange | null;
+  canVerify: boolean; canApprove: boolean; canSendBack: boolean; canArrangeAnnouncements: boolean; canArrangeMeetings: boolean;
+  canRequestChange: boolean; canConfirmChange: boolean; canDecideChange: boolean; maxSupport: number; remaining: number;
+};
+export type MarriageInput = {
+  unitId: string; p1Name: string; p1Contact: string; p2Name: string; p2Church: string; p2Contact: string; date: string; time: string | null; place: string;
+  capacity: number; need: number; certificate: { name: string; mime: string; data: string } | null;
+};
+const CS = (id: string) => `/api/work-plans/${encodeURIComponent(id)}/cases`;
+export const fetchCases = (planId: string): Promise<CasesView> => apiFetch(CS(planId));
+export const registerCase = (planId: string, b: { unitId: string; name: string; contact: string; issue: string; capacity: number; need: number }): Promise<CasesView> => apiFetch(CS(planId), { method: 'POST', body: b });
+export const reviewCases = (planId: string, b: { mode: 'PER_CASE'; items: Array<{ caseId: string; amount: number }> } | { mode: 'BLOCK'; unitId: string; caseIds: string[]; amount: number }): Promise<CasesView> => apiFetch(`${CS(planId)}/review`, { method: 'POST', body: b });
+export const allocateBlock = (planId: string, batchId: string, allocations: Array<{ caseId: string; amount: number }>): Promise<CasesView> => apiFetch(`${CS(planId)}/batches/${encodeURIComponent(batchId)}/allocate`, { method: 'POST', body: { allocations } });
+export const markBatchPaid = (planId: string, batchId: string, entryId: string): Promise<CasesView> => apiFetch(`${CS(planId)}/batches/${encodeURIComponent(batchId)}/disbursed`, { method: 'POST', body: { entryId } });
+export const fetchCase = (planId: string, caseId: string): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}`);
+export const reportCaseProgress = (planId: string, caseId: string, b: { text: string; condition: string | null }): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}/progress`, { method: 'POST', body: b });
+export const closeCase = (planId: string, caseId: string, b: { outcome: CaseOutcome; note: string | null }): Promise<CaseDetail> => apiFetch(`${CS(planId)}/${encodeURIComponent(caseId)}/close`, { method: 'POST', body: b });
+const CASE = (planId: string, caseId: string) => `${CS(planId)}/${encodeURIComponent(caseId)}`;
+export const registerMarriage = (planId: string, b: MarriageInput): Promise<{ id: string }> => apiFetch(`/api/work-plans/${encodeURIComponent(planId)}/marriages`, { method: 'POST', body: b });
+export const verifyMarriage = (planId: string, caseId: string): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/verify`, { method: 'POST', body: {} });
+export const sendMarriageBack = (planId: string, caseId: string, reason: string): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/send-back`, { method: 'POST', body: { reason } });
+export const approveMarriage = (planId: string, caseId: string, support: number): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/approve`, { method: 'POST', body: { support } });
+export const addMarriageItem = (planId: string, caseId: string, b: { kind: 'ANNOUNCEMENT' | 'MEETING'; onDate: string; atTime: string | null; place: string }): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/items`, { method: 'POST', body: b });
+export const changeMarriageItem = (planId: string, caseId: string, itemId: string, b: { onDate?: string; atTime?: string | null; place?: string; status?: 'SCHEDULED' | 'DONE' | 'CANCELLED' }): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/items/${encodeURIComponent(itemId)}`, { method: 'PATCH', body: b });
+export const requestMarriageChange = (planId: string, caseId: string, b: { kind: 'POSTPONE' | 'CANCEL'; reason: string; newDate: string | null; newTime: string | null }): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/change`, { method: 'POST', body: b });
+export const confirmMarriageChange = (planId: string, caseId: string): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/change/confirm`, { method: 'POST', body: {} });
+export const decideMarriageChange = (planId: string, caseId: string, b: { approve: boolean; note: string | null }): Promise<CaseDetail> => apiFetch(`${CASE(planId, caseId)}/change/decide`, { method: 'POST', body: b });
+/** Records an expense and says which entry it made, so the Treasurer can tie it to approved support. */
+export async function recordMoneyEntryId(input: MoneyEntryInput): Promise<string> {
+  return (await apiFetch<{ id: string }>(`${M}/entries`, { method: 'POST', body: input })).id;
+}
+
+// ── Scheduling configuration (slice 3.17) ───────────────────────────────────────
+
+export type SchedulingServiceApi = {
+  id: string; systemId: string; code: string; name: string; kind: ServiceKind;
+  weekday: number | null; time: string | null; recurrence: Recurrence; selectedDates: string[];
+  active: boolean; effectiveFrom: string; effectiveTo: string | null;
+  musicRequired: boolean; protocolRequired: boolean; maxChoirs: number; targetTeamSize: number;
+  configVersionId: string | null; displayOrder: number; supersedesId: string | null;
+  createdByPersonId: string; createdAt: string;
+};
+export type ChoirCategoryApi = {
+  id: string; systemId: string; code: string; name: string; description: string; active: boolean;
+  effectiveFrom: string; effectiveTo: string | null; configVersionId: string | null;
+  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+};
+export type CategoryServicePolicyApi = {
+  id: string; systemId: string; categoryId: string; serviceId: string; eligible: boolean; active: boolean;
+  frequencyTarget: number | null; frequencyCounting: FrequencyCounting; frequencyKind: FrequencyKind;
+  planningMode: PlanningMode; minCount: number | null; maxCount: number | null; requireAll: boolean;
+  configVersionId: string | null; effectiveFrom: string; effectiveTo: string | null;
+  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+};
+export type ChoirCategoryLinkApi = {
+  id: string; systemId: string; choirId: string; categoryId: string;
+  eligibleOverride: Record<string, unknown>; frequencyOverride: Record<string, unknown>; active: boolean;
+  effectiveFrom: string; effectiveTo: string | null; configVersionId: string | null;
+  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+};
+export type ProtocolServiceRuleApi = {
+  id: string; systemId: string; serviceId: string; serviceCode?: string; active: boolean; required: boolean;
+  defaultTeamSize: number; teamSizeOverrides: Record<string, number>; requireChoir: boolean;
+  requireWorship: boolean; relaxableKinds: string[]; configVersionId: string | null;
+  effectiveFrom: string; effectiveTo: string | null; supersedesId: string | null;
+  createdByPersonId: string; createdAt: string;
+};
+export type ProtocolDutyPolicyApi = {
+  id: string; systemId: string; preferTarget: number; softMax: number; hardMax: number;
+  extraDutyPolicy: 'ALLOW_WHEN_SHORT' | 'NEVER' | 'ALWAYS'; duplicateSameDayAllowed: boolean;
+  musicCompatibilityRequired: boolean; leadershipPriorities: string[]; exceptionsAllowed: boolean;
+  configVersionId: string | null; effectiveFrom: string; effectiveTo: string | null;
+  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+};
+export type ConfigVersionApi = {
+  id: string; systemId: string; version: number; label: string; status: ConfigStatus;
+  effectiveFrom: string; effectiveTo: string | null; createdByPersonId: string; createdAt: string;
+  reason: string | null; previousVersionId: string | null; notes: Record<string, unknown>;
+  validation: Record<string, unknown>; affectedSchedules: string[];
+};
+export type ConfigStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'SCHEDULED';
+export type ServiceKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
+export type Recurrence = 'WEEKLY' | 'MONTHLY' | 'SELECTED_DATES' | 'CUSTOM';
+export type FrequencyCounting = 'ASSIGNMENTS' | 'DISTINCT_DATES';
+export type FrequencyKind = 'MINIMUM' | 'TARGET' | 'MAXIMUM';
+export type PlanningMode = 'ROTATION' | 'FIXED' | 'MANUAL';
+
+const SC = '/api/scheduling/config';
+const scGet = <T>(path: string, systemId: string, params: Record<string, string> = {}): Promise<T> => {
+  const query = new URLSearchParams({ systemId, ...params });
+  return apiFetch<T>(`${SC}${path}?${query}`);
+};
+const scPost = (path: string, body: object) => apiFetch(`${SC}${path}`, { method: 'POST', body });
+
+export const fetchConfigVersions = (systemId: string): Promise<{ versions: ConfigVersionApi[] }> => scGet('/versions', systemId);
+export const fetchSchedulingServices = (systemId: string, activeOnly = false, configVersionId?: string): Promise<{ services: SchedulingServiceApi[] }> =>
+  scGet('/services', systemId, { ...(activeOnly ? { active: 'true' } : {}), ...(configVersionId ? { configVersionId } : {}) });
+export const fetchChoirCategories = (systemId: string, activeOnly = false, configVersionId?: string): Promise<{ categories: ChoirCategoryApi[] }> =>
+  scGet('/categories', systemId, { ...(activeOnly ? { active: 'true' } : {}), ...(configVersionId ? { configVersionId } : {}) });
+export const fetchCategoryServicePolicies = (systemId: string, configVersionId?: string): Promise<{ policies: CategoryServicePolicyApi[] }> =>
+  scGet('/policies', systemId, configVersionId ? { configVersionId } : {});
+export const fetchChoirCategoryLinks = (systemId: string, configVersionId?: string): Promise<{ links: ChoirCategoryLinkApi[] }> =>
+  scGet('/links', systemId, configVersionId ? { configVersionId } : {});
+export const fetchProtocolServiceRules = (systemId: string, configVersionId?: string): Promise<{ rules: ProtocolServiceRuleApi[] }> =>
+  scGet('/protocol/rules', systemId, configVersionId ? { configVersionId } : {});
+export const fetchProtocolDutyPolicy = (systemId: string, configVersionId?: string): Promise<{ policy: ProtocolDutyPolicyApi | null }> =>
+  scGet('/protocol/policy', systemId, configVersionId ? { configVersionId } : {});
+
+export const createConfigVersion = (body: object) => scPost('/versions', body);
+export const cloneConfigVersion = (systemId: string, label: string, reason?: string) =>
+  scPost('/versions/clone', { systemId, label, reason });
+export const activateConfigVersion = (id: string) =>
+  apiFetch(`${SC}/versions/${encodeURIComponent(id)}/activate`, { method: 'POST', body: {} });
+export const createSchedulingService = (body: object) => scPost('/services', body);
+export const createChoirCategory = (body: object) => scPost('/categories', body);
+export const createCategoryServicePolicy = (body: object) => scPost('/policies', body);
+export const createChoirCategoryLink = (body: object) => scPost('/links', body);
+export const createProtocolServiceRule = (body: object) => scPost('/protocol/rules', body);
+export const createProtocolDutyPolicy = (body: object) => scPost('/protocol/policy', body);
+export const updateSchedulingService = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/services/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateChoirCategory = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/categories/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateCategoryServicePolicy = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/policies/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateChoirCategoryLink = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/links/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateProtocolServiceRule = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/protocol/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateProtocolDutyPolicy = (id: string, configVersionId: string, patch: object) =>
+  apiFetch(`${SC}/protocol/policy/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const retireSchedulingService = (id: string) => apiFetch(`${SC}/services/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });
