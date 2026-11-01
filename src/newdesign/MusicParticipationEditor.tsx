@@ -1,5 +1,6 @@
+import { useChoirRegister } from './useChoirRegister';
 import { useState } from 'react';
-import { addMusicAvailability, addMusicFixedAssignment, fetchMusicAvailability, fetchMusicFixedAssignments, fetchCategoryServicePolicies, fetchChoirCategories, fetchChoirs, fetchSchedulingServices, removeMusicAvailability, removeMusicFixedAssignment, type ConfigVersionApi } from '../api/frontDoorApi';
+import { addMusicAvailability, addMusicFixedAssignment, fetchMusicAvailability, fetchMusicFixedAssignments, fetchCategoryServicePolicies, fetchChoirCategories, fetchSchedulingServices, removeMusicAvailability, removeMusicFixedAssignment, type ConfigVersionApi } from '../api/frontDoorApi';
 import { useT } from '../i18n/I18nContext';
 import { LoadState } from './LoadState';
 import { useLoad } from './useLoad';
@@ -9,7 +10,7 @@ import { EmptyState } from './kit';
 export function MusicParticipationEditor({ mode, version, canWrite }: { mode: 'fixed' | 'availability'; version?: ConfigVersionApi; canWrite: boolean }) {
   const t = useT(), id = version?.id ?? '';
   const [date, setDate] = useState(''), [busy, setBusy] = useState(false), [error, setError] = useState('');
-  const choirs = useLoad(fetchChoirs, 'participation-choirs');
+  const choirs = useChoirRegister(undefined, 'participation-choirs');
   const services = useLoad(() => fetchSchedulingServices('sys-music', false, mode === 'fixed' ? id : undefined), 'participation-services|' + mode + id);
   const categories = useLoad(() => fetchChoirCategories('sys-music', false, id), 'participation-categories|' + id);
   const policies = useLoad(() => fetchCategoryServicePolicies('sys-music', id), 'participation-policies|' + id);

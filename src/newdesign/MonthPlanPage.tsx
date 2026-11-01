@@ -1,3 +1,4 @@
+import { useChoirRegisterRefresh } from './useChoirRegister';
 import { Link } from 'react-router-dom';
 import { MusicBulletin } from './Bulletins.tsx';
 import type { ScheduleRuleContext } from '../api/frontDoorApi';
@@ -46,7 +47,6 @@ function ServiceCard({ svc, onEdit }: { svc: ScheduleService; onEdit?: () => voi
           ))}
         </ul>
       )}
-      {svc.requirements?.map((rule, index) => <p className="muted" key={index}><StatusChip tone={(rule.minimum !== null && rule.assigned < rule.minimum) || (rule.maximum !== null && rule.assigned > rule.maximum) ? 'warn' : 'neutral'}>{rule.categoryName}: {t('door.scheduling.requirementCount', {count:rule.assigned, minimum:rule.minimum ?? '—', maximum:rule.maximum ?? '—'})}</StatusChip></p>)}
       {onEdit && <button type="button" className="btn secondary sm" onClick={onEdit}>{t('door.sch.edit')}</button>}
     </li>
   );
@@ -166,6 +166,7 @@ function DraftBody({ id, state, onDone, show, view }: { id: string; state: Sched
   const day = useShortDay();
   const monthName = useMonthName();
   const draft = useLoad(() => fetchScheduleDraft(id), `music-draft|${id}`);
+  useChoirRegisterRefresh(draft.reload);
   const [pending, setPending] = useState(false);
   const [replacing, setReplacing] = useState(false);
   const [live, setLive] = useState<string[]>([]);
@@ -211,6 +212,7 @@ function MonthBody({ month, mode, state, onDone, show, view }: { month: string; 
   const day = useShortDay();
   const monthName = useMonthName();
   const data = useLoad(() => fetchScheduleMonth(month), `music-month|${month}`);
+  useChoirRegisterRefresh(data.reload);
   const m = data.data;
   const edit: Edit = async (e) => { try { await editScheduleMonth(month, e); data.reload(); onDone(); } catch (err) { show(err); throw err; } };
   const pdf = () => {
@@ -250,6 +252,7 @@ export function MonthPlanPage() {
   const t = useT();
   const monthName = useMonthName();
   const state = useLoad(fetchScheduleState, 'music-sched');
+  useChoirRegisterRefresh(state.reload);
   const s = state.data;
   const [tab, setTab] = useState<Tab | null>(null);
   const [picked, setPicked] = useState<Record<Tab, string>>({ generated: '', confirmed: '', published: '' });

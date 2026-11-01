@@ -4,7 +4,7 @@ import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useSearchParams } from "react-router-dom";
 import {
-  activateConfigVersion,
+  activateConfigVersion, archiveConfigVersion, restoreConfigVersion, deleteConfigVersion,
   cloneConfigVersion,
   createConfigVersion,
   fetchConfigVersions,
@@ -60,6 +60,7 @@ export function DoorSchedulingConfigPage() {
   const canWrite = configAccess.includes("W");
   const requestedVersionId = searchParams.get("version");
   const selectedVersion = rows.find((version) => version.id === requestedVersionId)
+    ?? (searchParams.get("draft") === "1" ? rows.find((version) => version.status === "DRAFT") : undefined)
     ?? rows.find((version) => version.status === "ACTIVE")
     ?? rows[0];
   const versionId = selectedVersion?.id ?? "";
@@ -153,6 +154,8 @@ export function DoorSchedulingConfigPage() {
                 ? canWrite ? t("door.config.draftEditable") : t("door.config.versionReadOnly", { status: t("door.config.status.DRAFT") })
                 : selectedVersion?.status === "ACTIVE"
                   ? t("door.config.activeInUse")
+                  : selectedVersion?.status === "ARCHIVED"
+                    ? t("door.config.archivedReadOnly")
                   : t("door.config.versionReadOnly", {
                     status: selectedVersion ? t(`door.config.status.${selectedVersion.status}` as Parameters<typeof t>[0]) : "",
                   })}
@@ -224,6 +227,7 @@ function VersionsTab({ systemId, rows, selectedId, reload, selectVersion, canWri
   const t = useT();
   const [error, setError] = useState("");
   const [working, setWorking] = useState(false);
+  const [operation, setOperation] = useState<{ version: ConfigVersionApi; action: 'archive' | 'restore' | 'delete' } | null>(null);
   const createDraft = async () => {
     setError("");
     setWorking(true);
@@ -244,6 +248,19 @@ function VersionsTab({ systemId, rows, selectedId, reload, selectVersion, canWri
       {canWrite && <button type="button" className="btn sm" disabled={working} onClick={() => void createDraft()}>
         {t("door.config.version.createDraft")}
       </button>}
+      <ConfirmDialog open={!!operation} busy={working} title={operation ? t(`door.config.version.${operation.action}`) + ': ' + operation.version.label : ''}
+        body={operation ? t(`door.config.version.${operation.action}Body`) : ''} confirmLabel={operation ? t(`door.config.version.${operation.action}`) : ''}
+        onCancel={() => { if (!working) setOperation(null); }} onConfirm={() => {
+          if (!operation || working || !canWrite) return;
+          setWorking(true); setError('');
+          const {version,action}=operation;
+          const job=action === 'archive' ? archiveConfigVersion : action === 'restore' ? restoreConfigVersion : deleteConfigVersion;
+          void job(version.id).then(() => {
+            setOperation(null);
+            if (action === 'delete' && selectedId === version.id) selectVersion(rows.find(row => row.id !== version.id && row.status === 'ACTIVE')?.id ?? rows.find(row => row.id !== version.id)?.id ?? '');
+            reload();
+          }).catch((reason: unknown) => { setError(schedulingError(reason) ?? t('door.config.err.server')); setOperation(null); }).finally(() => setWorking(false));
+        }} />
       {rows.length === 0 ? <EmptyState title={t("door.config.versions.empty")} /> : (
         <ul className="door-notices">
           {rows.map((version) => (
@@ -267,6 +284,10 @@ function VersionsTab({ systemId, rows, selectedId, reload, selectVersion, canWri
                       {t("door.config.version.activate")}
                     </button>
                   )}
+                  {canWrite && (version.status === 'DRAFT' || version.status === 'ARCHIVED') && <>
+                    <button type="button" className="btn ghost sm" disabled={working} onClick={() => setOperation({version,action:version.status === 'DRAFT' ? 'archive' : 'restore'})}>{t(version.status === 'DRAFT' ? 'door.config.version.archive' : 'door.config.version.restore')}</button>
+                    {version.status === 'DRAFT' && <button type="button" className="btn ghost sm" disabled={working} onClick={() => setOperation({version,action:'delete'})}>{t('door.config.version.delete')}</button>}
+                  </>}
                 </div>
               </div>
             </li>

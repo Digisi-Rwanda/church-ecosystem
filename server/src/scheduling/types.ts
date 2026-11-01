@@ -20,7 +20,7 @@ export const SYSTEM_PROTOCOL = 'sys-protocol';
 
 export type SystemId = string;
 
-export type ConfigStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'SCHEDULED';
+export type ConfigStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'SCHEDULED' | 'ARCHIVED';
 
 export type ServiceKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
 

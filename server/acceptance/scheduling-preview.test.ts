@@ -24,6 +24,6 @@ it('serves the isolated scheduling acceptance fixture', async()=>{
   db.account ??= [];
   for(const person of db.person)db.account.push({id:'fixture-'+person.id,personId:person.id,username:person.id,person:{...person,memberships:db.membership.filter((row:any)=>row.personId===person.id),positions:db.position.filter((row:any)=>row.personId===person.id)}});
   const {createApp}=await import('../src/app.js');const app=createApp();
-  const server=app.listen(4317,'127.0.0.1');console.log('Scheduling UI fixture ready on 4317; Prisma is mocked.');
-  await new Promise<void>(resolve=>{const timer=setTimeout(()=>server.close(),1100000);server.on('close',()=>{clearTimeout(timer);resolve();});});
+  const port=Number(process.env.SCHEDULING_PREVIEW_PORT ?? 4317); const server=app.listen(port,'127.0.0.1');console.log('Scheduling UI fixture ready on '+port+'; Prisma is mocked.');
+  await new Promise<void>(resolve=>{const timer=setTimeout(()=>server.close(),Number(process.env.SCHEDULING_PREVIEW_DURATION_MS ?? 1100000));server.on('close',()=>{clearTimeout(timer);resolve();});});
 });

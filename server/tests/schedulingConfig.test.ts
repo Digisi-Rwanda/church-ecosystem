@@ -728,3 +728,66 @@ describe('scheduling config — MusicMonth and ProtocolPlan reference', () => {
     expect(row.configVersionId).toBeNull();
   });
 });
+
+describe('draft version archive, restore and deletion', () => {
+  const change = (as: string, id: string, action: 'archive' | 'restore' | 'delete') => action === 'delete'
+    ? request(app).delete(`/api/scheduling/config/versions/${id}`).set(bearer(as))
+    : post(as, `/api/scheduling/config/versions/${id}/${action}`);
+  it('archives without losing configuration, prevents editing/activation, and restores to draft', async () => {
+    const draft = await createVersion('sys-music', 1);
+    const service = await S.createSchedulingService({systemId:'sys-music',code:'ss1',name:'Sunday',configVersionId:draft.id,createdByPersonId:LEADER});
+    expect((await change(MUSIC_LEADER,draft.id,'archive')).status).toBe(200);
+    expect((await S.getConfigVersion(draft.id)).status).toBe('ARCHIVED');
+    expect(fake.__db.schedulingService.some((row: any)=>row.id===service.id)).toBe(true);
+    const edit = await request(app).patch(`/api/scheduling/config/services/${service.id}`).set(bearer(MUSIC_LEADER)).send({configVersionId:draft.id,patch:{name:'Changed'}});
+    expect(edit.status).toBe(409);
+    await expect(S.activateConfigVersion(draft.id,'sys-music')).rejects.toThrow('Only a draft or scheduled');
+    expect((await change(MUSIC_LEADER,draft.id,'restore')).status).toBe(200);
+    expect((await S.getConfigVersion(draft.id)).status).toBe('DRAFT');
+    expect(fake.__db.auditEvent.map((row: any)=>row.action)).toEqual(expect.arrayContaining(['CONFIG_VERSION_ARCHIVED','CONFIG_VERSION_RESTORED']));
+  });
+  it('deletes only an unused draft and its own configuration rows, preserving active setup and availability', async () => {
+    const active = await createVersion('sys-music',1,'ACTIVE'), draft = await createVersion('sys-music',2);
+    const models=['schedulingService','choirCategory','categoryServicePolicy','choirCategoryLink','musicFixedAssignment','protocolServiceRule','protocolDutyPolicy'];
+    for(const model of models){fake.__db[model] ??=[];fake.__db[model].push({id:model+'-draft',systemId:'sys-music',configVersionId:draft.id},{id:model+'-active',systemId:'sys-music',configVersionId:active.id});}
+    fake.__db.musicChoirUnavailability=[{id:'away',systemId:'sys-music'}];
+    expect((await change(MUSIC_LEADER,draft.id,'delete')).status).toBe(200);
+    expect(await S.getConfigVersion(draft.id)).toBeNull();
+    expect((await S.getConfigVersion(active.id)).status).toBe('ACTIVE');
+    for(const model of models) expect(fake.__db[model].map((row: any)=>row.id)).toEqual([model+'-active']);
+    expect(fake.__db.musicChoirUnavailability).toHaveLength(1);
+    expect(fake.__db.auditEvent.some((row: any)=>row.action==='CONFIG_VERSION_DELETED')).toBe(true);
+  });
+  it.each(['ACTIVE','SUPERSEDED','SCHEDULED','ARCHIVED'])('refuses archive/delete of a %s version', async status => {
+    const version=await createVersion('sys-music',1);fake.__db.configVersion.find((row: any)=>row.id===version.id).status=status;
+    for(const action of ['archive','delete'] as const) expect((await change(MUSIC_LEADER,version.id,action)).body.code).toBe('CONFIG_VERSION_STATE');
+    expect((await S.getConfigVersion(version.id)).status).toBe(status);
+  });
+  it.each([['musicDraft','configVersionId'],['musicMonth','configVersionId'],['musicLog','configVersionId'],['protocolPlan','configVersionId'],['protocolPlan','musicConfigVersionId'],['protocolHistory','configVersionId'],['protocolHistory','musicConfigVersionId'],['configVersion','previousVersionId']])('preserves versions referenced by %s.%s', async(model,field)=>{
+    const draft=await createVersion('sys-music',1);(fake.__db[model] ??=[]).push({id:'reference',[field]:draft.id});
+    for(const action of ['archive','delete'] as const) expect((await change(MUSIC_LEADER,draft.id,action)).body.code).toBe('CONFIG_VERSION_IN_USE');
+    expect((await S.getConfigVersion(draft.id)).status).toBe('DRAFT');
+  });
+  it('preserves a draft whose service is used by another configuration', async()=>{
+    const draft=await createVersion('sys-music',1);
+    fake.__db.schedulingService.push({id:'shared',systemId:'sys-music',configVersionId:draft.id});
+    fake.__db.protocolServiceRule.push({id:'other-rule',systemId:'sys-protocol',configVersionId:'other',serviceId:'shared'});
+    expect((await change(MUSIC_LEADER,draft.id,'delete')).body.code).toBe('CONFIG_VERSION_IN_USE');
+    expect(fake.__db.schedulingService).toHaveLength(1);
+    expect(await S.getConfigVersion(draft.id)).not.toBeNull();
+  });
+  it('keeps configuration rows referenced by later row lineage', async()=>{
+    const draft=await createVersion('sys-music',1);
+    fake.__db.choirCategory.push({id:'old-category',systemId:'sys-music',configVersionId:draft.id},{id:'later-category',systemId:'sys-music',configVersionId:'later',supersedesId:'old-category'});
+    expect((await change(MUSIC_LEADER,draft.id,'delete')).body.code).toBe('CONFIG_VERSION_IN_USE');
+    expect(fake.__db.choirCategory).toHaveLength(2);
+    expect(await S.getConfigVersion(draft.id)).not.toBeNull();
+  });
+  it('enforces write permissions in the owning system for every action', async()=>{
+    const draft=await createVersion('sys-protocol',1);
+    for(const as of [MUSIC_LEADER,TREASURER,MEMBER]) for(const action of ['archive','restore','delete'] as const) expect((await change(as,draft.id,action)).status).toBe(403);
+    expect((await change(PROTOCOL_LEADER,draft.id,'archive')).status).toBe(200);
+    expect((await change(PROTOCOL_LEADER,draft.id,'restore')).status).toBe(200);
+    expect((await change(PROTOCOL_LEADER,draft.id,'delete')).status).toBe(200);
+  });
+});

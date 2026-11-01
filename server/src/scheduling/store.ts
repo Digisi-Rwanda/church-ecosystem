@@ -1,3 +1,4 @@
+import { syncChoirRegisterDrafts } from './choirRegisterSync.js';
 /**
  * Configurable scheduling persistence layer (slice 3.17).
  *
@@ -182,6 +183,7 @@ export async function cloneActiveConfigVersion(
       supersedesId: row.id, createdByPersonId: input.createdByPersonId,
     } });
 
+    await syncChoirRegisterDrafts(tx, { versionId: version.id });
     return toConfigVersionView(version);
   });
 }
@@ -204,6 +206,63 @@ export async function activateConfigVersion(id: string, systemId: SystemId): Pro
       data: { status: 'ACTIVE', effectiveFrom: now, effectiveTo: null },
     });
     return toConfigVersionView(activated);
+  });
+}
+
+/** Only unused drafts may be removed. Archive preserves the snapshot for review. */
+export async function changeDraftVersion(id: string, systemId: SystemId, action: 'archive' | 'restore' | 'delete'): Promise<void> {
+  await prisma.$transaction(async (tx) => {
+    const expectedStatus = action === 'restore' ? 'ARCHIVED' : 'DRAFT';
+    // Claim the expected status before checking references and changing this draft.
+    const claimed = await tx.configVersion.updateMany({ where: { id, systemId, status: expectedStatus }, data: { status: expectedStatus } });
+    if (claimed.count !== 1) throw new Error('CONFIG_VERSION_STATE');
+    const references = await Promise.all([
+      tx.musicDraft.count({ where: { configVersionId: id } }),
+      tx.musicMonth.count({ where: { configVersionId: id } }),
+      tx.musicLog.count({ where: { configVersionId: id } }),
+      tx.protocolPlan.count({ where: { OR: [{ configVersionId: id }, { musicConfigVersionId: id }] } }),
+      tx.protocolHistory.count({ where: { OR: [{ configVersionId: id }, { musicConfigVersionId: id }] } }),
+      tx.configVersion.count({ where: { previousVersionId: id } }),
+    ]);
+    if (references.some(count => count > 0)) throw new Error('CONFIG_VERSION_IN_USE');
+    if (action !== 'delete') {
+      await tx.configVersion.update({ where: { id }, data: { status: action === 'archive' ? 'ARCHIVED' : 'DRAFT' } });
+      if (action === 'restore') await syncChoirRegisterDrafts(tx, { versionId: id });
+      return;
+    }
+    const scope = { systemId, configVersionId: id };
+    const [services, categories, policies, links, rules, dutyPolicies] = await Promise.all([
+      tx.schedulingService.findMany({ where: scope, select: { id: true } }),
+      tx.choirCategory.findMany({ where: scope, select: { id: true } }),
+      tx.categoryServicePolicy.findMany({ where: scope, select: { id: true } }),
+      tx.choirCategoryLink.findMany({ where: scope, select: { id: true } }),
+      tx.protocolServiceRule.findMany({ where: scope, select: { id: true } }),
+      tx.protocolDutyPolicy.findMany({ where: scope, select: { id: true } }),
+    ]);
+    const serviceIds = services.map(row => row.id), categoryIds = categories.map(row => row.id), policyIds = policies.map(row => row.id);
+    const external = await Promise.all([
+      tx.categoryServicePolicy.count({ where: { NOT: { configVersionId: id }, OR: [{ serviceId: { in: serviceIds } }, { categoryId: { in: categoryIds } }] } }),
+      tx.choirCategoryLink.count({ where: { NOT: { configVersionId: id }, categoryId: { in: categoryIds } } }),
+      tx.protocolServiceRule.count({ where: { NOT: { configVersionId: id }, serviceId: { in: serviceIds } } }),
+      tx.musicFixedAssignment.count({ where: { NOT: { configVersionId: id }, categoryServicePolicyId: { in: policyIds } } }),
+    ]);
+    const descendants = await Promise.all([
+      tx.schedulingService.count({ where: { NOT: { configVersionId: id }, supersedesId: { in: serviceIds } } }),
+      tx.choirCategory.count({ where: { NOT: { configVersionId: id }, supersedesId: { in: categoryIds } } }),
+      tx.categoryServicePolicy.count({ where: { NOT: { configVersionId: id }, supersedesId: { in: policyIds } } }),
+      tx.choirCategoryLink.count({ where: { NOT: { configVersionId: id }, supersedesId: { in: links.map(row => row.id) } } }),
+      tx.protocolServiceRule.count({ where: { NOT: { configVersionId: id }, supersedesId: { in: rules.map(row => row.id) } } }),
+      tx.protocolDutyPolicy.count({ where: { NOT: { configVersionId: id }, supersedesId: { in: dutyPolicies.map(row => row.id) } } }),
+    ]);
+    if ([...external, ...descendants].some(count => count > 0)) throw new Error('CONFIG_VERSION_IN_USE');
+    await tx.musicFixedAssignment.deleteMany({ where: scope });
+    await tx.choirCategoryLink.deleteMany({ where: scope });
+    await tx.categoryServicePolicy.deleteMany({ where: scope });
+    await tx.protocolServiceRule.deleteMany({ where: scope });
+    await tx.protocolDutyPolicy.deleteMany({ where: scope });
+    await tx.choirCategory.deleteMany({ where: scope });
+    await tx.schedulingService.deleteMany({ where: scope });
+    await tx.configVersion.delete({ where: { id } });
   });
 }
 
@@ -325,6 +384,7 @@ export async function createChoirCategory(input: ChoirCategoryCreateInput): Prom
       createdByPersonId: input.createdByPersonId,
     },
   });
+  if (input.configVersionId) await syncChoirRegisterDrafts(prisma, { versionId: input.configVersionId });
   return toCategoryView(r);
 }
 

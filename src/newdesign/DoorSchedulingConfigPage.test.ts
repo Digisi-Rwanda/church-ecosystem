@@ -33,6 +33,9 @@ vi.mock('../api/frontDoorApi', () => ({
   createConfigVersion: vi.fn(),
   cloneConfigVersion: vi.fn(),
   activateConfigVersion: vi.fn(),
+  archiveConfigVersion: vi.fn(),
+  restoreConfigVersion: vi.fn(),
+  deleteConfigVersion: vi.fn(),
   retireSchedulingService: vi.fn(),
   createSchedulingService: vi.fn(),
   createChoirCategory: vi.fn(),
@@ -294,4 +297,37 @@ describe('DoorSchedulingConfigPage', () => {
     expect(html).toContain('Settings without an edit control remain preserved');
     expect(html).not.toContain('Extra duty policy</label>');
   });
+});
+
+
+describe('draft version history actions', () => {
+  const setup = (status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED', letters: string[]) => {
+    frontDoorState.capabilities.systems = [{id:'sys-music',own:[{key:'config',letters}]}];
+    loadStates.results = {'sched-config-versions|sys-music':{loading:false,failed:false,data:{versions:[{id:'v1',systemId:'sys-music',version:1,label:'Test setup',status}]},reload:()=>{}}};
+  };
+  it('offers archive/delete only on writable drafts', () => {
+    setup('DRAFT',['R','W']);
+    const html=renderPage('/s/sys-music/config?tab=versions&version=v1');
+    expect(html).toContain('>Archive draft</button>'); expect(html).toContain('>Delete draft</button>');
+    setup('ACTIVE',['R','W']);
+    const active=renderPage('/s/sys-music/config?tab=versions&version=v1');
+    expect(active).not.toContain('>Archive draft</button>'); expect(active).not.toContain('>Delete draft</button>');
+    setup('DRAFT',['R']);
+    const reader=renderPage('/s/sys-music/config?tab=versions&version=v1');
+    expect(reader).not.toContain('>Archive draft</button>'); expect(reader).not.toContain('>Delete draft</button>');
+  });
+  it('shows archived versions as read-only with a restore action', () => {
+    setup('ARCHIVED',['R','W']);
+    const html=renderPage('/s/sys-music/config?tab=versions&version=v1');
+    expect(html).toContain('Archived'); expect(html).toContain('>Restore draft</button>');
+    expect(html).not.toContain('>Activate version</button>'); expect(html).not.toContain('>Delete draft</button>');
+  });
+});
+
+
+it('opens an existing draft from the Choir register link', () => {
+  frontDoorState.capabilities.systems=[{id:'sys-music',own:[{key:'config',letters:['R','W']}]}];
+  loadStates.results={'sched-config-versions|sys-music':{loading:false,failed:false,data:{versions:[{id:'active',systemId:'sys-music',version:1,label:'Active setup',status:'ACTIVE'},{id:'draft',systemId:'sys-music',version:2,label:'Draft setup',status:'DRAFT'}]},reload:()=>{}}};
+  expect(renderPage('/s/sys-music/config?tab=links&draft=1')).toContain('You are editing a draft.');
+  expect(renderPage('/s/sys-music/config?tab=links&draft=1&version=active')).toContain('This active version is used');
 });

@@ -1,3 +1,4 @@
+import { notifyChoirRegisterChanged } from './choirRegisterEvents';
 import type { AccessLetter, ModuleKey, OfficeCode, SharedBlock, UnitKind } from '../../server/src/shared/vocabulary';
 import { apiMe, type ApiMeResponse } from './authApi';
 import { ApiError, apiFetch } from './client';
@@ -1629,15 +1630,19 @@ export const fetchChoirs = (systemId?: string): Promise<{ canManage: boolean; ch
 export const fetchChoir = (id: string): Promise<ChoirDetail> => apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`);
 export async function createChoir(input: { name: string; role: ChoirRole }): Promise<void> {
   await apiFetch(`${MU}/choirs`, { method: 'POST', body: input });
+  notifyChoirRegisterChanged();
 }
 export async function editChoir(id: string, input: { name: string; role: ChoirRole }): Promise<void> {
   await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+  notifyChoirRegisterChanged();
 }
 export async function deleteChoir(id: string): Promise<void> {
   await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}`, { method: 'DELETE' });
+  notifyChoirRegisterChanged();
 }
 export async function setChoirActive(id: string, active: boolean): Promise<void> {
   await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/active`, { method: 'POST', body: { active } });
+  notifyChoirRegisterChanged();
 }
 export async function addChoirMember(id: string, personId: string): Promise<void> {
   await apiFetch(`${MU}/choirs/${encodeURIComponent(id)}/members`, { method: 'POST', body: { personId } });
@@ -2136,7 +2141,7 @@ export type ConfigVersionApi = {
   reason: string | null; previousVersionId: string | null; notes: Record<string, unknown>;
   validation: Record<string, unknown>; affectedSchedules: string[];
 };
-export type ConfigStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'SCHEDULED';
+export type ConfigStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'SCHEDULED' | 'ARCHIVED';
 export type ServiceKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
 export type Recurrence = 'WEEKLY' | 'MONTHLY' | 'SELECTED_DATES' | 'CUSTOM';
 export type FrequencyCounting = 'ASSIGNMENTS' | 'DISTINCT_DATES';
@@ -2169,6 +2174,9 @@ export const cloneConfigVersion = (systemId: string, label: string, reason?: str
   scPost('/versions/clone', { systemId, label, reason });
 export const activateConfigVersion = (id: string) =>
   apiFetch(`${SC}/versions/${encodeURIComponent(id)}/activate`, { method: 'POST', body: {} });
+export const archiveConfigVersion = (id: string) => apiFetch(SC + '/versions/' + encodeURIComponent(id) + '/archive', { method: 'POST', body: {} });
+export const restoreConfigVersion = (id: string) => apiFetch(SC + '/versions/' + encodeURIComponent(id) + '/restore', { method: 'POST', body: {} });
+export const deleteConfigVersion = (id: string) => apiFetch(SC + '/versions/' + encodeURIComponent(id), { method: 'DELETE' });
 export const createSchedulingService = (body: object) => scPost('/services', body);
 export const createChoirCategory = (body: object) => scPost('/categories', body);
 export const createCategoryServicePolicy = (body: object) => scPost('/policies', body);

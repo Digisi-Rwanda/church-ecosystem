@@ -42,7 +42,7 @@ import { requireAuth, type AuthedRequest, pathParam } from '../middleware/http.j
 import { loadAccessData } from '../notifications/feed.js';
 import {
   createConfigVersion, listConfigVersions, getActiveConfigVersion,
-  cloneActiveConfigVersion, activateConfigVersion,
+  cloneActiveConfigVersion, activateConfigVersion, changeDraftVersion,
   createSchedulingService, listSchedulingServices, getSchedulingServiceByCodeInVersion, supersedeSchedulingService, updateSchedulingService,
   createChoirCategory, listChoirCategories, getChoirCategoryByCode, updateChoirCategory,
   createCategoryServicePolicy, listCategoryServicePolicies, updateCategoryServicePolicy,
@@ -427,6 +427,27 @@ configRouter.post('/config/versions/:id/activate', requireAuth, async (req: Auth
     throw error;
   }
 });
+
+async function draftVersionAction(req: AuthedRequest, res: Res, action: 'archive' | 'restore' | 'delete') {
+  const id = pathParam(req, 'id');
+  if (!id || !IdSchema.safeParse(id).success) return fail(res, 400, 'BAD_INPUT', 'Invalid version id');
+  const version = await prisma.configVersion.findUnique({ where: { id } });
+  if (!version || !isConfigSystem(version.systemId)) return fail(res, 404, 'NOT_FOUND', 'Configuration version not found');
+  const me = req.auth!.personId;
+  if (!canWriteConfig(me, version.systemId, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
+  try {
+    await changeDraftVersion(id, version.systemId, action);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'CONFIG_VERSION_STATE') return fail(res, 409, 'CONFIG_VERSION_STATE', action === 'restore' ? 'Only an archived draft can be restored.' : 'Only a draft configuration version can be archived or deleted.');
+    if (error instanceof Error && (error.message === 'CONFIG_VERSION_IN_USE' || ('code' in error && error.code === 'P2003'))) return fail(res, 409, 'CONFIG_VERSION_IN_USE', 'This version is referenced by a schedule or another configuration. Keep it for history.');
+    throw error;
+  }
+  await audit(me, version.systemId, 'CONFIG_VERSION_' + (action === 'delete' ? 'DELETED' : action === 'archive' ? 'ARCHIVED' : 'RESTORED'), action + ' configuration v' + version.version + ' “' + version.label + '”', { configVersionId: id });
+  return res.json({ ok: true });
+}
+configRouter.post('/config/versions/:id/archive', requireAuth, (req: AuthedRequest, res) => draftVersionAction(req, res, 'archive'));
+configRouter.post('/config/versions/:id/restore', requireAuth, (req: AuthedRequest, res) => draftVersionAction(req, res, 'restore'));
+configRouter.delete('/config/versions/:id', requireAuth, (req: AuthedRequest, res) => draftVersionAction(req, res, 'delete'));
 
 /* ─── SchedulingService ─── */
 

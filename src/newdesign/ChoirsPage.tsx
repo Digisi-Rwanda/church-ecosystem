@@ -1,7 +1,7 @@
 import { ImportLink } from './imports/ImportLink';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { createChoir, deleteChoir, editChoir, fetchChoirs, setChoirActive, type ChoirRole } from '../api/frontDoorApi';
+import { createChoir, deleteChoir, editChoir, setChoirActive, type ChoirRole } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
@@ -9,14 +9,14 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { musicErrorKey, ROLES } from './music';
 import { SystemLink } from './SystemLink';
-import { useLoad } from './useLoad';
+import { useChoirRegister } from './useChoirRegister';
 import { PageHeader } from './kit';
 
 /** The choir register: every choir the person may see, and a way into each one's singers. */
 export function ChoirsPage() {
   const t = useT();
   const { systemId = '' } = useParams();
-  const list = useLoad(() => fetchChoirs(systemId), `music-choirs|${systemId}`);
+  const list = useChoirRegister(systemId, `music-choirs|${systemId}`);
   const isMusic = systemId === 'sys-music';
   const [form, setForm] = useState(false);
   const [name, setName] = useState('');
@@ -44,6 +44,7 @@ export function ChoirsPage() {
       <div>
         <PageHeader id="door-choirs-title" title={t(isMusic ? 'door.own.choirs' : 'door.own.choirsOwn')} purpose={t(isMusic ? 'door.purpose.choirs' : 'door.purpose.choirsOwn')} />
       </div>
+      {isMusic && <p><Link className="btn ghost sm" to="/s/sys-music/config?tab=links&draft=1">{t('door.config.title')}</Link></p>}
       {error && <p className="door-error" role="alert">{error}</p>}
       {!isMusic && (
         <p className="muted">

@@ -1,3 +1,4 @@
+import { syncChoirRegisterDrafts } from '../scheduling/choirRegisterSync.js';
 /**
  * Music ministry (slice 3.12): choirs and their register, and the oversight summary.
  * The schedule itself (generate, confirm, publish) is in musicSchedule.ts. Nothing is deleted: a choir is retired, a member leaves.
@@ -71,6 +72,7 @@ musicRouter.post('/choirs', requireAuth, async (req: AuthedRequest, res) => {
   const row = (await prisma.musicChoir.create({
     data: { name: b.name, role: b.role, systemId: own?.systemId ?? target, ...(own ? { orgUnitId: own.orgUnitId } : {}), active: true, createdById: me },
   })) as ChoirRow;
+  await syncChoirRegisterDrafts(prisma, { choirId: row.id });
   await audit(me, 'PEOPLE', 'CHOIR_ADDED', `Added choir “${b.name}”`, { choirId: row.id });
   res.status(201).json({ id: row.id });
 });
@@ -83,6 +85,7 @@ musicRouter.post('/choirs/:id/active', requireAuth, async (req: AuthedRequest, r
   if (!c) return fail(res, 404, 'NOT_FOUND', 'Choir not found');
   if (!canWriteChoir(me, c.systemId, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
   await prisma.musicChoir.update({ where: { id: c.id }, data: { active: parsed.data.active } });
+  if (parsed.data.active) await syncChoirRegisterDrafts(prisma, { choirId: c.id });
   await audit(me, 'PEOPLE', parsed.data.active ? 'CHOIR_RESTORED' : 'CHOIR_RETIRED', `${parsed.data.active ? 'Restored' : 'Retired'} choir “${c.name}”`, { choirId: c.id });
   res.json({ ok: true });
 });
@@ -97,6 +100,7 @@ musicRouter.patch('/choirs/:id', requireAuth, async (req: AuthedRequest, res) =>
   if (!canWriteChoir(me, c.systemId, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
   if ((await choirs()).some((x) => x.id !== c.id && x.active && x.name.toLowerCase() === parsed.data.name.toLowerCase())) return fail(res, 409, 'ALREADY_EXISTS', 'A choir with this name exists');
   await prisma.musicChoir.update({ where: { id: c.id }, data: { name: parsed.data.name, role: parsed.data.role } });
+  if (c.role !== parsed.data.role) await syncChoirRegisterDrafts(prisma, { choirId: c.id });
   await audit(me, 'PEOPLE', 'CHOIR_EDITED', `Changed choir “${c.name}”${c.name !== parsed.data.name ? ` to “${parsed.data.name}”` : ''}`, { choirId: c.id });
   res.json({ ok: true });
 });
@@ -110,6 +114,11 @@ musicRouter.delete('/choirs/:id', requireAuth, async (req: AuthedRequest, res) =
   const c = (await prisma.musicChoir.findUnique({ where: { id: String(req.params.id) } })) as ChoirRow | null;
   if (!c) return fail(res, 404, 'NOT_FOUND', 'Choir not found');
   if (!canWriteChoir(me, c.systemId, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change choirs');
+  const [links, fixed] = await Promise.all([
+    prisma.choirCategoryLink.count({ where: { choirId: c.id } }),
+    prisma.musicFixedAssignment.count({ where: { choirId: c.id } }),
+  ]);
+  if (links || fixed) return fail(res, 409, 'SCHEDULING_HISTORY', 'This choir is used by scheduling configuration. Retire it to preserve existing schedules and configuration history.');
   const sponsors = ((await prisma.choirSponsor.findMany()) as Array<{ id: string; choirId: string }>).filter((x) => x.choirId === c.id);
   const pledges = ((await prisma.sponsorPledge.findMany()) as Array<{ sponsorId: string; status: string }>).filter((p) => sponsors.some((x) => x.id === p.sponsorId) && p.status !== 'CANCELLED');
   if (pledges.length > 0) return fail(res, 409, 'HAS_PLEDGES', 'This choir has sponsor pledges on record. Retire it instead.');

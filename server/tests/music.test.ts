@@ -141,3 +141,53 @@ describe('editing and deleting a choir', () => {
     expect(db.musicChoir).toHaveLength(1);
   });
 });
+
+describe('Choir register and scheduling draft synchronization', () => {
+  const setup = async (status: 'ACTIVE' | 'DRAFT' | 'ARCHIVED', version: number) => {
+    const S = await import('../src/scheduling/store');
+    const v=await S.createConfigVersion({systemId:'sys-music',version,label:'Rules '+version,status,createdByPersonId:MUSIC_LEADER});
+    const primary=await S.createChoirCategory({systemId:'sys-music',code:'PRIMARY',name:'Primary',configVersionId:v.id,createdByPersonId:MUSIC_LEADER});
+    const children=await S.createChoirCategory({systemId:'sys-music',code:'CHILDREN',name:'Children',configVersionId:v.id,createdByPersonId:MUSIC_LEADER});
+    return {S,v,primary,children};
+  };
+  it('creates and updates type-based membership in drafts only, preserving exceptions and saved versions', async()=>{
+    const active=await setup('ACTIVE',1), draft=await setup('DRAFT',2), archived=await setup('ARCHIVED',3);
+    const id=await choir('Register choir','PRIMARY');
+    const link=fake.__db.choirCategoryLink.find((row: any)=>row.choirId===id);
+    expect(link).toMatchObject({configVersionId:draft.v.id,categoryId:draft.primary.id});
+    link.frequencyOverrideJson='{"ss1":{"frequencyTarget":2}}';
+    const result=await request(app).patch(`/api/music/choirs/${id}`).set(bearer(MUSIC_LEADER)).send({name:'Renamed register choir',role:'CHILDREN'});
+    expect(result.status).toBe(200);
+    expect(link).toMatchObject({categoryId:draft.children.id,frequencyOverrideJson:'{"ss1":{"frequencyTarget":2}}'});
+    expect(fake.__db.choirCategoryLink.filter((row: any)=>[active.v.id,archived.v.id].includes(row.configVersionId))).toHaveLength(0);
+    expect((await get(MUSIC_LEADER,'/api/music/choirs')).body.choirs[0].name).toBe('Renamed register choir');
+    expect((await post(MUSIC_LEADER,`/api/music/choirs/${id}/active`,{active:false})).status).toBe(200);
+    expect((await get(MUSIC_LEADER,'/api/music/choirs')).body.choirs[0].active).toBe(false);
+    expect(fake.__db.choirCategoryLink).toHaveLength(1);
+  });
+  it('includes registered choirs when cloning an active version without modifying that version',async()=>{
+    const {S,v}=await setup('ACTIVE',1);const id=await choir('New register choir');
+    const draft=await S.cloneActiveConfigVersion('sys-music',{label:'Draft',createdByPersonId:MUSIC_LEADER});
+    expect(fake.__db.choirCategoryLink.filter((row: any)=>row.configVersionId===v.id)).toHaveLength(0);
+    const links=fake.__db.choirCategoryLink.filter((row: any)=>row.configVersionId===draft.id);
+    expect(links).toHaveLength(1);expect(links[0].choirId).toBe(id);
+    expect(fake.__db.choirCategory.find((row: any)=>row.id===links[0].categoryId)).toMatchObject({code:'PRIMARY',configVersionId:draft.id});
+  });
+  it('does not guess missing categories and maps automatically once a matching category is added',async()=>{
+    const S=await import('../src/scheduling/store');const v=await S.createConfigVersion({systemId:'sys-music',version:1,label:'Draft',status:'DRAFT',createdByPersonId:MUSIC_LEADER});
+    const id=await choir('Children register choir','CHILDREN');expect(fake.__db.choirCategoryLink ?? []).toHaveLength(0);
+    const added=await post(MUSIC_LEADER,'/api/scheduling/config/categories',{systemId:'sys-music',configVersionId:v.id,code:'CHILDREN',name:'Children'});
+    expect(added.status).toBe(201);expect(fake.__db.choirCategoryLink).toEqual(expect.arrayContaining([expect.objectContaining({choirId:id,categoryId:added.body.category,configVersionId:v.id})]));
+  });
+  it('keeps deliberate custom-category choices and refuses deletion of a referenced choir',async()=>{
+    const {S,v}=await setup('ACTIVE',1);const id=await choir('Custom choir');
+    const category=await S.createChoirCategory({systemId:'sys-music',code:'CUSTOM',name:'Custom',configVersionId:v.id,createdByPersonId:MUSIC_LEADER});
+    await S.createChoirCategoryLink({systemId:'sys-music',choirId:id,categoryId:category.id,configVersionId:v.id,createdByPersonId:MUSIC_LEADER});
+    const draft=await S.cloneActiveConfigVersion('sys-music',{label:'Draft',createdByPersonId:MUSIC_LEADER});
+    const link=fake.__db.choirCategoryLink.find((row: any)=>row.configVersionId===draft.id && row.choirId===id);
+    expect(fake.__db.choirCategory.find((row: any)=>row.id===link.categoryId).code).toBe('CUSTOM');
+    expect((await del(MUSIC_LEADER,`/api/music/choirs/${id}`)).body.code).toBe('SCHEDULING_HISTORY');
+    expect(fake.__db.musicChoir.some((row: any)=>row.id===id)).toBe(true);
+    expect((await post(MUSIC_LEADER,`/api/music/choirs/${id}/active`,{active:false})).status).toBe(200);
+  });
+});

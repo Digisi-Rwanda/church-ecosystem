@@ -1,3 +1,5 @@
+import { Link } from 'react-router-dom';
+import { useChoirRegister, useChoirRegisterRefresh } from './useChoirRegister';
 import { musicExceptions, preserveRelaxableKinds, schedulingError } from "./schedulingForms";
 import { useState } from "react";
 import type { ReactNode } from "react";
@@ -11,7 +13,6 @@ import {
   fetchCategoryServicePolicies,
   fetchChoirCategories,
   fetchChoirCategoryLinks,
-  fetchChoirs,
   fetchProtocolDutyPolicy,
   fetchProtocolServiceRules,
   fetchSchedulingServices,
@@ -430,7 +431,8 @@ export function LinksEditor({ systemId, version, canWrite }: Props) {
   const editable = canWrite && systemId === "sys-music" && version?.status === "DRAFT";
   const list = useLoad(() => fetchChoirCategoryLinks(systemId, versionId), `sched-config-links|${systemId}|${versionId ?? "active"}`);
   const categories = useLoad(() => fetchChoirCategories(systemId, false, versionId), `sched-config-link-cats|${versionId ?? "active"}`);
-  const choirs = useLoad(() => fetchChoirs(), "sched-config-link-choirs");
+  const choirs = useChoirRegister(undefined, "sched-config-link-choirs");
+  useChoirRegisterRefresh(list.reload);
   const state = useSaveState();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ChoirCategoryLinkApi | null>(null);
@@ -454,6 +456,14 @@ export function LinksEditor({ systemId, version, canWrite }: Props) {
     <LoadState loading={list.loading || categories.loading || choirs.loading}
       failed={list.failed || categories.failed || choirs.failed} retry={() => { list.reload(); categories.reload(); choirs.reload(); }}>
       <SectionNotice tone="warn">{t("door.config.link.behaviorNotice")}</SectionNotice>
+      <p>{t('door.config.registerSync')} <Link to="/s/sys-music/choirs">{t('door.own.choirs')}</Link></p>
+      {(choirs.data?.choirs ?? []).filter(choir => {
+        if (!choir.active) return false;
+        const link = rows.find(row => row.active && row.choirId === choir.id);
+        if (!link) return true;
+        const code = categories.data?.categories.find(row => row.id === link.categoryId)?.code?.toUpperCase();
+        return code && ['PRIMARY','SECONDARY','CHILDREN','WORSHIP'].includes(code) && code !== choir.role;
+      }).map(choir => <p className="door-error" key={choir.id}>{choir.name}: {t('door.config.needsCategory')}</p>)}
       {editable && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
       <FormNotice state={state} />
       <EmptyOrLocked canEdit={editable} empty={rows.length === 0} emptyKey="door.config.links.empty" />
@@ -466,7 +476,7 @@ export function LinksEditor({ systemId, version, canWrite }: Props) {
             choir: choir?.name ?? t("door.config.nameUnavailable.choir"),
             category: category?.name ?? t("door.config.nameUnavailable.category"),
           })}</strong>
-          <p className="muted">{row.active ? t("door.config.service.active") : t("door.config.service.inactive")}</p>
+          <p className="muted">{!choir ? t("door.config.registerMissing") : !choir.active ? t("door.music.retired") : row.active ? t("door.config.service.active") : t("door.config.service.inactive")}</p>
           {editable && <EditToggle onClick={() => { setEditing(row); setFormOpen(true); state.clear(); }} />}
         </div>
       </li>;
@@ -474,7 +484,7 @@ export function LinksEditor({ systemId, version, canWrite }: Props) {
       {editable && formOpen && <SaveForm key={editing?.id ?? "new"} title={editing ? t("door.config.editLink") : t("door.config.addLink")}
         state={state} editing={!!editing} working={state.working} onCancel={cancel} onSubmit={submit}>
         <SelectField label={t("door.config.link.choir")} name="choirId" value={editing?.choirId} required
-          options={(choirs.data?.choirs ?? []).filter((row) => row.active).map((row) => ({ value: row.id, label: row.name }))} />
+          options={(choirs.data?.choirs ?? []).filter((row) => row.active || row.id === editing?.choirId).map((row) => ({ value: row.id, label: row.name }))} />
         <SelectField label={t("door.config.link.category")} name="categoryId" value={editing?.categoryId} required
           options={(categories.data?.categories ?? []).map((row) => ({ value: row.id, label: row.name }))} />
         <ChoirExceptions versionId={versionId ?? ""} link={editing} />
