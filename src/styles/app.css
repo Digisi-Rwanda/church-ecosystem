@@ -8727,3 +8727,8 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
 .scheduling-table-scroll th, .scheduling-table-scroll td { padding: .65rem; text-align: start; border-bottom: 1px solid var(--border, #ddd); }
 .scheduling-config fieldset { min-width: 0; }
 .scheduling-config input, .scheduling-config select { max-width: 100%; }
+/* Keep service policies together under their choir category. */
+.scheduling-policy-groups { display: grid; gap: 1.25rem; }
+.scheduling-policy-groups > section > h4 { margin: 0 0 .75rem; font-size: 1.15rem; }
+.scheduling-policy-groups .door-notice { box-shadow: none; margin: 0; }
+.scheduling-policy-groups .scheduling-config-version-heading { gap: .75rem; flex-wrap: wrap; }

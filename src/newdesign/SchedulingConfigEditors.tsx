@@ -408,25 +408,24 @@ export function PoliciesEditor({ systemId, version, canWrite }: Props) {
       {editable && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
       <FormNotice state={state} />
       <EmptyOrLocked canEdit={editable} empty={rows.length === 0} emptyKey="door.config.policies.empty" />
-      <ul className="door-notices">{rows.map((row) => {
-        const category = categories.data?.categories.find((item) => item.id === row.categoryId);
+      <div className="scheduling-policy-groups">{[...new Set(rows.map(row => row.categoryId))].map(categoryId => <section className="panel" key={categoryId}>
+        <h4>{categories.data?.categories.find(item => item.id === categoryId)?.name ?? t("door.config.nameUnavailable.category")}</h4>
+        <ul className="door-notices">{rows.filter(row => row.categoryId === categoryId).map((row) => {
         const service = services.data?.services.find((item) => item.id === row.serviceId);
         return <li key={row.id} className="panel door-notice">
         <div className="door-notice-main">
           <div className="scheduling-config-version-heading">
-            <strong>{t("door.config.policy.pair", {
-              category: category?.name ?? t("door.config.nameUnavailable.category"),
-              service: service?.name ?? t("door.config.nameUnavailable.service"),
-            })}</strong>
-            <StatusChip tone={row.active ? "success" : "neutral"}>
-              {row.active ? t("door.config.service.active") : t("door.config.service.inactive")}
+            <strong>{service?.name ?? t("door.config.nameUnavailable.service")}</strong>
+            <StatusChip tone={row.active && row.eligible ? "success" : "neutral"}>
+              {t("door.config.policy.eligibility", {value: t(row.active && row.eligible ? "door.config.form.yes" : "door.config.form.no")})}
             </StatusChip>
+            {!row.active && <StatusChip tone="neutral">{t("door.config.service.inactive")}</StatusChip>}
           </div>
-          <p className="muted">{policySummary(row, t)}</p>
+          {row.eligible && <p className="muted">{policySummary(row, t, false)}</p>}
           {editable && <EditToggle onClick={() => { setEditing(row); setFormOpen(true); state.clear(); }} />}
         </div>
       </li>;
-      })}</ul>
+      })}</ul></section>)}</div>
       {editable && formOpen && <SaveForm key={editing?.id ?? "new"} title={editing ? t("door.config.editPolicy") : t("door.config.addPolicy")}
         state={state} editing={!!editing} working={state.working} onCancel={cancel} onSubmit={submit}>
         <SelectField label={t("door.config.tab.categories")} name="categoryId" value={editing?.categoryId} required

@@ -90,17 +90,15 @@ export const serviceSummary = (s: SchedulingServiceApi, t: TFn): string => {
 export const categorySummary = (c: ChoirCategoryApi): string => c.description || c.code;
 
 /** One line for a policy row. */
-export const policySummary = (p: CategoryServicePolicyApi, t: TFn): string => {
-  const parts: string[] = [
+export const policySummary = (p: CategoryServicePolicyApi, t: TFn, includeEligibility = true): string => {
+  const parts: string[] = includeEligibility ? [
     t('door.config.policy.eligibility', {
       value: t(p.eligible ? 'door.config.form.yes' : 'door.config.form.no'),
     }),
-  ];
+  ] : [];
   const frequencyKind = t(frequencyKindKey(p.frequencyKind));
   const frequencyCounting = t(frequencyCountingKey(p.frequencyCounting));
-  parts.push(p.frequencyTarget === null
-    ? `${frequencyKind} (${frequencyCounting})`
-    : t('door.config.policy.frequencySummary', {
+  if (p.frequencyTarget !== null) parts.push(t('door.config.policy.frequencySummary', {
       kind: frequencyKind,
       count: p.frequencyTarget,
       counting: frequencyCounting,

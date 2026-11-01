@@ -2382,6 +2382,7 @@ export const en = {
   'door.config.version.reason': 'Reason',
   'door.config.version.createDraft': 'Create draft version',
   'door.config.version.draftLabel': 'Configuration draft',
+  'door.config.version.allDrafts': 'Every draft below has its own Activate, Archive and Delete actions. You do not need to select it first. Drafts referenced by scheduling history remain protected.',
   'door.config.version.activate': 'Activate version',
   'door.config.err.input': 'Please check the fields.',
   'door.config.err.code': 'Use 1–40 letters, digits, dash or underscore.',

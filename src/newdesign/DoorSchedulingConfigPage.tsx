@@ -293,10 +293,11 @@ function VersionsTab({ systemId, rows, selectedId, reload, selectVersion, canWri
             reload();
           }).catch((reason: unknown) => { setError(schedulingError(reason) ?? t('door.config.err.server')); setOperation(null); }).finally(() => setWorking(false));
         }} />
+      <p className="muted">{t("door.config.version.allDrafts")}</p>
       {rows.length === 0 ? <EmptyState title={t("door.config.versions.empty")} /> : (
         <ul className="door-notices">
           {rows.map((version) => (
-            <li key={version.id} className="panel door-notice">
+            <li key={version.id} className="panel door-notice" aria-label={versionSummary(version, t)}>
               <div className="door-notice-main">
                 <div className="scheduling-config-version-heading">
                   <strong>{version.label}</strong>

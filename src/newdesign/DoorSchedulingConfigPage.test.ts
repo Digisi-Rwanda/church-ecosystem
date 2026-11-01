@@ -3,7 +3,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { I18nProvider } from '../i18n/I18nContext';
-import { DoorSchedulingConfigPage } from './DoorSchedulingConfigPage';
+import { DoorSchedulingConfigPage, serviceWorkingDraft } from './DoorSchedulingConfigPage';
 
 const loadStates = vi.hoisted(() => ({
   results: {} as Record<string, { loading: boolean; failed: boolean | string; data?: unknown; reload: () => void }>,
@@ -91,6 +91,30 @@ describe('DoorSchedulingConfigPage', () => {
     (api.retireSchedulingService as any).mockResolvedValue({});
   });
 
+  it('reuses a draft instead of creating another or modifying the active version', async () => {
+    vi.mocked(api.fetchConfigVersions).mockResolvedValue({ versions: [
+      { id: 'draft', status: 'DRAFT' }, { id: 'active', status: 'ACTIVE' },
+    ] } as any);
+    expect(await serviceWorkingDraft('sys-music', 'Working draft')).toBe('draft');
+    expect(api.cloneConfigVersion).not.toHaveBeenCalled();
+    expect(api.createConfigVersion).not.toHaveBeenCalled();
+    expect(api.activateConfigVersion).not.toHaveBeenCalled();
+  });
+
+  it('clones the active configuration when service editing has no working draft', async () => {
+    vi.mocked(api.fetchConfigVersions).mockResolvedValue({ versions: [{ id: 'active', status: 'ACTIVE' }] } as any);
+    vi.mocked(api.cloneConfigVersion).mockResolvedValue({ version: { id: 'new-draft' } } as any);
+    expect(await serviceWorkingDraft('sys-music', 'Working draft')).toBe('new-draft');
+    expect(api.cloneConfigVersion).toHaveBeenCalledWith('sys-music', 'Working draft');
+    expect(api.activateConfigVersion).not.toHaveBeenCalled();
+  });
+
+  it('propagates draft preparation failures instead of opening a writable active version', async () => {
+    vi.mocked(api.fetchConfigVersions).mockRejectedValue(new Error('Unavailable'));
+    await expect(serviceWorkingDraft('sys-music', 'Working draft')).rejects.toThrow('Unavailable');
+    expect(api.cloneConfigVersion).not.toHaveBeenCalled();
+  });
+
   it('shows the selected section and its content for each tab URL', () => {
     const cases = [
       ['services', 'Church services', 'Sunday Service 1', 'sched-config-services|sys-music|v1', { services: [{
@@ -129,7 +153,7 @@ describe('DoorSchedulingConfigPage', () => {
     expect(html).toContain('No church services yet.');
   });
 
-  it('keeps active versions read-only and exposes editors for a selected draft', () => {
+  it('exposes service actions from active and historical versions through a working draft', () => {
     loadStates.results['sched-config-versions|sys-music'] = {
       loading: false, failed: false, data: { versions: [
         { id: 'v0', systemId: 'sys-music', version: 0, label: 'Historical', status: 'SUPERSEDED' },
@@ -143,11 +167,12 @@ describe('DoorSchedulingConfigPage', () => {
 
     const activeHtml = renderPage('/s/sys-music/config?version=v1');
     expect(activeHtml).toContain('This active version is used when new schedules are generated.');
-    expect(activeHtml).not.toContain('Add</button>');
+    expect(activeHtml).toContain('Add</button>');
+    expect(activeHtml).toContain('Add or Change opens a working draft');
 
     const historicalHtml = renderPage('/s/sys-music/config?version=v0');
     expect(historicalHtml).toContain('This Superseded version is read-only.');
-    expect(historicalHtml).not.toContain('Add</button>');
+    expect(historicalHtml).toContain('Add</button>');
 
     const draftHtml = renderPage('/s/sys-music/config?version=v2');
     expect(draftHtml).toContain('You are editing a draft.');
@@ -278,7 +303,8 @@ describe('DoorSchedulingConfigPage', () => {
     expect(linksHtml).not.toContain('choir-secret-id');
     expect(linksHtml).toContain('Links determine selection and validation');
     const policiesHtml = renderPage('/s/sys-music/config?tab=policies&version=v1');
-    expect(policiesHtml).toContain('Youth Choir · Sunday Service 1');
+    expect(policiesHtml).toContain('<h4>Youth Choir</h4>');
+    expect(policiesHtml).toContain('Sunday Service 1');
     expect(policiesHtml).toContain('These rules control choir selection and validation');
   });
 
@@ -301,6 +327,18 @@ describe('DoorSchedulingConfigPage', () => {
 
 
 describe('draft version history actions', () => {
+  it('offers lifecycle actions on every draft while an active version is selected', () => {
+    frontDoorState.capabilities.systems = [{id:'sys-music',own:[{key:'config',letters:['R','W']}]}];
+    loadStates.results = {'sched-config-versions|sys-music':{loading:false,failed:false,data:{versions:[
+      {id:'active',systemId:'sys-music',version:1,label:'Active',status:'ACTIVE'},
+      {id:'draft1',systemId:'sys-music',version:2,label:'First draft',status:'DRAFT'},
+      {id:'draft2',systemId:'sys-music',version:3,label:'Second draft',status:'DRAFT'},
+    ]},reload:()=>{}}};
+    const html = renderPage('/s/sys-music/config?tab=versions&version=active');
+    for (const label of ['Activate version', 'Archive draft', 'Delete draft']) {
+      expect(html.split('>' + label + '</button>').length - 1).toBe(2);
+    }
+  });
   const setup = (status: 'DRAFT' | 'ACTIVE' | 'ARCHIVED', letters: string[]) => {
     frontDoorState.capabilities.systems = [{id:'sys-music',own:[{key:'config',letters}]}];
     loadStates.results = {'sched-config-versions|sys-music':{loading:false,failed:false,data:{versions:[{id:'v1',systemId:'sys-music',version:1,label:'Test setup',status}]},reload:()=>{}}};
