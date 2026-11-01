@@ -42,6 +42,12 @@ async function createDraftVersion(systemId: string, rows: ConfigVersionApi[], la
 const createdVersionId = (result: VersionCreateResult) =>
   typeof result.version === "string" ? result.version : result.version?.id;
 
+export async function serviceWorkingDraft(systemId: string, label: string) {
+  const current = await fetchConfigVersions(systemId);
+  return current.versions.find((row) => row.status === "DRAFT")?.id
+    ?? createdVersionId(await createDraftVersion(systemId, current.versions, label));
+}
+
 export function DoorSchedulingConfigPage() {
   const t = useT();
   const { capabilities } = useFrontDoor();
@@ -51,6 +57,7 @@ export function DoorSchedulingConfigPage() {
   const [confirmActivation, setConfirmActivation] = useState<ConfigVersionApi | null>(null);
   const [createError, setCreateError] = useState("");
   const [createWorking, setCreateWorking] = useState(false);
+  const [serviceIntent, setServiceIntent] = useState<{ versionId: string; code: string | null } | null>(null);
   const [activationError, setActivationError] = useState("");
   const [activationWorking, setActivationWorking] = useState(false);
   const versions = useLoad(() => fetchConfigVersions(systemId), `sched-config-versions|${systemId}`);
@@ -102,6 +109,23 @@ export function DoorSchedulingConfigPage() {
       versions.reload();
       const id = createdVersionId(result);
       if (id) selectVersion(id);
+    } catch (reason) {
+      setCreateError(schedulingError(reason) ?? t("door.config.err.server"));
+    } finally {
+      setCreateWorking(false);
+    }
+  };
+  const editServices = async (code: string | null) => {
+    if (!canWrite || createWorking) return;
+    setCreateWorking(true);
+    setCreateError("");
+    try {
+      // Reuse an existing working draft; historical versions are never edited in place.
+      const id = await serviceWorkingDraft(systemId, t("door.config.version.draftLabel"));
+      if (!id) throw new Error(t("door.config.err.server"));
+      setServiceIntent({ versionId: id, code });
+      selectVersion(id);
+      versions.reload();
     } catch (reason) {
       setCreateError(schedulingError(reason) ?? t("door.config.err.server"));
     } finally {
@@ -163,9 +187,14 @@ export function DoorSchedulingConfigPage() {
             {activeVersion && selectedVersion?.id !== activeVersion.id && (
               <p className="muted">{t("door.config.activeVersion", { name: activeVersion.label })}</p>
             )}
+            {canWrite && editable && selectedVersion && <button type="button" className="btn sm"
+              disabled={activationWorking} onClick={() => { setActivationError(""); setConfirmActivation(selectedVersion); }}>
+              {t("door.config.version.activate")}
+            </button>}
           </div>
         )}
         {activationError && <p className="door-error" role="alert">{activationError}</p>}
+        {rows.length > 0 && createError && <p className="door-error" role="alert">{createError}</p>}
       </LoadState>
       <nav className="door-menu" aria-label={t("door.config.tabs")}>
         {tabs.map((key) => (
@@ -179,7 +208,10 @@ export function DoorSchedulingConfigPage() {
         <h3>{t(configTabKey(tab))}</h3>
         <p className="muted">{t(tabCopyKey)}</p>
       </header>
-      {tab === "services" && <ServicesEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}
+      {tab === "services" && <ServicesEditor key={versionId} systemId={systemId} version={selectedVersion} canWrite={canWrite}
+        onRequestEdit={editServices} preparing={createWorking}
+        intent={serviceIntent?.versionId === versionId ? serviceIntent : null}
+        onIntentHandled={() => setServiceIntent(null)} />}
       {tab === "categories" && <CategoriesEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}
       {tab === "policies" && <PoliciesEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}
       {tab === "links" && <LinksEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}

@@ -2315,6 +2315,8 @@ export const en = {
   'door.config.service.protocolParticipation': 'Protocol: {value}',
   'door.config.service.teamSize': 'Target team size: {count}',
   'door.config.service.supportNotice': 'Music participation affects whether a Music schedule is expected for a service. The choir-count limit is enforced during selection and manual changes.',
+  'door.config.service.editViaDraft': 'Add or Change opens a working draft, reusing an existing draft or copying the active configuration. Uncheck Active to deactivate a service. Review and activate the draft to use the changes for new schedules.',
+  'door.config.service.missingInDraft': 'This service is absent from the working draft. Select that draft to review its services, or use Add to create the service there.',
   'door.config.sharedCalendarReadOnly': 'This is the shared service calendar. Service changes are managed in Music setup.',
   'door.config.service.active': 'Active',
   'door.config.service.inactive': 'Inactive',

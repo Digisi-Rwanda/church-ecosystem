@@ -1,7 +1,7 @@
 import { Link } from 'react-router-dom';
 import { useChoirRegister, useChoirRegisterRefresh } from './useChoirRegister';
 import { musicExceptions, preserveRelaxableKinds, schedulingError } from "./schedulingForms";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { ReactNode } from "react";
 import {
   createCategoryServicePolicy,
@@ -207,7 +207,12 @@ function TeamSizeOverridesField({ overrides }: { overrides: Record<string, numbe
   );
 }
 
-export function ServicesEditor({ systemId, version, canWrite }: Props) {
+export function ServicesEditor({ systemId, version, canWrite, onRequestEdit, preparing, intent, onIntentHandled }: Props & {
+  onRequestEdit?: (code: string | null) => Promise<void>;
+  preparing?: boolean;
+  intent?: { code: string | null } | null;
+  onIntentHandled?: () => void;
+}) {
   const t = useT();
   const isMusic = systemId === "sys-music";
   const configVersionId = isMusic ? version?.id : undefined;
@@ -217,6 +222,23 @@ export function ServicesEditor({ systemId, version, canWrite }: Props) {
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<SchedulingServiceApi | null>(null);
   const rows = list.data?.services ?? [];
+  useEffect(() => {
+    if (!intent || !editable || !list.data || list.loading || list.failed) return;
+    const row = intent.code === null ? null : rows.find((service) => service.code === intent.code);
+    if (intent.code !== null && !row) {
+      state.fail(new Error(t("door.config.service.missingInDraft")));
+    } else {
+      setEditing(row ?? null);
+      setFormOpen(true);
+      state.clear();
+    }
+    onIntentHandled?.();
+  });
+  const openEditor = (row: SchedulingServiceApi | null) => {
+    if (preparing) return;
+    if (!editable) { void onRequestEdit?.(row?.code ?? null); return; }
+    setEditing(row); setFormOpen(true); state.clear();
+  };
   const cancel = (clear = true) => { setEditing(null); setFormOpen(false); if (clear) state.clear(); };
   const submit = async (data: FormData) => {
     if (!configVersionId) return;
@@ -241,7 +263,10 @@ export function ServicesEditor({ systemId, version, canWrite }: Props) {
     <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
       {!isMusic && <SectionNotice>{t("door.config.sharedCalendarReadOnly")}</SectionNotice>}
       {isMusic && <SectionNotice tone="warn">{t("door.config.service.supportNotice")}</SectionNotice>}
-      {editable && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
+      {canWrite && isMusic && <>
+        {!editable && <SectionNotice>{t("door.config.service.editViaDraft")}</SectionNotice>}
+        <button type="button" className="btn sm" disabled={preparing} onClick={() => openEditor(null)}>{t("door.config.add")}</button>
+      </>}
       <FormNotice state={state} />
       <EmptyOrLocked canEdit={editable} empty={rows.length === 0} emptyKey="door.config.services.empty" />
       <ul className="door-notices">
@@ -265,13 +290,13 @@ export function ServicesEditor({ systemId, version, canWrite }: Props) {
                 {t("door.config.service.teamSize", { count: row.targetTeamSize })}
               </StatusChip>}
             </div>
-            {editable && <EditToggle onClick={() => { setEditing(row); setFormOpen(true); state.clear(); }} />}
+            {canWrite && isMusic && <button type="button" className="btn ghost sm" disabled={preparing} onClick={() => openEditor(row)}>{t("door.settings.edit")}</button>}
           </div>
         </li>)}
       </ul>
       {editable && formOpen && (
         <SaveForm key={editing?.id ?? "new"} title={editing ? t("door.config.editService") : t("door.config.addService")} state={state}
-          editing={!!editing} working={state.working} onCancel={cancel} onSubmit={submit}>
+          editing working={state.working} onCancel={cancel} onSubmit={submit}>
           <TextField label={t("door.config.service.code")} name="code" value={editing?.code} required pattern="[A-Za-z0-9_-]{1,40}" />
           <TextField label={t("door.config.service.name")} name="name" value={editing?.name} required />
           <SelectField label={t("door.config.service.kind")} name="kind" value={editing?.kind}
