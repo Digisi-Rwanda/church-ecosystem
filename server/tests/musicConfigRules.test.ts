@@ -70,7 +70,7 @@ describe('Music scheduling rule contracts', () => {
     snapshot.fixedAssignments.push({ categoryServicePolicyId: 'policy-v1', choirId: 'choir-1' });
     expect(validateMusicConfigSnapshot(snapshot).ok).toBe(true);
     snapshot.fixedAssignments[0]!.choirId = 'unlinked-choir';
-    expect(validateMusicConfigSnapshot(snapshot).errors).toContain('A fixed arrangement for ss1 must use an active choir linked to its category.');
+    expect(validateMusicConfigSnapshot(snapshot).errors).toContain('A fixed arrangement for ss1 must use a choir linked to its category.');
   });
 
   it('keeps membership and global active status ahead of eligibility overrides', () => {

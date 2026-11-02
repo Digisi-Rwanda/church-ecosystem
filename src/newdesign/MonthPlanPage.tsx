@@ -42,7 +42,6 @@ function ServiceCard({ svc, onEdit }: { svc: ScheduleService; onEdit?: () => voi
             <li key={u.unitId} className="pt-person">
               <span className="pt-avatar" aria-hidden>{u.name.slice(0, 2).toUpperCase()}</span>
               <span className="pt-name">{u.name}</span>
-              <span className="pt-tag">{u.category ?? t('door.config.nameUnavailable.category')}</span>
             </li>
           ))}
         </ul>
@@ -94,12 +93,11 @@ function EditPanel({ svc, units, edit, onClose }: { svc: ScheduleService; units:
 
 /** The services of a schedule, grouped by month, with the edit panel. */
 function Services({ services, months, units, edit, view }: { services: ScheduleService[]; months: string[]; units: Units; edit?: Edit; view: ScheduleViewKey }) {
-  const t = useT();
   const monthName = useMonthName();
   const [editing, setEditing] = useState<string | null>(null);
   const cur = services.find((s) => s.id === editing);
   const rows: ScheduleRow[] = months.flatMap((m) => servicesOfMonth(services, m)).map((s) => ({
-    id: s.id, date: s.date, title: s.label, names: s.units.map((u) => ({ name: u.name, tag: u.category ?? t('door.config.nameUnavailable.category') })),
+    id: s.id, date: s.date, title: s.label, names: s.units.map((u) => ({ name: u.name })),
     onEdit: edit && s.musicRequired !== false ? () => setEditing(s.id) : undefined,
   }));
   return (

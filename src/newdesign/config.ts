@@ -42,6 +42,7 @@ export const CONFIG_TABS = [
   'availability',
   'protocol',
   'duty',
+  'review',
   'versions',
 ] as const;
 export type ConfigTab = (typeof CONFIG_TABS)[number];
@@ -54,6 +55,13 @@ export const configTabsForSystem = (systemId: string): readonly ConfigTab[] =>
       : ['services', 'versions'];
 
 export const configTabKey = (tab: ConfigTab): MessageKey => `door.config.tab.${tab}`;
+
+export const MUSIC_SETUP_STEPS = ['services','links','policies','review'] as const;
+export function musicSetupStep(tab: string): number {
+  if (tab === 'categories' || tab === 'links') return 1;
+  if (tab === 'policies' || tab === 'fixed' || tab === 'availability') return 2;
+  return tab === 'review' ? 3 : 0;
+}
 
 /** A weekday 0-6 (Sunday-first) as a translated name. */
 export const weekdayName = (t: TFn, weekday: number | null): string => {

@@ -122,6 +122,8 @@ export interface MusicFixedAssignmentView {
   configVersionId: string;
   categoryServicePolicyId: string;
   choirId: string;
+  serviceDate?: string | null;
+  serviceTime?: string | null;
   displayOrder: number;
   createdByPersonId: string;
   createdAt: string;
@@ -132,6 +134,7 @@ export interface MusicChoirUnavailabilityView {
   systemId: string;
   choirId: string;
   serviceDate: string;
+  endDate?: string | null;
   serviceCode: string | null;
   reason: string | null;
   active: boolean;

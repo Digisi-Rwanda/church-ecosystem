@@ -2,6 +2,8 @@ import { MusicParticipationEditor } from "./MusicParticipationEditor";
 import { schedulingError } from "./schedulingForms";
 import { Link } from "react-router-dom";
 import { useEffect, useMemo, useState } from "react";
+import { SchedulingSetupContext } from './SchedulingSetupContext';
+import { MusicSetupReview } from './MusicSetupReview';
 import { useParams, useSearchParams } from "react-router-dom";
 import {
   activateConfigVersion, archiveConfigVersion, restoreConfigVersion, deleteConfigVersion,
@@ -27,6 +29,7 @@ import {
   configTabsForSystem,
   configTabKey,
   versionSummary,
+  MUSIC_SETUP_STEPS, musicSetupStep,
 } from "./config";
 
 type VersionCreateResult = { version?: ConfigVersionApi | string };
@@ -54,6 +57,10 @@ export function DoorSchedulingConfigPage() {
   const { systemId = "" } = useParams();
   const [searchParams, setSearchParams] = useSearchParams();
   const tabs = configTabsForSystem(systemId);
+  const isMusic = systemId === 'sys-music';
+  const [unsaved, setUnsaved] = useState(false);
+  const [navigationError, setNavigationError] = useState('');
+  const [reviewReady, setReviewReady] = useState(false);
   const [confirmActivation, setConfirmActivation] = useState<ConfigVersionApi | null>(null);
   const [createError, setCreateError] = useState("");
   const [createWorking, setCreateWorking] = useState(false);
@@ -74,6 +81,8 @@ export function DoorSchedulingConfigPage() {
   const editable = selectedVersion?.status === "DRAFT";
   const requestedTab = searchParams.get("tab");
   const tab = tabs.find((candidate) => candidate === requestedTab) ?? "services";
+  const step = musicSetupStep(tab);
+  const stepKeys = ['services','choirs','rules','review'] as const;
 
   useEffect(() => {
     if (requestedVersionId && !rows.some((version) => version.id === requestedVersionId)) return;
@@ -86,6 +95,7 @@ export function DoorSchedulingConfigPage() {
   }, [requestedVersionId, rows, searchParams, selectedVersion, setSearchParams]);
 
   const selectVersion = (id: string) => {
+    if (unsaved) {setNavigationError(t('door.config.setup.unsaved'));return;}
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       if (id) next.set("version", id);
@@ -94,6 +104,9 @@ export function DoorSchedulingConfigPage() {
     });
   };
   const selectTab = (nextTab: string) => {
+    if (unsaved) { setNavigationError(t('door.config.setup.unsaved')); return; }
+    setNavigationError('');
+    setReviewReady(false);
     setSearchParams((previous) => {
       const next = new URLSearchParams(previous);
       next.set("tab", nextTab);
@@ -114,6 +127,15 @@ export function DoorSchedulingConfigPage() {
     } finally {
       setCreateWorking(false);
     }
+  };
+  const beginSetup = async () => {
+    if (!canWrite || createWorking) return;
+    setCreateWorking(true);setCreateError('');
+    try {
+      const id = await serviceWorkingDraft(systemId,t('door.config.version.draftLabel'));
+      versions.reload();if (id) selectVersion(id);
+    } catch (reason) {setCreateError(schedulingError(reason) ?? t('door.config.err.server'));}
+    finally {setCreateWorking(false);}
   };
   const editServices = async (code: string | null) => {
     if (!canWrite || createWorking) return;
@@ -187,7 +209,8 @@ export function DoorSchedulingConfigPage() {
             {activeVersion && selectedVersion?.id !== activeVersion.id && (
               <p className="muted">{t("door.config.activeVersion", { name: activeVersion.label })}</p>
             )}
-            {canWrite && editable && selectedVersion && <button type="button" className="btn sm"
+            {isMusic && canWrite && !editable && <button type="button" className="btn sm" disabled={createWorking} onClick={() => void beginSetup()}>{t('door.config.setup.edit')}</button>}
+            {canWrite && editable && selectedVersion && !isMusic && <button type="button" className="btn sm"
               disabled={activationWorking} onClick={() => { setActivationError(""); setConfirmActivation(selectedVersion); }}>
               {t("door.config.version.activate")}
             </button>}
@@ -196,33 +219,66 @@ export function DoorSchedulingConfigPage() {
         {activationError && <p className="door-error" role="alert">{activationError}</p>}
         {rows.length > 0 && createError && <p className="door-error" role="alert">{createError}</p>}
       </LoadState>
-      <nav className="door-menu" aria-label={t("door.config.tabs")}>
+      {isMusic ? <>
+        <nav className="scheduling-steps" aria-label={t('door.config.setup.steps')}>
+          {MUSIC_SETUP_STEPS.map((key,index) => <button key={key} type="button" className={'btn ' + (tab !== 'versions' && index === step ? '' : 'ghost')}
+            aria-current={tab !== 'versions' && index === step ? 'step' : undefined} onClick={() => selectTab(key)}>
+            <span>{index + 1}</span> {t(`door.config.step.${stepKeys[index]}`)}
+          </button>)}
+        </nav>
+        <button type="button" className="btn ghost sm" onClick={() => selectTab('versions')}>{t('door.config.tab.versions')}</button>
+      </> : <nav className="door-menu" aria-label={t("door.config.tabs")}>
         {tabs.map((key) => (
           <button key={key} type="button" className={"door-menu-link" + (tab === key ? " active" : "")}
             aria-current={tab === key ? "page" : undefined} onClick={() => selectTab(key)}>
             {t(configTabKey(key))}
           </button>
         ))}
-      </nav>
+      </nav>}
+      {navigationError && <p className="door-error" role="alert">{navigationError}</p>}
       <header className="scheduling-config-section">
-        <h3>{t(configTabKey(tab))}</h3>
-        <p className="muted">{t(tabCopyKey)}</p>
+        <h3>{isMusic && tab !== 'versions' ? t(`door.config.setup.question.${stepKeys[step]}`) : t(configTabKey(tab))}</h3>
+        {isMusic && tab !== 'versions' ? <p>{t('door.config.setup.progress',{step:step + 1})}</p> : <p className="muted">{t(tabCopyKey)}</p>}
       </header>
+      <SchedulingSetupContext.Provider value={{saved:() => {setUnsaved(false);setNavigationError('');},changed:() => setUnsaved(true)}}>
+      <div onChangeCapture={() => setUnsaved(true)}>
       {tab === "services" && <ServicesEditor key={versionId} systemId={systemId} version={selectedVersion} canWrite={canWrite}
         onRequestEdit={editServices} preparing={createWorking}
         intent={serviceIntent?.versionId === versionId ? serviceIntent : null}
         onIntentHandled={() => setServiceIntent(null)} />}
-      {tab === "categories" && <CategoriesEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}
-      {tab === "policies" && <PoliciesEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}
-      {tab === "links" && <LinksEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}
+      {isMusic && step === 1 && tab !== 'versions' && <>
+        <LinksEditor key={'links' + versionId} systemId={systemId} version={selectedVersion} canWrite={canWrite} />
+        <details open={tab === 'categories'} className="scheduling-config-advanced"><summary>{t('door.config.setup.categories')}</summary>
+          <CategoriesEditor key={'cats' + versionId} systemId={systemId} version={selectedVersion} canWrite={canWrite} />
+        </details>
+      </>}
+      {isMusic && step === 2 && tab !== 'versions' && <>
+        <PoliciesEditor key={'policies' + versionId} systemId={systemId} version={selectedVersion} canWrite={canWrite} />
+        {(['fixed','availability'] as const).map(mode => <details key={mode} className="scheduling-config-advanced" open={tab === mode}>
+          <summary>{t(configTabKey(mode))}</summary><MusicParticipationEditor key={mode + versionId} mode={mode} version={selectedVersion} canWrite={canWrite} />
+        </details>)}
+      </>}
+      {isMusic && tab === 'review' && versionId && <MusicSetupReview key={versionId} versionId={versionId} edit={selectTab} ready={setReviewReady} />}
       {tab === "protocol" && <ProtocolRulesEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}
       {tab === "duty" && <ProtocolDutyEditor systemId={systemId} version={selectedVersion} canWrite={canWrite} />}
-      {(tab === "fixed" || tab === "availability") && <MusicParticipationEditor key={tab + versionId} mode={tab} version={selectedVersion} canWrite={canWrite} />}
       {tab === "versions" && (
         <VersionsTab systemId={systemId} rows={rows} selectedId={versionId} reload={versions.reload}
           selectVersion={selectVersion} canWrite={canWrite}
-          onActivate={(version) => { setActivationError(""); setConfirmActivation(version); }} />
+          onActivate={(version) => {
+            setActivationError('');
+            if (isMusic) {
+              setReviewReady(false);
+              setSearchParams(previous => {const next = new URLSearchParams(previous);next.set('version',version.id);next.set('tab','review');return next;});
+            } else setConfirmActivation(version);
+          }} />
       )}
+      </div>
+      </SchedulingSetupContext.Provider>
+      {isMusic && tab !== 'versions' && <div className="door-row scheduling-step-actions">
+        {step > 0 && <button type="button" className="btn ghost" onClick={() => selectTab(MUSIC_SETUP_STEPS[step - 1])}>{t('door.config.setup.back')}</button>}
+        {step < 3 && <button type="button" className="btn" onClick={() => selectTab(MUSIC_SETUP_STEPS[step + 1])}>{t('door.config.setup.continue')}</button>}
+        {step === 3 && canWrite && editable && selectedVersion && <button type="button" className="btn" disabled={activationWorking || !reviewReady} onClick={() => {setActivationError('');setConfirmActivation(selectedVersion);}}>{t('door.config.version.activate')}</button>}
+      </div>}
       <ConfirmDialog
         open={!!confirmActivation}
         title={t("door.config.version.activateTitle", { name: confirmActivation?.label ?? "" })}

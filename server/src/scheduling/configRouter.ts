@@ -36,6 +36,7 @@
  */
 
 import { Router } from 'express';
+import { buildMusicCalendar } from '../music/engine.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest, pathParam } from '../middleware/http.js';
@@ -43,7 +44,7 @@ import { loadAccessData } from '../notifications/feed.js';
 import {
   createConfigVersion, listConfigVersions, getActiveConfigVersion,
   cloneActiveConfigVersion, activateConfigVersion, changeDraftVersion,
-  createSchedulingService, listSchedulingServices, getSchedulingServiceByCodeInVersion, supersedeSchedulingService, updateSchedulingService,
+  createSchedulingService, listSchedulingServices, getSchedulingServiceByCodeInVersion, supersedeSchedulingService, updateSchedulingService, toServiceView,
   createChoirCategory, listChoirCategories, getChoirCategoryByCode, updateChoirCategory,
   createCategoryServicePolicy, listCategoryServicePolicies, updateCategoryServicePolicy,
   createChoirCategoryLink, listChoirCategoryLinks, getChoirCategoryLinkByChoir, updateChoirCategoryLink,
@@ -796,7 +797,10 @@ configRouter.post('/config/fixed-assignments', requireAuth, async (req: AuthedRe
   const parsed = z.object({
     systemId: z.literal(MUSIC_SYSTEM),
     configVersionId: IdSchema,
-    categoryServicePolicyId: IdSchema,
+    categoryServicePolicyId: IdSchema.optional(),
+    serviceId: IdSchema.optional(),
+    serviceDate: z.string().date().optional().nullable(),
+    serviceTime: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/).optional().nullable(),
     choirId: IdSchema,
     displayOrder: NonNegativeInt.default(0),
   }).safeParse(req.body);
@@ -805,12 +809,13 @@ configRouter.post('/config/fixed-assignments', requireAuth, async (req: AuthedRe
   const d = await accessOf(me);
   if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
   if (!(await draftVersionExists(res, MUSIC_SYSTEM, b.configVersionId))) return;
-  const policy = await prisma.categoryServicePolicy.findFirst({
-    where: { id: b.categoryServicePolicyId, systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, active: true },
-  });
-  if (!policy || policy.planningMode !== 'FIXED') {
-    return fail(res, 400, 'CONFIG_REFERENCE', 'Choose an active FIXED category rule in this draft.');
-  }
+  const choirLink = await prisma.choirCategoryLink.findFirst({where:{systemId:MUSIC_SYSTEM,configVersionId:b.configVersionId,choirId:b.choirId,active:true}});
+  if (!b.categoryServicePolicyId && (!b.serviceId || !choirLink)) return fail(res,400,'CONFIG_REFERENCE','Choose a service and a choir linked to a category in this draft.');
+  const policy = await prisma.categoryServicePolicy.findFirst({where:{
+    ...(b.categoryServicePolicyId ? {id:b.categoryServicePolicyId} : {serviceId:b.serviceId,categoryId:choirLink!.categoryId}),
+    systemId:MUSIC_SYSTEM,configVersionId:b.configVersionId,active:true,
+  }});
+  if (!policy) return fail(res,400,'CONFIG_REFERENCE','The selected service needs an active rule for this choir’s category.');
   const [service, choir, link] = await Promise.all([
     prisma.schedulingService.findFirst({ where: { id: policy.serviceId, systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, active: true } }),
     prisma.musicChoir.findFirst({ where: { id: b.choirId, active: true } }),
@@ -819,17 +824,22 @@ configRouter.post('/config/fixed-assignments', requireAuth, async (req: AuthedRe
     }),
   ]);
   if (!service || !choir || !link) return fail(res, 400, 'CONFIG_REFERENCE', 'The designated choir must be active and linked to this rule’s category in the draft.');
+  if (b.serviceTime && b.serviceTime !== service.time) return fail(res,400,'CONFIG_REFERENCE','Choose the selected service’s configured start time.');
+  if (b.serviceDate && !buildMusicCalendar(b.serviceDate.slice(0,7),'MONTH',[toServiceView(service)]).some(slot=>slot.date === b.serviceDate)) {
+    return fail(res,400,'CONFIG_REFERENCE','This service does not occur on that date. Add the date to the service calendar first.');
+  }
   const eligibilityOverride = parseJson(link.eligibleOverrideJson, {}) as Record<string, unknown>;
   if (eligibilityOverride[service.code] === false || (!policy.eligible && eligibilityOverride[service.code] !== true)) {
     return fail(res, 400, 'CONFIG_INELIGIBLE', 'This choir is not eligible for the selected service.');
   }
+  const scopeKey = !b.serviceDate && !b.serviceTime ? 'ALL' : `${b.serviceDate ?? '*'}|${b.serviceTime ?? '*'}`;
   const existing = await prisma.musicFixedAssignment.findFirst({
-    where: { systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, categoryServicePolicyId: policy.id, choirId: b.choirId },
+    where: { systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, categoryServicePolicyId: policy.id, choirId: b.choirId, scopeKey },
   });
   if (existing) return res.json({ assignment: existing.id, status: 'EXISTS' });
-  if (policy.maxCount !== null) {
+  if (policy.maxCount !== null && !b.serviceDate && !b.serviceTime) {
     const count = await prisma.musicFixedAssignment.count({
-      where: { systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, categoryServicePolicyId: policy.id },
+      where: { systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, categoryServicePolicyId: policy.id, serviceDate:null, serviceTime:null },
     });
     if (count + 1 > policy.maxCount) return fail(res, 409, 'SERVICE_LIMIT', 'This would exceed the category’s maximum choir count.');
   }
@@ -857,6 +867,9 @@ configRouter.post('/config/fixed-assignments', requireAuth, async (req: AuthedRe
       categoryServicePolicyId: policy.id,
       choirId: b.choirId,
       displayOrder: b.displayOrder,
+      serviceDate:b.serviceDate ?? null,
+      serviceTime:b.serviceTime ?? null,
+      scopeKey,
       createdByPersonId: me,
     },
   });
@@ -904,13 +917,11 @@ configRouter.get('/config/availability', requireAuth, async (req: AuthedRequest,
     where: {
       systemId,
       active: true,
-      ...(filter.data.serviceDate ? { serviceDate: filter.data.serviceDate } : {}),
       ...(filter.data.choirId ? { choirId: filter.data.choirId } : {}),
     },
     orderBy: [{ serviceDate: 'asc' }, { serviceCode: 'asc' }],
-    take: 200,
   });
-  res.json({ availability: records });
+  res.json({ availability: records.filter(row => !filter.data.serviceDate || (row.serviceDate <= filter.data.serviceDate && (row.endDate ?? row.serviceDate) >= filter.data.serviceDate)).slice(0,200) });
 });
 
 configRouter.post('/config/availability', requireAuth, async (req: AuthedRequest, res) => {
@@ -918,12 +929,17 @@ configRouter.post('/config/availability', requireAuth, async (req: AuthedRequest
   const parsed = z.object({
     systemId: z.literal(MUSIC_SYSTEM),
     choirId: IdSchema,
-    serviceDate: DateOnly,
+    serviceDate: DateOnly.optional(),
+    fromDate: DateOnly.optional(),
+    toDate: DateOnly.optional(),
     serviceCode: CodeSchema.optional().nullable(),
     reason: z.string().trim().max(500).optional().nullable(),
   }).safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Choose a choir, date, and optional service.');
   const b = parsed.data;
+  const start = b.fromDate ?? b.serviceDate;
+  const end = b.toDate ?? start;
+  if (!start || !end || end < start) return fail(res,400,'BAD_INPUT','Choose a valid From and To date; To cannot be before From.');
   const d = await accessOf(me);
   if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
   const choir = await prisma.musicChoir.findFirst({ where: { id: b.choirId, active: true } });
@@ -938,16 +954,17 @@ configRouter.post('/config/availability', requireAuth, async (req: AuthedRequest
     }
   }
   const current = await prisma.musicChoirUnavailability.findMany({
-    where: { systemId: MUSIC_SYSTEM, choirId: b.choirId, serviceDate: b.serviceDate, active: true },
+    where: { systemId: MUSIC_SYSTEM, choirId: b.choirId, active: true },
   });
-  if (current.some((record) => record.serviceCode === null || !b.serviceCode || record.serviceCode.toLowerCase() === b.serviceCode.toLowerCase())) {
-    return fail(res, 409, 'DUPLICATE_AVAILABILITY', 'This choir is already marked unavailable for that date or service.');
+  if (current.some((record) => record.serviceDate <= end && (record.endDate ?? record.serviceDate) >= start && (record.serviceCode === null || !b.serviceCode || record.serviceCode.toLowerCase() === b.serviceCode.toLowerCase()))) {
+    return fail(res, 409, 'DUPLICATE_AVAILABILITY', 'This choir already has unavailability overlapping those dates.');
   }
   const record = await prisma.musicChoirUnavailability.create({
     data: {
       systemId: MUSIC_SYSTEM,
       choirId: b.choirId,
-      serviceDate: b.serviceDate,
+      serviceDate: start,
+      endDate: end,
       serviceCode: b.serviceCode?.toLowerCase() ?? null,
       reason: b.reason?.trim() || null,
       active: true,

@@ -8710,6 +8710,23 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
 .scheduling-config-overrides { display: grid; gap: var(--space-2); min-width: 0; margin: 0; padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--radius-sm); }
 .scheduling-config-overrides legend { padding: 0 var(--space-1); font-weight: 600; }
 .scheduling-config-overrides > .muted { margin: 0; }
+.scheduling-config-advanced { border: 1px solid var(--line); border-radius: var(--radius-sm); padding: var(--space-3); }
+.scheduling-config-advanced > summary, details.scheduling-config-overrides > summary { cursor: pointer; font-weight: 600; padding: var(--space-1) 0; }
+.scheduling-config-advanced[open] > summary { margin-bottom: var(--space-3); }
+.scheduling-config-advanced > label, details.scheduling-config-overrides > label { display: grid; gap: var(--space-1); margin-block: var(--space-2); }
+.scheduling-config-advanced > .muted { max-width: 72ch; line-height: 1.55; }
+.scheduling-config .door-form { width: 100%; max-width: 48rem; }
+.scheduling-frequency-row { display: grid; grid-template-columns: 1fr; gap: var(--space-2); margin-block: var(--space-3); }
+.scheduling-frequency-row label { display: grid; gap: var(--space-1); min-width: 0; }
+.scheduling-frequency-row input, .scheduling-frequency-row select { width: 100%; min-width: 0; }
+.scheduling-steps { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: var(--space-2); }
+.scheduling-steps .btn { white-space: normal; text-align: left; justify-content: flex-start; }
+.scheduling-steps span { display: inline-flex; align-items: center; justify-content: center; border: 1px solid currentColor; border-radius: 50%; width: 1.6rem; height: 1.6rem; flex-shrink: 0; }
+.scheduling-step-actions { border-top: 1px solid var(--line); padding-top: var(--space-3); }
+.scheduling-review li { margin-bottom: var(--space-2); }
+.scheduling-config [hidden] { display: none !important; }
+@media (max-width: 700px) { .scheduling-steps { grid-template-columns: repeat(2,minmax(0,1fr)); } }
+@media (max-width: 540px) { .scheduling-frequency-row { grid-template-columns: 1fr; } }
 .scheduling-config-override-row { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)) auto; align-items: end; gap: var(--space-2); }
 .scheduling-config-override-row label { display: grid; gap: var(--space-1); min-width: 0; }
 .scheduling-config-override-row input { width: 100%; min-width: 0; }

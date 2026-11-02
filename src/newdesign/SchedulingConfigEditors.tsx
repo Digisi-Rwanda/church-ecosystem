@@ -1,7 +1,8 @@
 import { Link } from 'react-router-dom';
 import { useChoirRegister, useChoirRegisterRefresh } from './useChoirRegister';
 import { musicExceptions, preserveRelaxableKinds, schedulingError } from "./schedulingForms";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { SchedulingSetupContext } from './SchedulingSetupContext';
 import type { ReactNode } from "react";
 import {
   createCategoryServicePolicy,
@@ -58,6 +59,7 @@ type SaveState = {
 
 function useSaveState(): SaveState {
   const t = useT();
+  const setup = useContext(SchedulingSetupContext);
   const [error, setError] = useState("");
   const [saved, setSaved] = useState(false);
   const [working, setWorking] = useState(false);
@@ -71,6 +73,7 @@ function useSaveState(): SaveState {
       setWorking(true);
       try {
         await save();
+        setup.saved();
         reload();
         setSaved(true);
         return true;
@@ -104,12 +107,12 @@ function AddToggle({ onClick }: { onClick: () => void }) {
   return <button type="button" className="btn sm" onClick={onClick}>{t("door.config.add")}</button>;
 }
 
-function SubmitButtons({ editing, working, onCancel }: { editing: boolean; working: boolean; onCancel: () => void }) {
+function SubmitButtons({ working, onCancel }: { editing: boolean; working: boolean; onCancel: () => void }) {
   const t = useT();
   return (
     <div className="door-row">
       <button type="submit" className="btn sm" disabled={working}>{t("door.settings.save")}</button>
-      {editing && <button type="button" className="btn ghost sm" disabled={working} onClick={onCancel}>{t("door.settings.cancel")}</button>}
+      <button type="button" className="btn ghost sm" disabled={working} onClick={onCancel}>{t("door.settings.cancel")}</button>
     </div>
   );
 }
@@ -142,6 +145,19 @@ function CheckField({ label, name, checked = false, value }: { label: string; na
   return <label><input name={name} type="checkbox" value={value} defaultChecked={checked} /> {label}</label>;
 }
 
+function ServiceDates({ dates }: {dates: string[]}) {
+  const t = useT();
+  const setup = useContext(SchedulingSetupContext);
+  const [rows, setRows] = useState(() => dates.map((date,index) => ({id:String(index),date})));
+  return <fieldset className="scheduling-config-overrides"><legend>{t('door.config.service.dates')}</legend>
+    {rows.map((row,index) => <div className="door-row" key={row.id}>
+      <input type="date" name="selectedDate" aria-label={t('door.config.service.dateNumber',{number:index + 1})} defaultValue={row.date} />
+      <button type="button" className="btn ghost sm" onClick={() => { setRows(current => current.filter(item => item.id !== row.id)); setup.changed(); }}>{t('door.config.service.removeDate')}</button>
+    </div>)}
+    <button type="button" className="btn ghost sm" onClick={() => setRows(current => [...current,{id:crypto.randomUUID(),date:''}])}>{t('door.config.service.addDate')}</button>
+  </fieldset>;
+}
+
 function readForm(form: HTMLFormElement): FormData {
   return new FormData(form);
 }
@@ -150,11 +166,12 @@ const num = (data: FormData, key: string, emptyValue: number | null = null) => {
   const value = str(data, key);
   return value === "" ? emptyValue : Number(value);
 };
-const flag = (data: FormData, key: string) => data.has(key);
+const flag = (data: FormData, key: string) => data.has(key) && data.get(key) !== 'no';
 function SaveForm({ title, state, children, onSubmit, editing, working, onCancel }: {
   title: string; state: SaveState; children: ReactNode; onSubmit: (data: FormData) => Promise<void>;
   editing: boolean; working: boolean; onCancel: () => void;
 }) {
+  const setup = useContext(SchedulingSetupContext);
   return (
     <form className="panel door-form" onSubmit={(event) => {
       event.preventDefault();
@@ -162,7 +179,7 @@ function SaveForm({ title, state, children, onSubmit, editing, working, onCancel
     }}>
       <h3>{title}</h3>
       {children}
-      <SubmitButtons editing={editing} working={working} onCancel={onCancel} />
+      <SubmitButtons editing={editing} working={working} onCancel={() => { setup.saved(); onCancel(); }} />
     </form>
   );
 }
@@ -243,10 +260,10 @@ export function ServicesEditor({ systemId, version, canWrite, onRequestEdit, pre
   const submit = async (data: FormData) => {
     if (!configVersionId) return;
     const patch = {
-      code: str(data, "code"), name: str(data, "name"), kind: str(data, "kind"),
+      code: str(data, "code") || `SERVICE_${crypto.randomUUID().slice(0,8)}`, name: str(data, "name"), kind: str(data, "kind"),
       weekday: num(data, "weekday"), time: str(data, "time") || null,
       recurrence: str(data, "recurrence"),
-      selectedDates: str(data, "selectedDates").split(/[\n,]+/).map((date) => date.trim()).filter(Boolean),
+      selectedDates: data.getAll('selectedDate').map(value => String(value).trim()).filter(Boolean),
       active: flag(data, "active"), musicRequired: flag(data, "musicRequired"),
       protocolRequired: flag(data, "protocolRequired"), maxChoirs: num(data, "maxChoirs", 3),
       displayOrder: num(data, "displayOrder", 0),
@@ -262,14 +279,12 @@ export function ServicesEditor({ systemId, version, canWrite, onRequestEdit, pre
   return (
     <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
       {!isMusic && <SectionNotice>{t("door.config.sharedCalendarReadOnly")}</SectionNotice>}
-      {isMusic && <SectionNotice tone="warn">{t("door.config.service.supportNotice")}</SectionNotice>}
-      {canWrite && isMusic && <>
-        {!editable && <SectionNotice>{t("door.config.service.editViaDraft")}</SectionNotice>}
+      {canWrite && isMusic && !formOpen && <>
         <button type="button" className="btn sm" disabled={preparing} onClick={() => openEditor(null)}>{t("door.config.add")}</button>
       </>}
       <FormNotice state={state} />
       <EmptyOrLocked canEdit={editable} empty={rows.length === 0} emptyKey="door.config.services.empty" />
-      <ul className="door-notices">
+      <ul className="door-notices" hidden={formOpen}>
         {rows.map((row) => <li key={row.id} className="panel door-notice">
           <div className="door-notice-main">
             <div className="scheduling-config-version-heading">
@@ -297,7 +312,6 @@ export function ServicesEditor({ systemId, version, canWrite, onRequestEdit, pre
       {editable && formOpen && (
         <SaveForm key={editing?.id ?? "new"} title={editing ? t("door.config.editService") : t("door.config.addService")} state={state}
           editing working={state.working} onCancel={cancel} onSubmit={submit}>
-          <TextField label={t("door.config.service.code")} name="code" value={editing?.code} required pattern="[A-Za-z0-9_-]{1,40}" />
           <TextField label={t("door.config.service.name")} name="name" value={editing?.name} required />
           <SelectField label={t("door.config.service.kind")} name="kind" value={editing?.kind}
             options={["SERVICE", "REHEARSAL", "MEETING", "OTHER"].map((kind) => ({ value: kind, label: t(serviceKindKey(kind as SchedulingServiceApi["kind"])) }))} />
@@ -306,9 +320,13 @@ export function ServicesEditor({ systemId, version, canWrite, onRequestEdit, pre
           <TextField label={t("door.config.service.time")} name="time" type="time" value={editing?.time ?? ""} />
           <SelectField label={t("door.config.service.recurrence")} name="recurrence" value={editing?.recurrence}
             options={["WEEKLY", "MONTHLY", "SELECTED_DATES", "CUSTOM"].map((recurrence) => ({ value: recurrence, label: t(recurrenceKey(recurrence as SchedulingServiceApi["recurrence"])) }))} />
-          <TextField label={t("door.config.service.selectedDates")} name="selectedDates" value={editing?.selectedDates.join(", ")} />
-          <TextField label={t("door.config.policy.max")} name="maxChoirs" type="number" min={0} value={editing?.maxChoirs ?? 3} required />
+          <TextField label={t("door.config.service.capacity")} name="maxChoirs" type="number" min={0} value={editing?.maxChoirs ?? 3} required />
+          <details className="scheduling-config-advanced" open={!!editing?.selectedDates.length}>
+          <summary>{t('door.config.help.advancedService')}</summary>
+          <ServiceDates dates={editing?.selectedDates ?? []} />
+          <TextField label={t("door.config.service.code")} name="code" value={editing?.code} required={!!editing} pattern="[A-Za-z0-9_-]{1,40}" />
           <TextField label={t("door.config.service.order")} name="displayOrder" type="number" min={0} value={editing?.displayOrder ?? 0} />
+          </details>
           <CheckField label={t("door.config.service.active")} name="active" checked={editing?.active ?? true} />
           <CheckField label={t("door.config.service.music")} name="musicRequired" checked={editing?.musicRequired ?? true} />
           <CheckField label={t("door.config.service.protocol")} name="protocolRequired" checked={editing?.protocolRequired ?? true} />
@@ -340,7 +358,7 @@ export function CategoriesEditor({ systemId, version, canWrite }: Props) {
   };
   return (
     <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
-      {editable && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
+      {editable && !formOpen && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
       <FormNotice state={state} />
       <EmptyOrLocked canEdit={editable} empty={rows.length === 0} emptyKey="door.config.categories.empty" />
       <ul className="door-notices">{rows.map((row) => <li key={row.id} className="panel door-notice">
@@ -404,46 +422,52 @@ export function PoliciesEditor({ systemId, version, canWrite }: Props) {
   return (
     <LoadState loading={list.loading || categories.loading || services.loading}
       failed={list.failed || categories.failed || services.failed} retry={() => { list.reload(); categories.reload(); services.reload(); }}>
-      <SectionNotice tone="warn">{t("door.config.policy.behaviorNotice")}</SectionNotice>
-      {editable && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
+      {editable && !formOpen && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
       <FormNotice state={state} />
       <EmptyOrLocked canEdit={editable} empty={rows.length === 0} emptyKey="door.config.policies.empty" />
-      <div className="scheduling-policy-groups">{[...new Set(rows.map(row => row.categoryId))].map(categoryId => <section className="panel" key={categoryId}>
+      <div className="scheduling-policy-groups" hidden={formOpen}>{[...new Set(rows.map(row => row.categoryId))].map(categoryId => <section className="panel" key={categoryId}>
         <h4>{categories.data?.categories.find(item => item.id === categoryId)?.name ?? t("door.config.nameUnavailable.category")}</h4>
-        <ul className="door-notices">{rows.filter(row => row.categoryId === categoryId).map((row) => {
+        <ul className="door-notices">{rows.filter(row => row.categoryId === categoryId && row.active && row.eligible && services.data?.services.find(service => service.id === row.serviceId)?.active !== false).map((row) => {
         const service = services.data?.services.find((item) => item.id === row.serviceId);
         return <li key={row.id} className="panel door-notice">
         <div className="door-notice-main">
           <div className="scheduling-config-version-heading">
             <strong>{service?.name ?? t("door.config.nameUnavailable.service")}</strong>
-            <StatusChip tone={row.active && row.eligible ? "success" : "neutral"}>
-              {t("door.config.policy.eligibility", {value: t(row.active && row.eligible ? "door.config.form.yes" : "door.config.form.no")})}
-            </StatusChip>
-            {!row.active && <StatusChip tone="neutral">{t("door.config.service.inactive")}</StatusChip>}
           </div>
           {row.eligible && <p className="muted">{policySummary(row, t, false)}</p>}
           {editable && <EditToggle onClick={() => { setEditing(row); setFormOpen(true); state.clear(); }} />}
         </div>
       </li>;
-      })}</ul></section>)}</div>
+      })}</ul>
+      {editable && rows.some(row => row.categoryId === categoryId && (!row.active || !row.eligible || services.data?.services.find(service => service.id === row.serviceId)?.active === false)) && <details><summary>{t('door.config.otherServices')}</summary><ul className="door-list">{rows.filter(row => row.categoryId === categoryId && (!row.active || !row.eligible || services.data?.services.find(service => service.id === row.serviceId)?.active === false)).map(row => <li key={row.id}><strong>{services.data?.services.find(service => service.id === row.serviceId)?.name ?? t('door.config.nameUnavailable.service')}</strong> <EditToggle onClick={() => { setEditing(row); setFormOpen(true); state.clear(); }} /></li>)}</ul></details>}
+      </section>)}</div>
       {editable && formOpen && <SaveForm key={editing?.id ?? "new"} title={editing ? t("door.config.editPolicy") : t("door.config.addPolicy")}
         state={state} editing={!!editing} working={state.working} onCancel={cancel} onSubmit={submit}>
-        <SelectField label={t("door.config.tab.categories")} name="categoryId" value={editing?.categoryId} required
+        <SelectField label={t("door.config.categoryQuestion")} name="categoryId" value={editing?.categoryId} required
           options={(categories.data?.categories ?? []).map((row) => ({ value: row.id, label: row.name }))} />
-        <SelectField label={t("door.config.tab.services")} name="serviceId" value={editing?.serviceId} required
+        <SelectField label={t("door.config.serviceQuestion")} name="serviceId" value={editing?.serviceId} required
           options={(services.data?.services ?? []).map((row) => ({ value: row.id, label: row.name }))} />
-        <CheckField label={t("door.config.policy.eligible")} name="eligible" checked={editing?.eligible ?? true} />
+        <SelectField label={t("door.config.policy.eligible")} name="eligible" value={editing?.eligible === false ? 'no' : 'yes'} options={[{value:'yes',label:t('door.config.form.yes')},{value:'no',label:t('door.config.form.no')}]} />
         <CheckField label={t("door.config.service.active")} name="active" checked={editing?.active ?? true} />
-        <SelectField label={t("door.config.policy.mode")} name="planningMode" value={editing?.planningMode ?? "ROTATION"} options={["ROTATION", "FIXED", "MANUAL"].map(value => ({ value, label: t(`door.config.planningMode.${value}` as Parameters<typeof t>[0]) }))} />
-        <SelectField label={t("door.config.policy.period")} name="frequencyPeriod" value={editing?.frequencyPeriod ?? ""} options={[{value: "", label: t("door.config.form.none")}, ...["MONTH", "QUARTER", "HALF_YEAR", "YEAR"].map(value => ({value, label: t(`door.config.period.${value}` as Parameters<typeof t>[0])}))]} />
-        <TextField label={t("door.config.policy.target")} name="frequencyTarget" type="number" min={1} value={editing?.frequencyTarget ?? ""} />
-        <SelectField label={t("door.config.policy.counting")} name="frequencyCounting" value={editing?.frequencyCounting}
-          options={["ASSIGNMENTS", "DISTINCT_DATES"].map((value) => ({ value, label: t(`door.config.counting.${value}` as Parameters<typeof t>[0]) }))} />
-        <SelectField label={t("door.config.policy.kind")} name="frequencyKind" value={editing?.frequencyKind}
-          options={["MINIMUM", "TARGET", "MAXIMUM"].map((value) => ({ value, label: t(`door.config.frequencyKind.${value}` as Parameters<typeof t>[0]) }))} />
+        <SelectField label={t("door.config.policy.mode")} name="planningMode" value={editing?.planningMode ?? "ROTATION"} options={["ROTATION", "FIXED", "MANUAL"].map(value => ({ value, label: t(`door.config.modeChoice.${value}` as Parameters<typeof t>[0]) }))} />
+        <fieldset className="scheduling-config-overrides"><legend>{t('door.config.help.perService')}</legend>
         <TextField label={t("door.config.policy.min")} name="minCount" type="number" min={0} value={editing?.minCount ?? ""} />
         <TextField label={t("door.config.policy.max")} name="maxCount" type="number" min={0} value={editing?.maxCount ?? ""} />
-        <CheckField label={t("door.config.policy.requireAll")} name="requireAll" checked={editing?.requireAll ?? false} />
+        <SelectField label={t("door.config.policy.requireAll")} name="requireAll" value={editing?.requireAll ? 'yes' : 'no'} options={[{value:'yes',label:t('door.config.form.yes')},{value:'no',label:t('door.config.form.no')}]} />
+        </fieldset>
+        <details className="scheduling-config-advanced" open={editing?.frequencyTarget != null}>
+        <summary>{t('door.config.help.advancedFrequency')}</summary>
+        <div className="scheduling-frequency-row">
+        <SelectField label={t("door.config.policy.period")} name="frequencyPeriod" value={editing?.frequencyPeriod ?? ""} options={[{value: "", label: t("door.config.form.none")}, ...["MONTH", "QUARTER", "HALF_YEAR", "YEAR"].map(value => ({value, label: t(`door.config.period.${value}` as Parameters<typeof t>[0])}))]} />
+        <TextField label={t("door.config.policy.target")} name="frequencyTarget" type="number" min={1} value={editing?.frequencyTarget ?? ""} />
+        <SelectField label={t("door.config.policy.kind")} name="frequencyKind" value={editing?.frequencyKind}
+          options={["MINIMUM", "TARGET", "MAXIMUM"].map((value) => ({ value, label: t(`door.config.frequencyChoice.${value}` as Parameters<typeof t>[0]) }))} />
+        </div>
+        <details className="scheduling-config-advanced" open={editing?.frequencyCounting === 'DISTINCT_DATES'}><summary>{t('door.config.countingOptions')}</summary>
+        <SelectField label={t("door.config.policy.counting")} name="frequencyCounting" value={editing?.frequencyCounting}
+          options={["ASSIGNMENTS", "DISTINCT_DATES"].map((value) => ({ value, label: t(`door.config.counting.${value}` as Parameters<typeof t>[0]) }))} />
+        </details>
+        </details>
       </SaveForm>}
     </LoadState>
   );
@@ -479,8 +503,7 @@ export function LinksEditor({ systemId, version, canWrite }: Props) {
   return (
     <LoadState loading={list.loading || categories.loading || choirs.loading}
       failed={list.failed || categories.failed || choirs.failed} retry={() => { list.reload(); categories.reload(); choirs.reload(); }}>
-      <SectionNotice tone="warn">{t("door.config.link.behaviorNotice")}</SectionNotice>
-      <p>{t('door.config.registerSync')} <Link to="/s/sys-music/choirs">{t('door.own.choirs')}</Link></p>
+      <p><Link to="/s/sys-music/choirs">{t('door.own.choirs')}</Link></p>
       {(choirs.data?.choirs ?? []).filter(choir => {
         if (!choir.active) return false;
         const link = rows.find(row => row.active && row.choirId === choir.id);
@@ -488,10 +511,10 @@ export function LinksEditor({ systemId, version, canWrite }: Props) {
         const code = categories.data?.categories.find(row => row.id === link.categoryId)?.code?.toUpperCase();
         return code && ['PRIMARY','SECONDARY','CHILDREN','WORSHIP'].includes(code) && code !== choir.role;
       }).map(choir => <p className="door-error" key={choir.id}>{choir.name}: {t('door.config.needsCategory')}</p>)}
-      {editable && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
+      {editable && !formOpen && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
       <FormNotice state={state} />
       <EmptyOrLocked canEdit={editable} empty={rows.length === 0} emptyKey="door.config.links.empty" />
-      <ul className="door-notices">{rows.map((row) => {
+      <ul className="door-notices" hidden={formOpen}>{rows.map((row) => {
         const choir = choirs.data?.choirs.find((item) => item.id === row.choirId);
         const category = categories.data?.categories.find((item) => item.id === row.categoryId);
         return <li key={row.id} className="panel door-notice">
@@ -563,7 +586,7 @@ export function ProtocolRulesEditor({ systemId, version, canWrite }: Props) {
     <LoadState loading={list.loading || services.loading} failed={list.failed || services.failed}
       retry={() => { list.reload(); services.reload(); }}>
       <SectionNotice>{t("door.config.protocol.behaviorNotice")}</SectionNotice>
-      {editable && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
+      {editable && !formOpen && <AddToggle onClick={() => { setEditing(null); setFormOpen(true); state.clear(); }} />}
       <FormNotice state={state} />
       <EmptyOrLocked canEdit={editable} empty={rows.length === 0} emptyKey="door.config.protocol.empty" />
       <ul className="door-notices">{rows.map((row) => {
@@ -670,18 +693,18 @@ export function ProtocolDutyEditor({ systemId, version, canWrite }: Props) {
 function ChoirExceptions({ versionId, link }: { versionId: string; link: ChoirCategoryLinkApi | null }) {
   const t = useT();
   const services = useLoad(() => fetchSchedulingServices('sys-music', true, versionId), 'sched-exceptions|' + versionId);
-  return <fieldset><legend>{t('door.config.exceptions')}</legend><LoadState loading={services.loading} failed={services.failed} retry={services.reload}>
+  return <details className="scheduling-config-advanced"><summary>{t('door.config.exceptions')}</summary><LoadState loading={services.loading} failed={services.failed} retry={services.reload}>
     {(services.data?.services ?? []).map(service => {
       const get = (map: Record<string, unknown> | undefined) => Object.entries(map ?? {}).find(([key]) => key.toLowerCase() === service.code.toLowerCase())?.[1];
       const eligible = get(link?.eligibleOverride);
       const frequency = get(link?.frequencyOverride) as Record<string, string | number> | undefined;
-      return <fieldset key={service.code} className="scheduling-config-overrides"><legend>{service.name}</legend>
+      return <details key={service.code} className="scheduling-config-overrides" open={eligible !== undefined || frequency !== undefined}><summary>{service.name} · {t(eligible !== undefined || frequency !== undefined ? 'door.config.help.exceptionSet' : 'door.config.help.exceptionDefault')}</summary>
         <input type="hidden" name="exceptionCode" value={service.code} />
-        <SelectField label={t('door.config.policy.eligible')} name={'eligible:' + service.code} value={eligible === undefined ? 'inherit' : eligible ? 'yes' : 'no'} options={[{value:'inherit',label:t('door.config.inherit')},{value:'yes',label:t('door.config.form.yes')},{value:'no',label:t('door.config.form.no')}]} />
-        <TextField label={t('door.config.policy.target')} name={'target:' + service.code} type="number" min={1} value={frequency?.frequencyTarget ?? ''} />
-        <SelectField label={t('door.config.policy.kind')} name={'kind:' + service.code} value={String(frequency?.frequencyKind ?? '')} options={[{value:'',label:t('door.config.inherit')}, ...['MINIMUM','TARGET','MAXIMUM'].map(value=>({value,label:t(('door.config.frequencyKind.' + value) as Parameters<typeof t>[0])}))]} />
+        <SelectField label={t('door.config.choirEligibleQuestion')} name={'eligible:' + service.code} value={eligible === undefined ? 'inherit' : eligible ? 'yes' : 'no'} options={[{value:'inherit',label:t('door.config.inherit')},{value:'yes',label:t('door.config.form.yes')},{value:'no',label:t('door.config.form.no')}]} />
+        <TextField label={t('door.config.choirFrequencyQuestion')} name={'target:' + service.code} type="number" min={1} value={frequency?.frequencyTarget ?? ''} />
+        <SelectField label={t('door.config.policy.kind')} name={'kind:' + service.code} value={String(frequency?.frequencyKind ?? '')} options={[{value:'',label:t('door.config.inherit')}, ...['MINIMUM','TARGET','MAXIMUM'].map(value=>({value,label:t(('door.config.frequencyChoice.' + value) as Parameters<typeof t>[0])}))]} />
         <SelectField label={t('door.config.policy.period')} name={'period:' + service.code} value={String(frequency?.frequencyPeriod ?? '')} options={[{value:'',label:t('door.config.inherit')}, ...['MONTH','QUARTER','HALF_YEAR','YEAR'].map(value=>({value,label:t(('door.config.period.' + value) as Parameters<typeof t>[0])}))]} />
-      </fieldset>;
+      </details>;
     })}
-  </LoadState></fieldset>;
+  </LoadState></details>;
 }

@@ -347,7 +347,10 @@ async function confirmMonths(me: string, row: DraftRow, chosen: string[]): Promi
   for (const month of chosen) {
     const slice = sliceMonth(d, month);
     if (slice.services.some((service) => service.musicRequired !== false) && slice.assignments.length === 0) {
-      return { ok: false, status: 409, code: 'EMPTY', error: `${month} has no choirs assigned yet` };
+      const vacancies = new Set('vacantFixedServiceIds' in validation ? validation.vacantFixedServiceIds ?? [] : []);
+      if (slice.services.some(service => service.musicRequired !== false && !vacancies.has(service.id))) {
+        return { ok: false, status: 409, code: 'EMPTY', error: `${month} has no choirs assigned yet` };
+      }
     }
   }
   for (const month of chosen) {

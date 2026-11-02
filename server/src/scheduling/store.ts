@@ -164,6 +164,9 @@ export async function cloneActiveConfigVersion(
         configVersionId: version.id,
         categoryServicePolicyId: policyId,
         choirId: row.choirId,
+        serviceDate: row.serviceDate,
+        serviceTime: row.serviceTime,
+        scopeKey: row.scopeKey,
         displayOrder: row.displayOrder,
         createdByPersonId: input.createdByPersonId,
       } });

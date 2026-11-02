@@ -127,10 +127,22 @@ function isUnavailable(
   return rows.some((row) =>
     row.active &&
     row.choirId === choirId &&
-    row.serviceDate === service.date &&
+    row.serviceDate <= service.date && (row.endDate ?? row.serviceDate) >= service.date &&
     (!row.serviceCode || row.serviceCode.toLowerCase() === serviceCode(service)),
   );
 }
+
+function fixedFor(rules: ConfiguredMusicRules, policyId: string, service: MusicServiceSlot) {
+  const seen = new Set<string>();
+  return rules.fixedAssignments.filter(row => row.categoryServicePolicyId === policyId
+    && (!row.serviceDate || row.serviceDate === service.date)
+    && (!row.serviceTime || row.serviceTime === service.time))
+    .sort((a,b) => a.displayOrder - b.displayOrder || a.choirId.localeCompare(b.choirId))
+    .filter(row => {if (seen.has(row.choirId)) return false;seen.add(row.choirId);return true;});
+}
+
+const fixedVacancyWarning = (service: MusicServiceSlot, choirId: string, units: readonly MusicScheduleUnit[]) =>
+  `${service.label}: fixed slot for ${units.find(unit=>unit.id === choirId)?.name ?? 'the designated choir'} left empty because the choir cannot serve. You may add an eligible replacement.`;
 
 function activeLinksByChoir(links: ChoirCategoryLinkView[]) {
   const result = new Map<string, ChoirCategoryLinkView[]>();
@@ -192,6 +204,7 @@ export function generateConfiguredMusicSchedule(input: {
   for (const unit of activeUnits) {
     const links = linksByChoir.get(unit.id) ?? [];
     if (links.length !== 1) {
+      if (input.rules.fixedAssignments.some(row => row.choirId === unit.id)) continue;
       return failure(`${unit.name} needs exactly one explicit choir-category link in this configuration before generation.`);
     }
   }
@@ -228,18 +241,30 @@ export function generateConfiguredMusicSchedule(input: {
       });
       const requiredAll = policy.requireAll ? candidates : [];
       let chosen: Array<{ unit: MusicScheduleUnit; link: ChoirCategoryLinkView }> = [];
+      const scopedFixed = fixedFor(input.rules,policy.id,service);
+      const fixedMode = policy.planningMode === 'FIXED' || scopedFixed.length > 0;
 
-      if (policy.planningMode === 'MANUAL') {
+      if (!fixedMode && policy.planningMode === 'MANUAL') {
         warnings.push(`${service.label}: enter ${category.name} assignments manually.`);
-      } else if (policy.planningMode === 'FIXED') {
-        const fixed = input.rules.fixedAssignments
-          .filter((row) => row.categoryServicePolicyId === policy.id)
-          .sort((a, b) => a.displayOrder - b.displayOrder || a.choirId.localeCompare(b.choirId));
-        if (!fixed.length) return failure(`${category.name} is configured as FIXED for ${definition.name}, but has no designated choirs.`);
-        for (const row of fixed) {
+      } else if (fixedMode) {
+        if (!scopedFixed.length) warnings.push(`${service.label}: fixed ${category.name} slot left empty; no choir is designated for this occurrence.`);
+        for (const row of scopedFixed) {
           const candidate = candidates.find((item) => item.unit.id === row.choirId);
-          if (!candidate) return failure(`A designated ${category.name} choir is inactive, unavailable, or ineligible for ${service.label}.`);
+          const setting = candidate ? policyOverride(policy,candidate.link,definition.code) : null;
+          const atMaximum = setting?.kind === 'MAXIMUM' && frequencyCount(countFor(row.choirId,definition.code,setting.period,service.periodKey,input.services,assignments,input.history ?? []),setting.counting) >= setting.target;
+          if (!candidate || atMaximum) {warnings.push(fixedVacancyWarning(service,row.choirId,input.units));continue;}
           chosen.push(candidate);
+        }
+        if (policy.planningMode === 'ROTATION') {
+          const vacancies = scopedFixed.length - chosen.length;
+          const needed = policy.requireAll ? candidates.length : Math.max(chosen.length,(policy.minCount ?? 0) - vacancies);
+          for (const candidate of candidates) {
+            if (chosen.length >= needed) break;
+            if (scopedFixed.some(row=>row.choirId === candidate.unit.id) || chosen.some(row=>row.unit.id === candidate.unit.id)) continue;
+            const setting = policyOverride(policy,candidate.link,definition.code);
+            if (setting?.kind === 'MAXIMUM' && frequencyCount(countFor(candidate.unit.id,definition.code,setting.period,service.periodKey,input.services,assignments,input.history ?? []),setting.counting) >= setting.target) continue;
+            chosen.push(candidate);
+          }
         }
       } else {
         const maxCategory = policy.maxCount ?? Number.POSITIVE_INFINITY;
@@ -310,7 +335,7 @@ export function generateConfiguredMusicSchedule(input: {
           const rule = policies.find(row => row.categoryId === other.id);
           if (!rule) return total;
           const all = rule.requireAll ? eligibleCandidates({ service, policy: rule, rules: input.rules, units: input.units, linksByChoir }).length : 0;
-          const fixed = rule.planningMode === 'FIXED' ? input.rules.fixedAssignments.filter(row => row.categoryServicePolicyId === rule.id).length : 0;
+          const fixed = fixedFor(input.rules,rule.id,service).length;
           return total + Math.max(rule.minCount ?? 0, all, fixed);
         }, 0);
         const remainingCapacity = Math.min(maxCategory, definition.maxChoirs - reserved - assignments.filter((item) => item.serviceId === service.id).length);
@@ -332,7 +357,7 @@ export function generateConfiguredMusicSchedule(input: {
 
       const categoryMax = policy.maxCount ?? Number.POSITIVE_INFINITY;
       if (chosen.length > categoryMax) return failure(`${service.label}: the fixed ${category.name} arrangement exceeds its maximum of ${categoryMax}.`);
-      if (policy.planningMode !== 'MANUAL' && policy.requireAll && requiredAll.some((candidate) => !chosen.some((item) => item.unit.id === candidate.unit.id))) {
+      if (!fixedMode && policy.planningMode !== 'MANUAL' && policy.requireAll && requiredAll.some((candidate) => !chosen.some((item) => item.unit.id === candidate.unit.id))) {
         return failure(`${service.label}: every eligible and available ${category.name} choir must be assigned.`);
       }
       for (const candidate of chosen) {
@@ -361,7 +386,7 @@ export function generateConfiguredMusicSchedule(input: {
     allowManualIncomplete: true,
   });
   if (!validation.ok) return failure(validation.reason ?? 'The generated schedule violates Music configuration.', validation.warnings);
-  return { ok: true, assignments, warnings: [...warnings, ...validation.warnings] };
+  return { ok: true, assignments, warnings: [...new Set([...warnings, ...validation.warnings])] };
 }
 
 export function validateConfiguredMusicSchedule(input: {
@@ -371,8 +396,9 @@ export function validateConfiguredMusicSchedule(input: {
   rules: ConfiguredMusicRules;
   history?: HistoricalSchedule[];
   allowManualIncomplete?: boolean;
-}): { ok: boolean; warnings: string[]; reason?: string } {
+}): { ok: boolean; warnings: string[]; reason?: string; vacantFixedServiceIds?: string[] } {
   const warnings: string[] = [];
+  const vacantFixedServiceIds = new Set<string>();
   const unitsById = new Map(input.units.map((unit) => [unit.id, unit]));
   const linksByChoir = activeLinksByChoir(input.rules.links);
   const servicesById = new Map(input.services.map((service) => [service.id, service]));
@@ -404,10 +430,8 @@ export function validateConfiguredMusicSchedule(input: {
     if (isUnavailable(unit.id, service, input.rules.unavailability)) {
       return { ok: false, warnings, reason: `${unit.name} is marked unavailable for ${service.label}.` };
     }
-    const fixed = input.rules.fixedAssignments.filter((row) => row.categoryServicePolicyId === policy.id);
-    if (policy.planningMode === 'FIXED' && !fixed.some((row) => row.choirId === unit.id)) {
-      return { ok: false, warnings, reason: `${unit.name} is not designated in the FIXED arrangement for ${definition.name}.` };
-    }
+    // Eligible manual replacements are allowed; service-level checks retain designated
+    // available choirs and limit replacements to vacant fixed slots.
   }
 
   for (const service of input.services) {
@@ -424,26 +448,37 @@ export function validateConfiguredMusicSchedule(input: {
         service, policy, rules: input.rules, units: input.units, linksByChoir,
       });
       const assignedCategoryIds = [...assigned].filter((unitId) => linksByChoir.get(unitId)?.[0]?.categoryId === category.id);
+      const fixed = fixedFor(input.rules,policy.id,service);
+      const fixedMode = policy.planningMode === 'FIXED' || fixed.length > 0;
+      const availableFixed = fixed.filter(row => categoryCandidates.some(c => c.unit.id === row.choirId));
       if (!(input.allowManualIncomplete && policy.planningMode === 'MANUAL') &&
           policy.minCount !== null && assignedCategoryIds.length < policy.minCount) {
-        return { ok: false, warnings, reason: `${service.label}: ${category.name} needs at least ${policy.minCount} choirs; ${assignedCategoryIds.length} assigned.` };
+        if (!fixedMode) return { ok: false, warnings, reason: `${service.label}: ${category.name} needs at least ${policy.minCount} choirs; ${assignedCategoryIds.length} assigned.` };
       }
       if (policy.maxCount !== null && assignedCategoryIds.length > policy.maxCount) {
         return { ok: false, warnings, reason: `${service.label}: ${category.name} exceeds its maximum of ${policy.maxCount} choirs.` };
       }
-      if (!(input.allowManualIncomplete && policy.planningMode === 'MANUAL') &&
+      if (!fixedMode && !(input.allowManualIncomplete && policy.planningMode === 'MANUAL') &&
           policy.requireAll && categoryCandidates.some((candidate) => !assigned.has(candidate.unit.id))) {
         const missing = categoryCandidates.filter((candidate) => !assigned.has(candidate.unit.id)).map((candidate) => candidate.unit.name);
         return { ok: false, warnings, reason: `${service.label}: assign every eligible, available ${category.name} choir (${missing.join(', ')}).` };
       }
-      if (policy.planningMode === 'FIXED') {
-        const fixed = input.rules.fixedAssignments.filter((row) => row.categoryServicePolicyId === policy.id);
-        if (fixed.some((row) => !assigned.has(row.choirId))) {
-          return { ok: false, warnings, reason: `${service.label}: add every designated ${category.name} choir in the FIXED arrangement.` };
+      if (fixedMode) {
+        const fixedSlots = Math.max(fixed.length,policy.minCount ?? 0,1);
+        if (assignedCategoryIds.length < fixedSlots) {
+          vacantFixedServiceIds.add(service.id);
+          if (!fixed.length) warnings.push(`${service.label}: a fixed ${category.name} slot is empty; an eligible replacement is optional.`);
         }
-        if (assignedCategoryIds.some((unitId) => !fixed.some((row) => row.choirId === unitId))) {
-          return { ok: false, warnings, reason: `${service.label}: remove choirs not designated in the FIXED ${category.name} arrangement.` };
+        for (const row of availableFixed.filter(row => !assigned.has(row.choirId))) {
+          const candidate = categoryCandidates.find(c=>c.unit.id === row.choirId)!;
+          const setting = policyOverride(policy,candidate.link,definition.code);
+          const capped = setting?.kind === 'MAXIMUM' && frequencyCount(countFor(row.choirId,definition.code,setting.period,service.periodKey,input.services,input.assignments,input.history ?? []),setting.counting) >= setting.target;
+          if (!capped) return {ok:false,warnings,reason:`${service.label}: keep the available designated choir ${candidate.unit.name}.`};
         }
+        if (assignedCategoryIds.length > fixedSlots) return {ok:false,warnings,reason:`${service.label}: there are no additional vacant fixed slots for this category.`};
+        for (const row of fixed.filter(row => !assigned.has(row.choirId))) warnings.push(assignedCategoryIds.length < fixedSlots
+          ? fixedVacancyWarning(service,row.choirId,input.units)
+          : `${service.label}: an eligible replacement is assigned for a designated choir that cannot serve.`);
       }
     }
   }
@@ -472,6 +507,9 @@ export function validateConfiguredMusicSchedule(input: {
       }
       const actual = setting.counting === 'DISTINCT_DATES' ? dates.size : count;
       if (setting.kind === 'MINIMUM' && actual < setting.target) {
+        const vacantFixed = matchingServices.some(service => frequencyBucket(service.periodKey,setting.period) === bucket && fixedFor(input.rules,policy.id,service).some(row=>row.choirId === unitId)
+          && !eligibleCandidates({service,policy,rules:input.rules,units:input.units,linksByChoir}).some(candidate=>candidate.unit.id === unitId));
+        if (vacantFixed) {warnings.push(`Frequency minimum for ${unitId} could not be met because a fixed slot is unavailable or ineligible.`);continue;}
         return `Frequency minimum for ${unitId} is ${setting.target} in ${bucket}; found ${actual}.`;
       }
       if (setting.kind === 'MAXIMUM' && actual > setting.target) {
@@ -504,5 +542,5 @@ export function validateConfiguredMusicSchedule(input: {
       if (error) return { ok: false, warnings, reason: error };
     }
   }
-  return { ok: true, warnings };
+  return { ok: true, warnings:[...new Set(warnings)], vacantFixedServiceIds:[...vacantFixedServiceIds] };
 }

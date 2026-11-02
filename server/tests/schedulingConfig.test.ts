@@ -76,6 +76,38 @@ const createVersion = (systemId: string, version: number, status: 'DRAFT' | 'ACT
 /* ─── Store-level: direct persistence + versioning ─── */
 
 describe('scheduling config store — tenant scoping', () => {
+  it('records inclusive choir unavailability ranges, rejects reversed/overlapping ranges, and finds an interior date', async () => {
+    fake.__db.musicChoir.push({id:'range-choir',name:'Range choir',active:true,role:'PRIMARY'});
+    const path='/api/scheduling/config/availability?systemId=sys-music';
+    const body={systemId:'sys-music',choirId:'range-choir',fromDate:'2027-03-10',toDate:'2027-03-20',reason:'Travel'};
+    expect((await post(MUSIC_LEADER,path,{...body,toDate:'2027-03-09'})).status).toBe(400);
+    const created=await post(MUSIC_LEADER,path,body);
+    expect(created.status).toBe(201);expect(created.body.availability).toMatchObject({serviceDate:body.fromDate,endDate:body.toDate,reason:'Travel'});
+    expect((await get(MUSIC_LEADER,path+'&serviceDate=2027-03-15')).body.availability).toHaveLength(1);
+    expect((await get(MUSIC_LEADER,path+'&serviceDate=2027-03-21')).body.availability).toHaveLength(0);
+    expect((await post(MUSIC_LEADER,path,{...body,fromDate:'2027-03-20',toDate:'2027-03-22'})).status).toBe(409);
+    expect((await post(MUSIC_LEADER,path,{...body,fromDate:'2027-03-21',toDate:'2027-03-22'})).status).toBe(201);
+  });
+  it('resolves fixed service selection through the choir category and preserves date/time scope when cloning', async () => {
+    const version=await createVersion('sys-music',1);
+    const service=await S.createSchedulingService({systemId:'sys-music',code:'ss1',name:'Sunday',time:'09:00',weekday:0,recurrence:'WEEKLY',configVersionId:version.id,createdByPersonId:LEADER});
+    const category=await S.createChoirCategory({systemId:'sys-music',code:'PRIMARY',name:'Primary',configVersionId:version.id,createdByPersonId:LEADER});
+    await S.createCategoryServicePolicy({systemId:'sys-music',categoryId:category.id,serviceId:service.id,configVersionId:version.id,createdByPersonId:LEADER,planningMode:'ROTATION'});
+    fake.__db.musicChoir.push({id:'scoped-choir',name:'Scoped choir',active:true,role:'PRIMARY'});
+    await S.createChoirCategoryLink({systemId:'sys-music',choirId:'scoped-choir',categoryId:category.id,configVersionId:version.id,createdByPersonId:LEADER});
+    const body={systemId:'sys-music',configVersionId:version.id,serviceId:service.id,choirId:'scoped-choir',serviceDate:'2027-03-14',serviceTime:'09:00'};
+    const path='/api/scheduling/config/fixed-assignments?systemId=sys-music';
+    expect((await post(MUSIC_LEADER,path,{...body,serviceTime:'10:00'})).status).toBe(400);
+    expect((await post(MUSIC_LEADER,path,{...body,serviceDate:'2027-03-15'})).status).toBe(400);
+    const created=await post(MUSIC_LEADER,path,body);
+    expect(created.status).toBe(201);expect(created.body.assignment).toMatchObject({serviceDate:body.serviceDate,serviceTime:body.serviceTime});
+    expect((await post(MUSIC_LEADER,path,{...body,serviceDate:'2027-03-21'})).status).toBe(201);
+    expect((await post(MUSIC_LEADER,`/api/scheduling/config/versions/${version.id}/activate`)).status).toBe(200);
+    const clone=await S.cloneActiveConfigVersion('sys-music',{label:'Clone',createdByPersonId:LEADER});
+    const copied=fake.__db.musicFixedAssignment.filter((r:any)=>r.configVersionId === clone.id);
+    expect(copied.map((r:any)=>r.serviceDate).sort()).toEqual(['2027-03-14','2027-03-21']);
+    expect(copied.every((r:any)=>r.serviceTime === '09:00')).toBe(true);
+  });
   it('config versions are scoped to systemId', async () => {
     await S.createConfigVersion({ systemId: 'sys-music', version: 1, label: 'Music v1', createdByPersonId: LEADER });
     await S.createConfigVersion({ systemId: 'sys-protocol', version: 1, label: 'Protocol v1', createdByPersonId: LEADER });

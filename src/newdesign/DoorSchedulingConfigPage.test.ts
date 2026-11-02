@@ -117,21 +117,21 @@ describe('DoorSchedulingConfigPage', () => {
 
   it('shows the selected section and its content for each tab URL', () => {
     const cases = [
-      ['services', 'Church services', 'Sunday Service 1', 'sched-config-services|sys-music|v1', { services: [{
+      ['services', '1 Services', 'Sunday Service 1', 'sched-config-services|sys-music|v1', { services: [{
         id: 'svc1', systemId: 'sys-music', code: 'ss1', name: 'Sunday Service 1', kind: 'SERVICE',
         weekday: 0, time: '09:00', recurrence: 'WEEKLY', selectedDates: [], active: true,
         effectiveFrom: '2026-01-01T00:00:00.000Z', effectiveTo: null, musicRequired: true,
         protocolRequired: true, maxChoirs: 3, targetTeamSize: 10, configVersionId: 'v1',
         displayOrder: 0, supersedesId: null, createdByPersonId: 'p1', createdAt: '2026-01-01T00:00:00.000Z',
       }] }],
-      ['categories', 'Choir categories', 'Youth Choir', 'sched-config-cats|sys-music|v1', { categories: [{
+      ['categories', '2 Choirs', 'Youth Choir', 'sched-config-cats|sys-music|v1', { categories: [{
         id: 'cat1', name: 'Youth Choir', code: 'YOUTH', description: 'Youth singers',
       }] }],
-      ['policies', 'Scheduling frequency', 'Target: 2 assignments', 'sched-config-policies|sys-music|v1', { policies: [{
+      ['policies', '3 Choir rules', 'Preferred target: 2 assignments per choir', 'sched-config-policies|sys-music|v1', { policies: [{
         id: 'policy1', eligible: true, active: true, frequencyKind: 'TARGET', frequencyTarget: 2,
         frequencyCounting: 'ASSIGNMENTS', minCount: null, maxCount: null, requireAll: false, planningMode: 'ROTATION',
       }] }],
-      ['links', 'Choir participation', 'Choir name unavailable', 'sched-config-links|sys-music|v1', { links: [{
+      ['links', '2 Choirs', 'Choir name unavailable', 'sched-config-links|sys-music|v1', { links: [{
         id: 'link1', choirId: 'choir-youth', categoryId: 'cat1', active: true,
       }] }],
       ['versions', 'Configuration history', 'Initial setup', 'sched-config-versions|sys-music', { versions: [{
@@ -142,8 +142,8 @@ describe('DoorSchedulingConfigPage', () => {
     for (const [tab, label, content, key, data] of cases) {
       loadStates.results[key] = { loading: false, failed: false, data, reload: () => {} };
       const html = renderPage(`/s/sys-music/config?tab=${tab}&version=v1`);
-      const selectedButton = html.match(/<button[^>]*aria-current="page"[^>]*>(.*?)<\/button>/)?.[1];
-      expect(selectedButton).toBe(label);
+      const selectedButton = html.match(/<button[^>]*aria-current="step"[^>]*>(.*?)<\/button>/)?.[1]?.replace(/<[^>]*>/g, "").trim();
+      if (tab === "versions") expect(selectedButton).toBeUndefined(); else expect(selectedButton).toBe(label);
       expect(html).toContain(content);
     }
   });
@@ -151,6 +151,24 @@ describe('DoorSchedulingConfigPage', () => {
   it('shows the services empty state when there are no services', () => {
     const html = renderPage('/s/sys-music/config?version=v1');
     expect(html).toContain('No church services yet.');
+  });
+  it('asks for a fixed service and an unavailability date range without exposing a category-rule selector', () => {
+    loadStates.results['sched-config-versions|sys-music'] = {loading:false,failed:false,data:{versions:[{id:'v2',label:'Working draft',status:'DRAFT',version:2}]},reload:()=>{}};
+    const html=renderPage('/s/sys-music/config?tab=fixed&version=v2');
+    expect(html).toContain('At which service should this choir be fixed?');
+    expect(html).toContain('On a specific date and start time');
+    expect(html).not.toContain('name="policyId"');
+    expect(html).toContain('Choir unavailability');
+    expect(html).toContain('Unavailable from');expect(html).toContain('Unavailable to (inclusive)');
+  });
+  it('offers Music activation only on the final review step, never while answering setup questions', () => {
+    loadStates.results['sched-config-versions|sys-music'] = {loading:false,failed:false,data:{versions:[{id:'v2',label:'Working draft',status:'DRAFT',version:2}]},reload:()=>{}};
+    for (const tab of ['services','links','categories','policies','fixed','availability']) {
+      expect(renderPage(`/s/sys-music/config?tab=${tab}&version=v2`)).not.toContain('>Activate version</button>');
+    }
+    const review = renderPage('/s/sys-music/config?tab=review&version=v2');
+    expect(review).toContain('Are these settings ready to use?');
+    expect(review).toContain('disabled="">Activate version</button>');
   });
 
   it('exposes service actions from active and historical versions through a working draft', () => {
@@ -168,7 +186,7 @@ describe('DoorSchedulingConfigPage', () => {
     const activeHtml = renderPage('/s/sys-music/config?version=v1');
     expect(activeHtml).toContain('This active version is used when new schedules are generated.');
     expect(activeHtml).toContain('Add</button>');
-    expect(activeHtml).toContain('Add or Change opens a working draft');
+    expect(activeHtml).not.toContain('Add or Change opens a working draft');
 
     const historicalHtml = renderPage('/s/sys-music/config?version=v0');
     expect(historicalHtml).toContain('This Superseded version is read-only.');
@@ -209,14 +227,14 @@ describe('DoorSchedulingConfigPage', () => {
     };
     const html = renderPage('/s/sys-music/config?version=v1');
     expect(html).toContain('Scheduling Setup');
-    expect(html).toContain('Church services');
-    expect(html).toContain('Choir categories');
+    expect(html).toContain('Which services need scheduling?');
+    expect(html).toContain('Choirs');
   });
 
   it('keeps Protocol duty policy out of Music configuration', () => {
     const html = renderPage('/s/sys-music/config?tab=duty&version=v1');
     expect(html).not.toContain('Duty policy');
-    expect(html).toContain('Church services');
+    expect(html).toContain('Which services need scheduling?');
   });
 
   it('shows Protocol rules and duty policy only for sys-protocol', () => {
@@ -301,11 +319,11 @@ describe('DoorSchedulingConfigPage', () => {
     const linksHtml = renderPage('/s/sys-music/config?tab=links&version=v1');
     expect(linksHtml).toContain('Youth Voices · Youth Choir');
     expect(linksHtml).not.toContain('choir-secret-id');
-    expect(linksHtml).toContain('Links determine selection and validation');
+    expect(linksHtml).not.toContain('Links determine selection and validation');
     const policiesHtml = renderPage('/s/sys-music/config?tab=policies&version=v1');
     expect(policiesHtml).toContain('<h4>Youth Choir</h4>');
     expect(policiesHtml).toContain('Sunday Service 1');
-    expect(policiesHtml).toContain('These rules control choir selection and validation');
+    expect(policiesHtml).not.toContain('These rules control choir selection and validation');
   });
 
   it('separates Protocol duty limits from stored settings not used by automatic assignment', () => {

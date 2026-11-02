@@ -45,7 +45,7 @@ export interface MusicConfigRulesSnapshot {
   policies: MusicPolicyRules[];
   links: MusicLinkRules[];
   choirs: Array<{ id: string; active: boolean }>;
-  fixedAssignments: Array<{ categoryServicePolicyId: string; choirId: string }>;
+  fixedAssignments: Array<{ categoryServicePolicyId: string; choirId: string; serviceDate?: string | null; serviceTime?: string | null }>;
 }
 
 export interface MusicConfigValidation {
@@ -161,7 +161,7 @@ export function validateMusicConfigSnapshot(snapshot: MusicConfigRulesSnapshot):
     if (choirLinks.length > 1) errors.push('Each choir can belong to only one category in a configuration version.');
   }
 
-  const fixedByPolicy = new Map<string, Array<{ choirId: string }>>();
+  const fixedByPolicy = new Map<string, MusicConfigRulesSnapshot['fixedAssignments']>();
   for (const assignment of snapshot.fixedAssignments) {
     const rows = fixedByPolicy.get(assignment.categoryServicePolicyId) ?? [];
     rows.push(assignment);
@@ -191,21 +191,16 @@ export function validateMusicConfigSnapshot(snapshot: MusicConfigRulesSnapshot):
       const override = scopedValue(link.eligibleOverride, service.code);
       return typeof override === 'boolean' ? override : policy.eligible;
     });
-    const fixed = fixedByPolicy.get(policy.id) ?? [];
-    if (policy.planningMode === 'FIXED' && fixed.length === 0) {
+    const allFixed = fixedByPolicy.get(policy.id) ?? [];
+    const fixed = allFixed.filter(row => !row.serviceDate && !row.serviceTime);
+    if (policy.planningMode === 'FIXED' && allFixed.length === 0) {
       errors.push(`Choose at least one choir for the fixed arrangement for service ${service.code}.`);
-    }
-    if (policy.planningMode === 'FIXED' && policy.minCount !== null && fixed.length < policy.minCount) {
-      errors.push(`The fixed arrangement for ${service.code} needs at least ${policy.minCount} designated choirs.`);
-    }
-    if (policy.planningMode === 'FIXED' && policy.requireAll &&
-      eligibleMembers.some((member) => !fixed.some((row) => row.choirId === member.choirId))) {
-      errors.push(`The fixed arrangement for ${service.code} must include every eligible linked choir.`);
     }
 
     for (const designation of fixed) {
-      const link = eligibleMembers.find((member) => member.choirId === designation.choirId);
-      if (!link) errors.push(`A fixed arrangement for ${service.code} must use an active choir linked to its category.`);
+      if (!snapshot.links.some(link => link.choirId === designation.choirId && link.categoryId === policy.categoryId)) {
+        errors.push(`A fixed arrangement for ${service.code} must use a choir linked to its category.`);
+      }
       const used = fixedChoirsByService.get(service.id) ?? new Set<string>();
       if (used.has(designation.choirId)) {
         errors.push(`A choir cannot fill two categories on service ${service.code}.`);
@@ -214,15 +209,15 @@ export function validateMusicConfigSnapshot(snapshot: MusicConfigRulesSnapshot):
       fixedChoirsByService.set(service.id, used);
     }
 
-    const requireAllCount = policy.requireAll ? eligibleMembers.length : 0;
-    if ((policy.minCount ?? 0) > eligibleMembers.length) {
+    const requireAllCount = policy.requireAll && !allFixed.length ? eligibleMembers.length : 0;
+    if (!allFixed.length && (policy.minCount ?? 0) > eligibleMembers.length) {
       errors.push(`The minimum for ${service.code} is greater than the number of eligible linked choirs.`);
     }
     if (policy.maxCount !== null && requireAllCount > policy.maxCount) {
       errors.push(`The “include every eligible choir” rule for ${service.code} exceeds that category's maximum.`);
     }
     const minimumRequired = Math.max(policy.minCount ?? 0, requireAllCount, fixed.length);
-    if (!policy.eligible && minimumRequired > 0) {
+    if (!allFixed.length && !policy.eligible && minimumRequired > 0) {
       errors.push(`Service ${service.code} requires choirs from a category that is marked ineligible.`);
     }
     if (policy.maxCount !== null && minimumRequired > policy.maxCount) {

@@ -2274,13 +2274,16 @@ model MusicFixedAssignment {
   configVersionId          String
   categoryServicePolicyId  String
   choirId                  String
+  serviceDate              String?
+  serviceTime              String?
+  scopeKey                 String   @default("ALL")
   displayOrder             Int      @default(0)
   createdByPersonId        String
   createdAt                DateTime @default(now())
   configVersion            ConfigVersion @relation(fields: [configVersionId], references: [id])
   categoryServicePolicy   CategoryServicePolicy @relation(fields: [categoryServicePolicyId], references: [id])
 
-  @@unique([systemId, categoryServicePolicyId, choirId])
+  @@unique([systemId, categoryServicePolicyId, choirId, scopeKey], map: "MusicFixedAssignment_scope_key")
   @@index([systemId, configVersionId])
   @@index([categoryServicePolicyId])
 }
@@ -2291,6 +2294,7 @@ model MusicChoirUnavailability {
   systemId           String
   choirId            String
   serviceDate        String   // YYYY-MM-DD
+  endDate            String?  // Inclusive; null retains the legacy single-day meaning.
   serviceCode        String?
   reason             String?
   active             Boolean  @default(true)

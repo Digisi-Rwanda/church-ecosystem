@@ -1,7 +1,8 @@
 import { ImportLink } from './imports/ImportLink';
 import { useState, type FormEvent } from 'react';
 import { Link, useParams } from 'react-router-dom';
-import { createChoir, deleteChoir, editChoir, setChoirActive, type ChoirRole } from '../api/frontDoorApi';
+import { createChoir, deleteChoir, editChoir, setChoirActive, fetchChoirCategories, type ChoirRole } from '../api/frontDoorApi';
+import { useLoad } from './useLoad';
 import { EmptyState } from '../components/ui/EmptyState';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
@@ -18,6 +19,8 @@ export function ChoirsPage() {
   const { systemId = '' } = useParams();
   const list = useChoirRegister(systemId, `music-choirs|${systemId}`);
   const isMusic = systemId === 'sys-music';
+  const categories = useLoad(() => fetchChoirCategories('sys-music', true), 'choir-register-category-names');
+  const categoryName = (role: ChoirRole) => categories.data?.categories.find(category => category.code.toUpperCase() === role)?.name ?? t(`door.music.role.${role}` as 'door.music.role.PRIMARY');
   const [form, setForm] = useState(false);
   const [name, setName] = useState('');
   const [role, setRole] = useState<ChoirRole>('PRIMARY');
@@ -60,7 +63,7 @@ export function ChoirsPage() {
           <h3>{t('door.music.choirs.new')}</h3>
           <TextField label={t('door.music.choirs.name')} name="ch-name" value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
           <SelectField label={t('door.music.choirs.role')} name="ch-role" value={role} onChange={(e) => setRole(e.target.value as ChoirRole)}>
-            {ROLES.map((r) => <option key={r} value={r}>{t(`door.music.role.${r}` as 'door.music.role.PRIMARY')}</option>)}
+            {ROLES.map((r) => <option key={r} value={r}>{categoryName(r)}</option>)}
           </SelectField>
           <div className="door-row">
             <button type="submit" className="btn">{t('door.music.choirs.save')}</button>
@@ -80,12 +83,12 @@ export function ChoirsPage() {
                     <strong><Link to={`/s/${systemId}/choirs/${c.id}`}>{c.name}</Link></strong>
                     {!c.active && <span className="door-chip">{t('door.music.retired')}</span>}
                   </div>
-                  <p className="muted">{t(`door.music.role.${c.role}` as 'door.music.role.PRIMARY')} · {t('door.music.members', { count: String(c.members) })}</p>
+                  <p className="muted">{categoryName(c.role)} · {t('door.music.members', { count: String(c.members) })}</p>
                   {list.data?.canManage && editing === c.id && (
                     <form className="door-form" noValidate onSubmit={(e) => { e.preventDefault(); if (!name.trim()) return setError(t('door.caring.err.input')); void run(() => editChoir(c.id, { name: name.trim(), role }), () => setEditing(null)); }}>
                       <TextField label={t('door.music.choirs.name')} name={`ce-${c.id}`} value={name} maxLength={80} onChange={(e) => setName(e.target.value)} />
                       <SelectField label={t('door.music.choirs.role')} name={`cr-${c.id}`} value={role} onChange={(e) => setRole(e.target.value as ChoirRole)}>
-                        {ROLES.map((r) => <option key={r} value={r}>{t(`door.music.role.${r}` as 'door.music.role.PRIMARY')}</option>)}
+                        {ROLES.map((r) => <option key={r} value={r}>{categoryName(r)}</option>)}
                       </SelectField>
                       <div className="door-row">
                         <button type="submit" className="btn sm">{t('door.work.form.save')}</button>

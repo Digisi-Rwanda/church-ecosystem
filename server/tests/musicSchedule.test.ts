@@ -190,6 +190,23 @@ describe('editing a draft by hand', () => {
 });
 
 describe('confirm, publish and edit', () => {
+  it('can confirm and publish deliberately vacant fixed slots without requiring a replacement', async () => {
+    const ids=await lineup();
+    for (const service of fake.__db.schedulingService) service.active=service.code === 'ss1';
+    for (const category of fake.__db.choirCategory) category.active=category.code === 'PRIMARY';
+    for (const choir of fake.__db.musicChoir) choir.active=false;
+    const p=fake.__db.categoryServicePolicy.find((row:any)=>row.id === 'policy-ss1-PRIMARY');
+    p.planningMode='FIXED';
+    fake.__db.musicFixedAssignment ??= [];
+    fake.__db.musicFixedAssignment.push({id:'vacant-fixed',systemId:'sys-music',configVersionId:'music-config-v1',categoryServicePolicyId:p.id,choirId:ids.Ijwi,displayOrder:0,createdByPersonId:LEADER,createdAt:new Date()});
+    const generated=await generate();
+    expect(generated.status,generated.body.error).toBe(201);
+    const id=generated.body.id;
+    const draft=await get(LEADER,`/api/music/schedule/drafts/${id}`);
+    expect(draft.body.warnings.join(' ')).toMatch(/empty|unfilled/);
+    expect((await post(LEADER,`/api/music/schedule/drafts/${id}/confirm`,{})).status).toBe(200);
+    expect((await post(LEADER,'/api/music/schedule/months/publish',{months:[START]})).status).toBe(200);
+  });
   const confirmed = async (configVersionId?: string) => {
     const ids = await lineup();
     const id = (await generate()).body.id as string;

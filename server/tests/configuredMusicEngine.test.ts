@@ -57,6 +57,43 @@ const units: MusicScheduleUnit[] = [
 ];
 
 describe('configured Music candidate engine', () => {
+  const designation = (extra: object = {}) => ({id:'fixed-slot',systemId:'sys-music',configVersionId:'music-v1',categoryServicePolicyId:'policy-primary',choirId:'choir-a',displayOrder:0,createdByPersonId:'leader',createdAt:'2026-01-01T00:00:00.000Z',...extra});
+  it('keeps unavailable fixed slots vacant with warnings and allows an eligible manual replacement', () => {
+    const p = policy({planningMode:'FIXED'});
+    const config=rules({policies:[p],fixedAssignments:[designation({categoryServicePolicyId:p.id})],unavailability:[{id:'away',systemId:'sys-music',choirId:'choir-a',serviceDate:'2026-01-01',endDate:'2026-01-10',serviceCode:null,reason:null,active:true,recordedByPersonId:'leader',recordedAt:'',updatedAt:''}]});
+    const generated=generateConfiguredMusicSchedule({services:[slot()],units,rules:config});
+    expect(generated.ok,generated.reason).toBe(true);
+    expect(generated.assignments).toEqual([]);
+    expect(generated.warnings.join(' ')).toMatch(/slot.*empty|unfilled/);
+    const vacant=validateConfiguredMusicSchedule({services:[slot()],units,rules:config,assignments:[]});
+    expect(vacant.ok).toBe(true); expect(vacant.vacantFixedServiceIds).toEqual([slot().id]);
+    expect(validateConfiguredMusicSchedule({services:[slot()],units,rules:config,assignments:[{id:'replacement',serviceId:slot().id,unitId:'choir-b',source:'MANUAL'}]}).ok).toBe(true);
+    expect(generateConfiguredMusicSchedule({services:[slot('2026-01','2026-01-10')],units,rules:config}).assignments).toEqual([]);
+    expect(generateConfiguredMusicSchedule({services:[slot('2026-01','2026-01-11')],units,rules:config}).assignments[0]?.unitId).toBe('choir-a');
+  });
+  it.each(['inactive','ineligible'])('warns instead of failing for an %s fixed choir', state => {
+    const p=policy({planningMode:'FIXED'});
+    const config=rules({policies:[p],fixedAssignments:[designation({categoryServicePolicyId:p.id})],links:[link('choir-a',{eligibleOverride:state === 'ineligible' ? {ss1:false} : {}}),link('choir-b')]});
+    const result=generateConfiguredMusicSchedule({services:[slot()],units:units.map(u=>u.id === 'choir-a' && state === 'inactive' ? {...u,active:false} : u),rules:config});
+    expect(result.ok,result.reason).toBe(true);expect(result.assignments).toEqual([]);expect(result.warnings.length).toBeGreaterThan(0);
+  });
+  it('applies a date/time designation only to the matching occurrence and keeps other occurrences rotating', () => {
+    const p=policy();
+    const config=rules({policies:[p],fixedAssignments:[designation({categoryServicePolicyId:p.id,serviceDate:'2026-01-04',serviceTime:'09:00'})]});
+    const first={...slot(),time:'09:00'},second={...slot('2026-01','2026-01-11'),time:'09:00'};
+    const result=generateConfiguredMusicSchedule({services:[first,second],units,rules:config});
+    expect(result.ok,result.reason).toBe(true);
+    expect(result.assignments.find(a=>a.serviceId === first.id)?.unitId).toBe('choir-a');
+    expect(result.assignments.filter(a=>a.serviceId === second.id)).toHaveLength(1);
+  });
+  it('keeps a missing date-scoped FIXED occurrence vacant and permits an optional replacement', () => {
+    const p=policy({planningMode:'FIXED',minCount:null});
+    const config=rules({policies:[p],fixedAssignments:[designation({categoryServicePolicyId:p.id,serviceDate:'2026-01-11'})]});
+    const result=generateConfiguredMusicSchedule({services:[slot()],units,rules:config});
+    expect(result.ok,result.reason).toBe(true);expect(result.assignments).toEqual([]);
+    expect(validateConfiguredMusicSchedule({services:[slot()],units,rules:config,assignments:[]}).vacantFixedServiceIds).toEqual([slot().id]);
+    expect(validateConfiguredMusicSchedule({services:[slot()],units,rules:config,assignments:[{id:'r',serviceId:slot().id,unitId:'choir-b',source:'MANUAL'}]}).ok).toBe(true);
+  });
   it('uses explicit category links, excludes inactive choirs, and is deterministic with a seed', () => {
     const config = rules({ links: [...rules().links, link('choir-inactive')] });
     const service = slot();
