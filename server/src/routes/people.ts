@@ -7,14 +7,15 @@ import { nextMemberCode, personWithNationalId, possibleDuplicates } from '../lib
 import { authorizePerson } from '../policy/index.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { lettersInSystem, reachableSystems } from '../capabilities/engine.js';
-import { accessFor } from '../person360/rules.js';
+import { accessFor, SECTIONS } from '../person360/rules.js';
+import { cleanRegistrationRecords, registrationRecords } from '../person360/registration.js';
 import { CriteriaSchema, criteriaToMatch, forbiddenKeys, usableKeys, type Viewer } from '../people/filters.js';
 import { EDU_LEVELS, MARITAL, PEOPLE_FIELDS } from '../people/fields.js';
 import { searchPeople, type PeopleSearch } from '../people/search.js';
 import { FilterError, MatchSchema, PageSchema, SortSchema, schemaFor } from '../filters/index.js';
 import { SECTORS } from '../person360/rules.js';
 import { CENTRAL, isAdministrator, mayReadPeople, peopleOfSystem, subtreeUnitIds } from '../lib/peopleScope.js';
-import { unitPeopleIds } from '../lib/unitPeople.js';
+import { unitPeopleIds, unitPeopleSystems } from '../lib/unitPeople.js';
 import {
   pathParam,
   requireAuth,
@@ -286,6 +287,16 @@ peopleRouter.get('/check-duplicate', requireAuth, async (req: AuthedRequest, res
   res.json({ candidates: maybe.map((p) => ({ id: p.id, fullName: p.fullName, memberCode: p.memberCode ?? null })) });
 });
 
+peopleRouter.get('/registration-options', requireAuth, async (req: AuthedRequest, res) => {
+  const me = req.auth!.personId;
+  const systemId = typeof req.query.systemId === 'string' ? req.query.systemId : CENTRAL;
+  const gate = await authorizePerson({personId:me,systemId:CENTRAL,resource:'PERSON',action:'MANAGE'});
+  const {data} = await loadAccessData(me);
+  if (!gate.allowed && !lettersInSystem(me,systemId,data).PEOPLE.includes('W')) return res.status(403).json({code:'NOT_ALLOWED'});
+  const write = systemId !== CENTRAL && unitPeopleSystems(me,data).includes(systemId) ? [...SECTIONS] : accessFor(me,data).write;
+  res.json({write});
+});
+
 peopleRouter.get('/:id', requireAuth, async (req: AuthedRequest, res) => {
   const id = pathParam(req, 'id');
   if (!id) {
@@ -464,6 +475,7 @@ const patchSchema = z.object({
 });
 
 const createSchema = z.object({
+  records: registrationRecords.optional(),
   id: z.string().regex(/^p-[A-Za-z0-9-]{3,40}$/).optional(),
   fullName: z.string().min(1),
   preferredName: z.string().optional(),
@@ -502,6 +514,10 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   }
   const home = from === CENTRAL ? null : ((await prisma.churchSystem.findUnique({ where: { id: from } })) as { orgUnitId?: string | null } | null)?.orgUnitId ?? null;
   if (from !== CENTRAL && !home) return res.status(400).json({error:'The system needs an organizational unit before registering people',code:'BAD_INPUT'});
+  const writable = from !== CENTRAL && unitPeopleSystems(me,access).includes(from) ? [...SECTIONS] : accessFor(me,access).write;
+  let records;
+  try { records = cleanRegistrationRecords(parsed.data.records ?? [], writable); }
+  catch (error) { return res.status(400).json({error:(error as Error).message,code:'BAD_INPUT'}); }
   const id = parsed.data.id ?? `p-${crypto.randomUUID().slice(0, 8)}`;
   if (await prisma.person.findUnique({ where: { id } })) {
     res.status(409).json({ error: 'A person with this id already exists' });
@@ -524,10 +540,11 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
       return;
     }
   }
-  const person = await prisma.person.create({
+  const person = await prisma.$transaction(async tx => {
+  const person = await tx.person.create({
     data: {
       id,
-      memberCode: await nextMemberCode(prisma),
+      memberCode: await nextMemberCode(tx as unknown as typeof prisma),
       fullName: parsed.data.fullName,
       preferredName: parsed.data.preferredName,
       phone: parsed.data.phone,
@@ -543,9 +560,10 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
     },
   });
   if (home) {
-    await prisma.membership.create({ data: { id: `mem-${crypto.randomUUID().slice(0, 8)}`, personId: person.id, type: 'MEMBER', label: 'Member', orgUnitId: home, systemId: from, status: 'ACTIVE', startDate: new Date() } });
+    await tx.membership.create({ data: { id: `mem-${crypto.randomUUID().slice(0, 8)}`, personId: person.id, type: 'MEMBER', label: 'Member', orgUnitId: home, systemId: from, status: 'ACTIVE', startDate: new Date() } });
   }
-  await prisma.auditEvent.create({
+  for (const record of records) await tx.personRecord.create({data:{personId:person.id,section:record.section,dataJson:JSON.stringify(record.data),status:'CURRENT',recordedById:me}});
+  await tx.auditEvent.create({
     data: {
       actorId: req.auth!.personId,
       systemId: 'sys-main',
@@ -553,6 +571,8 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
       resource: 'PERSON',
       detail: person.id,
     },
+  });
+  return person;
   });
   res.status(201).json({ person });
 });

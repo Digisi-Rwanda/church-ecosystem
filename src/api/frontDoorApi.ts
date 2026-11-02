@@ -201,6 +201,12 @@ export async function fetchStructure(systemId?: string): Promise<Structure> {
 }
 
 export type NewPerson = {
+  preferredName?: string;
+  gender?: string;
+  address?: string;
+  joinedChurchOn?: string;
+  status?: 'ACTIVE' | 'INACTIVE' | 'VISITOR';
+  records?: Array<{section:P360Section;data:Record<string,string|number>}>;
   fullName: string;
   phone?: string;
   email?: string;
@@ -210,6 +216,7 @@ export type NewPerson = {
   /** The unit's system the person is added from: they also become a member of that unit. */
   systemId?: string;
 };
+
 
 export async function createPerson(body: NewPerson): Promise<DirectoryPerson> {
   const res = await apiFetch<{ person: DirectoryPerson }>('/api/people', { method: 'POST', body });
@@ -2199,8 +2206,8 @@ export const updateProtocolDutyPolicy = (id: string, configVersionId: string, pa
   apiFetch(`${SC}/protocol/policy/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
 export const retireSchedulingService = (id: string) => apiFetch(`${SC}/services/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });
 
-export type MusicFixedAssignmentApi = { id: string; choirId: string; categoryServicePolicyId: string; configVersionId: string };
-export type MusicAvailabilityApi = { id: string; choirId: string; serviceDate: string; serviceCode: string | null; reason: string | null };
+export type MusicFixedAssignmentApi = { id: string; choirId: string; categoryServicePolicyId: string; configVersionId: string; serviceDate?:string|null; serviceTime?:string|null };
+export type MusicAvailabilityApi = { id: string; choirId: string; serviceDate: string; endDate?:string|null; serviceCode: string | null; reason: string | null };
 export const fetchMusicFixedAssignments = (versionId: string) => scGet<{ assignments: MusicFixedAssignmentApi[] }>('/fixed-assignments', 'sys-music', { configVersionId: versionId });
 export const addMusicFixedAssignment = (body: object) => scPost('/fixed-assignments', { ...body, systemId: 'sys-music' });
 export const removeMusicFixedAssignment = (id: string, configVersionId: string) => apiFetch(SC + '/fixed-assignments/' + encodeURIComponent(id), { method: 'DELETE', body: { configVersionId } });

@@ -6,14 +6,15 @@
  */
 import { Router } from 'express';
 import { z } from 'zod';
-import { nextMemberCode, normaliseName, normalisePhone } from '../lib/codes.js';
+import { nextMemberCode, normaliseName, normalisePhone, normaliseNationalId } from '../lib/codes.js';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { personTier } from '../policy/personAccess.js';
 import { authorizePerson } from '../policy/index.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { unitPeopleSystems } from '../lib/unitPeople.js';
-import { accessFor, cleanData, SECTIONS, type Section } from '../person360/rules.js';
+import { accessFor, SECTIONS } from '../person360/rules.js';
+import { cleanRegistrationRecords, importProfileRecords, registrationRecords } from '../person360/registration.js';
 
 export const peopleToolsRouter = Router();
 
@@ -21,6 +22,8 @@ const MAX_ROWS = 500;
 const date = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, 'Use YYYY-MM-DD');
 const rowSchema = z.object({
   fullName: z.string().trim().min(1, 'Name is missing').max(120),
+  preferredName: z.string().trim().max(120).optional().or(z.literal('')),
+  nationalId: z.string().trim().max(30).optional().or(z.literal('')),
   phone: z.string().trim().max(30).optional().or(z.literal('')),
   email: z.string().trim().email('Email is not valid').optional().or(z.literal('')),
   dateOfBirth: date.optional().or(z.literal('')),
@@ -28,7 +31,7 @@ const rowSchema = z.object({
   status: z.enum(['ACTIVE', 'INACTIVE', 'VISITOR']).optional().or(z.literal('')),
   joinedChurchOn: date.optional().or(z.literal('')),
   address: z.string().trim().max(200).optional().or(z.literal('')),
-  records: z.array(z.object({section:z.enum(SECTIONS),data:z.record(z.string(),z.unknown())})).max(50).optional(),
+  records: registrationRecords.optional(),
 });
 const bodySchema = z.object({ rows: z.array(z.record(z.string(), z.unknown())).min(1).max(MAX_ROWS), commit: z.boolean().optional(), systemId:z.string().min(1).optional() });
 
@@ -51,37 +54,29 @@ peopleToolsRouter.post('/import', requireAuth, async (req: AuthedRequest, res) =
   const home = systemId === 'sys-main' ? null : (await prisma.churchSystem.findUnique({where:{id:systemId}}))?.orgUnitId;
   if (systemId !== 'sys-main' && !home) return res.status(400).json({error:'System has no organizational unit',code:'BAD_INPUT'});
   const writable = unit ? [...SECTIONS] : accessFor(me, access).write;
-  const existing = (await prisma.person.findMany({})) as Array<{ fullName: string; dateOfBirth?: string | null; phone?: string | null; memberCode?: string | null }>;
+  const existing = (await prisma.person.findMany({})) as Array<{ fullName: string; dateOfBirth?: string | null; phone?: string | null; memberCode?: string | null; nationalId?:string|null }>;
+  const nationalIds = new Set(existing.map(person=>normaliseNationalId(person.nationalId)).filter(Boolean));
   const seen = existing.map((p) => ({ name: normaliseName(p.fullName), dob: p.dateOfBirth ?? '', phone: normalisePhone(p.phone), label: `${p.fullName}${p.memberCode ? ` (${p.memberCode})` : ''}` }));
   const results: RowResult[] = [];
   const toCreate: Array<z.infer<typeof rowSchema>> = [];
   parsed.data.rows.forEach((raw, i) => {
     const line = i + 1;
-    let records: Array<{section:Section;data:Record<string,unknown>}> = [];
+    let records: unknown[] = [];
     try {
-      records = Array.isArray(raw.records) ? raw.records as typeof records : [];
-      for (const section of SECTIONS) if (raw[section]) {
-        const values = typeof raw[section] === 'string' ? JSON.parse(raw[section] as string) : raw[section];
-        for (const data of Array.isArray(values) ? values : [values]) records.push({section,data});
-      }
+      records = importProfileRecords(raw);
     } catch { return void results.push({line,fullName:String(raw.fullName ?? ''),state:'ERROR',message:'Profile sections must contain valid JSON'}); }
     const r = rowSchema.safeParse({...raw,records});
     if (!r.success) return void results.push({ line, fullName: String(raw.fullName ?? ''), state: 'ERROR', message: r.error.issues[0]?.message ?? 'Row is not valid' });
     const d = r.data;
-    const singles = new Set<string>();
-    for (const record of d.records ?? []) {
-      const cleaned = cleanData(record.section,record.data);
-      if (!writable.includes(record.section) || !cleaned || record.data.relatedPersonId || record.data.spousePersonId || record.data.orgUnitId
-        || (['BAPTISM','MARRIAGE'].includes(record.section) && singles.has(record.section))) {
-        return void results.push({line,fullName:d.fullName,state:'ERROR',message:'Invalid or unauthorized profile section; use names for family/spouse and record unit links individually'});
-      }
-      singles.add(record.section);
-      record.data = cleaned;
-    }
+    try { d.records = cleanRegistrationRecords(d.records ?? [], writable); }
+    catch (error) { return void results.push({line,fullName:d.fullName,state:'ERROR',message:(error as Error).message}); }
+    const nationalId = normaliseNationalId(d.nationalId);
+    if (nationalId && nationalIds.has(nationalId)) return void results.push({line,fullName:d.fullName,state:'DUPLICATE',message:'National ID is already registered; ask Central Administration to review'});
     const key = { name: normaliseName(d.fullName), dob: d.dateOfBirth ?? '', phone: normalisePhone(d.phone) };
     const same = seen.filter((p) => p.name === key.name && ((!!key.dob && p.dob === key.dob) || (!!key.phone && p.phone === key.phone) || (!key.dob && !key.phone)));
     if (same.length) return void results.push({ line, fullName: d.fullName, state: 'DUPLICATE', ...(global ? {matches: same.slice(0, 3).map((p) => p.label)} : {message:'Possible duplicate; ask Central Administration to review'}) });
     seen.push({ ...key, label: `${d.fullName} (this file, line ${line})` });
+    if (nationalId) nationalIds.add(nationalId);
     toCreate.push(d);
     results.push({ line, fullName: d.fullName, state: 'OK' });
   });
@@ -95,6 +90,8 @@ peopleToolsRouter.post('/import', requireAuth, async (req: AuthedRequest, res) =
         id: `p-${crypto.randomUUID().slice(0, 8)}`,
         memberCode: await nextMemberCode(tx as unknown as typeof prisma),
         fullName: d.fullName,
+        preferredName: d.preferredName || undefined,
+        nationalId: d.nationalId || undefined,
         phone: d.phone || undefined,
         email: d.email || undefined,
         dateOfBirth: d.dateOfBirth || undefined,

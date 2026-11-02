@@ -1,10 +1,15 @@
 import { useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import { importPeople, type ImportResult } from '../api/frontDoorApi';
+import { fetchRegistrationOptions } from '../api/personRegistrationApi';
+import { useLoad } from './useLoad';
+import { peopleImportTemplate, PROFILE_COLUMNS } from './personRegistration';
+import { SECTION_ORDER, sectionKey } from './person360';
 import { TextAreaField } from '../components/ui/Field';
 import { useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
-import { mapImport, parseCsv } from './peopleTools';
+import { parseCsv } from './peopleTools';
+import { mapImport } from './peopleImportMapping';
 import { EmptyState, PageHeader, StatusChip } from './kit';
 import { useCanWritePeople } from './usePeopleAccess';
 
@@ -13,12 +18,17 @@ export function PeopleImportPage() {
   const t = useT();
   const { systemId = '' } = useParams();
   const canWrite = useCanWritePeople();
+  const options = useLoad(()=>canWrite ? fetchRegistrationOptions(systemId) : Promise.resolve({write:[]}), 'registration-options|'+systemId+'|'+canWrite);
   const [text, setText] = useState('');
   const [preview, setPreview] = useState<ImportResult | null>(null);
   const [done, setDone] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [unknown, setUnknown] = useState<string[]>([]);
   const [busy, setBusy] = useState(false);
+  const template = () => {
+    const url=URL.createObjectURL(new Blob([peopleImportTemplate(options.data?.write ?? [])],{type:'text/csv;charset=utf-8'}));
+    const link=document.createElement('a'); link.href=url; link.download='person-360-template.csv'; link.click(); setTimeout(()=>URL.revokeObjectURL(url),5000);
+  };
   if (!canWrite) return <EmptyState variant="error" title={t('door.block.noAccessTitle')} />;
 
   const run = async (commit: boolean) => {
@@ -63,6 +73,9 @@ export function PeopleImportPage() {
         <>
           <div className="panel door-form">
             <p className="muted">{t('door.people.import.help')}</p>
+            <button type="button" className="btn ghost" disabled={options.loading || !!options.failed || !options.data} onClick={template}>{t('door.import.template')}</button>
+            {options.failed && <p className="door-error" role="alert">{t('door.people.actionFailed')} <button type="button" onClick={options.reload}>{t('door.people.retry')}</button></p>}
+            <details><summary>{t('door.people.import.profileColumns')}</summary>{SECTION_ORDER.filter(section=>options.data?.write.includes(section)).map(section=><div key={section}><h4>{t(sectionKey(section))}</h4><ul>{PROFILE_COLUMNS.filter(column=>column.section===section).map(column=><li key={column.key}>{column.header}{column.field.options?.length ? `: ${column.field.options.join(', ')}` : ''}</li>)}</ul></div>)}</details>
             <input type="file" accept=".csv,text/csv" aria-label={t('door.people.import.file')} onChange={(e) => void onFile(e.target.files?.[0])} />
             <TextAreaField label={t('door.people.import.paste')} name="imp-text" rows={8} value={text} onChange={(e) => { setText(e.target.value); setPreview(null); }} />
             {unknown.length > 0 && <p className="muted">{t('door.people.import.unknown', { columns: unknown.join(', ') })}</p>}

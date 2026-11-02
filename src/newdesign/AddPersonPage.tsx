@@ -1,8 +1,13 @@
 import { useState, type FormEvent } from 'react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import { createPerson, type NewPerson } from '../api/frontDoorApi';
+import { fetchRegistrationOptions } from '../api/personRegistrationApi';
 import { ApiError } from '../api/client';
-import { TextField } from '../components/ui/Field';
+import { SelectField, TextField } from '../components/ui/Field';
+import { PersonRegistrationSections, type RegistrationRecord } from './PersonRegistrationSections';
+import { formData, sectionKey } from './person360';
+import { useLoad } from './useLoad';
+import { LoadState } from './LoadState';
 import { useT } from '../i18n/I18nContext';
 import { useCanWritePeople } from './usePeopleAccess';
 import { PageHeader } from './kit';
@@ -15,7 +20,10 @@ export function AddPersonPage() {
   const navigate = useNavigate();
   const canWrite = useCanWritePeople();
   const base = `/s/${systemId}/people`;
-  const [form, setForm] = useState({ fullName: '', phone: '', email: '', dateOfBirth: '', nationalId: '' });
+  const [form, setForm] = useState({ fullName: '', preferredName:'', phone: '', email: '', dateOfBirth: '', nationalId: '', gender:'', address:'', joinedChurchOn:'' });
+  const [status,setStatus] = useState<NonNullable<NewPerson['status']>>('ACTIVE');
+  const [records,setRecords] = useState<RegistrationRecord[]>([]);
+  const options = useLoad(()=>canWrite ? fetchRegistrationOptions(systemId) : Promise.resolve({write:[]}), 'registration-options|'+systemId+'|'+canWrite);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [candidates, setCandidates] = useState<Candidate[]>([]);
@@ -30,8 +38,13 @@ export function AddPersonPage() {
     }
     setBusy(true);
     setError('');
-    const body: NewPerson = { fullName: form.fullName.trim(), confirmDuplicate, ...(systemId && systemId !== 'sys-main' ? { systemId } : {}) };
-    for (const k of ['phone', 'email', 'dateOfBirth', 'nationalId'] as const) {
+    const body: NewPerson = { fullName: form.fullName.trim(), status, confirmDuplicate, records:[], ...(systemId && systemId !== 'sys-main' ? { systemId } : {}) };
+    for (const record of records) {
+      const data = formData(record.section,record.values);
+      if (!data) { setBusy(false); return setError(`${t(sectionKey(record.section))}: ${t('door.p360.err.input')}`); }
+      body.records!.push({section:record.section,data});
+    }
+    for (const k of ['preferredName','phone', 'email', 'dateOfBirth', 'nationalId','gender','address','joinedChurchOn'] as const) {
       if (form[k].trim()) body[k] = form[k].trim();
     }
     try {
@@ -61,16 +74,24 @@ export function AddPersonPage() {
       <PageHeader title={t('door.people.form.title')} />
       <form className="panel door-form" onSubmit={onSubmit} noValidate>
         <TextField label={t('door.people.form.fullName')} name="fullName" value={form.fullName} onChange={set('fullName')} required />
+        <TextField label={t('door.people.form.preferredName')} name="preferredName" value={form.preferredName} onChange={set('preferredName')} />
         <TextField label={t('door.people.form.phone')} name="phone" type="tel" value={form.phone} onChange={set('phone')} />
         <TextField label={t('door.people.form.email')} name="email" type="email" value={form.email} onChange={set('email')} />
         <TextField label={t('door.people.form.dateOfBirth')} name="dateOfBirth" type="date" value={form.dateOfBirth} onChange={set('dateOfBirth')} />
         <TextField label={t('door.people.form.nationalId')} name="nationalId" value={form.nationalId} onChange={set('nationalId')} />
+        <SelectField label={t('door.p360.f.gender')} name="gender" value={form.gender} onChange={set('gender')}><option value="">{t('door.gov.meeting.choose')}</option>{['MALE','FEMALE'].map(value=><option key={value} value={value}>{t(`door.p360.v.${value}` as 'door.p360.v.MALE')}</option>)}</SelectField>
+        <TextField label={t('door.p360.f.address')} name="address" value={form.address} onChange={set('address')} />
+        <TextField label={t('door.p360.f.joinedChurchOn')} name="joinedChurchOn" type="date" value={form.joinedChurchOn} onChange={set('joinedChurchOn')} />
+        <SelectField label={t('door.people.statusFilter')} name="status" value={status} onChange={event=>setStatus(event.target.value as typeof status)}>{(['ACTIVE','INACTIVE','VISITOR'] as const).map(value=><option key={value} value={value}>{t(`door.status.${value}` as 'door.status.ACTIVE')}</option>)}</SelectField>
+        <LoadState loading={options.loading} failed={options.failed} retry={options.reload}>
+          <PersonRegistrationSections write={options.data?.write ?? []} records={records} onChange={setRecords} />
+        </LoadState>
         {error && (
           <p className="door-error" role="alert">
             {error}
           </p>
         )}
-        <button type="submit" className="btn" disabled={busy}>
+        <button type="submit" className="btn" disabled={busy || options.loading || !!options.failed}>
           {busy ? t('door.people.form.saving') : t('door.people.form.save')}
         </button>
       </form>

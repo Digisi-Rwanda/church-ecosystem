@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { DirectoryPerson } from '../api/frontDoorApi';
-import { mapImport, parseCsv, peopleToCsv } from './peopleTools';
+import { parseCsv, peopleToCsv } from './peopleTools';
+import { mapImport } from './peopleImportMapping';
 
 describe('CSV reading', () => {
   it('reads quotes, commas inside cells, semicolons and blank lines', () => {
