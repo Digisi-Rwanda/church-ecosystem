@@ -1,3 +1,4 @@
+import { isChiefAdministrator, managedSystems, mayManageAppointment } from '../lib/administratorScope.js';
 /**
  * Access by letters (slice 1.3): appointments, vacancies, delegation, the audit trail
  * and the access explainer. Every answer comes from the letters engine, so what the
@@ -106,11 +107,14 @@ const own = (hs: Holding[], office: OfficeCode) => hs.some((h) => h.via === 'OFF
 
 /** What the signed-in person may do on this page, from their own live offices. */
 function powers(hs: Holding[]) {
-  const admin = own(hs, 'ADMINISTRATOR');
+  const admin = isChiefAdministrator(hs);
+  const systems = managedSystems(hs);
   return {
     // Offices are voted in real life; the system only records who holds them.
     // Administrators assign every office (the Church Leader's too) and reassign it when it changes hands.
-    canAppoint: admin,
+    canAppoint: admin || systems.length > 0,
+    isChiefAdministrator: admin,
+    managedSystemIds: systems,
     canAppointLeader: admin,
     canReadAppointments: admin || hs.some((h) => (h.letters.PEOPLE?.length ?? 0) > 0),
     // The Access page, the rule matrix and the audit trail are Administrator-only, here as on screen.
@@ -269,11 +273,11 @@ accessRouter.get('/appointments', requireAuth, async (req: AuthedRequest, res) =
     return inSystem.find((u) => !u.parentId) ?? inSystem.find((u) => unitKindOf(u) !== 'TEAM') ?? inSystem[0];
   };
   // Firm walls: an Administrator or the Church Leader see every appointment; anyone else only their own systems'.
-  const reach = pw.canAppoint ? null : reachableSystems(req.auth!.personId, data, now);
+  const reach = pw.isChiefAdministrator ? null : pw.managedSystemIds.length ? new Set(pw.managedSystemIds) : reachableSystems(req.auth!.personId, data, now);
   const sysOfPos = (p: PositionRec) => p.systemId ?? (p.orgUnitId ? byId.get(p.orgUnitId)?.systemId : null) ?? 'sys-main';
   // Leaders of one system: its own offices only. Central names every leader of the church.
   const named = typeof req.query.systemId === 'string' ? req.query.systemId : '';
-  if (named && !pw.canAppoint && !mayReadPeople(req.auth!.personId, named, data, now)) return fail(res, 403, 'NOT_ALLOWED', 'You may not see the leaders of this system');
+  if (named && !pw.isChiefAdministrator && !mayReadPeople(req.auth!.personId, named, data, now)) return fail(res, 403, 'NOT_ALLOWED', 'You may not see the leaders of this system');
   const rows = data.positions.filter(
     (p) =>
       officeOf(p) && (includeEnded || isLive(p, now)) && (!unitId || unitFor(p)?.id === unitId) && (reach === null || reach.has(sysOfPos(p))) &&
@@ -308,6 +312,7 @@ accessRouter.post('/appointments', requireAuth, async (req: AuthedRequest, res) 
   if (!pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only an Administrator assigns offices');
   const unit = units.find((u) => u.id === d.orgUnitId);
   if (!unit) return fail(res, 404, 'UNIT_NOT_FOUND', 'Unit not found');
+  if (!mayManageAppointment(liveHoldings(me, data, now), unit.systemId, d.office)) return fail(res, 403, 'NOT_ALLOWED', 'You may only manage President, Secretary and Treasurer in your assigned system');
   const person = (await prisma.person.findUnique({ where: { id: d.personId } })) as
     | { id: string; fullName: string; status: string; archivedAt?: Date | null }
     | null;
@@ -381,13 +386,14 @@ accessRouter.post('/appointments/:id/end', requireAuth, async (req: AuthedReques
   const id = pathParam(req, 'id')!;
   const me = req.auth!.personId;
   const now = new Date();
-  const { data } = await load();
+  const { data, units } = await load();
   const pos = data.positions.find((p) => p.id === id);
   const office = pos ? officeOf(pos) : null;
   if (!pos || !office) return fail(res, 404, 'NOT_FOUND', 'Appointment not found');
   if (pos.status !== 'ACTIVE' || !isLive(pos, now)) return fail(res, 409, 'ALREADY_ENDED', 'This appointment has already ended');
   const pw = powers(liveHoldings(me, data, now));
   if (!pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only an Administrator ends appointments');
+  if (!mayManageAppointment(liveHoldings(me, data, now), pos.systemId ?? units.find(u => u.id === pos.orgUnitId)?.systemId, office)) return fail(res, 403, 'NOT_ALLOWED', 'This appointment is outside your administration scope');
   if (pos.personId === me) return fail(res, 403, 'CANNOT_END_OWN_OFFICE', 'You cannot end your own appointment');
   if (office === 'ADMINISTRATOR' && countLiveAdministrators(data.positions, now, id) < MIN_ADMINISTRATORS) {
     return fail(res, 409, 'NEEDS_TWO_ADMINISTRATORS', `The church keeps at least ${MIN_ADMINISTRATORS} Administrators. Appoint another first.`);
@@ -426,13 +432,14 @@ accessRouter.post('/appointments/:id/term', requireAuth, async (req: AuthedReque
   const id = pathParam(req, 'id')!;
   const me = req.auth!.personId;
   const now = new Date();
-  const { data } = await load();
+  const { data, units } = await load();
   const pos = data.positions.find((p) => p.id === id);
   const office = pos ? officeOf(pos) : null;
   if (!pos || !office) return fail(res, 404, 'NOT_FOUND', 'Appointment not found');
   if (!isLive(pos, now)) return fail(res, 409, 'ALREADY_ENDED', 'This appointment has already ended');
   const pw = powers(liveHoldings(me, data, now));
   if (!pw.canAppoint) return fail(res, 403, 'NOT_ALLOWED', 'Only an Administrator sets terms');
+  if (!mayManageAppointment(liveHoldings(me, data, now), pos.systemId ?? units.find(u => u.id === pos.orgUnitId)?.systemId, office)) return fail(res, 403, 'NOT_ALLOWED', 'This appointment is outside your administration scope');
   const end = parsed.data.endDate ? new Date(parsed.data.endDate) : null;
   if (end && (Number.isNaN(end.getTime()) || end <= now)) return fail(res, 400, 'BAD_DATES', 'A term must end in the future; to end it now, end the appointment');
   await prisma.position.update({ where: { id }, data: { endDate: end } });
@@ -452,7 +459,7 @@ accessRouter.get('/vacancies', requireAuth, async (req: AuthedRequest, res) => {
   const pw = powers(liveHoldings(req.auth!.personId, data, now));
   if (!pw.canReadAppointments) return fail(res, 403, 'NOT_ALLOWED', 'You may not see vacancies');
   const all = computeVacancies(units, data.positions, now, (await loadSettings())['access.termReminderDays']);
-  const reach = pw.canAppoint ? null : reachableSystems(req.auth!.personId, data, now);
+  const reach = pw.isChiefAdministrator ? null : pw.managedSystemIds.length ? new Set(pw.managedSystemIds) : reachableSystems(req.auth!.personId, data, now);
   const unitSys = (id: string) => units.find((u) => u.id === id)?.systemId ?? 'sys-main';
   const named = typeof req.query.systemId === 'string' ? req.query.systemId : '';
   const mine = (s: string) => (reach === null || reach.has(s)) && (!named || named === 'sys-main' || s === named);
@@ -532,7 +539,7 @@ accessRouter.post('/delegations', requireAuth, async (req: AuthedRequest, res) =
   if (!pos || !office || pos.personId !== me || !isLive(pos, now)) {
     return fail(res, 403, 'NOT_YOUR_OFFICE', 'You can lend letters only from an office you hold now');
   }
-  if (office === 'ADMINISTRATOR') return fail(res, 403, 'NOT_DELEGABLE', 'Administrators’ duties are personal and cannot be lent');
+  if (office === 'ADMINISTRATOR' || office === 'SYSTEM_ADMINISTRATOR') return fail(res, 403, 'NOT_DELEGABLE', 'Administrators’ duties are personal and cannot be lent');
   if (d.toPersonId === me) return fail(res, 400, 'SELF', 'Choose someone else');
   const to = (await prisma.person.findUnique({ where: { id: d.toPersonId } })) as
     | { id: string; fullName: string; status: string; archivedAt?: Date | null }

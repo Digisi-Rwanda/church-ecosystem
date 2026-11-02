@@ -8,6 +8,15 @@ const row = (id: string, office: AppointmentRow['office'], unit: string): Appoin
 });
 
 describe('officesFor', () => {
+  it('limits a system administrator to the three delegated leadership offices', () => {
+    expect(officesFor('TEAM','sys-choir-grace',true,false,true)).toEqual(['PRESIDENT','SECRETARY','TREASURER']);
+    expect(officesFor('MINISTRY','sys-youth',true,false,true)).toEqual(['PRESIDENT','SECRETARY','TREASURER']);
+  });
+  it('offers choir officers for existing TEAM choir units without widening other teams', () => {
+    expect(officesFor('TEAM', 'sys-choir-grace', true, true)).toEqual(['PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY', 'TREASURER', 'COORDINATOR', 'SYSTEM_ADMINISTRATOR']);
+    expect(officesFor('TEAM', 'sys-protocol', true, true)).toEqual(['COORDINATOR', 'SECRETARY', 'SYSTEM_ADMINISTRATOR']);
+    expect(officesFor('TEAM', 'sys-choir-grace', false, false)).toEqual([]);
+  });
   it('lets the Church Leader fill unit offices but not their own seat', () => {
     expect(officesFor('MINISTRY', 'sys-choir', true, false)).toEqual(['PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY', 'TREASURER', 'COORDINATOR']);
     expect(officesFor('CENTRAL', 'sys-main', true, false)).toEqual(['CATECHIST', 'CHURCH_SECRETARY', 'PASTOR', 'CHURCH_TREASURER']);

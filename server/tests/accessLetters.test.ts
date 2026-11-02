@@ -232,6 +232,54 @@ const caps = async (as: string, sys: string) => {
 };
 
 describe('appointments', () => {
+  const systemAdmin = () => {
+    fake.__db.position.push({id:'system-admin',personId:'p-new',office:'SYSTEM_ADMINISTRATOR',systemId:'sys-choir',orgUnitId:'ou-choir',status:'ACTIVE',startDate:'2020-01-01'});
+  };
+  it('a chief appoints a system administrator without giving legacy church-wide admin access', async () => {
+    const r = await appoint('p-admin1', { personId:'p-new', orgUnitId:'ou-choir', office:'SYSTEM_ADMINISTRATOR' });
+    expect(r.status, JSON.stringify(r.body)).toBe(201);
+    expect(r.body.appointment).toMatchObject({office:'SYSTEM_ADMINISTRATOR',systemId:'sys-choir',systemAdmin:false});
+  });
+  it('system administrators appoint officers in their own system only', async () => {
+    systemAdmin();
+    expect((await appoint('p-new',{personId:'p-vp',orgUnitId:'ou-choir',office:'SECRETARY'})).status).toBe(201);
+    expect((await appoint('p-new',{personId:'p-vp',orgUnitId:'ou-youth',office:'SECRETARY'})).status).toBe(403);
+    for (const office of ['SYSTEM_ADMINISTRATOR','ADMINISTRATOR','CHURCH_LEADER','VICE_PRESIDENT']) {
+      expect((await appoint('p-new',{personId:'p-vp',orgUnitId:office === 'ADMINISTRATOR' ? 'ou-media' : 'ou-choir',office})).status).toBe(403);
+    }
+  });
+  it('a choir system administrator can fill all three offices on an existing TEAM choir unit', async () => {
+    fake.__db.orgUnit.push({id:'ou-grace',name:'Grace',kind:'TEAM',systemId:'sys-choir-grace'});
+    fake.__db.position.push({id:'grace-admin',personId:'p-new',office:'SYSTEM_ADMINISTRATOR',orgUnitId:'ou-grace',systemId:'sys-choir-grace',status:'ACTIVE',startDate:'2020-01-01'});
+    for (const [office, personId] of [['PRESIDENT','p-vp'],['SECRETARY','p-admin1'],['TREASURER','p-admin2']]) {
+      const r = await appoint('p-new', {personId,orgUnitId:'ou-grace',office});
+      expect(r.status,JSON.stringify(r.body)).toBe(201);
+    }
+    expect((await request(app).get('/api/admin/overview').set(bearer('p-new'))).status).toBe(403);
+  });
+  it('system administrators can manage terms and end their own system officers but not other systems or administrators', async () => {
+    systemAdmin();
+    const own = await appoint('p-admin1',{personId:'p-vp',orgUnitId:'ou-choir',office:'SECRETARY'});
+    const other = await appoint('p-admin1',{personId:'p-vp',orgUnitId:'ou-youth',office:'SECRETARY'});
+    const changeTerm = (id: string) => request(app).post(`/api/access/appointments/${id}/term`).set(bearer('p-new')).send({endDate:'2099-01-01'});
+    const end = (id: string) => request(app).post(`/api/access/appointments/${id}/end`).set(bearer('p-new')).send({reason:'Term completed'});
+    expect((await changeTerm(own.body.appointment.id)).status).toBe(200);
+    expect((await changeTerm(other.body.appointment.id)).status).toBe(403);
+    expect((await end(other.body.appointment.id)).status).toBe(403);
+    expect((await end('pos-ad1')).status).toBe(403);
+    expect((await end('system-admin')).status).toBe(403);
+    expect((await end(own.body.appointment.id)).status).toBe(200);
+  });
+  it('system administrator appointment listings stay in their assigned system and expire with the office', async () => {
+    systemAdmin();
+    const listing = await request(app).get('/api/access/appointments').set(bearer('p-new'));
+    expect(listing.status).toBe(200);
+    expect(listing.body.isChiefAdministrator).toBe(false);
+    expect(listing.body.managedSystemIds).toEqual(['sys-choir']);
+    expect(listing.body.appointments.every((row: any) => row.systemId === 'sys-choir')).toBe(true);
+    fake.__db.position.find((p: any) => p.id === 'system-admin').status = 'ENDED';
+    expect((await appoint('p-new',{personId:'p-vp',orgUnitId:'ou-choir',office:'SECRETARY'})).status).toBe(403);
+  });
   it('need sign-in, and only an Administrator assigns offices', async () => {
     expect((await request(app).post('/api/access/appointments').send({})).status).toBe(401);
     const r = await appoint('p-choir-leader', { personId: 'p-new', orgUnitId: 'ou-choir', office: 'SECRETARY' });

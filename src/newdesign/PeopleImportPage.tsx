@@ -29,7 +29,7 @@ export function PeopleImportPage() {
     if (m.rows.length > 500) return setError(t('door.people.import.tooMany'));
     setBusy(true);
     try {
-      const r = await importPeople(m.rows, commit);
+      const r = await importPeople(m.rows, commit, systemId);
       setPreview(r);
       if (commit) setDone(r.created ?? 0);
     } catch (err) {

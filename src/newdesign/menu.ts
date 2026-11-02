@@ -112,6 +112,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
           ...(admin ? [place('access', 'people/access', 'door.people.tab.access'), place('admin', 'people/admin', 'door.people.tab.admin')] : []),
           ...some(['groups', 'couples', 'contacts', 'visits', 'moves'].map(ownPlace)),
         ]
+      : admin ? [place('appointments', 'people/appointments', 'door.people.tab.appointments'), place('access', 'people/access', 'door.people.tab.access'), place('admin', 'people/admin', 'door.people.tab.admin')]
       : some(['groups', 'couples', 'contacts', 'visits', 'moves'].map(ownPlace)),
     work: shared.has('work')
       ? [

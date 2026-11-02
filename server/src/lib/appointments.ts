@@ -3,9 +3,9 @@
  * The pure parts are separate from the database so every rule can be tested alone.
  */
 import {
-  OFFICES_BY_KIND,
+  officesForUnit,
   OFFICE_SCOPE,
-  REQUIRED_OFFICES,
+  requiredOfficesForUnit,
   SOLE_OFFICES,
   TERM_ENDING_SOON_DAYS,
 } from '../shared/accessMatrix.js';
@@ -84,8 +84,9 @@ export function findClash(
 
 /** May this office be held in a unit of this kind? Administrators sit in the Media system. */
 export function officeFitsUnit(office: OfficeCode, unit: UnitRec): boolean {
+  if (office === 'SYSTEM_ADMINISTRATOR') return !!unit.systemId;
   if (office === 'ADMINISTRATOR') return unit.systemId === 'sys-media';
-  return (OFFICES_BY_KIND[unitKindOf(unit)] as readonly OfficeCode[]).includes(office);
+  return officesForUnit(unitKindOf(unit), unit.systemId).includes(office);
 }
 
 export interface Vacancy {
@@ -120,7 +121,7 @@ export function computeVacancies(
   for (const u of units) {
     const kind = unitKindOf(u);
     const place = u.id;
-    for (const office of REQUIRED_OFFICES[kind]) {
+    for (const office of requiredOfficesForUnit(kind, u.systemId)) {
       const holders = positions.filter(
         (p) =>
           isLive(p, now) &&

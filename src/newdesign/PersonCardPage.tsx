@@ -34,7 +34,7 @@ export function PersonCardPage() {
     return { person, belonging: belongingOf(personId, structure, today()), p360 };
   }, `person|${personId}`);
 
-  if (p360.data?.allowed && (p360.data.leader || !p360.data.write.includes('CONTACT'))) return <Navigate replace to={`${base}/${personId}/360`} />;
+  if (p360.data?.allowed && (p360.data.leader || !p360.data.write.includes('CONTACT') || data?.p360?.write.includes('MARRIAGE'))) return <Navigate replace to={`${base}/${personId}/360`} />;
   return (
     <div className="door-block">
       <Link className="btn ghost sm door-back" to={base}>

@@ -2,7 +2,7 @@
  * Person 360 (slice 3.6): what each church-wide office may read and write about a person.
  * Church Leader reads and writes everything. Catechist records baptism. Church Secretary records the
  * everyday facts (contact, work, education, callings, family). Marriage is the Church Leader's alone.
- * Presidents and other unit offices never reach Person 360: it is church-wide.
+ * Unit President, Vice President and Secretary may record all sections for their own people.
  */
 import { liveHoldings, type AccessData } from '../capabilities/engine.js';
 import { z } from 'zod';
@@ -26,7 +26,13 @@ export const SINGLE: Section[] = ['BAPTISM', 'MARRIAGE'];
 
 export interface Access { read: Section[]; write: Section[]; leader: boolean }
 
-export function accessFor(me: string, data: AccessData, now = new Date()): Access {
+export function accessFor(me: string, data: AccessData, now = new Date(), scopedUnit = false): Access {
+  // Only routes that enforce unit-member checks may opt into this authority.
+  if (scopedUnit && liveHoldings(me, data, now).some(h => h.via === 'OFFICE' && h.scope === 'UNIT'
+    && ['PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY'].includes(h.office ?? '') && h.letters.PERSON_360?.includes('W'))) {
+    const church = accessFor(me, data, now);
+    return {read: [...SECTIONS], write: [...SECTIONS], leader: church.leader};
+  }
   const held = liveHoldings(me, data, now).filter((h) => h.scope === 'CHURCH' && (h.letters.PERSON_360 as string[] | undefined)?.includes('R'));
   const offices = (write: boolean) =>
     new Set(held.filter((h) => !write || (h.letters.PERSON_360 as string[]).includes('W')).map((h) => h.office as string));

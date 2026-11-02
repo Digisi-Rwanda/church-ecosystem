@@ -1,11 +1,13 @@
-import { OFFICES_BY_KIND, OFFICE_SCOPE } from '../../server/src/shared/accessMatrix';
+import { officesForUnit, OFFICE_SCOPE } from '../../server/src/shared/accessMatrix';
 import type { AccessLetter, OfficeCode, UnitKind } from '../../server/src/shared/vocabulary';
 import type { AppointmentRow, UnitRecord, Vacancy } from '../api/frontDoorApi';
 
 /** The offices a unit of this kind can hold, in the order the form lists them. Administrators are appointed in Media only. */
-export function officesFor(kind: UnitKind, systemId: string | null | undefined, isLeader: boolean, isAdministrator: boolean): OfficeCode[] {
-  const list: OfficeCode[] = [...OFFICES_BY_KIND[kind]];
+export function officesFor(kind: UnitKind, systemId: string | null | undefined, isLeader: boolean, isAdministrator: boolean, systemAdministrator = false): OfficeCode[] {
+  const list: OfficeCode[] = [...officesForUnit(kind, systemId)];
   if (systemId === 'sys-media') list.push('ADMINISTRATOR');
+  if (systemId && isAdministrator) list.push('SYSTEM_ADMINISTRATOR');
+  if (systemAdministrator) return list.filter(o => ['PRESIDENT', 'SECRETARY', 'TREASURER'].includes(o));
   // Offices are voted in real life: only Administrators assign them, the Church Leader's seat included.
   return list.filter((o) => (o === 'CHURCH_LEADER' ? isAdministrator : isLeader));
 }

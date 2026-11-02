@@ -14,6 +14,7 @@ import { searchPeople, type PeopleSearch } from '../people/search.js';
 import { FilterError, MatchSchema, PageSchema, SortSchema, schemaFor } from '../filters/index.js';
 import { SECTORS } from '../person360/rules.js';
 import { CENTRAL, isAdministrator, mayReadPeople, peopleOfSystem, subtreeUnitIds } from '../lib/peopleScope.js';
+import { unitPeopleIds } from '../lib/unitPeople.js';
 import {
   pathParam,
   requireAuth,
@@ -303,6 +304,8 @@ peopleRouter.get('/:id', requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   let tier = await tierOf(req.auth!.personId, id);
+  const {data: viewerAccess} = await loadAccessData(req.auth!.personId);
+  if (unitPeopleIds(req.auth!.personId, viewerAccess, await prisma.orgUnit.findMany()).has(id) && tier !== 'FULL') tier = 'BASIC';
   // Someone who may list a person in their own system (a unit's treasurer, secretary...) may open that person's names-only card.
   if (tier === 'NONE' && id !== req.auth!.personId) {
     const scope = await peopleScopeFor(req.auth!.personId, '', false);
@@ -378,7 +381,10 @@ peopleRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   const actor = req.auth!.personId;
-  const tier = await tierOf(actor, id);
+  const {data: actorAccess} = await loadAccessData(actor);
+  const unitEditor = unitPeopleIds(actor, actorAccess, await prisma.orgUnit.findMany()).has(id);
+  if (unitEditor && (await prisma.person.findUnique({where:{id}}))?.archivedAt) return res.status(409).json({error:'This person is archived',code:'PERSON_ARCHIVED'});
+  const tier = unitEditor ? 'FULL' : await tierOf(actor, id);
   if (req.body && typeof req.body === 'object' && 'memberCode' in req.body) {
     res.status(400).json({ error: 'A member code never changes', code: 'CODE_IS_FIXED' });
     return;
@@ -397,7 +403,7 @@ peopleRouter.patch('/:id', requireAuth, async (req: AuthedRequest, res) => {
       resource: 'PERSON',
       action: 'MANAGE',
     });
-    if (!gate.allowed) {
+    if (!gate.allowed && !unitEditor) {
       res.status(403).json({ error: gate.reason });
       return;
     }
@@ -495,6 +501,7 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   const home = from === CENTRAL ? null : ((await prisma.churchSystem.findUnique({ where: { id: from } })) as { orgUnitId?: string | null } | null)?.orgUnitId ?? null;
+  if (from !== CENTRAL && !home) return res.status(400).json({error:'The system needs an organizational unit before registering people',code:'BAD_INPUT'});
   const id = parsed.data.id ?? `p-${crypto.randomUUID().slice(0, 8)}`;
   if (await prisma.person.findUnique({ where: { id } })) {
     res.status(409).json({ error: 'A person with this id already exists' });
@@ -502,16 +509,17 @@ peopleRouter.post('/', requireAuth, async (req: AuthedRequest, res) => {
   }
   const twin = await personWithNationalId(prisma, parsed.data.nationalId);
   if (twin) {
-    res.status(409).json({ error: 'This national ID is already registered', code: 'DUPLICATE_NATIONAL_ID', personId: twin.id });
+    res.status(409).json({ error: 'This national ID is already registered', code: 'DUPLICATE_NATIONAL_ID', ...(gate.allowed ? {personId:twin.id} : {}) });
     return;
   }
   if (!parsed.data.confirmDuplicate) {
     const maybe = await possibleDuplicates(prisma, parsed.data);
     if (maybe.length) {
+      const ownIds = gate.allowed ? null : unitPeopleIds(me, access, await prisma.orgUnit.findMany());
       res.status(409).json({
         error: 'Someone with this name may already be registered. Check before adding.',
         code: 'POSSIBLE_DUPLICATE',
-        candidates: maybe.map((p) => ({ id: p.id, fullName: p.fullName, memberCode: p.memberCode ?? null })),
+        candidates: maybe.filter(p => ownIds === null || ownIds.has(p.id)).map((p) => ({ id: p.id, fullName: p.fullName, memberCode: p.memberCode ?? null })),
       });
       return;
     }

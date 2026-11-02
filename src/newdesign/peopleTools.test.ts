@@ -11,6 +11,12 @@ describe('CSV reading', () => {
 });
 
 describe('import mapping', () => {
+  it('preserves quoted JSON section cells, including baptism and marriage', () => {
+    const csv = 'fullName,BAPTISM,MARRIAGE\nExample,"{""date"":""2020-05-03""}","{""date"":""2021-06-12"",""spouseName"":""Example Spouse""}"';
+    const result = mapImport(parseCsv(csv));
+    expect(result.unknown).toEqual([]);
+    expect(result.rows).toEqual([{fullName:'Example',BAPTISM:'{"date":"2020-05-03"}',MARRIAGE:'{"date":"2021-06-12","spouseName":"Example Spouse"}'}]);
+  });
   it('knows common headings in English, Kinyarwanda and French and reports the rest', () => {
     const m = mapImport(parseCsv('Izina,Tel,Sex,Colour\nAline,0788,F\nSam,,gabo'));
     expect(m.hasName).toBe(true);

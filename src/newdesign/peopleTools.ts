@@ -35,9 +35,10 @@ export function parseCsv(text: string): string[][] {
 }
 
 /** The columns the import understands, with the headings people tend to use for them. */
-export const IMPORT_FIELDS = ['fullName', 'phone', 'email', 'dateOfBirth', 'gender', 'status', 'joinedChurchOn', 'address'] as const;
+export const IMPORT_FIELDS = ['fullName', 'phone', 'email', 'dateOfBirth', 'gender', 'status', 'joinedChurchOn', 'address', 'CONTACT', 'EMPLOYMENT', 'EDUCATION', 'CALLING', 'FAMILY', 'BAPTISM', 'MARRIAGE'] as const;
 export type ImportField = (typeof IMPORT_FIELDS)[number];
 const ALIASES: Record<ImportField, string[]> = {
+  CONTACT: [], EMPLOYMENT: [], EDUCATION: [], CALLING: [], FAMILY: [], BAPTISM: [], MARRIAGE: [],
   fullName: ['fullname', 'name', 'names', 'izina', 'nom', 'full name'],
   phone: ['phone', 'telephone', 'tel', 'mobile', 'telefoni', 'téléphone'],
   email: ['email', 'e-mail', 'mail'],

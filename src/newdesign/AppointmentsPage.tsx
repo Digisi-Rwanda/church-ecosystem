@@ -40,7 +40,7 @@ export function AppointmentsPage() {
   const [ending, setEnding] = useState<string | null>(null);
   const [message, setMessage] = useState('');
 
-  const units = useMemo(() => data?.structure.units ?? [], [data]);
+  const units = useMemo(() => (data?.structure.units ?? []).filter(u => !data?.list.managedSystemIds?.length || data.list.canAppointLeader || data.list.managedSystemIds.includes(u.systemId ?? '')), [data]);
   const cards = useMemo(() => {
     if (!data) return [];
     const groups = groupByUnit(data.list.appointments, flattenTree(units).map((r) => r.unit));
@@ -52,6 +52,7 @@ export function AppointmentsPage() {
     return out.filter((g, i) => out.findIndex((x) => x.key === g.key) === i && !isHiddenOfficeCard(g.key));
   }, [data, units]);
   const canAct = !!data && (data.list.canAppoint || data.list.canAppointLeader);
+  const canManage = (office: string, targetSystem?: string | null) => !!data && (data.list.canAppointLeader || (data.list.canAppoint && !!targetSystem && !!data.list.managedSystemIds?.includes(targetSystem) && ['PRESIDENT','SECRETARY','TREASURER'].includes(office)));
   const live = data ? data.list.appointments.filter((r) => r.live).length : 0;
   const vacant = data ? data.vac.vacancies.filter((v) => v.reason === 'EMPTY').length : 0;
   const soon = data ? data.list.appointments.filter((r) => r.live && r.endsSoon).length : 0;
@@ -70,6 +71,8 @@ export function AppointmentsPage() {
       <LoadState loading={loading} failed={failed} retry={reload}>
         {data && (
           <>
+            {data.list.canAppointLeader && <p className="panel">{t('door.access.chiefScope')}</p>}
+            {!data.list.canAppointLeader && !!data.list.managedSystemIds?.length && <p className="panel">{t('door.access.systemAdminScope')}</p>}
             <ul className="seat-stats" aria-label={t('door.access.appointments.title')}>
               <li><strong>{live}</strong><span>{t('door.access.stat.leaders')}</span></li>
               <li className={vacant ? 'warn' : ''}><strong>{vacant}</strong><span>{t('door.access.stat.vacant')}</span></li>
@@ -105,7 +108,7 @@ export function AppointmentsPage() {
                               {r.endsSoon && <span className="door-chip warn"> {t('door.access.endsSoon')}</span>}
                             </small>
                           </span>
-                          {r.live && canAct && (r.office === 'CHURCH_LEADER' ? data.list.canAppointLeader : data.list.canAppoint) && (
+                          {r.live && canAct && canManage(r.office, r.systemId) && (
                             <button type="button" className="btn ghost sm" onClick={() => setEnding(ending === r.id ? null : r.id)}>{t('door.access.end')}</button>
                           )}
                           {ending === r.id && (
@@ -120,7 +123,7 @@ export function AppointmentsPage() {
                             <small className="seat-office">{t(`door.office.${v.office}` as const)}</small>
                             <strong>{t('door.access.vacancies.empty')}</strong>
                           </span>
-                          {canAct && <button type="button" className="btn sm" onClick={() => open({ unitId: v.unitId, office: v.office })}>{t('door.access.vacancies.fill')}</button>}
+                          {canManage(v.office, units.find(u => u.id === v.unitId)?.systemId) && <button type="button" className="btn sm" onClick={() => open({ unitId: v.unitId, office: v.office })}>{t('door.access.vacancies.fill')}</button>}
                         </li>
                       ))}
                     </ul>
@@ -191,7 +194,7 @@ function AppointForm({
   const [error, setError] = useState('');
 
   const unit = units.find((u) => u.id === unitId);
-  const offices = unit ? officesFor(unit.kind, unit.systemId, isLeader, isAdministrator) : [];
+  const offices = unit ? officesFor(unit.kind, unit.systemId, isLeader, isAdministrator, isLeader && !isAdministrator) : [];
 
   const search = async () => {
     setError('');

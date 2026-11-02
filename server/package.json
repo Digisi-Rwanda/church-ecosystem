@@ -15,6 +15,8 @@
     "db:generate:pg": "prisma generate --schema=prisma/schema.postgres.prisma",
     "db:push:pg": "prisma db push --schema=prisma/schema.postgres.prisma",
     "db:seed:pg": "tsx prisma/seed.ts",
+    "chief:verify": "tsx scripts/first-chief-administrator.ts",
+    "db:seed:chief": "tsx prisma/seedChiefAdministrator.ts",
     "db:baseline": "node scripts/make-baseline.mjs",
     "people:cleanup": "tsx scripts/remove-gifts-skills-deeds.ts",
     "migrate:pg": "tsx scripts/migrate-deploy.ts",

@@ -32,6 +32,7 @@ export const OFFICE_SCOPE: Record<OfficeCode, 'CHURCH' | 'UNIT'> = {
   PASTOR: 'CHURCH',
   CHURCH_TREASURER: 'CHURCH',
   ADMINISTRATOR: 'CHURCH',
+  SYSTEM_ADMINISTRATOR: 'UNIT',
   PRESIDENT: 'UNIT',
   VICE_PRESIDENT: 'UNIT',
   SECRETARY: 'UNIT',
@@ -45,7 +46,8 @@ export const OFFICE_TITLE: Record<OfficeCode, string> = {
   CHURCH_SECRETARY: 'Church Secretary',
   PASTOR: 'Pastor',
   CHURCH_TREASURER: 'Church Treasurer',
-  ADMINISTRATOR: 'Administrator',
+  ADMINISTRATOR: 'Chief Administrator',
+  SYSTEM_ADMINISTRATOR: 'System Administrator',
   PRESIDENT: 'President',
   VICE_PRESIDENT: 'Vice President',
   SECRETARY: 'Secretary',
@@ -107,9 +109,10 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
   ADMINISTRATOR: {
     COMMUNICATION: ['R', 'W'],
   },
+  SYSTEM_ADMINISTRATOR: { PEOPLE: ['R'] },
   PRESIDENT: {
     PEOPLE: ['R', 'W'],
-    PERSON_360: ['R'],
+    PERSON_360: ['R', 'W'],
     MISSION: ['R', 'W', 'A'],
     SCHEDULING: ['R', 'W', 'C', 'P'],
     MONEY: ['R', 'V', 'A'],
@@ -118,9 +121,8 @@ export const OFFICE_LETTERS: Record<OfficeCode, ModuleLetters> = {
     REPORTS: ['R', 'W', 'P'],
   },
   VICE_PRESIDENT: {
-    // Only the President and the Secretary add and change people in a unit.
-    PEOPLE: ['R'],
-    PERSON_360: ['R'],
+    PEOPLE: ['R', 'W'],
+    PERSON_360: ['R', 'W'],
     MISSION: ['R', 'W'],
     SCHEDULING: ['R', 'W', 'C'],
     MONEY: ['R', 'V'],
@@ -198,6 +200,15 @@ export const OFFICES_BY_KIND: Record<UnitKind, readonly OfficeCode[]> = {
   ORGANISATION: ['PRESIDENT', 'VICE_PRESIDENT', 'SECRETARY', 'TREASURER', 'COORDINATOR'],
   TEAM: ['COORDINATOR', 'SECRETARY'],
 };
+
+/** Named choir workspaces have ministry officers even when their unit is stored as TEAM. */
+export function officesForUnit(kind: UnitKind, systemId?: string | null): readonly OfficeCode[] {
+  return systemId?.startsWith('sys-choir-') ? OFFICES_BY_KIND.MINISTRY : OFFICES_BY_KIND[kind];
+}
+
+export function requiredOfficesForUnit(kind: UnitKind, systemId?: string | null): readonly OfficeCode[] {
+  return systemId?.startsWith('sys-choir-') ? REQUIRED_OFFICES.MINISTRY : REQUIRED_OFFICES[kind];
+}
 
 /** Administrators sit in Media; the church always keeps at least this many. */
 export const MIN_ADMINISTRATORS = 2;

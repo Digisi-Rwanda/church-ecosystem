@@ -22,6 +22,11 @@ const caps: Capabilities = {
 };
 
 describe('menu from capabilities', () => {
+  it('offers the chief administration links without ordinary People permissions', async () => {
+    const {buildModules}=await import('./menu');
+    const chief={...caps,offices:[{id:'chief',systemId:'sys-media',title:'Chief Administrator',code:'ADMINISTRATOR' as const}]};
+    expect(buildModules(chief,'sys-main').find(m=>m.id==='people')?.places.map(p=>p.key)).toEqual(['appointments','access','admin']);
+  });
   it('shows only the blocks the person holds a letter in, in the server order', () => {
     expect(buildMenu(caps, 'sys-choir').map((m) => m.block)).toEqual(['home', 'people', 'work']);
     expect(buildMenu(caps, 'sys-main').map((m) => m.block)).toEqual(['home']);

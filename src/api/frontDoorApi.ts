@@ -240,6 +240,8 @@ export async function unarchivePerson(id: string): Promise<DirectoryPerson> {
 /* ── Access by letters (slice 1.3) ── */
 
 export type AccessPowers = {
+  isChiefAdministrator?: boolean;
+  managedSystemIds?: string[];
   canAppoint: boolean;
   canAppointLeader: boolean;
   canReadAppointments: boolean;
@@ -1890,8 +1892,8 @@ export async function fetchAdminAudit(limit = 50): Promise<AdminEvent[]> {
 
 export type ImportRow = { line: number; fullName: string; state: 'OK' | 'DUPLICATE' | 'ERROR'; message?: string; matches?: string[] };
 export type ImportResult = { committed: boolean; created?: number; summary: { ok: number; duplicates: number; errors: number }; rows: ImportRow[] };
-export const importPeople = (rows: Array<Record<string, string>>, commit: boolean): Promise<ImportResult> =>
-  apiFetch('/api/people-tools/import', { method: 'POST', body: { rows, commit } });
+export const importPeople = (rows: Array<Record<string, string>>, commit: boolean, systemId?: string): Promise<ImportResult> =>
+  apiFetch('/api/people-tools/import', { method: 'POST', body: { rows, commit, systemId } });
 export type DuplicateGroup = { key: string; people: Array<{ id: string; fullName: string; memberCode: string | null }> };
 export const fetchDuplicates = (): Promise<{ groups: DuplicateGroup[]; total: number }> => apiFetch('/api/people-tools/duplicates');
 export type UpcomingDay = { personId: string; name: string; memberCode: string | null; kind: 'BIRTHDAY' | 'ANNIVERSARY'; day: string; years: number };

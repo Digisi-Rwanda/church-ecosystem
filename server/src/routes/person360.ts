@@ -1,7 +1,7 @@
 /**
  * Person 360 (slice 3.6): the whole person, kept with history. Contact, work, education, gifts and
- * callings, family, baptism (usually recorded from a programme cohort) and marriage. Church-wide
- * offices only; marriage is the Church Leader's alone.
+ * callings, family, baptism and marriage. Church-wide section rights are supplemented
+ * by scoped recording rights for a unit's President, Vice President and Secretary.
  */
 import { Router } from 'express';
 import { z } from 'zod';
@@ -10,8 +10,44 @@ import { requireAuth, type AuthedRequest } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
 import { counts } from '../money/block.js';
 import { SECTIONS, SINGLE, accessFor, cleanData, isSection, type Section } from '../person360/rules.js';
+import { unitPeopleIds } from '../lib/unitPeople.js';
 
 export const person360Router = Router();
+
+// Enforce scope for every profile, history, file and mutation endpoint, including
+// direct record/document IDs. Church-wide section permissions remain unchanged.
+person360Router.use(requireAuth, async (req: AuthedRequest, res, next) => {
+  const {data} = await loadAccessData(req.auth!.personId);
+  const church = accessFor(req.auth!.personId, data);
+  const allowed = unitPeopleIds(req.auth!.personId, data, await prisma.orgUnit.findMany());
+  const parts = req.path.split('/').filter(Boolean);
+  if (parts[0] === 'access') { res.locals.unitProfileAccess = allowed.size > 0; return next(); }
+  // Cohort operations expose church-wide enrolments; unit officers record individually.
+  if (parts[0] === 'cohorts' || parts[0] === 'baptism-cohort') {
+    if (church.read.length) return next();
+    return res.status(404).json({code:'NOT_FOUND',error:'Not found'});
+  }
+  let target = parts[0];
+  if (target === 'records') target = (await prisma.personRecord.findUnique({where:{id:parts[1] ?? ''}}))?.personId ?? '';
+  if (target === 'documents') target = (await prisma.personDocument.findUnique({where:{id:parts[1] ?? ''}}))?.personId ?? '';
+  if (!allowed.has(target)) {
+    if (church.read.length) return next();
+    return res.status(404).json({code:'NOT_FOUND',error:'Not found'});
+  }
+  res.locals.unitProfileAccess = true;
+  if (req.method !== 'GET' && (await prisma.person.findUnique({where:{id:target}}))?.archivedAt) return res.status(409).json({code:'PERSON_ARCHIVED',error:'This person is archived'});
+  const payload = req.body?.data;
+  if (payload && ['relatedPersonId','spousePersonId'].some(k => payload[k] && !allowed.has(String(payload[k])))) {
+    return res.status(400).json({code:'PERSON_NOT_FOUND',error:'Related person must belong to your unit'});
+  }
+  if (payload?.orgUnitId) {
+    const units = await prisma.orgUnit.findMany();
+    const {unitPeopleSystems} = await import('../lib/unitPeople.js');
+    const systems = unitPeopleSystems(req.auth!.personId, data);
+    if (!units.some(u => u.id === payload.orgUnitId && systems.includes(u.systemId ?? ''))) return res.status(403).json({code:'FORBIDDEN',error:'Unit is outside your scope'});
+  }
+  next();
+});
 
 type Res = import('express').Response;
 const fail = (res: Res, status: number, code: string, error: string) => res.status(status).json({ error, code });
@@ -46,9 +82,9 @@ async function names(ids: Array<string | null | undefined>): Promise<Map<string,
 async function audit(actorId: string, action: string, detail: string, meta: object) {
   await prisma.auditEvent.create({ data: { at: new Date(), actorId, systemId: 'sys-main', action, resource: 'PERSON_360', detail, metaJson: JSON.stringify(meta) } });
 }
-async function access(me: string) {
+async function access(me: string, scopedUnit = false) {
   const { data } = await loadAccessData(me);
-  return accessFor(me, data);
+  return accessFor(me, data, new Date(), scopedUnit);
 }
 const personOf = async (id: string) => (await prisma.person.findUnique({ where: { id } })) as PersonRow | null;
 const archived = (p: PersonRow) => !!p.archivedAt;
@@ -72,12 +108,12 @@ async function shapeRecords(rows: RecordRow[], a: { write: Section[] }) {
 
 /** What this person may do in Person 360 at all. 404 for everyone else, so it is not even confirmed to exist. */
 person360Router.get('/access', requireAuth, async (req: AuthedRequest, res) => {
-  const a = await access(req.auth!.personId);
+  const a = await access(req.auth!.personId, res.locals.unitProfileAccess);
   res.json({ read: a.read, write: a.write, allowed: a.read.length > 0, leader: a.leader });
 });
 
 person360Router.get('/cohorts', requireAuth, async (req: AuthedRequest, res) => {
-  const a = await access(req.auth!.personId);
+  const a = await access(req.auth!.personId, res.locals.unitProfileAccess);
   if (!a.write.includes('BAPTISM')) return fail(res, 404, 'NOT_FOUND', 'Not found');
   const programs = ((await prisma.program.findMany()) as ProgramRow[]).filter((p) => /bapt/i.test(`${p.programType ?? ''} ${p.name}`) && p.status !== 'DRAFT');
   const enrol = (await prisma.programEnrollment.findMany()) as EnrolRow[];
@@ -107,7 +143,7 @@ person360Router.post('/baptism-cohort', requireAuth, async (req: AuthedRequest, 
     })
     .safeParse(req.body);
   if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Choose a cohort, a date and who was baptised');
-  const a = await access(me);
+  const a = await access(me, res.locals.unitProfileAccess);
   if (!a.write.includes('BAPTISM')) return fail(res, 403, 'FORBIDDEN', 'You may not record baptisms');
   const b = parsed.data;
   const program = (await prisma.program.findUnique({ where: { id: b.programId } })) as ProgramRow | null;
@@ -131,7 +167,7 @@ person360Router.post('/baptism-cohort', requireAuth, async (req: AuthedRequest, 
 });
 
 person360Router.get('/records/:id/history', requireAuth, async (req: AuthedRequest, res) => {
-  const a = await access(req.auth!.personId);
+  const a = await access(req.auth!.personId, res.locals.unitProfileAccess);
   const r = (await prisma.personRecord.findUnique({ where: { id: String(req.params.id) } })) as RecordRow | null;
   if (!r || !a.read.includes(r.section)) return fail(res, 404, 'NOT_FOUND', 'Not found');
   const chain: RecordRow[] = [r];
@@ -146,7 +182,7 @@ person360Router.get('/records/:id/history', requireAuth, async (req: AuthedReque
 });
 
 person360Router.get('/:personId', requireAuth, async (req: AuthedRequest, res) => {
-  const a = await access(req.auth!.personId);
+  const a = await access(req.auth!.personId, res.locals.unitProfileAccess);
   if (a.read.length === 0) return fail(res, 404, 'NOT_FOUND', 'Not found');
   const p = await personOf(String(req.params.personId));
   if (!p) return fail(res, 404, 'NOT_FOUND', 'Not found');
@@ -169,7 +205,7 @@ person360Router.get('/:personId', requireAuth, async (req: AuthedRequest, res) =
  * donations, sponsorship pledges and confirmed claims. For the Church Leader only; everyone else gets a 404.
  */
 person360Router.get('/:personId/participation', requireAuth, async (req: AuthedRequest, res) => {
-  const a = await access(req.auth!.personId);
+  const a = await access(req.auth!.personId, res.locals.unitProfileAccess);
   if (!a.leader) return fail(res, 404, 'NOT_FOUND', 'Not found');
   const p = await personOf(String(req.params.personId));
   if (!p) return fail(res, 404, 'NOT_FOUND', 'Not found');
@@ -222,7 +258,7 @@ const DOC_TYPES = ['application/pdf', 'image/png', 'image/jpeg', 'image/webp', '
 interface DocRow { id: string; personId: string; name: string; mime: string; size: number; dataBase64?: string; note?: string | null; uploadedById: string; uploadedAt: Date | string; deletedAt?: Date | string | null }
 
 person360Router.get('/:personId/documents', requireAuth, async (req: AuthedRequest, res) => {
-  const a = await access(req.auth!.personId);
+  const a = await access(req.auth!.personId, res.locals.unitProfileAccess);
   const p = await personOf(String(req.params.personId));
   if (a.read.length === 0 || !p) return fail(res, 404, 'NOT_FOUND', 'Not found');
   const rows = ((await prisma.personDocument.findMany()) as DocRow[]).filter((d) => d.personId === p.id && !d.deletedAt).sort((x, y) => +new Date(y.uploadedAt) - +new Date(x.uploadedAt));
@@ -235,7 +271,7 @@ person360Router.get('/:personId/documents', requireAuth, async (req: AuthedReque
 
 person360Router.post('/:personId/documents', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const a = await access(me);
+  const a = await access(me, res.locals.unitProfileAccess);
   const p = await personOf(String(req.params.personId));
   if (a.read.length === 0 || !p) return fail(res, 404, 'NOT_FOUND', 'Not found');
   if (a.write.length === 0) return fail(res, 403, 'FORBIDDEN', 'You may not add files here');
@@ -253,7 +289,7 @@ person360Router.post('/:personId/documents', requireAuth, async (req: AuthedRequ
 });
 
 person360Router.get('/documents/:docId/file', requireAuth, async (req: AuthedRequest, res) => {
-  const a = await access(req.auth!.personId);
+  const a = await access(req.auth!.personId, res.locals.unitProfileAccess);
   const d = (await prisma.personDocument.findUnique({ where: { id: String(req.params.docId) } })) as DocRow | null;
   if (a.read.length === 0 || !d || d.deletedAt) return fail(res, 404, 'NOT_FOUND', 'Not found');
   res.json({ name: d.name, mime: d.mime, data: d.dataBase64 ?? '' });
@@ -261,7 +297,7 @@ person360Router.get('/documents/:docId/file', requireAuth, async (req: AuthedReq
 
 person360Router.delete('/documents/:docId', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const a = await access(me);
+  const a = await access(me, res.locals.unitProfileAccess);
   const d = (await prisma.personDocument.findUnique({ where: { id: String(req.params.docId) } })) as DocRow | null;
   if (a.read.length === 0 || !d || d.deletedAt) return fail(res, 404, 'NOT_FOUND', 'Not found');
   if (a.write.length === 0) return fail(res, 403, 'FORBIDDEN', 'You may not remove files here');
@@ -274,7 +310,7 @@ person360Router.post('/:personId/records', requireAuth, async (req: AuthedReques
   const me = req.auth!.personId;
   const section = req.body?.section;
   if (!isSection(section)) return fail(res, 400, 'BAD_INPUT', 'Unknown section');
-  const a = await access(me);
+  const a = await access(me, res.locals.unitProfileAccess);
   const p = await personOf(String(req.params.personId));
   if (!p || !a.read.includes(section)) return fail(res, 404, 'NOT_FOUND', 'Not found');
   if (!a.write.includes(section)) return fail(res, 403, 'FORBIDDEN', 'You may not record this here');
@@ -294,7 +330,7 @@ person360Router.post('/:personId/records', requireAuth, async (req: AuthedReques
 
 person360Router.patch('/records/:id', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const a = await access(me);
+  const a = await access(me, res.locals.unitProfileAccess);
   const r = (await prisma.personRecord.findUnique({ where: { id: String(req.params.id) } })) as RecordRow | null;
   if (!r || !a.read.includes(r.section)) return fail(res, 404, 'NOT_FOUND', 'Not found');
   if (!a.write.includes(r.section)) return fail(res, 403, 'FORBIDDEN', 'You may not change this');
@@ -312,7 +348,7 @@ person360Router.patch('/records/:id', requireAuth, async (req: AuthedRequest, re
 
 person360Router.post('/records/:id/void', requireAuth, async (req: AuthedRequest, res) => {
   const me = req.auth!.personId;
-  const a = await access(me);
+  const a = await access(me, res.locals.unitProfileAccess);
   const r = (await prisma.personRecord.findUnique({ where: { id: String(req.params.id) } })) as RecordRow | null;
   if (!r || !a.read.includes(r.section)) return fail(res, 404, 'NOT_FOUND', 'Not found');
   if (!a.write.includes(r.section)) return fail(res, 403, 'FORBIDDEN', 'You may not change this');

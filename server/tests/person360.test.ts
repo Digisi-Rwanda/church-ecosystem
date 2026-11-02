@@ -75,10 +75,10 @@ beforeEach(async () => {
 const rec = (as: string, section: string, data: object, who = 'p-member') => post(as, `/api/person360/${who}/records`, { section, data });
 
 describe('person 360 routes', () => {
-  it('only church-wide offices get in; presidents and members are told nothing exists', async () => {
+  it('unit officers have access but cannot open unrelated people; ordinary members remain denied', async () => {
     expect((await get('p-choir-leader', '/api/person360/p-member')).status).toBe(404);
     expect((await get('p-member', '/api/person360/p-member')).status).toBe(404);
-    expect((await get('p-choir-leader', '/api/person360/access')).body.allowed).toBe(false);
+    expect((await get('p-choir-leader', '/api/person360/access')).body.allowed).toBe(true);
     expect((await get('p-pastor', '/api/person360/access')).body.allowed).toBe(true);
   });
   it('each office writes its own part; marriage is the Church Leader\'s alone', async () => {
