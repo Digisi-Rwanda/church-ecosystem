@@ -9,11 +9,11 @@ import type {
   CategoryServicePolicyApi,
   ChoirCategoryApi,
   ChoirCategoryLinkApi,
-  ConfigStatus,
-  ConfigVersionApi,
   PlanningMode,
   ProtocolDutyPolicyApi,
+  MusicRuleApi,
   ProtocolServiceRuleApi,
+  RuleFrequencyApi,
   Recurrence,
   SchedulingServiceApi,
 } from '../api/frontDoorApi';
@@ -32,18 +32,14 @@ const WEEKDAY_KEYS = [
   'door.caring.weekday.6',
 ] as const satisfies readonly MessageKey[];
 
-/** The seven tabs of the configuration page, in the order they appear. */
+/** The tabs of the configuration page. Music shows the first four, in this order; Protocol shows services, protocol, duty. */
 export const CONFIG_TABS = [
   'services',
   'categories',
-  'policies',
-  'links',
-  'fixed',
-  'availability',
+  'choirs',
+  'rules',
   'protocol',
   'duty',
-  'review',
-  'versions',
 ] as const;
 export type ConfigTab = (typeof CONFIG_TABS)[number];
 
@@ -51,17 +47,17 @@ export const configTabsForSystem = (systemId: string): readonly ConfigTab[] =>
   systemId === 'sys-music'
     ? CONFIG_TABS.filter((tab) => tab !== 'protocol' && tab !== 'duty')
     : systemId === 'sys-protocol'
-      ? CONFIG_TABS.filter((tab) => tab === 'services' || tab === 'protocol' || tab === 'duty' || tab === 'versions')
-      : ['services', 'versions'];
+      ? CONFIG_TABS.filter((tab) => tab === 'services' || tab === 'protocol' || tab === 'duty')
+      : ['services'];
 
 export const configTabKey = (tab: ConfigTab): MessageKey => `door.config.tab.${tab}`;
 
-export const MUSIC_SETUP_STEPS = ['services','links','policies','review'] as const;
-export function musicSetupStep(tab: string): number {
-  if (tab === 'categories' || tab === 'links') return 1;
-  if (tab === 'policies' || tab === 'fixed' || tab === 'availability') return 2;
-  return tab === 'review' ? 3 : 0;
-}
+/** Old bookmarks (?tab=links, policies, fixed, availability, review, versions) land on the tab that now owns the content. */
+export const normalizeConfigTab = (raw: string | null, tabs: readonly ConfigTab[]): ConfigTab => {
+  const moved: Record<string, ConfigTab> = { links: 'choirs', availability: 'choirs', policies: 'rules', fixed: 'rules' };
+  const wanted = (raw && moved[raw]) || raw;
+  return tabs.find((tab) => tab === wanted) ?? tabs[0] ?? 'services';
+};
 
 /** A weekday 0-6 (Sunday-first) as a translated name. */
 export const weekdayName = (t: TFn, weekday: number | null): string => {
@@ -76,7 +72,6 @@ export const frequencyCountingKey = (c: CategoryServicePolicyApi['frequencyCount
 export const frequencyKindKey = (k: CategoryServicePolicyApi['frequencyKind']): MessageKey =>
   `door.config.frequencyKind.${k}`;
 export const planningModeKey = (m: PlanningMode): MessageKey => `door.config.planningMode.${m}`;
-export const configStatusKey = (s: ConfigStatus): MessageKey => `door.config.status.${s}`;
 export const extraDutyPolicyKey = (p: ProtocolDutyPolicyApi['extraDutyPolicy']): MessageKey =>
   `door.config.extraDuty.${p}`;
 
@@ -132,13 +127,6 @@ export const linkSummary = (
 export const ruleSummary = (r: ProtocolServiceRuleApi, t: TFn): string =>
   `${r.serviceCode ?? t('door.config.nameUnavailable.service')} · ${t('door.config.protocol.defaultTeamSize')}: ${r.defaultTeamSize}`;
 
-/** One line for a config version row. */
-export const versionSummary = (v: ConfigVersionApi, t: TFn): string =>
-  `${v.label} · ${t(configStatusKey(v.status))} · v${v.version}`;
-
-/** The human name of a config version status. */
-export const versionStatusName = (v: ConfigVersionApi, t: TFn): string => t(configStatusKey(v.status));
-
 /** The human name of a service kind. */
 export const serviceKindName = (k: SchedulingServiceApi['kind'], t: TFn): string => t(serviceKindKey(k));
 
@@ -159,3 +147,49 @@ export const planningModeName = (m: PlanningMode, t: TFn): string => t(planningM
 /** The human name of an extra-duty policy. */
 export const extraDutyPolicyName = (p: ProtocolDutyPolicyApi['extraDutyPolicy'], t: TFn): string =>
   t(extraDutyPolicyKey(p));
+
+/* ─── Rules, in words ─── */
+
+const FREQUENCY_SYMBOL = { MINIMUM: '≥', TARGET: '=', MAXIMUM: '≤' } as const;
+
+/** "≥ 2 / month", "= 1 / quarter", "≤ 3 / year", or "—". Accepts the partial frequency of an exception. */
+export const formatFrequency = (f: Partial<RuleFrequencyApi> | null | undefined, t: TFn): string => {
+  if (!f || (f.target === undefined && f.kind === undefined && f.period === undefined)) return '—';
+  const per = f.period ? ` / ${t(`door.config.rules.per.${f.period}` as MessageKey)}` : '';
+  const dates = f.counting === 'DISTINCT_DATES' ? ` (${t('door.config.rules.perDates')})` : '';
+  return `${f.kind ? FREQUENCY_SYMBOL[f.kind] + ' ' : ''}${f.target ?? ''}${per}${dates}`.trim();
+};
+
+/** "0–1", "2–∞", or blank when the rule has no counts (Fixed and Manual rules, or a rotation with neither set). */
+export const formatMinMax = (r: Pick<MusicRuleApi, 'minCount' | 'maxCount'>): string =>
+  r.minCount === null && r.maxCount === null ? '' : `${r.minCount ?? 0}–${r.maxCount ?? '∞'}`;
+
+export interface RuleNames {
+  /** Weekday-qualified label, for pickers and chips. */
+  service: (id: string) => string;
+  /** Plain service name, for sentences. */
+  serviceShort: (id: string) => string;
+  category: (id: string) => string;
+  choir: (id: string) => string;
+}
+
+const list = (items: string[]) => {
+  try { return new Intl.ListFormat(undefined, { style: 'long', type: 'conjunction' }).format(items); } catch { return items.join(', '); }
+};
+
+/** One English sentence per rule, assembled from the rule's fields and translated phrase templates. */
+export const ruleSentences = (rules: MusicRuleApi[], names: RuleNames, t: TFn): string[] =>
+  rules.map((r) => {
+    const extra: string[] = [];
+    if (r.minCount !== null && r.maxCount !== null) extra.push(t('door.config.rules.count', { min: r.minCount, max: r.maxCount }));
+    else if (r.minCount !== null) extra.push(t('door.config.rules.countMin', { min: r.minCount }));
+    else if (r.maxCount !== null) extra.push(t('door.config.rules.countMax', { max: r.maxCount }));
+    if (r.requireAll) extra.push(t('door.config.rules.everyChoir'));
+    if (r.frequency) extra.push(formatFrequency(r.frequency, t));
+    return t('door.config.rules.sentence', {
+      target: r.target.kind === 'category' ? names.category(r.target.categoryId) : names.choir(r.target.choirId),
+      how: t(`door.config.rules.how.${r.arrangement}` as MessageKey),
+      services: list(r.scope.map(names.serviceShort)),
+      extra: extra.map((part) => `, ${part}`).join(''),
+    });
+  });

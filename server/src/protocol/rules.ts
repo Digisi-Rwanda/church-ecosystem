@@ -11,7 +11,7 @@ export const DEACON = 'sys-deacon';
 export const OFFICES = ['PRESIDENT', 'VP', 'SECRETARY', 'TREASURER', 'COORDINATOR', 'MEMBER'] as const;
 export const SERVE_DAYS = ['SUNDAY', 'TUESDAY', 'BOTH'] as const;
 export const ROSTER_STATUS = ['ACTIVE', 'INACTIVE', 'LEAVE'] as const;
-export const KINDS = ['SS1', 'SS2', 'TUESDAY', 'IGABURO'] as const;
+// KINDS moved to protocol/engine.ts as SUPPORTED_PROTOCOL_KINDS (single source of truth).
 export const ATTENDANCE = ['PRESENT', 'HALF_PRESENT', 'EXCUSED', 'ABSENT'] as const;
 export const REASON_MIN = 5;
 export const REASON_MAX = 300;

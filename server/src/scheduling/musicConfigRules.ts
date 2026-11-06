@@ -40,11 +40,12 @@ export interface MusicLinkRules {
 }
 
 export interface MusicConfigRulesSnapshot {
-  services: Array<Pick<SchedulingServiceView, 'id' | 'code' | 'name' | 'active' | 'musicRequired' | 'maxChoirs'>>;
-  categories: Array<{ id: string; active: boolean }>;
+  services: Array<Pick<SchedulingServiceView, 'id' | 'code' | 'name' | 'active' | 'musicRequired' | 'maxChoirs'> &
+    Partial<Pick<SchedulingServiceView, 'weekday' | 'recurrence' | 'selectedDates'>>>;
+  categories: Array<{ id: string; active: boolean; code?: string; name?: string }>;
   policies: MusicPolicyRules[];
   links: MusicLinkRules[];
-  choirs: Array<{ id: string; active: boolean }>;
+  choirs: Array<{ id: string; active: boolean; name?: string }>;
   fixedAssignments: Array<{ categoryServicePolicyId: string; choirId: string; serviceDate?: string | null; serviceTime?: string | null }>;
 }
 
@@ -118,12 +119,12 @@ export function validateMusicConfigSnapshot(snapshot: MusicConfigRulesSnapshot):
     const choirLinks = linksByChoir.get(link.choirId) ?? [];
     choirLinks.push(link);
     linksByChoir.set(link.choirId, choirLinks);
-    if (!categoryById.has(link.categoryId)) errors.push('A choir link refers to a category outside this configuration version.');
+    if (!categoryById.has(link.categoryId)) errors.push('A choir link refers to a category outside the live configuration.');
     if (!choirById.has(link.choirId)) errors.push('A choir link refers to a choir that no longer exists.');
     const eligibleOverrides = EligibleOverrideSchema.safeParse(link.eligibleOverride);
     const frequencyOverrides = FrequencyOverrideSchema.safeParse(link.frequencyOverride);
     if (!eligibleOverrides.success || !frequencyOverrides.success) {
-      errors.push('A choir has an invalid eligibility or frequency exception. Review its settings before activation.');
+      errors.push('A choir has an invalid eligibility or frequency exception. Review its settings before saving.');
       continue;
     }
     const serviceCodes = [...Object.keys(eligibleOverrides.data), ...Object.keys(frequencyOverrides.data)];
@@ -158,7 +159,7 @@ export function validateMusicConfigSnapshot(snapshot: MusicConfigRulesSnapshot):
     }
   }
   for (const choirLinks of linksByChoir.values()) {
-    if (choirLinks.length > 1) errors.push('Each choir can belong to only one category in a configuration version.');
+    if (choirLinks.length > 1) errors.push('Each choir can belong to only one category in the live configuration.');
   }
 
   const fixedByPolicy = new Map<string, MusicConfigRulesSnapshot['fixedAssignments']>();
@@ -173,11 +174,11 @@ export function validateMusicConfigSnapshot(snapshot: MusicConfigRulesSnapshot):
   for (const policy of snapshot.policies.filter((row) => row.active)) {
     const service = serviceById.get(policy.serviceId);
     if (!service) {
-      errors.push('A category rule refers to a service outside this configuration version.');
+      errors.push('A category rule refers to a service outside the live configuration.');
       continue;
     }
     if (!categoryById.has(policy.categoryId)) {
-      errors.push('A category rule refers to a category outside this configuration version.');
+      errors.push('A category rule refers to a category outside the live configuration.');
       continue;
     }
     if (!categoryById.get(policy.categoryId)?.active) {

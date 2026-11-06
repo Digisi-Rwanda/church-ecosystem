@@ -1669,7 +1669,7 @@ export type ScheduleState = {
   options: Record<string, Array<{ value: string; label: string }>>;
   units: Array<{ id: string; name: string; kind: ChoirRole }>;
 };
-export type ScheduleRuleContext = { configVersionId?: string | null; configLabel?: string | null; rules?: Array<CategoryServicePolicyApi & { categoryName: string; serviceCode: string }>; validation?: { ok: boolean; reason?: string; warnings: string[] } | null };
+export type ScheduleRuleContext = { rules?: Array<CategoryServicePolicyApi & { categoryName: string; serviceCode: string }>; validation?: { ok: boolean; reason?: string; warnings: string[] } | null };
 export type ScheduleDraftView = ScheduleRuleContext & { id: string; label: string; horizon: MusicHorizonKey; warnings: string[]; months: Array<{ periodKey: string; decided: 'CONFIRMED' | 'PUBLISHED' | null }>; services: ScheduleService[] };
 export type ScheduleMonthView = ScheduleRuleContext & { canWrite: boolean; periodKey: string; state: 'CONFIRMED' | 'PUBLISHED'; version: number; warnings: string[]; services: ScheduleService[] };
 export type ScheduleEdit = { serviceId: string; action: 'add' | 'remove' | 'replace'; unitId: string; toUnitId?: string | null };
@@ -2107,54 +2107,43 @@ export async function recordMoneyEntryId(input: MoneyEntryInput): Promise<string
 export type SchedulingServiceApi = {
   id: string; systemId: string; code: string; name: string; kind: ServiceKind;
   weekday: number | null; time: string | null; recurrence: Recurrence; selectedDates: string[];
-  active: boolean; effectiveFrom: string; effectiveTo: string | null;
+  active: boolean;
   musicRequired: boolean; protocolRequired: boolean; maxChoirs: number; targetTeamSize: number;
-  configVersionId: string | null; displayOrder: number; supersedesId: string | null;
+  displayOrder: number;
   createdByPersonId: string; createdAt: string;
 };
 export type ChoirCategoryApi = {
   id: string; systemId: string; code: string; name: string; description: string; active: boolean;
-  effectiveFrom: string; effectiveTo: string | null; configVersionId: string | null;
-  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+  createdByPersonId: string; createdAt: string;
 };
 export type CategoryServicePolicyApi = {
   id: string; systemId: string; categoryId: string; serviceId: string; eligible: boolean; active: boolean;
   frequencyTarget: number | null; frequencyCounting: FrequencyCounting; frequencyKind: FrequencyKind;
   frequencyPeriod?: 'MONTH' | 'QUARTER' | 'HALF_YEAR' | 'YEAR' | null; planningMode: PlanningMode; minCount: number | null; maxCount: number | null; requireAll: boolean;
-  configVersionId: string | null; effectiveFrom: string; effectiveTo: string | null;
-  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+  createdByPersonId: string; createdAt: string;
 };
 export type ChoirCategoryLinkApi = {
   id: string; systemId: string; choirId: string; categoryId: string;
   eligibleOverride: Record<string, unknown>; frequencyOverride: Record<string, unknown>; active: boolean;
-  effectiveFrom: string; effectiveTo: string | null; configVersionId: string | null;
-  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+  createdByPersonId: string; createdAt: string;
 };
 export type ProtocolServiceRuleApi = {
   id: string; systemId: string; serviceId: string; serviceCode?: string; active: boolean; required: boolean;
   defaultTeamSize: number; teamSizeOverrides: Record<string, number>; requireChoir: boolean;
-  requireWorship: boolean; relaxableKinds: string[]; configVersionId: string | null;
-  effectiveFrom: string; effectiveTo: string | null; supersedesId: string | null;
+  requireWorship: boolean; relaxableKinds: string[];
   createdByPersonId: string; createdAt: string;
 };
 export type ProtocolDutyPolicyApi = {
   id: string; systemId: string; preferTarget: number; softMax: number; hardMax: number;
   extraDutyPolicy: 'ALLOW_WHEN_SHORT' | 'NEVER' | 'ALWAYS'; duplicateSameDayAllowed: boolean;
   musicCompatibilityRequired: boolean; leadershipPriorities: string[]; exceptionsAllowed: boolean;
-  configVersionId: string | null; effectiveFrom: string; effectiveTo: string | null;
-  supersedesId: string | null; createdByPersonId: string; createdAt: string;
+  createdByPersonId: string; createdAt: string;
 };
-export type ConfigVersionApi = {
-  id: string; systemId: string; version: number; label: string; status: ConfigStatus;
-  effectiveFrom: string; effectiveTo: string | null; createdByPersonId: string; createdAt: string;
-  reason: string | null; previousVersionId: string | null; notes: Record<string, unknown>;
-  validation: Record<string, unknown>; affectedSchedules: string[];
-};
-export type ConfigStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'SCHEDULED' | 'ARCHIVED';
 export type ServiceKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
 export type Recurrence = 'WEEKLY' | 'MONTHLY' | 'SELECTED_DATES' | 'CUSTOM';
 export type FrequencyCounting = 'ASSIGNMENTS' | 'DISTINCT_DATES';
 export type FrequencyKind = 'MINIMUM' | 'TARGET' | 'MAXIMUM';
+export type FrequencyPeriod = 'MONTH' | 'QUARTER' | 'HALF_YEAR' | 'YEAR';
 export type PlanningMode = 'ROTATION' | 'FIXED' | 'MANUAL';
 
 const SC = '/api/scheduling/config';
@@ -2164,53 +2153,80 @@ const scGet = <T>(path: string, systemId: string, params: Record<string, string>
 };
 const scPost = (path: string, body: object) => apiFetch(`${SC}${path}`, { method: 'POST', body });
 
-export const fetchConfigVersions = (systemId: string): Promise<{ versions: ConfigVersionApi[] }> => scGet('/versions', systemId);
-export const fetchSchedulingServices = (systemId: string, activeOnly = false, configVersionId?: string): Promise<{ services: SchedulingServiceApi[] }> =>
-  scGet('/services', systemId, { ...(activeOnly ? { active: 'true' } : {}), ...(configVersionId ? { configVersionId } : {}) });
-export const fetchChoirCategories = (systemId: string, activeOnly = false, configVersionId?: string): Promise<{ categories: ChoirCategoryApi[] }> =>
-  scGet('/categories', systemId, { ...(activeOnly ? { active: 'true' } : {}), ...(configVersionId ? { configVersionId } : {}) });
-export const fetchCategoryServicePolicies = (systemId: string, configVersionId?: string): Promise<{ policies: CategoryServicePolicyApi[] }> =>
-  scGet('/policies', systemId, configVersionId ? { configVersionId } : {});
-export const fetchChoirCategoryLinks = (systemId: string, configVersionId?: string): Promise<{ links: ChoirCategoryLinkApi[] }> =>
-  scGet('/links', systemId, configVersionId ? { configVersionId } : {});
-export const fetchProtocolServiceRules = (systemId: string, configVersionId?: string): Promise<{ rules: ProtocolServiceRuleApi[] }> =>
-  scGet('/protocol/rules', systemId, configVersionId ? { configVersionId } : {});
-export const fetchProtocolDutyPolicy = (systemId: string, configVersionId?: string): Promise<{ policy: ProtocolDutyPolicyApi | null }> =>
-  scGet('/protocol/policy', systemId, configVersionId ? { configVersionId } : {});
+/** Configuration is live: there are no versions to choose, so every read returns the one current set. */
+export const fetchSchedulingServices = (systemId: string, activeOnly = false): Promise<{ services: SchedulingServiceApi[] }> =>
+  scGet('/services', systemId, activeOnly ? { active: 'true' } : {});
+export const fetchChoirCategories = (systemId: string, activeOnly = false): Promise<{ categories: ChoirCategoryApi[] }> =>
+  scGet('/categories', systemId, activeOnly ? { active: 'true' } : {});
+/** @deprecated the Rules tab replaces policy editing; kept for the schedule page's read-only rule context. */
+export const fetchCategoryServicePolicies = (systemId: string): Promise<{ policies: CategoryServicePolicyApi[] }> => scGet('/policies', systemId);
+/** @deprecated use fetchConfigChoirs (a choir has one category; "links" are an implementation term). */
+export const fetchChoirCategoryLinks = (systemId: string): Promise<{ links: ChoirCategoryLinkApi[] }> => scGet('/links', systemId);
+export const fetchProtocolServiceRules = (systemId: string): Promise<{ rules: ProtocolServiceRuleApi[] }> => scGet('/protocol/rules', systemId);
+export const fetchProtocolDutyPolicy = (systemId: string): Promise<{ policy: ProtocolDutyPolicyApi | null }> => scGet('/protocol/policy', systemId);
+/** Can the live configuration generate a schedule right now? */
+export const fetchConfigValidation = (systemId: string): Promise<{ ok: boolean; errors: string[] }> => scGet('/validation', systemId);
 
-export const createConfigVersion = (body: object) => scPost('/versions', body);
-export const cloneConfigVersion = (systemId: string, label: string, reason?: string) =>
-  scPost('/versions/clone', { systemId, label, reason });
-export const activateConfigVersion = (id: string) =>
-  apiFetch(`${SC}/versions/${encodeURIComponent(id)}/activate`, { method: 'POST', body: {} });
-export const archiveConfigVersion = (id: string) => apiFetch(SC + '/versions/' + encodeURIComponent(id) + '/archive', { method: 'POST', body: {} });
-export const restoreConfigVersion = (id: string) => apiFetch(SC + '/versions/' + encodeURIComponent(id) + '/restore', { method: 'POST', body: {} });
-export const deleteConfigVersion = (id: string) => apiFetch(SC + '/versions/' + encodeURIComponent(id), { method: 'DELETE' });
 export const createSchedulingService = (body: object) => scPost('/services', body);
 export const createChoirCategory = (body: object) => scPost('/categories', body);
+/** @deprecated not used by the UI any more; Rules write these tables server-side. */
 export const createCategoryServicePolicy = (body: object) => scPost('/policies', body);
+/** @deprecated not used by the UI any more; Rules write these tables server-side. */
 export const createChoirCategoryLink = (body: object) => scPost('/links', body);
 export const createProtocolServiceRule = (body: object) => scPost('/protocol/rules', body);
 export const createProtocolDutyPolicy = (body: object) => scPost('/protocol/policy', body);
-export const updateSchedulingService = (id: string, configVersionId: string, patch: object) =>
-  apiFetch(`${SC}/services/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
-export const updateChoirCategory = (id: string, configVersionId: string, patch: object) =>
-  apiFetch(`${SC}/categories/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
-export const updateCategoryServicePolicy = (id: string, configVersionId: string, patch: object) =>
-  apiFetch(`${SC}/policies/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
-export const updateChoirCategoryLink = (id: string, configVersionId: string, patch: object) =>
-  apiFetch(`${SC}/links/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
-export const updateProtocolServiceRule = (id: string, configVersionId: string, patch: object) =>
-  apiFetch(`${SC}/protocol/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
-export const updateProtocolDutyPolicy = (id: string, configVersionId: string, patch: object) =>
-  apiFetch(`${SC}/protocol/policy/${encodeURIComponent(id)}`, { method: 'PATCH', body: { configVersionId, patch } });
+export const updateSchedulingService = (id: string, patch: object) =>
+  apiFetch(`${SC}/services/${encodeURIComponent(id)}`, { method: 'PATCH', body: { patch } });
+export const updateChoirCategory = (id: string, patch: object) =>
+  apiFetch(`${SC}/categories/${encodeURIComponent(id)}`, { method: 'PATCH', body: { patch } });
+/** @deprecated not used by the UI any more; Rules write these tables server-side. */
+export const updateCategoryServicePolicy = (id: string, patch: object) =>
+  apiFetch(`${SC}/policies/${encodeURIComponent(id)}`, { method: 'PATCH', body: { patch } });
+/** @deprecated not used by the UI any more; Rules write these tables server-side. */
+export const updateChoirCategoryLink = (id: string, patch: object) =>
+  apiFetch(`${SC}/links/${encodeURIComponent(id)}`, { method: 'PATCH', body: { patch } });
+export const updateProtocolServiceRule = (id: string, patch: object) =>
+  apiFetch(`${SC}/protocol/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: { patch } });
+export const updateProtocolDutyPolicy = (id: string, patch: object) =>
+  apiFetch(`${SC}/protocol/policy/${encodeURIComponent(id)}`, { method: 'PATCH', body: { patch } });
 export const retireSchedulingService = (id: string) => apiFetch(`${SC}/services/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });
 
-export type MusicFixedAssignmentApi = { id: string; choirId: string; categoryServicePolicyId: string; configVersionId: string; serviceDate?:string|null; serviceTime?:string|null };
+/* ─── Rules: the only scheduling concept the Music setup screens speak. The tables behind them stay server-side. ─── */
+export type RuleFrequencyApi = { kind: FrequencyKind; target: number; period: FrequencyPeriod; counting: FrequencyCounting };
+export type RuleExceptionApi = { choirId: string; eligible?: boolean; frequency?: Partial<RuleFrequencyApi> };
+export type RuleTargetApi = { kind: 'category'; categoryId: string } | { kind: 'choir'; choirId: string };
+export type MusicRuleInputApi = {
+  scope: string[]; target: RuleTargetApi; arrangement: PlanningMode; minCount?: number | null; maxCount?: number | null;
+  frequency?: RuleFrequencyApi | null; requireAll?: boolean; exceptions?: RuleExceptionApi[];
+};
+export type MusicRuleApi = Required<Pick<MusicRuleInputApi, 'scope' | 'target' | 'arrangement'>> & {
+  id: string; minCount: number | null; maxCount: number | null; frequency: RuleFrequencyApi | null; requireAll: boolean; exceptions: RuleExceptionApi[];
+  /** Choir rules on the same underlying policy share it, so the table can group them. */
+  sharedPolicyId?: string; categoryEligible?: boolean; dateScope?: { serviceDate: string | null; serviceTime: string | null }; readOnly?: boolean;
+};
+export type ConfigChoirApi = { id: string; name: string; active: boolean; categoryId: string | null };
+export const fetchMusicRules = () => scGet<{ rules: MusicRuleApi[]; warnings: Array<{ code: string; choirId: string; message: string }> }>('/rules', 'sys-music');
+export const fetchConfigChoirs = () => scGet<{ choirs: ConfigChoirApi[] }>('/choirs', 'sys-music');
+export const createMusicRule = (body: MusicRuleInputApi) => scPost('/rules', body);
+export const updateMusicRule = (id: string, patch: Partial<MusicRuleInputApi>) => apiFetch(`${SC}/rules/${encodeURIComponent(id)}`, { method: 'PATCH', body: { patch } });
+export const deleteMusicRule = (id: string) => apiFetch(`${SC}/rules/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const setChoirCategory = (choirId: string, categoryId: string) => apiFetch(`${SC}/choirs/${encodeURIComponent(choirId)}/category`, { method: 'PUT', body: { categoryId } });
+
+/** The person holding a system's configuration edit lock. */
+export type ConfigLockHolder = { personId: string; name: string | null; since: string; expiresAt: string };
+/** Take the edit lock. Rejects with ApiError 409 and body.holder when someone else is editing. */
+export const acquireConfigLock = (systemId: string) => apiFetch<{ ok: true; lock: { expiresAt: string } }>(`${SC}/lock?${new URLSearchParams({ systemId })}`, { method: 'POST', body: { systemId } });
+export const refreshConfigLock = (systemId: string) => apiFetch<{ ok: true }>(`${SC}/lock/refresh?${new URLSearchParams({ systemId })}`, { method: 'POST', body: { systemId } });
+export const releaseConfigLock = (systemId: string) => apiFetch<{ ok: true }>(`${SC}/lock?${new URLSearchParams({ systemId })}`, { method: 'DELETE' });
+
+export type MusicFixedAssignmentApi = { id: string; choirId: string; categoryServicePolicyId: string; serviceDate?:string|null; serviceTime?:string|null };
 export type MusicAvailabilityApi = { id: string; choirId: string; serviceDate: string; endDate?:string|null; serviceCode: string | null; reason: string | null };
-export const fetchMusicFixedAssignments = (versionId: string) => scGet<{ assignments: MusicFixedAssignmentApi[] }>('/fixed-assignments', 'sys-music', { configVersionId: versionId });
+/** @deprecated not used by the UI any more; Rules write these tables server-side. */
+export const fetchMusicFixedAssignments = () => scGet<{ assignments: MusicFixedAssignmentApi[] }>('/fixed-assignments', 'sys-music');
+/** @deprecated not used by the UI any more; Rules write these tables server-side. */
 export const addMusicFixedAssignment = (body: object) => scPost('/fixed-assignments', { ...body, systemId: 'sys-music' });
-export const removeMusicFixedAssignment = (id: string, configVersionId: string) => apiFetch(SC + '/fixed-assignments/' + encodeURIComponent(id), { method: 'DELETE', body: { configVersionId } });
+/** @deprecated not used by the UI any more; Rules write these tables server-side. */
+export const removeMusicFixedAssignment = (id: string) => apiFetch(SC + '/fixed-assignments/' + encodeURIComponent(id), { method: 'DELETE' });
 export const fetchMusicAvailability = (date = '') => scGet<{ availability: MusicAvailabilityApi[] }>('/availability', 'sys-music', date ? { serviceDate: date } : {});
 export const addMusicAvailability = (body: object) => scPost('/availability', { ...body, systemId: 'sys-music' });
 export const removeMusicAvailability = (id: string) => apiFetch(SC + '/availability/' + encodeURIComponent(id), { method: 'DELETE' });

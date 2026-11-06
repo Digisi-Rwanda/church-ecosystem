@@ -51,7 +51,8 @@ function historyOutside(services: MusicServiceSlot[], months: MonthDoc[]): Histo
     .filter((month) => !excluded.has(month.periodKey))
     .map(({ services: monthServices, assignments }) => ({ services: monthServices, assignments }));
 }
-function validatePinnedMusic(
+/** Validate a schedule against the LIVE configuration (there is no pinned version any more). */
+function validateLiveMusic(
   services: MusicServiceSlot[],
   assignments: MusicAssignment[],
   units: readonly MusicScheduleUnit[],
@@ -59,9 +60,6 @@ function validatePinnedMusic(
   history: HistoricalSchedule[],
   allowManualIncomplete = false,
 ) {
-  if (!config.version) {
-    return { ok: false, warnings: [], reason: 'This schedule has no pinned Music configuration version. Rebuild it from a versioned draft before continuing.' };
-  }
   return validateConfiguredMusicSchedule({
     services, assignments, units, rules: configuredRules(config), history, allowManualIncomplete,
   });
@@ -124,16 +122,14 @@ function serviceViews(services: MusicServiceSlot[], assignments: MusicAssignment
     }));
 }
 
-/** Presentation metadata from the schedule's own pinned configuration, for planners. */
+/** Presentation metadata from the live configuration, for planners. */
 async function schedulePresentation(doc: Pick<MonthDoc, 'services' | 'assignments' | 'configVersionId'>, units: MusicScheduleUnit[], canWrite: boolean) {
-  const config = canWrite && doc.configVersionId ? await loadMusicConfig(doc.configVersionId) : null;
+  const config = canWrite ? await loadMusicConfig() : null;
   const categoryNames = new Map((config?.categories ?? []).map(row => [row.id, row.name]));
   const byChoir = new Map((config?.links ?? []).filter(row => row.active).map(row => [row.choirId, categoryNames.get(row.categoryId)]));
   return {
-    configVersionId: doc.configVersionId ?? null,
-    configLabel: config?.version?.label ?? null,
     rules: config?.policies.map(row => ({ ...row, categoryName: categoryNames.get(row.categoryId) ?? '', serviceCode: config.services.find(service => service.id === row.serviceId)?.code ?? '' })) ?? [],
-    validation: config ? validatePinnedMusic(doc.services, doc.assignments, units, config, historyOutside(doc.services, await loadMonths())) : null,
+    validation: config ? validateLiveMusic(doc.services, doc.assignments, units, config, historyOutside(doc.services, await loadMonths())) : null,
     services: serviceViews(doc.services, doc.assignments, units).map(service => ({
       ...service,
       requirements: config?.policies.filter(rule => rule.active && rule.eligible && config.services.find(row => row.id === rule.serviceId)?.code.toLowerCase() === service.kind.toLowerCase()).map(rule => ({
@@ -220,9 +216,11 @@ musicScheduleRouter.post('/drafts/generate', requireAuth, async (req: AuthedRequ
   const { horizon, start } = parsed.data;
   if (start < nowMonth()) return fail(res, 400, 'PAST', 'Choose a period from this month on');
   const units = unitsFrom(await loadChoirs());
-  // Pin the draft to the exact Music rules version used for generation.
+  // Configuration is live: whatever is saved now is what this draft is built from.
   const cfg = await loadMusicConfig();
-  if (!cfg.version) return fail(res, 409, 'NO_CONFIG', 'Activate a Music configuration version before generating a schedule.');
+  if (!cfg.services.some((service) => service.active && service.musicRequired)) {
+    return fail(res, 409, 'NO_CONFIG', 'Set up at least one Music service before generating a schedule.');
+  }
   let services: MusicServiceSlot[];
   try {
     services = buildMusicCalendar(start, horizon, cfg.services);
@@ -230,12 +228,23 @@ musicScheduleRouter.post('/drafts/generate', requireAuth, async (req: AuthedRequ
     if (error instanceof Error) return fail(res, 422, 'CONFIG', error.message);
     throw error;
   }
+  // Frozen schedules: a month that is already confirmed or published is immutable, and config edits never
+  // rebuild it. Only months with no schedule yet (or drafts, which live in MusicDraft) can be generated.
+  const frozen = new Set((await loadMonths()).filter((m) => m.state === 'CONFIRMED' || m.state === 'PUBLISHED').map((m) => m.periodKey));
+  const touched = [...new Set(services.map((service) => service.periodKey))].filter((month) => frozen.has(month));
+  if (touched.length) {
+    return res.status(409).json({
+      error: 'SCHEDULE_FROZEN',
+      message: 'This schedule is already confirmed. Edits to configuration do not rebuild confirmed or published schedules.',
+      months: touched, // extra detail for the UI; the two fields above are the contract
+    });
+  }
   const history = historyOutside(services, await loadMonths());
   const result = generateConfiguredMusicSchedule({
     services, units, rules: configuredRules(cfg), history, seed: parsed.data.seed,
   });
   if (!result.ok) return fail(res, 422, 'ENGINE', result.reason ?? 'Could not build a valid schedule');
-  const validation = validatePinnedMusic(services, result.assignments, units, cfg, history, true);
+  const validation = validateLiveMusic(services, result.assignments, units, cfg, history, true);
   if (!validation.ok) return fail(res, 422, 'CONFIG', validation.reason ?? 'Configuration policy violation');
   const fp = fingerprint(start, horizon, services, result.assignments);
   const dup = (await drafts()).map(draftDoc).find((d) => fingerprint(d.startMonth, d.horizon, d.services, d.assignments) === fp);
@@ -244,7 +253,7 @@ musicScheduleRouter.post('/drafts/generate', requireAuth, async (req: AuthedRequ
     data: {
       label: `${start} · ${horizon.toLowerCase()}`, horizon, startMonth: start, servicesJson: JSON.stringify(services), assignmentsJson: JSON.stringify(result.assignments),
       warningsJson: JSON.stringify([...result.warnings, ...validation.warnings]), createdById: g.me,
-      configVersionId: cfg.version?.id ?? null,
+      configVersionId: null, // no longer pinned; the column stays only for rows written before live configuration
     },
   })) as { id: string };
   await audit(g.me, 'DRAFT_GENERATED', `Generated a ${horizon.toLowerCase()} choir schedule from ${start}`, { draftId: row.id });
@@ -260,7 +269,7 @@ function applyEdit(
   assignments: MusicAssignment[],
   e: Edit,
   units: readonly MusicScheduleUnit[],
-  cfg: LoadedMusicConfig | null,
+  cfg: LoadedMusicConfig,
   history: HistoricalSchedule[],
   allowManualIncomplete = true,
 ) {
@@ -283,8 +292,7 @@ function applyEdit(
     next = now.map((x) => (x === e.unitId ? e.toUnitId! : x));
   }
   const after = withService(assignments, e.serviceId, next);
-  if (!cfg?.version) return { ok: false as const, status: 409, code: 'NO_CONFIG', error: 'This schedule has no pinned Music configuration version. Rebuild it from a versioned draft before editing.', warnings: [] };
-  const validation = validatePinnedMusic(services, after, units, cfg, history, allowManualIncomplete);
+  const validation = validateLiveMusic(services, after, units, cfg, history, allowManualIncomplete);
   if (!validation.ok) return { ok: false as const, status: 409, code: 'CONFIG', error: validation.reason ?? 'This breaks a configuration policy', warnings: validation.warnings };
   return { ok: true as const, assignments: after, warnings: validation.warnings };
 }
@@ -297,7 +305,7 @@ musicScheduleRouter.post('/drafts/:id/edit', requireAuth, async (req: AuthedRequ
   const row = (await drafts()).find((d) => d.id === String(req.params.id));
   if (!row) return fail(res, 404, 'NOT_FOUND', 'Draft not found');
   const d = draftDoc(row);
-  const cfg = d.configVersionId ? await loadMusicConfig(d.configVersionId) : null;
+  const cfg = await loadMusicConfig();
   const history = historyOutside(d.services, await loadMonths());
   const r = applyEdit(d.services, d.assignments, parsed.data, unitsFrom(await loadChoirs()), cfg, history);
   if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code, warnings: 'warnings' in r ? r.warnings : [] });
@@ -327,13 +335,11 @@ async function takeMonthsOut(row: DraftRow, months: string[]) {
 
 async function confirmMonths(me: string, row: DraftRow, chosen: string[]): Promise<{ ok: true } | { ok: false; status: number; code: string; error: string }> {
   const d = draftDoc(row);
-  const config = d.configVersionId ? await loadMusicConfig(d.configVersionId) : null;
+  const config = await loadMusicConfig();
   const units = unitsFrom(await loadChoirs());
-  const validation = config
-    ? validatePinnedMusic(d.services, d.assignments, units, config, historyOutside(d.services, await loadMonths()))
-    : { ok: false, reason: 'This draft has no pinned Music configuration version. Rebuild it from a versioned draft before confirming.' };
+  const validation = validateLiveMusic(d.services, d.assignments, units, config, historyOutside(d.services, await loadMonths()));
   if (!validation.ok) {
-    return { ok: false, status: 409, code: 'CONFIG', error: validation.reason ?? 'The draft does not satisfy its pinned Music configuration.' };
+    return { ok: false, status: 409, code: 'CONFIG', error: validation.reason ?? 'The draft does not satisfy the current Music configuration.' };
   }
   const have = monthsOf(d.services);
   if (chosen.length === 0) return { ok: false, status: 400, code: 'BAD_INPUT', error: 'Pick at least one month' };
@@ -389,13 +395,12 @@ async function publishMonths(me: string, months: string[]): Promise<{ ok: true }
   const units = unitsFrom(await loadChoirs());
   for (const month of chosen) {
     const doc = have.get(month)!;
-    const config = doc.configVersionId ? await loadMusicConfig(doc.configVersionId) : null;
-    if (!config) return { ok: false, status: 409, code: 'NO_CONFIG', error: `${month} has no pinned Music configuration version and cannot be published.` };
-    const validation = validatePinnedMusic(
+    const config = await loadMusicConfig();
+    const validation = validateLiveMusic(
       doc.services, doc.assignments, units, config, historyOutside(doc.services, allMonths),
     );
     if (!validation.ok) {
-      return { ok: false, status: 409, code: 'CONFIG', error: `${month}: ${validation.reason ?? 'The schedule does not satisfy its pinned Music configuration.'}` };
+      return { ok: false, status: 409, code: 'CONFIG', error: `${month}: ${validation.reason ?? 'The schedule does not satisfy the current Music configuration.'}` };
     }
   }
   const at = new Date();
@@ -432,11 +437,9 @@ musicScheduleRouter.post('/drafts/:id/publish', requireAuth, async (req: AuthedR
   const already = months.filter((m) => existing.get(m)?.state === 'PUBLISHED');
   const fresh = months.filter((m) => !already.includes(m));
   const units = unitsFrom(await loadChoirs());
-  const config = d.configVersionId ? await loadMusicConfig(d.configVersionId) : null;
-  const validation = config
-    ? validatePinnedMusic(d.services, d.assignments, units, config, historyOutside(d.services, await loadMonths()))
-    : { ok: false, reason: 'This draft has no pinned Music configuration version and cannot be published.' };
-  if (!validation.ok) return fail(res, 409, 'CONFIG', validation.reason ?? 'The draft does not satisfy its pinned Music configuration.');
+  const config = await loadMusicConfig();
+  const validation = validateLiveMusic(d.services, d.assignments, units, config, historyOutside(d.services, await loadMonths()));
+  if (!validation.ok) return fail(res, 409, 'CONFIG', validation.reason ?? 'The draft does not satisfy the current Music configuration.');
   for (const m of months) {
     const slice = sliceMonth(d, m);
     if (slice.services.some((service) => service.musicRequired !== false) && slice.assignments.length === 0) {
@@ -479,7 +482,7 @@ musicScheduleRouter.post('/months/:month/edit', requireAuth, async (req: AuthedR
   const before = (await loadMonths()).find((m) => m.periodKey === month);
   if (!before) return fail(res, 404, 'NOT_FOUND', 'No choir schedule for this month');
   const units = unitsFrom(await loadChoirs());
-  const cfg = before.configVersionId ? await loadMusicConfig(before.configVersionId) : null;
+  const cfg = await loadMusicConfig();
   const history = historyOutside(before.services, await loadMonths());
   const r = applyEdit(before.services, before.assignments, parsed.data, units, cfg, history, false);
   if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code, warnings: 'warnings' in r ? r.warnings : [] });

@@ -322,6 +322,7 @@ export function MonthPlanPage() {
       </LoadState>
       <SidePanel open={building} title={t('door.sch.build')} onClose={() => setBuilding(false)} onSave={() => void build()} saveLabel={busy ? t('door.music.sched.building') : t('door.music.sched.buildNow')} saving={busy}>
         <div className="pt-edit">
+          <p className="muted" role="note">{t('door.scheduling.generateNote')}</p>
           <SelectField label={t('door.music.sched.horizon')} name="g-horizon" value={horizon} onChange={(e) => { setHorizon(e.target.value as MusicHorizonKey); setStart(''); }}>
             {HORIZONS.map((h) => <option key={h} value={h}>{t(`door.music.sched.horizon.${h}` as 'door.music.sched.horizon.MONTH')}</option>)}
           </SelectField>
@@ -337,7 +338,6 @@ export function MonthPlanPage() {
 function RuleContext({ value }: { value: ScheduleRuleContext }) {
   const t = useT();
   return <details className="panel pt-more"><summary>{t('door.scheduling.rules')}</summary>
-    <p className="muted">{t('door.scheduling.pinned', {version:value.configLabel ?? value.configVersionId ?? '—'})}</p>
     <p>{t('door.scheduling.manual')}</p>
     {value.validation?.reason && <p className="door-error" role="alert">{value.validation.reason}</p>}
     {value.rules?.length ? <ul className="door-list">{value.rules.filter(row=>row.active).map(row=><li key={row.id}><strong>{row.categoryName} · {row.serviceCode}</strong><p className="muted">{policySummary(row,t)}</p></li>)}</ul> : <p className="muted">{t('door.scheduling.noContext')}</p>}

@@ -1,11 +1,14 @@
 /**
- * Load the active scheduling configuration for a system from the database.
+ * Load the LIVE scheduling configuration for a system from the database.
  * The engines call this to get their rules instead of hard-coding them.
- * If no configuration exists yet, the seed's initial config is returned.
+ *
+ * There are no versions: whatever is saved is what the next generate call sees. Confirmed and published
+ * schedules never call this to rebuild themselves; they are frozen copies (see the frozen-schedule guard in
+ * routes/musicSchedule.ts and routes/protocol.ts).
+ * Availability (unavailability) was always live and is read the same way as before.
  */
 import { prisma } from '../lib/prisma.js';
 import {
-  toConfigVersionView,
   toServiceView,
   toCategoryView,
   toPolicyView,
@@ -17,7 +20,6 @@ import type {
   CategoryServicePolicyView,
   ChoirCategoryLinkView,
   ChoirCategoryView,
-  ConfigVersionView,
   MusicChoirUnavailabilityView,
   MusicFixedAssignmentView,
   ProtocolDutyPolicyView,
@@ -29,7 +31,6 @@ export const SYSTEM_MUSIC = 'sys-music';
 export const SYSTEM_PROTOCOL = 'sys-protocol';
 
 export type LoadedMusicConfig = {
-  version: ConfigVersionView | null;
   services: SchedulingServiceView[];
   categories: ChoirCategoryView[];
   policies: CategoryServicePolicyView[];
@@ -43,37 +44,20 @@ export type LoadedMusicConfig = {
 };
 
 export type LoadedProtocolConfig = {
-  version: ConfigVersionView | null;
   services: SchedulingServiceView[];
   rules: ProtocolServiceRuleView[];
   dutyPolicy: ProtocolDutyPolicyView | null;
 };
 
-async function activeVersion(systemId: string, versionId?: string): Promise<ConfigVersionView | null> {
-  const v = versionId
-    ? await prisma.configVersion.findFirst({ where: { id: versionId, systemId } })
-    : await prisma.configVersion.findFirst({
-      where: { systemId, status: 'ACTIVE' },
-      orderBy: { version: 'desc' },
-    });
-  return v ? toConfigVersionView(v) : null;
-}
-
 /** Load everything the Music engine needs. */
-export async function loadMusicConfig(versionId?: string): Promise<LoadedMusicConfig> {
-  const version = await activeVersion(SYSTEM_MUSIC, versionId);
-  if (versionId && !version) throw new Error(`Music configuration version ${versionId} was not found`);
-  if (!version) return {
-    version: null, services: [], categories: [], policies: [], choirLinks: new Map(),
-    choirEligibilityOverrides: new Map(), links: [], fixedAssignments: [], unavailability: [],
-  };
-  const versionFilter = { systemId: SYSTEM_MUSIC, configVersionId: version.id, active: true };
+export async function loadMusicConfig(): Promise<LoadedMusicConfig> {
+  const live = { systemId: SYSTEM_MUSIC, active: true };
   const [services, categories, policies, links, fixedAssignments, unavailability] = await Promise.all([
-    prisma.schedulingService.findMany({ where: versionFilter }),
-    prisma.choirCategory.findMany({ where: versionFilter }),
-    prisma.categoryServicePolicy.findMany({ where: versionFilter }),
-    prisma.choirCategoryLink.findMany({ where: versionFilter }),
-    prisma.musicFixedAssignment.findMany({ where: { systemId: SYSTEM_MUSIC, configVersionId: version.id } }),
+    prisma.schedulingService.findMany({ where: live }),
+    prisma.choirCategory.findMany({ where: live }),
+    prisma.categoryServicePolicy.findMany({ where: live }),
+    prisma.choirCategoryLink.findMany({ where: live }),
+    prisma.musicFixedAssignment.findMany({ where: { systemId: SYSTEM_MUSIC } }),
     prisma.musicChoirUnavailability.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
   ]);
   const choirLinks = new Map<string, string[]>();
@@ -85,7 +69,6 @@ export async function loadMusicConfig(versionId?: string): Promise<LoadedMusicCo
     choirEligibilityOverrides.set(l.choirId, toLinkView(l).eligibleOverride);
   }
   return {
-    version,
     services: services.map(toServiceView),
     categories: categories.map(toCategoryView),
     policies: policies.map(toPolicyView),
@@ -95,7 +78,6 @@ export async function loadMusicConfig(versionId?: string): Promise<LoadedMusicCo
     fixedAssignments: fixedAssignments.map((row) => ({
       id: row.id,
       systemId: row.systemId,
-      configVersionId: row.configVersionId,
       categoryServicePolicyId: row.categoryServicePolicyId,
       choirId: row.choirId,
       serviceDate: row.serviceDate,
@@ -120,33 +102,18 @@ export async function loadMusicConfig(versionId?: string): Promise<LoadedMusicCo
   };
 }
 
-/** Load everything the Protocol engine needs. */
-export async function loadProtocolConfig(versionId?: string, calendarVersionId?: string): Promise<LoadedProtocolConfig> {
-  const [version, calendarVersion] = await Promise.all([
-    activeVersion(SYSTEM_PROTOCOL, versionId),
-    activeVersion(SYSTEM_MUSIC, calendarVersionId),
+/** Load everything the Protocol engine needs. The calendar is the live Music calendar. */
+export async function loadProtocolConfig(): Promise<LoadedProtocolConfig> {
+  const [services, rules, dutyPolicy] = await Promise.all([
+    prisma.schedulingService.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
+    prisma.protocolServiceRule.findMany({ where: { systemId: SYSTEM_PROTOCOL, active: true } }),
+    prisma.protocolDutyPolicy.findFirst({ where: { systemId: SYSTEM_PROTOCOL } }),
   ]);
-  if (versionId && !version) throw new Error(`Protocol configuration version ${versionId} was not found`);
-  if (calendarVersionId && !calendarVersion) throw new Error(`Shared calendar version ${calendarVersionId} was not found`);
-  if (!version) return { version: null, services: [], rules: [], dutyPolicy: null };
-  const [services, allServices, ruleRows, dutyPolicy] = await Promise.all([
-    calendarVersion
-      ? prisma.schedulingService.findMany({ where: { systemId: SYSTEM_MUSIC, configVersionId: calendarVersion.id, active: true } })
-      : prisma.schedulingService.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
-    prisma.schedulingService.findMany({ where: { systemId: SYSTEM_MUSIC } }),
-    prisma.protocolServiceRule.findMany({ where: { systemId: SYSTEM_PROTOCOL, configVersionId: version.id, active: true } }),
-    prisma.protocolDutyPolicy.findFirst({ where: { systemId: SYSTEM_PROTOCOL, configVersionId: version.id } }),
-  ]);
-  const codeById = new Map(allServices.map((s) => [s.id, s.code]));
-  const currentIdByCode = new Map(services.map((s) => [s.code, s.id]));
-  const rules = ruleRows.map((r) => {
-    const code = codeById.get(r.serviceId);
-    return toRuleView({ ...r, serviceId: (code && currentIdByCode.get(code)) || r.serviceId });
-  });
   return {
-    version,
     services: services.map(toServiceView),
-    rules,
+    rules: rules.map(toRuleView),
     dutyPolicy: dutyPolicy ? toDutyPolicyView(dutyPolicy) : null,
   };
 }
+
+// ...unchanged: nothing else lived in this file.

@@ -1,0 +1,15 @@
+/* Scheduling configuration tables and the rule dialog. Plain structure; colours come from the app's tokens. */
+.scheduling-table { width: 100%; border-collapse: collapse; margin-block: 0.75rem; }
+.scheduling-table th, .scheduling-table td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border, #ddd); vertical-align: top; }
+.scheduling-table th { font-weight: 600; white-space: nowrap; }
+.scheduling-table tr.is-inactive td { opacity: 0.55; }
+.scheduling-table tr.is-editing td { background: var(--surface-2, rgba(0, 0, 0, 0.03)); }
+.scheduling-table input:not([type='checkbox']), .scheduling-table select { width: 100%; min-width: 5rem; }
+.scheduling-table-actions { white-space: nowrap; text-align: right; }
+.scheduling-table tr[data-shared] td:first-child { box-shadow: inset 3px 0 0 var(--accent, #6b7cff); }
+.scheduling-rules-preview { margin-block: 0.5rem; line-height: 1.5; }
+.scheduling-segmented { display: inline-flex; gap: 0.25rem; }
+.scheduling-rule-dialog fieldset { border: 0; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.35rem; }
+.scheduling-rule-dialog legend { font-weight: 600; margin-bottom: 0.25rem; }
+.scheduling-exceptions-dialog { max-width: 28rem; }
+@media (max-width: 720px) { .scheduling-table { display: block; overflow-x: auto; } }

@@ -1,103 +1,69 @@
 /**
- * Configurable scheduling HTTP API (slice 3.17).
+ * Scheduling configuration HTTP API: LIVE settings (no versions, no drafts, no activation).
  *
- * Endpoints:
- *   GET    /api/scheduling/config/versions          list config versions for a system
- *   POST   /api/scheduling/config/versions          create a config version
- *   GET    /api/scheduling/config/services          list scheduling services
- *   POST   /api/scheduling/config/services          create a scheduling service
- *   PATCH  /api/scheduling/config/services/:id      edit a draft service
- *   GET    /api/scheduling/config/categories        list choir categories
- *   POST   /api/scheduling/config/categories        create a choir category
- *   PATCH  /api/scheduling/config/categories/:id    edit a draft category
- *   GET    /api/scheduling/config/policies          list category × service policies
- *   POST   /api/scheduling/config/policies          create a category × service policy
- *   PATCH  /api/scheduling/config/policies/:id      edit a draft policy
- *   GET    /api/scheduling/config/links             list choir ↔ category links
- *   POST   /api/scheduling/config/links             create a choir ↔ category link
- *   PATCH  /api/scheduling/config/links/:id          edit a draft link
- *   GET    /api/scheduling/config/fixed-assignments list FIXED choir designations
- *   POST   /api/scheduling/config/fixed-assignments add a draft designation
- *   DELETE /api/scheduling/config/fixed-assignments/:id remove a draft designation
- *   GET    /api/scheduling/config/availability      list Music choir unavailability
- *   POST   /api/scheduling/config/availability      record Music choir unavailability
- *   DELETE /api/scheduling/config/availability/:id clear a recorded unavailability
- *   GET    /api/scheduling/config/protocol/rules    list protocol service rules
- *   POST   /api/scheduling/config/protocol/rules    create a protocol service rule
- *   PATCH  /api/scheduling/config/protocol/rules/:id edit a draft rule
- *   GET    /api/scheduling/config/protocol/policy   get protocol duty policy
- *   POST   /api/scheduling/config/protocol/policy   create a protocol duty policy
- *   PATCH  /api/scheduling/config/protocol/policy/:id edit a draft duty policy
+ *   GET    /api/scheduling/config/services|categories|policies|links       read live rows
+ *   GET    /api/scheduling/config/fixed-assignments|availability           read live rows
+ *   GET    /api/scheduling/config/protocol/rules|policy                    read live rows
+ *   GET    /api/scheduling/config/validation                               can the live config generate?
+ *   POST   /api/scheduling/config/services|categories|policies|links       create
+ *   PATCH  /api/scheduling/config/services|categories|policies|links/:id   edit
+ *   POST   /api/scheduling/config/services/:id/retire                      retire a service
+ *   POST   /api/scheduling/config/fixed-assignments  DELETE .../:id        designate / remove a choir
+ *   POST   /api/scheduling/config/availability       DELETE .../:id        record / clear unavailability
+ *   POST   /api/scheduling/config/protocol/rules     PATCH .../:id         Protocol team rules
+ *   POST   /api/scheduling/config/protocol/policy    PATCH .../:id         Protocol duty policy
+ *   GET|POST|PATCH|DELETE /api/scheduling/config/rules                Rules (see routes/configRules.ts)
+ *   GET /config/choirs, PUT /config/choirs/:id/category               Choirs tab (same file)
+ *   POST   /api/scheduling/config/lock               take the edit lock
+ *   POST   /api/scheduling/config/lock/refresh       keep it alive
+ *   DELETE /api/scheduling/config/lock               give it up
  *
- * Query `systemId` selects the tenant. Authorization is by SCHEDULING/PEOPLE
- * letters held in that system, never by a client-supplied systemId alone.
+ * Query `systemId` selects the tenant. Authorization is by SCHEDULING letters held in that system, never by
+ * a client-supplied systemId alone.
  *
- * Configuration writes are restricted to DRAFT versions.
+ * EVERY mutating route below does one thing: build a change and hand it to `saveConfigChange`, which owns the
+ * permission check, the edit lock, validation and the audit entry. A route that writes a row itself is a bug.
+ *
+ * Compatibility: old clients still send `configVersionId` in bodies and queries. It is ignored (zod strips
+ * unknown keys; query params are never read). The /versions routes are gone and now answer 404.
  */
 
 import { Router } from 'express';
-import { buildMusicCalendar } from '../music/engine.js';
 import { z } from 'zod';
 import { prisma } from '../lib/prisma.js';
 import { requireAuth, type AuthedRequest, pathParam } from '../middleware/http.js';
 import { loadAccessData } from '../notifications/feed.js';
-import {
-  createConfigVersion, listConfigVersions, getActiveConfigVersion,
-  cloneActiveConfigVersion, activateConfigVersion, changeDraftVersion,
-  createSchedulingService, listSchedulingServices, getSchedulingServiceByCodeInVersion, supersedeSchedulingService, updateSchedulingService, toServiceView,
-  createChoirCategory, listChoirCategories, getChoirCategoryByCode, updateChoirCategory,
-  createCategoryServicePolicy, listCategoryServicePolicies, updateCategoryServicePolicy,
-  createChoirCategoryLink, listChoirCategoryLinks, getChoirCategoryLinkByChoir, updateChoirCategoryLink,
-  createProtocolServiceRule, listProtocolServiceRules, getProtocolServiceRuleByService, updateProtocolServiceRule,
-  createProtocolDutyPolicy, getProtocolDutyPolicyBySystem, updateProtocolDutyPolicy,
-} from './store.js';
-import {
-  canReadConfig, canWriteConfig,
-} from './rules.js';
+import { canReadConfig, canWriteConfig } from './rules.js';
 import {
   EligibleOverrideSchema, FrequencyOverrideSchema, FrequencyPeriodSchema,
-  validateMusicConfigSnapshot, validatePolicyValues,
 } from './musicConfigRules.js';
-import { parseJson } from './types.js';
+import { toCategoryView, toDutyPolicyView, toLinkView, toPolicyView, toRuleView, toServiceView } from './store.js';
+import { configRulesRouter } from '../routes/configRules.js';
+import { acquireEditLock, refreshEditLock, releaseEditLock } from './editLock.js';
+import {
+  ConfigError, MUSIC_SYSTEM, PROTOCOL_SYSTEM, saveConfigChange, validateLiveConfig,
+  type ConfigOp,
+} from './saveConfigChange.js';
 
 export const configRouter = Router();
+configRouter.use(configRulesRouter); // Rules + Choirs tab endpoints (routes/configRules.ts)
 
 type Res = import('express').Response;
 const fail = (res: Res, status: number, code: string, error: string) => res.status(status).json({ error, code });
-
 const accessOf = async (me: string) => (await loadAccessData(me)).data;
 
-async function audit(actorId: string, systemId: string, action: string, detail: string, meta: object) {
-  await prisma.auditEvent.create({ data: { at: new Date(), actorId, systemId, action, resource: 'SCHEDULING', detail, metaJson: JSON.stringify(meta) } });
-}
-
-/* ─── Validation ─── */
-
 const IdSchema = z.string().min(1);
-const SystemIdSchema = z.string().min(1);
 const NonEmptyName = z.string().trim().min(1).max(120);
 const CodeSchema = z.string().trim().min(1).max(40).regex(/^[a-zA-Z0-9_-]+$/);
 const PositiveInt = z.number().int().positive();
 const NonNegativeInt = z.number().int().nonnegative();
-const IsoDate = z.string().datetime().optional();
-
-const VersionSchema = z.object({
-  systemId: SystemIdSchema,
-  version: PositiveInt,
-  label: NonEmptyName,
-  status: z.enum(['DRAFT', 'ACTIVE', 'SUPERSEDED', 'SCHEDULED']).default('DRAFT'),
-  effectiveFrom: IsoDate,
-  effectiveTo: IsoDate,
-  createdByPersonId: SystemIdSchema.optional(),
-  reason: z.string().max(500).optional().nullable(),
-  previousVersionId: z.string().cuid().optional().nullable(),
-  notes: z.record(z.string(), z.unknown()).default({}),
-  validation: z.record(z.string(), z.unknown()).default({}),
-  affectedSchedules: z.array(z.string()).default([]),
-});
+const DateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
+  const date = new Date(`${value}T00:00:00.000Z`);
+  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
+}, 'Use a valid calendar date.');
 
 const ServiceSchema = z.object({
-  systemId: SystemIdSchema,
+  systemId: z.literal(MUSIC_SYSTEM),
   code: CodeSchema,
   name: NonEmptyName,
   kind: z.enum(['SERVICE', 'REHEARSAL', 'MEETING', 'OTHER']).default('SERVICE'),
@@ -106,34 +72,22 @@ const ServiceSchema = z.object({
   recurrence: z.enum(['WEEKLY', 'MONTHLY', 'SELECTED_DATES', 'CUSTOM']).default('WEEKLY'),
   selectedDates: z.array(z.string()).default([]),
   active: z.boolean().default(true),
-  effectiveFrom: IsoDate,
-  effectiveTo: IsoDate,
   musicRequired: z.boolean().default(false),
   protocolRequired: z.boolean().default(false),
   maxChoirs: NonNegativeInt.default(3),
-  configVersionId: IdSchema.optional().nullable(),
   displayOrder: NonNegativeInt.default(0),
-  supersedesId: z.string().cuid().optional().nullable(),
-  createdByPersonId: SystemIdSchema.optional(),
 });
-
 const CategorySchema = z.object({
-  systemId: SystemIdSchema,
+  systemId: z.literal(MUSIC_SYSTEM),
   code: CodeSchema,
   name: NonEmptyName,
   description: z.string().max(500).default(''),
   active: z.boolean().default(true),
-  effectiveFrom: IsoDate,
-  effectiveTo: IsoDate,
-  configVersionId: IdSchema.optional().nullable(),
-  supersedesId: z.string().cuid().optional().nullable(),
-  createdByPersonId: SystemIdSchema.optional(),
 });
-
 const PolicySchema = z.object({
-  systemId: SystemIdSchema,
-  categoryId: SystemIdSchema,
-  serviceId: SystemIdSchema,
+  systemId: z.literal(MUSIC_SYSTEM),
+  categoryId: IdSchema,
+  serviceId: IdSchema,
   eligible: z.boolean().default(true),
   active: z.boolean().default(true),
   frequencyTarget: PositiveInt.optional().nullable(),
@@ -144,30 +98,18 @@ const PolicySchema = z.object({
   maxCount: NonNegativeInt.optional().nullable(),
   frequencyPeriod: FrequencyPeriodSchema.optional().nullable(),
   requireAll: z.boolean().default(false),
-  configVersionId: IdSchema.optional().nullable(),
-  effectiveFrom: IsoDate,
-  effectiveTo: IsoDate,
-  supersedesId: z.string().cuid().optional().nullable(),
-  createdByPersonId: SystemIdSchema.optional(),
 });
-
 const LinkSchema = z.object({
-  systemId: SystemIdSchema,
-  choirId: SystemIdSchema,
-  categoryId: SystemIdSchema,
+  systemId: z.literal(MUSIC_SYSTEM),
+  choirId: IdSchema,
+  categoryId: IdSchema,
   eligibleOverride: EligibleOverrideSchema,
   frequencyOverride: FrequencyOverrideSchema,
   active: z.boolean().default(true),
-  effectiveFrom: IsoDate,
-  effectiveTo: IsoDate,
-  configVersionId: IdSchema.optional().nullable(),
-  supersedesId: z.string().cuid().optional().nullable(),
-  createdByPersonId: SystemIdSchema.optional(),
 });
-
 const ProtocolRuleSchema = z.object({
-  systemId: SystemIdSchema,
-  serviceId: SystemIdSchema,
+  systemId: z.literal(PROTOCOL_SYSTEM),
+  serviceId: IdSchema,
   active: z.boolean().default(true),
   required: z.boolean().default(false),
   defaultTeamSize: PositiveInt.default(10),
@@ -175,15 +117,9 @@ const ProtocolRuleSchema = z.object({
   requireChoir: z.boolean().default(true),
   requireWorship: z.boolean().default(true),
   relaxableKinds: z.array(z.string()).default([]),
-  configVersionId: IdSchema.optional().nullable(),
-  effectiveFrom: IsoDate,
-  effectiveTo: IsoDate,
-  supersedesId: z.string().cuid().optional().nullable(),
-  createdByPersonId: SystemIdSchema.optional(),
 });
-
 const DutyPolicySchema = z.object({
-  systemId: SystemIdSchema,
+  systemId: z.literal(PROTOCOL_SYSTEM),
   preferTarget: PositiveInt.default(3),
   softMax: PositiveInt.default(3),
   hardMax: PositiveInt.default(4),
@@ -192,11 +128,6 @@ const DutyPolicySchema = z.object({
   musicCompatibilityRequired: z.boolean().default(true),
   leadershipPriorities: z.array(z.string()).default([]),
   exceptionsAllowed: z.boolean().default(true),
-  configVersionId: IdSchema.optional().nullable(),
-  effectiveFrom: IsoDate,
-  effectiveTo: IsoDate,
-  supersedesId: z.string().cuid().optional().nullable(),
-  createdByPersonId: SystemIdSchema.optional(),
 });
 
 /* ─── Helpers ─── */
@@ -207,596 +138,201 @@ function systemIdOf(req: AuthedRequest): string | undefined {
   if (Array.isArray(raw) && typeof raw[0] === 'string') return raw[0];
   return undefined;
 }
-
-const MUSIC_SYSTEM = 'sys-music';
-const PROTOCOL_SYSTEM = 'sys-protocol';
 const isConfigSystem = (systemId: string) => systemId === MUSIC_SYSTEM || systemId === PROTOCOL_SYSTEM;
 
-async function draftVersionExists(res: Res, systemId: string, versionId: string | null | undefined): Promise<boolean> {
-  if (!versionId) {
-    fail(res, 400, 'CONFIG_VERSION_REQUIRED', 'Create a draft configuration version first');
-    return false;
-  }
-  const version = await prisma.configVersion.findFirst({ where: { id: versionId, systemId } });
-  if (!version || version.status !== 'DRAFT') {
-    fail(res, 409, 'CONFIG_VERSION_NOT_DRAFT', 'Configuration changes must be made in a draft version');
-    return false;
-  }
-  return true;
-}
-
-async function musicDraftReferencesExist(
-  res: Res,
-  configVersionId: string,
-  input: { categoryId?: string; serviceId?: string },
-): Promise<boolean> {
-  if (input.categoryId) {
-    const category = await prisma.choirCategory.findFirst({
-      where: { id: input.categoryId, systemId: MUSIC_SYSTEM, configVersionId, active: true },
-    });
-    if (!category) {
-      fail(res, 400, 'CONFIG_REFERENCE', 'Choose an active choir category in this draft');
-      return false;
-    }
-  }
-  if (input.serviceId) {
-    const service = await prisma.schedulingService.findFirst({
-      where: { id: input.serviceId, systemId: MUSIC_SYSTEM, configVersionId, active: true },
-    });
-    if (!service) {
-      fail(res, 400, 'CONFIG_REFERENCE', 'Choose an active service in this draft');
-      return false;
-    }
-  }
-  return true;
-}
-
-async function validateMusicVersion(versionId: string) {
-  const [services, categories, policies, links, choirs, fixedAssignments] = await Promise.all([
-    prisma.schedulingService.findMany({ where: { systemId: MUSIC_SYSTEM, configVersionId: versionId } }),
-    prisma.choirCategory.findMany({ where: { systemId: MUSIC_SYSTEM, configVersionId: versionId } }),
-    prisma.categoryServicePolicy.findMany({ where: { systemId: MUSIC_SYSTEM, configVersionId: versionId } }),
-    prisma.choirCategoryLink.findMany({ where: { systemId: MUSIC_SYSTEM, configVersionId: versionId } }),
-    prisma.musicChoir.findMany(),
-    prisma.musicFixedAssignment.findMany({ where: { systemId: MUSIC_SYSTEM, configVersionId: versionId } }),
-  ]);
-  return validateMusicConfigSnapshot({
-    services,
-    categories,
-    policies,
-    links: links.map((row) => ({
-      choirId: row.choirId,
-      categoryId: row.categoryId,
-      active: row.active,
-      eligibleOverride: parseJson(row.eligibleOverrideJson, {}),
-      frequencyOverride: parseJson(row.frequencyOverrideJson, {}),
-    })),
-    choirs,
-    fixedAssignments,
-  });
-}
-
-async function validateLinkOverrides(
-  configVersionId: string,
-  categoryId: string,
-  eligibleOverride: Record<string, boolean>,
-  frequencyOverride: Record<string, {
-    frequencyTarget?: number;
-    frequencyCounting?: 'ASSIGNMENTS' | 'DISTINCT_DATES';
-    frequencyKind?: 'MINIMUM' | 'TARGET' | 'MAXIMUM';
-    frequencyPeriod?: 'MONTH' | 'QUARTER' | 'HALF_YEAR' | 'YEAR';
-  }>,
-): Promise<string | null> {
-  const [services, policies] = await Promise.all([
-    prisma.schedulingService.findMany({ where: { systemId: MUSIC_SYSTEM, configVersionId } }),
-    prisma.categoryServicePolicy.findMany({ where: { systemId: MUSIC_SYSTEM, configVersionId, categoryId } }),
-  ]);
-  const serviceByCode = new Map(services.map((service) => [service.code.toLowerCase(), service]));
-  const policyByService = new Map(policies.map((policy) => [policy.serviceId, policy]));
-  const scopedCodes = [...Object.keys(eligibleOverride), ...Object.keys(frequencyOverride)];
-  for (const overrides of [eligibleOverride, frequencyOverride]) {
-    const seen = new Set<string>();
-    for (const code of Object.keys(overrides)) {
-      const normalized = code.toLowerCase();
-      if (seen.has(normalized)) return `The override for service ${code} is repeated with different capitalization.`;
-      seen.add(normalized);
-    }
-  }
-  for (const code of scopedCodes) {
-    const normalized = code.toLowerCase();
-    const service = serviceByCode.get(normalized);
-    if (!service) return `The override refers to service ${code}, which is not in this draft.`;
-    const policy = policyByService.get(service.id);
-    if (!policy?.active) return `Add an active category rule for ${service.name} before adding a choir override.`;
-  }
-  for (const [code, override] of Object.entries(frequencyOverride)) {
-    const service = serviceByCode.get(code.toLowerCase())!;
-    const policy = policyByService.get(service.id)!;
-    const target = override.frequencyTarget ?? policy.frequencyTarget;
-    const period = override.frequencyPeriod ?? policy.frequencyPeriod;
-    if (target === null || target === undefined) {
-      return `The frequency override for ${service.name} needs a positive frequency target.`;
-    }
-    if (!period) {
-      return `Choose a period for the frequency override on ${service.name}.`;
-    }
-    const errors = validatePolicyValues({
-      eligible: policy.eligible,
-      frequencyTarget: target,
-      frequencyCounting: override.frequencyCounting ?? policy.frequencyCounting,
-      frequencyKind: override.frequencyKind ?? policy.frequencyKind,
-      frequencyPeriod: period,
-      planningMode: policy.planningMode,
-      minCount: policy.minCount,
-      maxCount: policy.maxCount,
-      requireAll: policy.requireAll,
-    });
-    if (errors.length) return errors[0]!;
-  }
-  return null;
-}
-
-async function activeSharedServiceExists(res: Res, serviceId: string): Promise<boolean> {
-  const service = await prisma.schedulingService.findFirst({
-    where: { id: serviceId, systemId: MUSIC_SYSTEM, active: true },
-  });
-  if (!service) {
-    fail(res, 400, 'CONFIG_REFERENCE', 'Choose an active shared calendar service');
-    return false;
-  }
-  return true;
-}
-
-/* ─── ConfigVersion ─── */
-
-configRouter.get('/config/versions', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
+/** Read gate: SCHEDULING R in the tenant, else 404 (never reveal the system exists). */
+async function readGate(req: AuthedRequest, res: Res, only?: string): Promise<string | null> {
   const systemId = systemIdOf(req);
-  if (!systemId || !isConfigSystem(systemId)) return fail(res, 400, 'BAD_INPUT', 'A supported systemId is required');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const versions = await listConfigVersions(systemId);
-  res.json({ versions });
-});
-
-configRouter.post('/config/versions', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const parsed = VersionSchema.safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid config version');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!isConfigSystem(b.systemId)) return fail(res, 400, 'BAD_INPUT', 'Unsupported configuration system');
-  if (!canWriteConfig(me, b.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (b.status !== 'DRAFT') return fail(res, 400, 'BAD_INPUT', 'Create a draft version, then activate it separately');
-  // Idempotency: same (systemId, version) already exists -> return it.
-  const existing = await prisma.configVersion.findFirst({ where: { systemId: b.systemId, version: b.version } });
-  if (existing) {
-    await audit(me, b.systemId, 'CONFIG_VERSION_EXISTS', `Config version ${b.version} already exists`, { configVersionId: existing.id });
-    return res.json({ version: existing.id, status: 'EXISTS' });
-  }
-  const created = await createConfigVersion({ ...b, status: 'DRAFT', createdByPersonId: me });
-  await audit(me, b.systemId, 'CONFIG_VERSION_CREATED', `Created config version ${b.version} “${b.label}”`, { configVersionId: created.id });
-  res.status(201).json({ version: created.id });
-});
-
-configRouter.post('/config/versions/clone', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const parsed = z.object({
-    systemId: z.enum([MUSIC_SYSTEM, PROTOCOL_SYSTEM]),
-    label: NonEmptyName,
-    reason: z.string().max(500).optional().nullable(),
-  }).safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Choose a system and draft label');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, b.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  try {
-    const version = await cloneActiveConfigVersion(b.systemId, { ...b, createdByPersonId: me });
-    await audit(me, b.systemId, 'CONFIG_VERSION_CLONED', `Created draft “${version.label}” from the active configuration`, { configVersionId: version.id, previousVersionId: version.previousVersionId });
-    return res.status(201).json({ version });
-  } catch (error) {
-    if (error instanceof Error && error.message.startsWith('No active configuration')) return fail(res, 409, 'NO_ACTIVE_CONFIG', error.message);
-    throw error;
-  }
-});
-
-configRouter.post('/config/versions/:id/activate', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
-  if (!id || !IdSchema.safeParse(id).success) return fail(res, 400, 'BAD_INPUT', 'Invalid version id');
-  const version = await prisma.configVersion.findUnique({ where: { id } });
-  if (!version) return fail(res, 404, 'NOT_FOUND', 'Configuration version not found');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, version.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (version.systemId === MUSIC_SYSTEM) {
-    const validation = await validateMusicVersion(id);
-    if (!validation.ok) {
-      return res.status(409).json({
-        error: 'Resolve the Music scheduling rules before activating this version.',
-        code: 'CONFIG_INVALID',
-        issues: validation.errors,
-      });
-    }
-  }
-  try {
-    const activated = await activateConfigVersion(id, version.systemId);
-    if (!activated) return fail(res, 404, 'NOT_FOUND', 'Configuration version not found');
-    await audit(me, version.systemId, 'CONFIG_VERSION_ACTIVATED', `Activated configuration v${activated.version}`, { configVersionId: id });
-    return res.json({ version: activated });
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('Only a draft or scheduled')) return fail(res, 409, 'CONFIG_VERSION_STATE', error.message);
-    throw error;
-  }
-});
-
-async function draftVersionAction(req: AuthedRequest, res: Res, action: 'archive' | 'restore' | 'delete') {
-  const id = pathParam(req, 'id');
-  if (!id || !IdSchema.safeParse(id).success) return fail(res, 400, 'BAD_INPUT', 'Invalid version id');
-  const version = await prisma.configVersion.findUnique({ where: { id } });
-  if (!version || !isConfigSystem(version.systemId)) return fail(res, 404, 'NOT_FOUND', 'Configuration version not found');
-  const me = req.auth!.personId;
-  if (!canWriteConfig(me, version.systemId, await accessOf(me))) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  try {
-    await changeDraftVersion(id, version.systemId, action);
-  } catch (error) {
-    if (error instanceof Error && error.message === 'CONFIG_VERSION_STATE') return fail(res, 409, 'CONFIG_VERSION_STATE', action === 'restore' ? 'Only an archived draft can be restored.' : 'Only a draft configuration version can be archived or deleted.');
-    if (error instanceof Error && (error.message === 'CONFIG_VERSION_IN_USE' || ('code' in error && error.code === 'P2003'))) return fail(res, 409, 'CONFIG_VERSION_IN_USE', 'This version is referenced by a schedule or another configuration. Keep it for history.');
-    throw error;
-  }
-  await audit(me, version.systemId, 'CONFIG_VERSION_' + (action === 'delete' ? 'DELETED' : action === 'archive' ? 'ARCHIVED' : 'RESTORED'), action + ' configuration v' + version.version + ' “' + version.label + '”', { configVersionId: id });
-  return res.json({ ok: true });
+  if (!systemId || !isConfigSystem(systemId) || (only && systemId !== only)) { fail(res, 400, 'BAD_INPUT', 'A supported systemId is required'); return null; }
+  if (!canReadConfig(req.auth!.personId, systemId, await accessOf(req.auth!.personId))) { fail(res, 404, 'NOT_FOUND', 'Not found'); return null; }
+  return systemId;
 }
-configRouter.post('/config/versions/:id/archive', requireAuth, (req: AuthedRequest, res) => draftVersionAction(req, res, 'archive'));
-configRouter.post('/config/versions/:id/restore', requireAuth, (req: AuthedRequest, res) => draftVersionAction(req, res, 'restore'));
-configRouter.delete('/config/versions/:id', requireAuth, (req: AuthedRequest, res) => draftVersionAction(req, res, 'delete'));
 
-/* ─── SchedulingService ─── */
+/** Run one change through the single write path and translate its refusals. */
+async function save(req: AuthedRequest, res: Res, systemId: string, op: ConfigOp, reply: (row: unknown, status: string) => object, createdStatus = 201) {
+  try {
+    const { results } = await saveConfigChange(systemId, req.auth!.personId, { ops: [op] });
+    const main = results.find((r) => r.op === op.op)!;
+    const code = main.status === 'CREATED' ? createdStatus : 200;
+    return res.status(code).json({ ...reply(main.row, main.status), status: main.status, implied: results.filter((r) => r.op === 'policy.implied').length });
+  } catch (error) {
+    if (error instanceof ConfigError) return res.status(error.status).json(error.body);
+    throw error;
+  }
+}
+const badInput = (res: Res, what: string) => fail(res, 400, 'BAD_INPUT', what);
+const idOf = (req: AuthedRequest) => { const id = pathParam(req, 'id'); return id && IdSchema.safeParse(id).success ? id : null; };
 
-configRouter.get('/config/services', requireAuth, async (req: AuthedRequest, res) => {
+/* ─── Edit lock ─── */
+
+async function lockGate(req: AuthedRequest, res: Res): Promise<string | null> {
+  const raw = systemIdOf(req) ?? (typeof (req.body as { systemId?: unknown } | undefined)?.systemId === 'string' ? (req.body as { systemId: string }).systemId : undefined);
+  if (!raw || !isConfigSystem(raw)) { fail(res, 400, 'BAD_INPUT', 'A supported systemId is required'); return null; }
   const me = req.auth!.personId;
-  const systemId = systemIdOf(req);
-  if (!systemId || !isConfigSystem(systemId)) return fail(res, 400, 'BAD_INPUT', 'A supported systemId is required');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const activeOnly = req.query.active === 'true';
-  const requestedVersion = typeof req.query.configVersionId === 'string' ? req.query.configVersionId : undefined;
-  const calendarVersion = requestedVersion
-    ? await prisma.configVersion.findFirst({ where: { id: requestedVersion, systemId: MUSIC_SYSTEM } })
-    : await getActiveConfigVersion(MUSIC_SYSTEM);
-  if (requestedVersion && !calendarVersion) return fail(res, 404, 'NOT_FOUND', 'Calendar version not found');
-  const services = await listSchedulingServices(MUSIC_SYSTEM, activeOnly, calendarVersion?.id);
-  res.json({ services });
+  const data = await accessOf(me);
+  if (!canReadConfig(me, raw, data)) { fail(res, 404, 'NOT_FOUND', 'Not found'); return null; }
+  if (!canWriteConfig(me, raw, data)) { fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration'); return null; }
+  return raw;
+}
+
+configRouter.post('/config/lock', requireAuth, async (req: AuthedRequest, res) => {
+  const systemId = await lockGate(req, res);
+  if (!systemId) return;
+  const result = await acquireEditLock(systemId, req.auth!.personId);
+  if (!result.ok) {
+    return res.status(409).json({
+      error: 'LOCKED', code: 'LOCKED', holder: result.holder,
+      message: `${result.holder.name ?? 'Another person'} is currently editing configuration.`,
+    });
+  }
+  res.json({ ok: true, lock: result.lock });
 });
 
-configRouter.post('/config/services', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const parsed = ServiceSchema.safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid service');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, b.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (b.systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Shared calendar services are managed in sys-music');
-  if (!(await draftVersionExists(res, b.systemId, b.configVersionId))) return;
-  const existing = await getSchedulingServiceByCodeInVersion(b.systemId, b.code, b.configVersionId!);
-  if (existing) {
-    await audit(me, b.systemId, 'SERVICE_EXISTS', `Service ${b.code} already exists`, { serviceId: existing.id });
-    return res.json({ service: existing.id, status: 'EXISTS' });
+configRouter.post('/config/lock/refresh', requireAuth, async (req: AuthedRequest, res) => {
+  const systemId = await lockGate(req, res);
+  if (!systemId) return;
+  if (!(await refreshEditLock(systemId, req.auth!.personId))) {
+    return res.status(409).json({ error: 'LOCKED', code: 'LOCKED', holder: null, message: 'Your edit lock expired. Reopen the configuration to take it again.' });
   }
-  const created = await createSchedulingService({ ...b, createdByPersonId: me });
-  await audit(me, b.systemId, 'SERVICE_CREATED', `Created service “${b.name}” (${b.code})`, { serviceId: created.id });
-  res.status(201).json({ service: created.id });
-});
-
-configRouter.patch('/config/services/:id', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
-  const parsed = z.object({
-    configVersionId: IdSchema,
-    patch: ServiceSchema.pick({
-      code: true, name: true, kind: true, weekday: true, time: true, recurrence: true,
-      selectedDates: true, active: true, musicRequired: true, protocolRequired: true,
-      maxChoirs: true, displayOrder: true,
-    }).partial(),
-  }).safeParse(req.body);
-  if (!id || !IdSchema.safeParse(id).success || !parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the service fields');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!(await draftVersionExists(res, MUSIC_SYSTEM, parsed.data.configVersionId))) return;
-  const row = await prisma.schedulingService.findUnique({ where: { id } });
-  if (!row) return fail(res, 404, 'NOT_FOUND', 'Service not found');
-  if (row.systemId !== MUSIC_SYSTEM || row.configVersionId !== parsed.data.configVersionId) {
-    return fail(res, 409, 'CONFIG_VERSION_MISMATCH', 'The service does not belong to the selected draft');
-  }
-  const { patch } = parsed.data;
-  if (patch.code && patch.code !== row.code) {
-    const duplicate = await getSchedulingServiceByCodeInVersion(MUSIC_SYSTEM, patch.code, parsed.data.configVersionId);
-    if (duplicate) return fail(res, 409, 'DUPLICATE', 'That service code is already used in this draft');
-  }
-  const updated = await updateSchedulingService(id, patch);
-  await audit(me, MUSIC_SYSTEM, 'SERVICE_UPDATED', `Updated service “${updated.name}” (${updated.code})`, { serviceId: id, configVersionId: parsed.data.configVersionId });
-  res.json({ service: updated });
-});
-
-configRouter.post('/config/services/:id/retire', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
-  if (!id || !IdSchema.safeParse(id).success) return fail(res, 400, 'BAD_INPUT', 'Invalid service id');
-  const row = await prisma.schedulingService.findUnique({ where: { id } });
-  if (!row) return fail(res, 404, 'NOT_FOUND', 'Service not found');
-  if (row.systemId !== MUSIC_SYSTEM) return fail(res, 409, 'SERVICE_OWNER', 'Only shared calendar services can be retired here');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!row.configVersionId) return fail(res, 409, 'LEGACY_SERVICE', 'Create a versioned draft before retiring this service');
-  const oldVersion = await prisma.configVersion.findFirst({ where: { id: row.configVersionId, systemId: MUSIC_SYSTEM } });
-  if (!oldVersion || oldVersion.status !== 'ACTIVE') return fail(res, 409, 'CONFIG_VERSION_STATE', 'Only a service in the active calendar can be retired');
-  const draft = await cloneActiveConfigVersion(MUSIC_SYSTEM, {
-    label: `${oldVersion.label} - retire ${row.code}`,
-    reason: `Retire shared calendar service ${row.code}`,
-    createdByPersonId: me,
-  });
-  const replacement = await getSchedulingServiceByCodeInVersion(MUSIC_SYSTEM, row.code, draft.id);
-  if (!replacement) return fail(res, 409, 'SERVICE_NOT_COPIED', 'The service was not found in the copied draft');
-  await supersedeSchedulingService(replacement.id, new Date());
-  await activateConfigVersion(draft.id, MUSIC_SYSTEM);
-  await audit(me, MUSIC_SYSTEM, 'SERVICE_RETIRED', `Retired service “${row.name}” (${row.code})`, { serviceId: id, configVersionId: draft.id });
   res.json({ ok: true });
 });
 
-/* ─── ChoirCategory ─── */
+configRouter.delete('/config/lock', requireAuth, async (req: AuthedRequest, res) => {
+  const systemId = await lockGate(req, res);
+  if (!systemId) return;
+  res.json({ ok: true, released: await releaseEditLock(systemId, req.auth!.personId) });
+});
+
+/* ─── Validation status ─── */
+
+configRouter.get('/config/validation', requireAuth, async (req: AuthedRequest, res) => {
+  const systemId = await readGate(req, res);
+  if (!systemId) return;
+  res.json(await validateLiveConfig(systemId));
+});
+
+/* ─── Services ─── */
+
+configRouter.get('/config/services', requireAuth, async (req: AuthedRequest, res) => {
+  if (!(await readGate(req, res))) return;
+  const rows = await prisma.schedulingService.findMany({
+    where: { systemId: MUSIC_SYSTEM, ...(req.query.active === 'true' ? { active: true } : {}) },
+    orderBy: [{ displayOrder: 'asc' }, { code: 'asc' }],
+  });
+  res.json({ services: rows.map(toServiceView) });
+});
+
+configRouter.post('/config/services', requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = ServiceSchema.safeParse(req.body);
+  if (!parsed.success) return badInput(res, 'Invalid service');
+  const { systemId, ...data } = parsed.data;
+  return save(req, res, systemId, { op: 'service.create', data }, (service) => ({ service }));
+});
+
+configRouter.patch('/config/services/:id', requireAuth, async (req: AuthedRequest, res) => {
+  const id = idOf(req);
+  const parsed = z.object({
+    patch: ServiceSchema.omit({ systemId: true }).partial(),
+  }).safeParse(req.body);
+  if (!id || !parsed.success) return badInput(res, 'Check the service fields');
+  return save(req, res, MUSIC_SYSTEM, { op: 'service.update', id, patch: parsed.data.patch }, (service) => ({ service }));
+});
+
+configRouter.post('/config/services/:id/retire', requireAuth, async (req: AuthedRequest, res) => {
+  const id = idOf(req);
+  if (!id) return badInput(res, 'Invalid service id');
+  return save(req, res, MUSIC_SYSTEM, { op: 'service.retire', id }, () => ({ ok: true }));
+});
+
+/* ─── Categories ─── */
 
 configRouter.get('/config/categories', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const systemId = systemIdOf(req);
-  if (systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Choir categories belong to sys-music');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const activeOnly = req.query.active === 'true';
-  const versionId = typeof req.query.configVersionId === 'string' ? req.query.configVersionId : (await getActiveConfigVersion(MUSIC_SYSTEM))?.id;
-  const categories = await listChoirCategories(systemId, activeOnly, versionId);
-  res.json({ categories });
+  if (!(await readGate(req, res, MUSIC_SYSTEM))) return;
+  const rows = await prisma.choirCategory.findMany({
+    where: { systemId: MUSIC_SYSTEM, ...(req.query.active === 'true' ? { active: true } : {}) },
+    orderBy: [{ code: 'asc' }],
+  });
+  res.json({ categories: rows.map(toCategoryView) });
 });
 
 configRouter.post('/config/categories', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
   const parsed = CategorySchema.safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid category');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, b.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (b.systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Choir categories belong to sys-music');
-  if (!(await draftVersionExists(res, b.systemId, b.configVersionId))) return;
-  const existing = await getChoirCategoryByCode(b.systemId, b.code, b.configVersionId!);
-  if (existing) {
-    await audit(me, b.systemId, 'CATEGORY_EXISTS', `Category ${b.code} already exists`, { categoryId: existing.id });
-    return res.json({ category: existing.id, status: 'EXISTS' });
-  }
-  const created = await createChoirCategory({ ...b, createdByPersonId: me });
-  await audit(me, b.systemId, 'CATEGORY_CREATED', `Created category “${b.name}” (${b.code})`, { categoryId: created.id });
-  res.status(201).json({ category: created.id });
+  if (!parsed.success) return badInput(res, 'Invalid category');
+  const { systemId, ...data } = parsed.data;
+  return save(req, res, systemId, { op: 'category.create', data }, (category) => ({ category }));
 });
 
 configRouter.patch('/config/categories/:id', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
-  const parsed = z.object({
-    configVersionId: IdSchema,
-    patch: CategorySchema.pick({ code: true, name: true, description: true, active: true }).partial(),
-  }).safeParse(req.body);
-  if (!id || !IdSchema.safeParse(id).success || !parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the category fields');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!(await draftVersionExists(res, MUSIC_SYSTEM, parsed.data.configVersionId))) return;
-  const row = await prisma.choirCategory.findUnique({ where: { id } });
-  if (!row) return fail(res, 404, 'NOT_FOUND', 'Category not found');
-  if (row.systemId !== MUSIC_SYSTEM || row.configVersionId !== parsed.data.configVersionId) {
-    return fail(res, 409, 'CONFIG_VERSION_MISMATCH', 'The category does not belong to the selected draft');
-  }
-  if (parsed.data.patch.code && parsed.data.patch.code !== row.code) {
-    const duplicate = await getChoirCategoryByCode(MUSIC_SYSTEM, parsed.data.patch.code, parsed.data.configVersionId);
-    if (duplicate) return fail(res, 409, 'DUPLICATE', 'That category code is already used in this draft');
-  }
-  const updated = await updateChoirCategory(id, parsed.data.patch);
-  await audit(me, MUSIC_SYSTEM, 'CATEGORY_UPDATED', `Updated category “${updated.name}” (${updated.code})`, { categoryId: id, configVersionId: parsed.data.configVersionId });
-  res.json({ category: updated });
+  const id = idOf(req);
+  const parsed = z.object({ patch: CategorySchema.pick({ code: true, name: true, description: true, active: true }).partial() }).safeParse(req.body);
+  if (!id || !parsed.success) return badInput(res, 'Check the category fields');
+  return save(req, res, MUSIC_SYSTEM, { op: 'category.update', id, patch: parsed.data.patch }, (category) => ({ category }));
 });
 
-/* ─── CategoryServicePolicy ─── */
+/* ─── Category x service policies ─── */
 
 configRouter.get('/config/policies', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const systemId = systemIdOf(req);
-  if (systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Choir policies belong to sys-music');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const versionId = typeof req.query.configVersionId === 'string' ? req.query.configVersionId : (await getActiveConfigVersion(MUSIC_SYSTEM))?.id;
-  const policies = await listCategoryServicePolicies(systemId, versionId);
-  res.json({ policies });
+  if (!(await readGate(req, res, MUSIC_SYSTEM))) return;
+  const rows = await prisma.categoryServicePolicy.findMany({ where: { systemId: MUSIC_SYSTEM } });
+  res.json({ policies: rows.map(toPolicyView) });
 });
 
 configRouter.post('/config/policies', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
   const parsed = PolicySchema.safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid policy');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, b.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (b.systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Choir policies belong to sys-music');
-  if (!(await draftVersionExists(res, b.systemId, b.configVersionId))) return;
-  if (!(await musicDraftReferencesExist(res, b.configVersionId!, { categoryId: b.categoryId, serviceId: b.serviceId }))) return;
-  const ruleErrors = validatePolicyValues({
-    eligible: b.eligible,
-    frequencyTarget: b.frequencyTarget ?? null,
-    frequencyCounting: b.frequencyCounting,
-    frequencyKind: b.frequencyKind,
-    frequencyPeriod: b.frequencyPeriod ?? null,
-    planningMode: b.planningMode,
-    minCount: b.minCount ?? null,
-    maxCount: b.maxCount ?? null,
-    requireAll: b.requireAll,
-  });
-  if (ruleErrors.length) return res.status(400).json({ error: 'Check the category scheduling rules.', code: 'CONFIG_RULES', issues: ruleErrors });
-  // Idempotency: same (systemId, categoryId, serviceId) already exists -> return it.
-  const existing = await prisma.categoryServicePolicy.findFirst({
-    where: { systemId: b.systemId, categoryId: b.categoryId, serviceId: b.serviceId, configVersionId: b.configVersionId },
-  });
-  if (existing) {
-    await audit(me, b.systemId, 'POLICY_EXISTS', `Policy for ${b.categoryId} × ${b.serviceId} already exists`, { policyId: existing.id });
-    return res.json({ policy: existing.id, status: 'EXISTS' });
-  }
-  const created = await createCategoryServicePolicy({ ...b, createdByPersonId: me });
-  await audit(me, b.systemId, 'POLICY_CREATED', `Created policy ${b.categoryId} × ${b.serviceId}`, { policyId: created.id });
-  res.status(201).json({ policy: created.id });
+  if (!parsed.success) return badInput(res, 'Invalid policy');
+  const { systemId, ...data } = parsed.data;
+  return save(req, res, systemId, { op: 'policy.create', data }, (policy) => ({ policy }));
 });
 
 configRouter.patch('/config/policies/:id', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
+  const id = idOf(req);
   const parsed = z.object({
-    configVersionId: IdSchema,
     patch: PolicySchema.pick({
-      categoryId: true, serviceId: true, eligible: true, active: true, frequencyTarget: true,
-      frequencyCounting: true, frequencyKind: true, frequencyPeriod: true, planningMode: true, minCount: true,
-      maxCount: true, requireAll: true,
+      categoryId: true, serviceId: true, eligible: true, active: true, frequencyTarget: true, frequencyCounting: true,
+      frequencyKind: true, frequencyPeriod: true, planningMode: true, minCount: true, maxCount: true, requireAll: true,
     }).partial(),
   }).safeParse(req.body);
-  if (!id || !IdSchema.safeParse(id).success || !parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the category policy fields');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!(await draftVersionExists(res, MUSIC_SYSTEM, parsed.data.configVersionId))) return;
-  const row = await prisma.categoryServicePolicy.findUnique({ where: { id } });
-  if (!row) return fail(res, 404, 'NOT_FOUND', 'Policy not found');
-  if (row.systemId !== MUSIC_SYSTEM || row.configVersionId !== parsed.data.configVersionId) {
-    return fail(res, 409, 'CONFIG_VERSION_MISMATCH', 'The policy does not belong to the selected draft');
-  }
-  const categoryId = parsed.data.patch.categoryId ?? row.categoryId;
-  const serviceId = parsed.data.patch.serviceId ?? row.serviceId;
-  if (!(await musicDraftReferencesExist(res, parsed.data.configVersionId, { categoryId, serviceId }))) return;
-  const ruleErrors = validatePolicyValues({
-    eligible: parsed.data.patch.eligible ?? row.eligible,
-    frequencyTarget: parsed.data.patch.frequencyTarget === undefined ? row.frequencyTarget : parsed.data.patch.frequencyTarget,
-    frequencyCounting: parsed.data.patch.frequencyCounting ?? row.frequencyCounting,
-    frequencyKind: parsed.data.patch.frequencyKind ?? row.frequencyKind,
-    frequencyPeriod: parsed.data.patch.frequencyPeriod === undefined ? row.frequencyPeriod : parsed.data.patch.frequencyPeriod,
-    planningMode: parsed.data.patch.planningMode ?? row.planningMode,
-    minCount: parsed.data.patch.minCount === undefined ? row.minCount : parsed.data.patch.minCount,
-    maxCount: parsed.data.patch.maxCount === undefined ? row.maxCount : parsed.data.patch.maxCount,
-    requireAll: parsed.data.patch.requireAll ?? row.requireAll,
-  });
-  if (ruleErrors.length) return res.status(400).json({ error: 'Check the category scheduling rules.', code: 'CONFIG_RULES', issues: ruleErrors });
-  const duplicate = await prisma.categoryServicePolicy.findFirst({
-    where: { systemId: MUSIC_SYSTEM, configVersionId: parsed.data.configVersionId, categoryId, serviceId },
-  });
-  if (duplicate && duplicate.id !== id) return fail(res, 409, 'DUPLICATE', 'That category and service already have a policy in this draft');
-  const updated = await updateCategoryServicePolicy(id, parsed.data.patch);
-  await audit(me, MUSIC_SYSTEM, 'POLICY_UPDATED', `Updated policy for ${categoryId} × ${serviceId}`, { policyId: id, configVersionId: parsed.data.configVersionId });
-  res.json({ policy: updated });
+  if (!id || !parsed.success) return badInput(res, 'Check the category policy fields');
+  return save(req, res, MUSIC_SYSTEM, { op: 'policy.update', id, patch: parsed.data.patch }, (policy) => ({ policy }));
 });
 
-/* ─── ChoirCategoryLink ─── */
+/* ─── Choir <-> category links ─── */
 
 configRouter.get('/config/links', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const systemId = systemIdOf(req);
-  if (systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Choir category links belong to sys-music');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const versionId = typeof req.query.configVersionId === 'string' ? req.query.configVersionId : (await getActiveConfigVersion(MUSIC_SYSTEM))?.id;
-  const links = await listChoirCategoryLinks(systemId, versionId);
-  res.json({ links });
+  if (!(await readGate(req, res, MUSIC_SYSTEM))) return;
+  const rows = await prisma.choirCategoryLink.findMany({ where: { systemId: MUSIC_SYSTEM } });
+  res.json({ links: rows.map(toLinkView) });
 });
 
 configRouter.post('/config/links', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
   const parsed = LinkSchema.safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid link');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, b.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (b.systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Choir category links belong to sys-music');
-  if (!(await draftVersionExists(res, b.systemId, b.configVersionId))) return;
-  if (!(await musicDraftReferencesExist(res, b.configVersionId!, { categoryId: b.categoryId }))) return;
-  const choir = await prisma.musicChoir.findFirst({ where: { id: b.choirId, active: true } });
-  if (!choir) return fail(res, 400, 'CONFIG_REFERENCE', 'Choose an active choir');
-  const overrideError = await validateLinkOverrides(b.configVersionId!, b.categoryId, b.eligibleOverride, b.frequencyOverride);
-  if (overrideError) return fail(res, 400, 'CONFIG_OVERRIDE', overrideError);
-  const existing = await getChoirCategoryLinkByChoir(b.systemId, b.choirId, b.configVersionId!);
-  if (existing) {
-    if (existing.categoryId !== b.categoryId) {
-      return fail(res, 409, 'DUPLICATE_MEMBERSHIP', 'Each choir can belong to only one category in a configuration version.');
-    }
-    await audit(me, b.systemId, 'LINK_EXISTS', `Link for choir ${b.choirId} already exists`, { linkId: existing.id });
-    return res.json({ link: existing.id, status: 'EXISTS' });
-  }
-  const created = await createChoirCategoryLink({ ...b, createdByPersonId: me });
-  await audit(me, b.systemId, 'LINK_CREATED', `Linked choir ${b.choirId} to category ${b.categoryId}`, { linkId: created.id });
-  res.status(201).json({ link: created.id });
+  if (!parsed.success) return badInput(res, 'Invalid link');
+  const { systemId, ...data } = parsed.data;
+  return save(req, res, systemId, { op: 'link.create', data }, (link) => ({ link }));
 });
 
 configRouter.patch('/config/links/:id', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
+  const id = idOf(req);
   const parsed = z.object({
-    configVersionId: IdSchema,
-    patch: LinkSchema.pick({
-      choirId: true, categoryId: true, eligibleOverride: true, frequencyOverride: true, active: true,
-    }).partial(),
+    patch: LinkSchema.pick({ choirId: true, categoryId: true, eligibleOverride: true, frequencyOverride: true, active: true }).partial(),
   }).safeParse(req.body);
-  if (!id || !IdSchema.safeParse(id).success || !parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the choir category link fields');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!(await draftVersionExists(res, MUSIC_SYSTEM, parsed.data.configVersionId))) return;
-  const row = await prisma.choirCategoryLink.findUnique({ where: { id } });
-  if (!row) return fail(res, 404, 'NOT_FOUND', 'Choir category link not found');
-  if (row.systemId !== MUSIC_SYSTEM || row.configVersionId !== parsed.data.configVersionId) {
-    return fail(res, 409, 'CONFIG_VERSION_MISMATCH', 'The link does not belong to the selected draft');
-  }
-  const categoryId = parsed.data.patch.categoryId ?? row.categoryId;
-  const choirId = parsed.data.patch.choirId ?? row.choirId;
-  if (!(await musicDraftReferencesExist(res, parsed.data.configVersionId, { categoryId }))) return;
-  const choir = await prisma.musicChoir.findFirst({ where: { id: choirId, active: true } });
-  if (!choir) return fail(res, 400, 'CONFIG_REFERENCE', 'Choose an active choir');
-  if (choirId !== row.choirId) {
-    const duplicate = await prisma.choirCategoryLink.findFirst({
-      where: { systemId: MUSIC_SYSTEM, configVersionId: parsed.data.configVersionId, choirId },
-    });
-    if (duplicate) return fail(res, 409, 'DUPLICATE_MEMBERSHIP', 'Each choir can belong to only one category in a configuration version.');
-  }
-  const eligibleOverride = parsed.data.patch.eligibleOverride ?? parseJson(row.eligibleOverrideJson, {});
-  const frequencyOverride = parsed.data.patch.frequencyOverride ?? parseJson(row.frequencyOverrideJson, {});
-  const overrideError = await validateLinkOverrides(parsed.data.configVersionId, categoryId, eligibleOverride, frequencyOverride);
-  if (overrideError) return fail(res, 400, 'CONFIG_OVERRIDE', overrideError);
-  const duplicate = await prisma.choirCategoryLink.findFirst({
-    where: { systemId: MUSIC_SYSTEM, configVersionId: parsed.data.configVersionId, choirId },
-  });
-  if (duplicate && duplicate.id !== id) return fail(res, 409, 'DUPLICATE', 'That choir already has a category link in this draft');
-  const updated = await updateChoirCategoryLink(id, parsed.data.patch);
-  await audit(me, MUSIC_SYSTEM, 'LINK_UPDATED', `Updated choir category link for ${choirId}`, { linkId: id, configVersionId: parsed.data.configVersionId });
-  res.json({ link: updated });
+  if (!id || !parsed.success) return badInput(res, 'Check the choir category link fields');
+  return save(req, res, MUSIC_SYSTEM, { op: 'link.update', id, patch: parsed.data.patch }, (link) => ({ link }));
 });
 
 /* ─── Fixed Music designations ─── */
 
 configRouter.get('/config/fixed-assignments', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const systemId = systemIdOf(req);
-  if (systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Fixed choir assignments belong to sys-music');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const versionId = typeof req.query.configVersionId === 'string'
-    ? req.query.configVersionId
-    : (await getActiveConfigVersion(MUSIC_SYSTEM))?.id;
+  if (!(await readGate(req, res, MUSIC_SYSTEM))) return;
   const assignments = await prisma.musicFixedAssignment.findMany({
-    where: { systemId, ...(versionId ? { configVersionId: versionId } : {}) },
-    orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
+    where: { systemId: MUSIC_SYSTEM }, orderBy: [{ displayOrder: 'asc' }, { createdAt: 'asc' }],
   });
   res.json({ assignments });
 });
 
 configRouter.post('/config/fixed-assignments', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
   const parsed = z.object({
     systemId: z.literal(MUSIC_SYSTEM),
-    configVersionId: IdSchema,
     categoryServicePolicyId: IdSchema.optional(),
     serviceId: IdSchema.optional(),
     serviceDate: z.string().date().optional().nullable(),
@@ -804,128 +340,32 @@ configRouter.post('/config/fixed-assignments', requireAuth, async (req: AuthedRe
     choirId: IdSchema,
     displayOrder: NonNegativeInt.default(0),
   }).safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Choose a draft, fixed rule, and choir.');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!(await draftVersionExists(res, MUSIC_SYSTEM, b.configVersionId))) return;
-  const choirLink = await prisma.choirCategoryLink.findFirst({where:{systemId:MUSIC_SYSTEM,configVersionId:b.configVersionId,choirId:b.choirId,active:true}});
-  if (!b.categoryServicePolicyId && (!b.serviceId || !choirLink)) return fail(res,400,'CONFIG_REFERENCE','Choose a service and a choir linked to a category in this draft.');
-  const policy = await prisma.categoryServicePolicy.findFirst({where:{
-    ...(b.categoryServicePolicyId ? {id:b.categoryServicePolicyId} : {serviceId:b.serviceId,categoryId:choirLink!.categoryId}),
-    systemId:MUSIC_SYSTEM,configVersionId:b.configVersionId,active:true,
-  }});
-  if (!policy) return fail(res,400,'CONFIG_REFERENCE','The selected service needs an active rule for this choir’s category.');
-  const [service, choir, link] = await Promise.all([
-    prisma.schedulingService.findFirst({ where: { id: policy.serviceId, systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, active: true } }),
-    prisma.musicChoir.findFirst({ where: { id: b.choirId, active: true } }),
-    prisma.choirCategoryLink.findFirst({
-      where: { systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, choirId: b.choirId, categoryId: policy.categoryId, active: true },
-    }),
-  ]);
-  if (!service || !choir || !link) return fail(res, 400, 'CONFIG_REFERENCE', 'The designated choir must be active and linked to this rule’s category in the draft.');
-  if (b.serviceTime && b.serviceTime !== service.time) return fail(res,400,'CONFIG_REFERENCE','Choose the selected service’s configured start time.');
-  if (b.serviceDate && !buildMusicCalendar(b.serviceDate.slice(0,7),'MONTH',[toServiceView(service)]).some(slot=>slot.date === b.serviceDate)) {
-    return fail(res,400,'CONFIG_REFERENCE','This service does not occur on that date. Add the date to the service calendar first.');
-  }
-  const eligibilityOverride = parseJson(link.eligibleOverrideJson, {}) as Record<string, unknown>;
-  if (eligibilityOverride[service.code] === false || (!policy.eligible && eligibilityOverride[service.code] !== true)) {
-    return fail(res, 400, 'CONFIG_INELIGIBLE', 'This choir is not eligible for the selected service.');
-  }
-  const scopeKey = !b.serviceDate && !b.serviceTime ? 'ALL' : `${b.serviceDate ?? '*'}|${b.serviceTime ?? '*'}`;
-  const existing = await prisma.musicFixedAssignment.findFirst({
-    where: { systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, categoryServicePolicyId: policy.id, choirId: b.choirId, scopeKey },
-  });
-  if (existing) return res.json({ assignment: existing.id, status: 'EXISTS' });
-  if (policy.maxCount !== null && !b.serviceDate && !b.serviceTime) {
-    const count = await prisma.musicFixedAssignment.count({
-      where: { systemId: MUSIC_SYSTEM, configVersionId: b.configVersionId, categoryServicePolicyId: policy.id, serviceDate:null, serviceTime:null },
-    });
-    if (count + 1 > policy.maxCount) return fail(res, 409, 'SERVICE_LIMIT', 'This would exceed the category’s maximum choir count.');
-  }
-  const peerPolicies = await prisma.categoryServicePolicy.findMany({
-    where: {
-      systemId: MUSIC_SYSTEM,
-      configVersionId: b.configVersionId,
-      serviceId: policy.serviceId,
-      id: { not: policy.id },
-    },
-  });
-  const otherCategory = await prisma.musicFixedAssignment.findFirst({
-    where: {
-      systemId: MUSIC_SYSTEM,
-      configVersionId: b.configVersionId,
-      choirId: b.choirId,
-      categoryServicePolicyId: { in: peerPolicies.map((row) => row.id) },
-    },
-  });
-  if (otherCategory) return fail(res, 409, 'DUPLICATE_SERVICE_ASSIGNMENT', 'A choir cannot fill two categories on the same service.');
-  const assignment = await prisma.musicFixedAssignment.create({
-    data: {
-      systemId: MUSIC_SYSTEM,
-      configVersionId: b.configVersionId,
-      categoryServicePolicyId: policy.id,
-      choirId: b.choirId,
-      displayOrder: b.displayOrder,
-      serviceDate:b.serviceDate ?? null,
-      serviceTime:b.serviceTime ?? null,
-      scopeKey,
-      createdByPersonId: me,
-    },
-  });
-  await audit(me, MUSIC_SYSTEM, 'MUSIC_FIXED_ASSIGNMENT_CREATED', `Designated a choir for ${service.name}`, {
-    assignmentId: assignment.id, configVersionId: b.configVersionId, policyId: policy.id, choirId: b.choirId,
-  });
-  res.status(201).json({ assignment });
+  if (!parsed.success) return badInput(res, 'Choose a fixed rule and a choir.');
+  const { systemId, ...data } = parsed.data;
+  return save(req, res, systemId, { op: 'fixed.create', data }, (assignment) => ({ assignment }));
 });
 
 configRouter.delete('/config/fixed-assignments/:id', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
-  const parsed = z.object({ configVersionId: IdSchema }).safeParse(req.body);
-  if (!id || !IdSchema.safeParse(id).success || !parsed.success) return fail(res, 400, 'BAD_INPUT', 'Choose the draft for this fixed assignment.');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!(await draftVersionExists(res, MUSIC_SYSTEM, parsed.data.configVersionId))) return;
-  const assignment = await prisma.musicFixedAssignment.findFirst({
-    where: { id, systemId: MUSIC_SYSTEM, configVersionId: parsed.data.configVersionId },
-  });
-  if (!assignment) return fail(res, 404, 'NOT_FOUND', 'Fixed choir assignment not found in this draft.');
-  await prisma.musicFixedAssignment.delete({ where: { id } });
-  await audit(me, MUSIC_SYSTEM, 'MUSIC_FIXED_ASSIGNMENT_REMOVED', 'Removed a fixed choir designation', {
-    assignmentId: id, configVersionId: parsed.data.configVersionId, choirId: assignment.choirId,
-  });
-  res.json({ ok: true });
+  const id = idOf(req);
+  if (!id) return badInput(res, 'Choose the fixed assignment to remove.');
+  return save(req, res, MUSIC_SYSTEM, { op: 'fixed.delete', id }, () => ({ ok: true }));
 });
 
 /* ─── Music choir availability ─── */
 
-const DateOnly = z.string().regex(/^\d{4}-\d{2}-\d{2}$/).refine((value) => {
-  const date = new Date(`${value}T00:00:00.000Z`);
-  return !Number.isNaN(date.valueOf()) && date.toISOString().slice(0, 10) === value;
-}, 'Use a valid calendar date.');
-
 configRouter.get('/config/availability', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const systemId = systemIdOf(req);
-  if (systemId !== MUSIC_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Choir availability belongs to sys-music');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  const systemId = await readGate(req, res, MUSIC_SYSTEM);
+  if (!systemId) return;
   const filter = z.object({ serviceDate: DateOnly.optional(), choirId: IdSchema.optional() }).safeParse(req.query);
-  if (!filter.success) return fail(res, 400, 'BAD_INPUT', 'Check the date or choir filter.');
+  if (!filter.success) return badInput(res, 'Check the date or choir filter.');
   const records = await prisma.musicChoirUnavailability.findMany({
-    where: {
-      systemId,
-      active: true,
-      ...(filter.data.choirId ? { choirId: filter.data.choirId } : {}),
-    },
+    where: { systemId, active: true, ...(filter.data.choirId ? { choirId: filter.data.choirId } : {}) },
     orderBy: [{ serviceDate: 'asc' }, { serviceCode: 'asc' }],
   });
-  res.json({ availability: records.filter(row => !filter.data.serviceDate || (row.serviceDate <= filter.data.serviceDate && (row.endDate ?? row.serviceDate) >= filter.data.serviceDate)).slice(0,200) });
+  res.json({ availability: records.filter((row) => !filter.data.serviceDate || (row.serviceDate <= filter.data.serviceDate && (row.endDate ?? row.serviceDate) >= filter.data.serviceDate)).slice(0, 200) });
 });
 
 configRouter.post('/config/availability', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
   const parsed = z.object({
     systemId: z.literal(MUSIC_SYSTEM),
     choirId: IdSchema,
@@ -935,202 +375,71 @@ configRouter.post('/config/availability', requireAuth, async (req: AuthedRequest
     serviceCode: CodeSchema.optional().nullable(),
     reason: z.string().trim().max(500).optional().nullable(),
   }).safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Choose a choir, date, and optional service.');
+  if (!parsed.success) return badInput(res, 'Choose a choir, date, and optional service.');
   const b = parsed.data;
   const start = b.fromDate ?? b.serviceDate;
   const end = b.toDate ?? start;
-  if (!start || !end || end < start) return fail(res,400,'BAD_INPUT','Choose a valid From and To date; To cannot be before From.');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  const choir = await prisma.musicChoir.findFirst({ where: { id: b.choirId, active: true } });
-  if (!choir) return fail(res, 400, 'CONFIG_REFERENCE', 'Choose an active choir.');
-  if (b.serviceCode) {
-    const activeVersion = await getActiveConfigVersion(MUSIC_SYSTEM);
-    const services = activeVersion
-      ? await prisma.schedulingService.findMany({ where: { systemId: MUSIC_SYSTEM, configVersionId: activeVersion.id, active: true, musicRequired: true } })
-      : [];
-    if (!services.some((service) => service.code.toLowerCase() === b.serviceCode!.toLowerCase())) {
-      return fail(res, 400, 'CONFIG_REFERENCE', 'Choose a service from the active Music calendar.');
-    }
-  }
-  const current = await prisma.musicChoirUnavailability.findMany({
-    where: { systemId: MUSIC_SYSTEM, choirId: b.choirId, active: true },
-  });
-  if (current.some((record) => record.serviceDate <= end && (record.endDate ?? record.serviceDate) >= start && (record.serviceCode === null || !b.serviceCode || record.serviceCode.toLowerCase() === b.serviceCode.toLowerCase()))) {
-    return fail(res, 409, 'DUPLICATE_AVAILABILITY', 'This choir already has unavailability overlapping those dates.');
-  }
-  const record = await prisma.musicChoirUnavailability.create({
-    data: {
-      systemId: MUSIC_SYSTEM,
-      choirId: b.choirId,
-      serviceDate: start,
-      endDate: end,
-      serviceCode: b.serviceCode?.toLowerCase() ?? null,
-      reason: b.reason?.trim() || null,
-      active: true,
-      recordedByPersonId: me,
-    },
-  });
-  await audit(me, MUSIC_SYSTEM, 'MUSIC_UNAVAILABILITY_RECORDED', `Recorded choir unavailability for ${b.serviceDate}`, {
-    availabilityId: record.id, choirId: b.choirId, serviceDate: b.serviceDate, serviceCode: record.serviceCode,
-  });
-  res.status(201).json({ availability: record });
+  if (!start || !end) return badInput(res, 'Choose a valid From and To date; To cannot be before From.');
+  return save(req, res, b.systemId, { op: 'availability.add', data: { choirId: b.choirId, fromDate: start, toDate: end, serviceCode: b.serviceCode, reason: b.reason } }, (availability) => ({ availability }));
 });
 
 configRouter.delete('/config/availability/:id', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
-  if (!id || !IdSchema.safeParse(id).success) return fail(res, 400, 'BAD_INPUT', 'Invalid availability record.');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, MUSIC_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  const record = await prisma.musicChoirUnavailability.findFirst({ where: { id, systemId: MUSIC_SYSTEM, active: true } });
-  if (!record) return fail(res, 404, 'NOT_FOUND', 'Availability record not found.');
-  await prisma.musicChoirUnavailability.update({ where: { id }, data: { active: false } });
-  await audit(me, MUSIC_SYSTEM, 'MUSIC_UNAVAILABILITY_CLEARED', `Cleared choir unavailability for ${record.serviceDate}`, {
-    availabilityId: id, choirId: record.choirId, serviceDate: record.serviceDate, serviceCode: record.serviceCode,
-  });
-  res.json({ ok: true });
+  const id = idOf(req);
+  if (!id) return badInput(res, 'Invalid availability record.');
+  return save(req, res, MUSIC_SYSTEM, { op: 'availability.clear', id }, () => ({ ok: true }));
 });
 
-/* ─── ProtocolServiceRule ─── */
+/* ─── Protocol service rules ─── */
 
 configRouter.get('/config/protocol/rules', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const systemId = systemIdOf(req);
-  if (systemId !== PROTOCOL_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Protocol rules belong to sys-protocol');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const versionId = typeof req.query.configVersionId === 'string' ? req.query.configVersionId : (await getActiveConfigVersion(PROTOCOL_SYSTEM))?.id;
-  const [rules, allServices, activeCalendarVersion] = await Promise.all([
-    listProtocolServiceRules(systemId, versionId),
+  if (!(await readGate(req, res, PROTOCOL_SYSTEM))) return;
+  const [rules, services] = await Promise.all([
+    prisma.protocolServiceRule.findMany({ where: { systemId: PROTOCOL_SYSTEM } }),
     prisma.schedulingService.findMany({ where: { systemId: MUSIC_SYSTEM } }),
-    getActiveConfigVersion(MUSIC_SYSTEM),
   ]);
-  const activeServices = await listSchedulingServices(MUSIC_SYSTEM, true, activeCalendarVersion?.id);
-  const codeById = new Map(allServices.map((service) => [service.id, service.code]));
-  const currentIdByCode = new Map(activeServices.map((service) => [service.code, service.id]));
-  res.json({
-    rules: rules.map((rule) => ({
-      ...rule,
-      serviceCode: codeById.get(rule.serviceId),
-      serviceId: currentIdByCode.get(codeById.get(rule.serviceId) ?? '') ?? rule.serviceId,
-    })),
-  });
+  const codeById = new Map(services.map((service) => [service.id, service.code]));
+  res.json({ rules: rules.map((rule) => ({ ...toRuleView(rule), serviceCode: codeById.get(rule.serviceId) })) });
 });
 
 configRouter.post('/config/protocol/rules', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
   const parsed = ProtocolRuleSchema.safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid protocol rule');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, b.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (b.systemId !== PROTOCOL_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Protocol rules belong to sys-protocol');
-  if (!(await draftVersionExists(res, b.systemId, b.configVersionId))) return;
-  if (!(await activeSharedServiceExists(res, b.serviceId))) return;
-  const existing = await getProtocolServiceRuleByService(b.systemId, b.serviceId, b.configVersionId!);
-  if (existing) {
-    await audit(me, b.systemId, 'PROTOCOL_RULE_EXISTS', `Rule for ${b.serviceId} already exists`, { ruleId: existing.id });
-    return res.json({ rule: existing.id, status: 'EXISTS' });
-  }
-  const created = await createProtocolServiceRule({ ...b, createdByPersonId: me });
-  await audit(me, b.systemId, 'PROTOCOL_RULE_CREATED', `Created protocol rule for ${b.serviceId}`, { ruleId: created.id });
-  res.status(201).json({ rule: created.id });
+  if (!parsed.success) return badInput(res, 'Invalid protocol rule');
+  const { systemId, ...data } = parsed.data;
+  return save(req, res, systemId, { op: 'rule.create', data }, (rule) => ({ rule }));
 });
 
 configRouter.patch('/config/protocol/rules/:id', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
+  const id = idOf(req);
   const parsed = z.object({
-    configVersionId: IdSchema,
     patch: ProtocolRuleSchema.pick({
-      serviceId: true, active: true, required: true, defaultTeamSize: true,
-      teamSizeOverrides: true, requireChoir: true, requireWorship: true, relaxableKinds: true,
+      serviceId: true, active: true, required: true, defaultTeamSize: true, teamSizeOverrides: true,
+      requireChoir: true, requireWorship: true, relaxableKinds: true,
     }).partial(),
   }).safeParse(req.body);
-  if (!id || !IdSchema.safeParse(id).success || !parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the Protocol service rule fields');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, PROTOCOL_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!(await draftVersionExists(res, PROTOCOL_SYSTEM, parsed.data.configVersionId))) return;
-  const row = await prisma.protocolServiceRule.findUnique({ where: { id } });
-  if (!row) return fail(res, 404, 'NOT_FOUND', 'Protocol rule not found');
-  if (row.systemId !== PROTOCOL_SYSTEM || row.configVersionId !== parsed.data.configVersionId) {
-    return fail(res, 409, 'CONFIG_VERSION_MISMATCH', 'The Protocol rule does not belong to the selected draft');
-  }
-  const serviceId = parsed.data.patch.serviceId ?? row.serviceId;
-  if (!(await activeSharedServiceExists(res, serviceId))) return;
-  const duplicate = await prisma.protocolServiceRule.findFirst({
-    where: { systemId: PROTOCOL_SYSTEM, configVersionId: parsed.data.configVersionId, serviceId },
-  });
-  if (duplicate && duplicate.id !== id) return fail(res, 409, 'DUPLICATE', 'That service already has a Protocol rule in this draft');
-  const updated = await updateProtocolServiceRule(id, parsed.data.patch);
-  await audit(me, PROTOCOL_SYSTEM, 'PROTOCOL_RULE_UPDATED', `Updated Protocol rule for ${serviceId}`, { ruleId: id, configVersionId: parsed.data.configVersionId });
-  res.json({ rule: updated });
+  if (!id || !parsed.success) return badInput(res, 'Check the Protocol service rule fields');
+  return save(req, res, PROTOCOL_SYSTEM, { op: 'rule.update', id, patch: parsed.data.patch }, (rule) => ({ rule }));
 });
 
-/* ─── ProtocolDutyPolicy ─── */
+/* ─── Protocol duty policy ─── */
 
 configRouter.get('/config/protocol/policy', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const systemId = systemIdOf(req);
-  if (systemId !== PROTOCOL_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Protocol duty policy belongs to sys-protocol');
-  const d = await accessOf(me);
-  if (!canReadConfig(me, systemId, d)) return fail(res, 404, 'NOT_FOUND', 'Not found');
-  const versionId = typeof req.query.configVersionId === 'string' ? req.query.configVersionId : (await getActiveConfigVersion(PROTOCOL_SYSTEM))?.id;
-  const policy = await getProtocolDutyPolicyBySystem(systemId, versionId);
-  res.json({ policy });
+  if (!(await readGate(req, res, PROTOCOL_SYSTEM))) return;
+  const row = await prisma.protocolDutyPolicy.findFirst({ where: { systemId: PROTOCOL_SYSTEM } });
+  res.json({ policy: row ? toDutyPolicyView(row) : null });
 });
 
 configRouter.post('/config/protocol/policy', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
   const parsed = DutyPolicySchema.safeParse(req.body);
-  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Invalid duty policy');
-  const b = parsed.data;
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, b.systemId, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (b.systemId !== PROTOCOL_SYSTEM) return fail(res, 400, 'BAD_INPUT', 'Protocol duty policy belongs to sys-protocol');
-  if (!(await draftVersionExists(res, b.systemId, b.configVersionId))) return;
-  if (b.softMax < b.preferTarget || b.hardMax < b.softMax) {
-    return fail(res, 400, 'BAD_INPUT', 'Duty limits must satisfy prefer target ≤ soft maximum ≤ hard maximum');
-  }
-  const existing = await getProtocolDutyPolicyBySystem(b.systemId, b.configVersionId!);
-  if (existing) {
-    await audit(me, b.systemId, 'DUTY_POLICY_EXISTS', `Duty policy for ${b.systemId} already exists`, { policyId: existing.id });
-    return res.json({ policy: existing.id, status: 'EXISTS' });
-  }
-  const created = await createProtocolDutyPolicy({ ...b, createdByPersonId: me });
-  await audit(me, b.systemId, 'DUTY_POLICY_CREATED', `Created protocol duty policy for ${b.systemId}`, { policyId: created.id });
-  res.status(201).json({ policy: created.id });
+  if (!parsed.success) return badInput(res, 'Invalid duty policy');
+  const { systemId, ...data } = parsed.data;
+  return save(req, res, systemId, { op: 'duty.create', data }, (policy) => ({ policy }));
 });
 
 configRouter.patch('/config/protocol/policy/:id', requireAuth, async (req: AuthedRequest, res) => {
-  const me = req.auth!.personId;
-  const id = pathParam(req, 'id');
+  const id = idOf(req);
   const parsed = z.object({
-    configVersionId: IdSchema,
-    patch: DutyPolicySchema.pick({
-      preferTarget: true, softMax: true, hardMax: true, extraDutyPolicy: true,
-      duplicateSameDayAllowed: true, musicCompatibilityRequired: true, leadershipPriorities: true,
-      exceptionsAllowed: true,
-    }).partial(),
+    patch: DutyPolicySchema.omit({ systemId: true }).partial(),
   }).safeParse(req.body);
-  if (!id || !IdSchema.safeParse(id).success || !parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the Protocol duty policy fields');
-  const d = await accessOf(me);
-  if (!canWriteConfig(me, PROTOCOL_SYSTEM, d)) return fail(res, 403, 'FORBIDDEN', 'You may not change scheduling configuration');
-  if (!(await draftVersionExists(res, PROTOCOL_SYSTEM, parsed.data.configVersionId))) return;
-  const row = await prisma.protocolDutyPolicy.findUnique({ where: { id } });
-  if (!row) return fail(res, 404, 'NOT_FOUND', 'Protocol duty policy not found');
-  if (row.systemId !== PROTOCOL_SYSTEM || row.configVersionId !== parsed.data.configVersionId) {
-    return fail(res, 409, 'CONFIG_VERSION_MISMATCH', 'The Protocol duty policy does not belong to the selected draft');
-  }
-  const { preferTarget, softMax, hardMax } = parsed.data.patch;
-  const currentTarget = preferTarget ?? row.preferTarget;
-  const currentSoftMax = softMax ?? row.softMax;
-  const currentHardMax = hardMax ?? row.hardMax;
-  if (currentSoftMax < currentTarget || currentHardMax < currentSoftMax) {
-    return fail(res, 400, 'BAD_INPUT', 'Duty limits must satisfy prefer target ≤ soft maximum ≤ hard maximum');
-  }
-  const updated = await updateProtocolDutyPolicy(id, parsed.data.patch);
-  await audit(me, PROTOCOL_SYSTEM, 'DUTY_POLICY_UPDATED', 'Updated Protocol duty policy', { policyId: id, configVersionId: parsed.data.configVersionId });
-  res.json({ policy: updated });
+  if (!id || !parsed.success) return badInput(res, 'Check the Protocol duty policy fields');
+  return save(req, res, PROTOCOL_SYSTEM, { op: 'duty.update', id, patch: parsed.data.patch }, (policy) => ({ policy }));
 });

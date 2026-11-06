@@ -381,7 +381,6 @@ export function ProtocolTeamsPage() {
         {v && <>
           <p className="muted">{t('door.scheduling.teamHelp')}</p>
           <nav className="door-row">{canReadConfig && <Link className="btn ghost sm" to="/s/sys-protocol/config">{t('door.scheduling.setup')}</Link>}<Link className="btn ghost sm" to="/s/sys-protocol/roster">{t('door.sch.editRoster')}</Link><Link className="btn ghost sm" to="/s/sys-protocol/mine">{t('door.own.mine')}</Link></nav>
-          <p className="muted">{t('door.scheduling.pinned', {version:v.configVersionId ?? '—'})}</p>
           {v.notes.length > 0 && <details className="panel pt-more"><summary>{t('door.protocol.more')}</summary><ul>{v.notes.map((note,index)=><li key={index}>{note}</li>)}</ul></details>}
           <DutyDistribution view={v} />
         </>}

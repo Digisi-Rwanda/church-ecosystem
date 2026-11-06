@@ -17,6 +17,12 @@ import type {
   ProtocolTeamSlot,
 } from './types.js';
 
+/**
+ * The service codes the Protocol engine knows how to staff. Single source of truth: the engine,
+ * the Protocol routes and the generation validator all read this one list.
+ */
+export const SUPPORTED_PROTOCOL_KINDS = ['SS1', 'SS2', 'TUESDAY', 'IGABURO'] as const satisfies readonly ProtocolServiceKind[];
+
 /** personId → Music unit ids whose choir they belong to (empty = no choir). */
 export type ChoirUnitsByPerson = Map<string, Set<string>>;
 
@@ -596,11 +602,10 @@ export function buildRulesFromConfig(
 ): ProtocolSchedulingRules {
   const dp = dutyPolicy ?? { preferTarget: 3, softMax: 3, hardMax: 4, extraDutyPolicy: 'ALLOW_WHEN_SHORT' as const, leadershipPriorities: [] };
   const serviceRequirements: NonNullable<ProtocolSchedulingRules['serviceRequirements']> = {};
-  const protocolKinds: readonly ProtocolServiceKind[] = ['SS1', 'SS2', 'TUESDAY', 'IGABURO'];
   for (const rule of rules) {
     const service = services.find((candidate) => candidate.id === rule.serviceId);
     const kind = service?.code.toUpperCase() as ProtocolServiceKind | undefined;
-    if (!kind || !protocolKinds.includes(kind)) continue;
+    if (!kind || !SUPPORTED_PROTOCOL_KINDS.includes(kind)) continue;
     serviceRequirements[kind] = {
       choir: rule.requireChoir,
       worship: rule.requireWorship,

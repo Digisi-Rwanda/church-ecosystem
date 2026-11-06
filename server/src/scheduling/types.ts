@@ -1,26 +1,19 @@
 /**
- * Configurable Music & Protocol scheduling (slice 3.17).
+ * Configurable Music & Protocol scheduling.
  *
- * Tenant-scoped, versioned configuration that replaces hard-coded church
- * scheduling policy. Every row carries systemId, effectiveFrom / effectiveTo
- * and status; edits supersede the prior row instead of overwriting it.
- * MusicMonth and ProtocolPlan record the ConfigVersion they were generated
- * against, keeping published schedules reproducible.
- *
- * Phase 2 boundary: this module only persists and reads configuration. It does
- * not modify the Music or Protocol scheduling engines.
+ * Tenant-scoped LIVE configuration. Rows are edited in place; the next
+ * generate call reads them. There are no versions, drafts or effective ranges.
+ * Confirmed/published schedules are frozen copies and are never rebuilt.
  */
 
-import type { ConfigVersion, SchedulingService, ChoirCategory, CategoryServicePolicy, ChoirCategoryLink, ProtocolServiceRule, ProtocolDutyPolicy } from '@prisma/client';
+import type { SchedulingService, ChoirCategory, CategoryServicePolicy, ChoirCategoryLink, ProtocolServiceRule, ProtocolDutyPolicy } from '@prisma/client';
 
-export type { ConfigVersion, SchedulingService, ChoirCategory, CategoryServicePolicy, ChoirCategoryLink, ProtocolServiceRule, ProtocolDutyPolicy };
+export type { SchedulingService, ChoirCategory, CategoryServicePolicy, ChoirCategoryLink, ProtocolServiceRule, ProtocolDutyPolicy };
 
 export const SYSTEM_MUSIC = 'sys-music';
 export const SYSTEM_PROTOCOL = 'sys-protocol';
 
 export type SystemId = string;
-
-export type ConfigStatus = 'DRAFT' | 'ACTIVE' | 'SUPERSEDED' | 'SCHEDULED' | 'ARCHIVED';
 
 export type ServiceKind = 'SERVICE' | 'REHEARSAL' | 'MEETING' | 'OTHER';
 
@@ -49,15 +42,11 @@ export interface SchedulingServiceView {
   recurrence: Recurrence;
   selectedDates: string[];
   active: boolean;
-  effectiveFrom: string;
-  effectiveTo: string | null;
   musicRequired: boolean;
   protocolRequired: boolean;
   maxChoirs: number;
   targetTeamSize: number;
-  configVersionId: string | null;
   displayOrder: number;
-  supersedesId: string | null;
   createdByPersonId: string;
   createdAt: string;
 }
@@ -69,10 +58,6 @@ export interface ChoirCategoryView {
   name: string;
   description: string;
   active: boolean;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-  configVersionId: string | null;
-  supersedesId: string | null;
   createdByPersonId: string;
   createdAt: string;
 }
@@ -92,10 +77,6 @@ export interface CategoryServicePolicyView {
   minCount: number | null;
   maxCount: number | null;
   requireAll: boolean;
-  configVersionId: string | null;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-  supersedesId: string | null;
   createdByPersonId: string;
   createdAt: string;
 }
@@ -108,10 +89,6 @@ export interface ChoirCategoryLinkView {
   eligibleOverride: Record<string, unknown>;
   frequencyOverride: Record<string, unknown>;
   active: boolean;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-  configVersionId: string | null;
-  supersedesId: string | null;
   createdByPersonId: string;
   createdAt: string;
 }
@@ -119,7 +96,6 @@ export interface ChoirCategoryLinkView {
 export interface MusicFixedAssignmentView {
   id: string;
   systemId: string;
-  configVersionId: string;
   categoryServicePolicyId: string;
   choirId: string;
   serviceDate?: string | null;
@@ -154,10 +130,6 @@ export interface ProtocolServiceRuleView {
   requireChoir: boolean;
   requireWorship: boolean;
   relaxableKinds: string[];
-  configVersionId: string | null;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-  supersedesId: string | null;
   createdByPersonId: string;
   createdAt: string;
 }
@@ -173,44 +145,8 @@ export interface ProtocolDutyPolicyView {
   musicCompatibilityRequired: boolean;
   leadershipPriorities: string[];
   exceptionsAllowed: boolean;
-  configVersionId: string | null;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-  supersedesId: string | null;
   createdByPersonId: string;
   createdAt: string;
-}
-
-export interface ConfigVersionView {
-  id: string;
-  systemId: string;
-  version: number;
-  label: string;
-  status: ConfigStatus;
-  effectiveFrom: string;
-  effectiveTo: string | null;
-  createdByPersonId: string;
-  createdAt: string;
-  reason: string | null;
-  previousVersionId: string | null;
-  notes: Record<string, unknown>;
-  validation: Record<string, unknown>;
-  affectedSchedules: string[];
-}
-
-export interface ConfigVersionCreateInput {
-  systemId: string;
-  version: number;
-  label: string;
-  status?: ConfigStatus;
-  effectiveFrom?: string;
-  effectiveTo?: string | null;
-  createdByPersonId: string;
-  reason?: string | null;
-  previousVersionId?: string | null;
-  notes?: Record<string, unknown>;
-  validation?: Record<string, unknown>;
-  affectedSchedules?: string[];
 }
 
 export interface SchedulingServiceCreateInput {
@@ -223,14 +159,10 @@ export interface SchedulingServiceCreateInput {
   recurrence?: Recurrence;
   selectedDates?: string[];
   active?: boolean;
-  effectiveFrom?: string;
-  effectiveTo?: string | null;
   musicRequired?: boolean;
   protocolRequired?: boolean;
   maxChoirs?: number;
-  configVersionId?: string | null;
   displayOrder?: number;
-  supersedesId?: string | null;
   createdByPersonId: string;
 }
 
@@ -240,10 +172,6 @@ export interface ChoirCategoryCreateInput {
   name: string;
   description?: string;
   active?: boolean;
-  effectiveFrom?: string;
-  effectiveTo?: string | null;
-  configVersionId?: string | null;
-  supersedesId?: string | null;
   createdByPersonId: string;
 }
 
@@ -261,10 +189,6 @@ export interface CategoryServicePolicyCreateInput {
   minCount?: number | null;
   maxCount?: number | null;
   requireAll?: boolean;
-  configVersionId?: string | null;
-  effectiveFrom?: string;
-  effectiveTo?: string | null;
-  supersedesId?: string | null;
   createdByPersonId: string;
 }
 
@@ -278,10 +202,6 @@ export interface ProtocolServiceRuleCreateInput {
   requireChoir?: boolean;
   requireWorship?: boolean;
   relaxableKinds?: string[];
-  configVersionId?: string | null;
-  effectiveFrom?: string;
-  effectiveTo?: string | null;
-  supersedesId?: string | null;
   createdByPersonId: string;
 }
 
@@ -295,10 +215,6 @@ export interface ProtocolDutyPolicyCreateInput {
   musicCompatibilityRequired?: boolean;
   leadershipPriorities?: string[];
   exceptionsAllowed?: boolean;
-  configVersionId?: string | null;
-  effectiveFrom?: string;
-  effectiveTo?: string | null;
-  supersedesId?: string | null;
   createdByPersonId: string;
 }
 
@@ -309,19 +225,16 @@ export const toServiceView = (r: SchedulingService): SchedulingServiceView => ({
   weekday: r.weekday, time: r.time, recurrence: r.recurrence as Recurrence,
   selectedDates: parseJson(r.selectedDatesJson, [] as string[]),
   active: r.active,
-  effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
   musicRequired: r.musicRequired, protocolRequired: r.protocolRequired,
-  maxChoirs: r.maxChoirs, targetTeamSize: r.targetTeamSize, configVersionId: r.configVersionId,
-  displayOrder: r.displayOrder, supersedesId: r.supersedesId,
+  maxChoirs: r.maxChoirs, targetTeamSize: r.targetTeamSize,
+  displayOrder: r.displayOrder,
   createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
 });
 
 export const toCategoryView = (r: ChoirCategory): ChoirCategoryView => ({
   id: r.id, systemId: r.systemId, code: r.code, name: r.name, description: r.description,
   active: r.active,
-  effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
-  configVersionId: r.configVersionId,
-  supersedesId: r.supersedesId, createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
+  createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
 });
 
 export const toPolicyView = (r: CategoryServicePolicy): CategoryServicePolicyView => ({
@@ -333,9 +246,7 @@ export const toPolicyView = (r: CategoryServicePolicy): CategoryServicePolicyVie
   frequencyPeriod: r.frequencyPeriod as FrequencyPeriod | null,
   planningMode: r.planningMode as PlanningMode,
   minCount: r.minCount, maxCount: r.maxCount, requireAll: r.requireAll,
-  configVersionId: r.configVersionId,
-  effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
-  supersedesId: r.supersedesId, createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
+  createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
 });
 
 export const toLinkView = (r: ChoirCategoryLink): ChoirCategoryLinkView => ({
@@ -343,9 +254,7 @@ export const toLinkView = (r: ChoirCategoryLink): ChoirCategoryLinkView => ({
   eligibleOverride: parseJson(r.eligibleOverrideJson, {}),
   frequencyOverride: parseJson(r.frequencyOverrideJson, {}),
   active: r.active,
-  effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
-  configVersionId: r.configVersionId,
-  supersedesId: r.supersedesId, createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
+  createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
 });
 
 export const toProtocolRuleView = (r: ProtocolServiceRule): ProtocolServiceRuleView => ({
@@ -355,9 +264,7 @@ export const toProtocolRuleView = (r: ProtocolServiceRule): ProtocolServiceRuleV
   teamSizeOverrides: parseJson(r.teamSizeOverridesJson, {} as Record<string, number>),
   requireChoir: r.requireChoir, requireWorship: r.requireWorship,
   relaxableKinds: parseJson(r.relaxableKindsJson, [] as string[]),
-  configVersionId: r.configVersionId,
-  effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
-  supersedesId: r.supersedesId, createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
+  createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
 });
 
 export const toDutyPolicyView = (r: ProtocolDutyPolicy): ProtocolDutyPolicyView => ({
@@ -368,18 +275,7 @@ export const toDutyPolicyView = (r: ProtocolDutyPolicy): ProtocolDutyPolicyView 
   musicCompatibilityRequired: r.musicCompatibilityRequired,
   leadershipPriorities: parseJson(r.leadershipPrioritiesJson, [] as string[]),
   exceptionsAllowed: r.exceptionsAllowed,
-  configVersionId: r.configVersionId,
-  effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
-  supersedesId: r.supersedesId, createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
-});
-
-export const toConfigVersionView = (r: ConfigVersion): ConfigVersionView => ({
-  id: r.id, systemId: r.systemId, version: r.version, label: r.label, status: r.status as ConfigStatus,
-  effectiveFrom: r.effectiveFrom.toISOString(), effectiveTo: r.effectiveTo?.toISOString() ?? null,
   createdByPersonId: r.createdByPersonId, createdAt: r.createdAt.toISOString(),
-  reason: r.reason, previousVersionId: r.previousVersionId,
-  notes: parseJson(r.notesJson, {}), validation: parseJson(r.validationJson, {}),
-  affectedSchedules: parseJson(r.affectedSchedulesJson, [] as string[]),
 });
 
 /** Parse a JSON column safely, returning the default on failure. */
