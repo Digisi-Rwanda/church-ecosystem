@@ -1,0 +1,421 @@
+{
+  "version": "09a60d1e5c633e2b",
+  "columns": [
+    {
+      "key": "fullName",
+      "header": "Full name",
+      "section": "BASICS",
+      "type": "text",
+      "max": 120,
+      "question": "What is your full name?",
+      "required": true
+    },
+    {
+      "key": "preferredName",
+      "header": "Preferred name",
+      "section": "BASICS",
+      "type": "text",
+      "max": 120,
+      "question": "What name do you prefer to be called?",
+      "required": true
+    },
+    {
+      "key": "phone",
+      "header": "Phone",
+      "section": "BASICS",
+      "type": "text",
+      "max": 30,
+      "question": "What is your phone number?",
+      "required": true
+    },
+    {
+      "key": "email",
+      "header": "Email",
+      "section": "BASICS",
+      "type": "email",
+      "question": "What is your email address?",
+      "required": true
+    },
+    {
+      "key": "dateOfBirth",
+      "header": "Date of birth",
+      "section": "BASICS",
+      "type": "date",
+      "question": "What is your date of birth?",
+      "required": true
+    },
+    {
+      "key": "nationalId",
+      "header": "National ID",
+      "section": "BASICS",
+      "type": "text",
+      "max": 30,
+      "question": "What is your National ID number?",
+      "required": true
+    },
+    {
+      "key": "gender",
+      "header": "Gender",
+      "section": "BASICS",
+      "type": "select",
+      "question": "What is your gender?",
+      "choices": [
+        {
+          "code": "MALE",
+          "label": "Male"
+        },
+        {
+          "code": "FEMALE",
+          "label": "Female"
+        }
+      ],
+      "required": true
+    },
+    {
+      "key": "joinedChurchOn",
+      "header": "Joined church on",
+      "section": "BASICS",
+      "type": "date",
+      "question": "When did you join the church?",
+      "required": true
+    },
+    {
+      "key": "address",
+      "header": "Address",
+      "section": "BASICS",
+      "type": "text",
+      "max": 200,
+      "question": "Where do you live?",
+      "required": true
+    },
+    {
+      "key": "EMPLOYMENT.status",
+      "header": "Work - Situation",
+      "section": "EMPLOYMENT",
+      "type": "select",
+      "question": "What is your current work situation?",
+      "choices": [
+        {
+          "code": "EMPLOYED",
+          "label": "Employed"
+        },
+        {
+          "code": "SELF_EMPLOYED",
+          "label": "Self-employed"
+        },
+        {
+          "code": "STUDENT",
+          "label": "Student"
+        },
+        {
+          "code": "UNEMPLOYED",
+          "label": "Looking for work"
+        },
+        {
+          "code": "RETIRED",
+          "label": "Retired"
+        }
+      ],
+      "required": false
+    },
+    {
+      "key": "EMPLOYMENT.sector",
+      "header": "Work - Sector",
+      "section": "EMPLOYMENT",
+      "type": "select",
+      "question": "Which field do you work in?",
+      "choices": [
+        {
+          "code": "FINANCE",
+          "label": "Finance"
+        },
+        {
+          "code": "EDUCATION",
+          "label": "Education"
+        },
+        {
+          "code": "HEALTH",
+          "label": "Health"
+        },
+        {
+          "code": "AGRICULTURE",
+          "label": "Agriculture"
+        },
+        {
+          "code": "TECHNOLOGY",
+          "label": "Technology"
+        },
+        {
+          "code": "BUSINESS",
+          "label": "Business and trade"
+        },
+        {
+          "code": "CONSTRUCTION",
+          "label": "Construction"
+        },
+        {
+          "code": "TRANSPORT",
+          "label": "Transport"
+        },
+        {
+          "code": "GOVERNMENT",
+          "label": "Government"
+        },
+        {
+          "code": "CHURCH",
+          "label": "Church or ministry"
+        },
+        {
+          "code": "OTHER",
+          "label": "Other"
+        }
+      ],
+      "required": false
+    },
+    {
+      "key": "EMPLOYMENT.employer",
+      "header": "Work - Employer",
+      "section": "EMPLOYMENT",
+      "type": "text",
+      "max": 120,
+      "question": "Who is your employer?",
+      "required": false
+    },
+    {
+      "key": "EMPLOYMENT.role",
+      "header": "Work - Role",
+      "section": "EMPLOYMENT",
+      "type": "text",
+      "max": 120,
+      "question": "What's your job title/role?",
+      "required": false
+    },
+    {
+      "key": "EMPLOYMENT.since",
+      "header": "Work - Since",
+      "section": "EMPLOYMENT",
+      "type": "date",
+      "question": "When did this work begin?",
+      "required": false
+    },
+    {
+      "key": "EMPLOYMENT.business",
+      "header": "Work - Business",
+      "section": "EMPLOYMENT",
+      "type": "text",
+      "max": 120,
+      "question": "What business do you run?",
+      "required": false
+    },
+    {
+      "key": "EDUCATION.level",
+      "header": "Education - Level",
+      "section": "EDUCATION",
+      "type": "select",
+      "question": "What is your education level?",
+      "choices": [
+        {
+          "code": "NONE",
+          "label": "None"
+        },
+        {
+          "code": "PRIMARY",
+          "label": "Primary"
+        },
+        {
+          "code": "SECONDARY_O",
+          "label": "Secondary (O' Level)"
+        },
+        {
+          "code": "SECONDARY_A",
+          "label": "Secondary (A' Level)"
+        },
+        {
+          "code": "ASSOCIATE",
+          "label": "Associate Degree / Vocational"
+        },
+        {
+          "code": "BACHELOR",
+          "label": "Bachelor's Degree"
+        },
+        {
+          "code": "MASTER",
+          "label": "Master's Degree"
+        },
+        {
+          "code": "DOCTORATE",
+          "label": "Doctorate Degree"
+        }
+      ],
+      "required": false
+    },
+    {
+      "key": "EDUCATION.field",
+      "header": "Education - Field of study",
+      "section": "EDUCATION",
+      "type": "text",
+      "max": 120,
+      "question": "What is your field of study?",
+      "required": false
+    },
+    {
+      "key": "EDUCATION.school",
+      "header": "Education - School",
+      "section": "EDUCATION",
+      "type": "text",
+      "max": 120,
+      "question": "Which school or institution did you attend?",
+      "required": false
+    },
+    {
+      "key": "EDUCATION.startYear",
+      "header": "Education - Start year",
+      "section": "EDUCATION",
+      "type": "number",
+      "question": "In which year did you start?",
+      "required": false
+    },
+    {
+      "key": "EDUCATION.endYear",
+      "header": "Education - End year",
+      "section": "EDUCATION",
+      "type": "number",
+      "question": "In which year did you finish?",
+      "required": false
+    },
+    {
+      "key": "BAPTISM.date",
+      "header": "Baptism - Date",
+      "section": "BAPTISM",
+      "type": "date",
+      "question": "When were you baptised?",
+      "required": false
+    },
+    {
+      "key": "BAPTISM.place",
+      "header": "Baptism - Place",
+      "section": "BAPTISM",
+      "type": "text",
+      "max": 120,
+      "question": "Where were you baptised?",
+      "required": false
+    }
+  ],
+  "headers": [
+    "Full name",
+    "Preferred name",
+    "Phone",
+    "Email",
+    "Date of birth",
+    "National ID",
+    "Gender",
+    "Status",
+    "Joined church on",
+    "Address",
+    "Contact - Label",
+    "Contact - Value",
+    "Work - Situation",
+    "Work - Sector",
+    "Work - Employer",
+    "Work - Role",
+    "Work - Since",
+    "Work - Business",
+    "Work - School",
+    "Work - Field of study",
+    "Education - Level",
+    "Education - Field of study",
+    "Education - School",
+    "Education - Start year",
+    "Education - End year",
+    "Calling - Name",
+    "Calling - Since",
+    "Calling - Notes",
+    "Family - Relationship",
+    "Family - Name",
+    "Family - Phone",
+    "Family - National ID",
+    "Family - Date of birth",
+    "Family - Gender",
+    "Family - Notes",
+    "Baptism - Date",
+    "Baptism - Place",
+    "Baptism - Baptised by",
+    "Marriage - Date",
+    "Marriage - Spouse name",
+    "Marriage - Place",
+    "Marriage - Blessed by",
+    "Marriage - Certificate reference",
+    "Marriage - Marriage ended by",
+    "Marriage - Marriage ended on",
+    "CALLING",
+    "FAMILY",
+    "CONTACT"
+  ],
+  "callings": [
+    "Evangelist",
+    "Intercessor",
+    "Children ministry",
+    "Deacon",
+    "Protocol",
+    "Singer",
+    "Instrumentalist",
+    "Media"
+  ],
+  "familyLimit": 20,
+  "relations": [
+    {
+      "code": "SPOUSE",
+      "label": "Spouse"
+    },
+    {
+      "code": "PARENT",
+      "label": "Parent"
+    },
+    {
+      "code": "CHILD",
+      "label": "Child"
+    },
+    {
+      "code": "SIBLING",
+      "label": "Brother or sister"
+    },
+    {
+      "code": "GUARDIAN",
+      "label": "Guardian"
+    },
+    {
+      "code": "OTHER",
+      "label": "Other"
+    }
+  ],
+  "choirs": [
+    {
+      "id": "ou-choir-ijwi",
+      "name": "Ijwi ry' umwami Yesu"
+    },
+    {
+      "id": "ou-choir-elbethel",
+      "name": "El bethel"
+    },
+    {
+      "id": "ou-choir-integuza",
+      "name": "Integuza"
+    },
+    {
+      "id": "ou-choir-elim",
+      "name": "Elim"
+    },
+    {
+      "id": "ou-choir-beulah",
+      "name": "Beulah"
+    },
+    {
+      "id": "ou-choir-yerusalemu",
+      "name": "Yerusalemu"
+    },
+    {
+      "id": "ou-choir-hope",
+      "name": "Hope"
+    }
+  ]
+}

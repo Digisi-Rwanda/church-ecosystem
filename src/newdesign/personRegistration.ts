@@ -2,7 +2,7 @@ import type { P360Section } from '../api/frontDoorApi';
 import { fieldsFor, SECTION_ORDER, type FieldDef } from './person360';
 
 const SECTION_NAMES: Record<P360Section,string> = {CONTACT:'Contact',EMPLOYMENT:'Work',EDUCATION:'Education',CALLING:'Calling',FAMILY:'Family',BAPTISM:'Baptism',MARRIAGE:'Marriage'};
-const LABELS: Record<string,string> = {date:'Date',label:'Label',value:'Value',status:'Situation',sector:'Sector',employer:'Employer',business:'Business',role:'Role',school:'School',field:'Field of study',since:'Since',level:'Level',startYear:'Start year',endYear:'End year',name:'Name',note:'Notes',relation:'Relationship',dateOfBirth:'Date of birth',gender:'Gender',place:'Place',baptisedBy:'Baptised by',spouseName:'Spouse name',blessedBy:'Blessed by',certificateRef:'Certificate reference',endedBy:'Marriage ended by',endedOn:'Marriage ended on'};
+const LABELS: Record<string,string> = {date:'Date',label:'Label',value:'Value',status:'Situation',sector:'Sector',employer:'Employer',business:'Business',role:'Role',school:'School',field:'Field of study',since:'Since',level:'Level',startYear:'Start year',endYear:'End year',name:'Name',note:'Notes',phone:'Phone',nationalId:'National ID',relation:'Relationship',dateOfBirth:'Date of birth',gender:'Gender',place:'Place',baptisedBy:'Baptised by',spouseName:'Spouse name',blessedBy:'Blessed by',certificateRef:'Certificate reference',endedBy:'Marriage ended by',endedOn:'Marriage ended on'};
 
 /** All fields that may appear after choosing a work situation, education level or family relationship. */
 export function registrationFields(section:P360Section): FieldDef[] {

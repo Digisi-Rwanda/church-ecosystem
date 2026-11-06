@@ -1,0 +1,103 @@
+{
+  "planHash": "e17e941a90405385149a46362ba483f1714d7d615e86869fedcb11beaf58ea31",
+  "phase": "standalone",
+  "recordedAtUtc": "2026-10-31T14:44:34.6767164Z",
+  "retryCount": 0,
+  "resetBaseline": false,
+  "complete": true,
+  "result": {
+    "setupSucceeded": true,
+    "setupDurationMs": 0,
+    "setupFailureOutput": null,
+    "assertions": [
+      {
+        "name": "frontend-build",
+        "kind": "process",
+        "verificationMethod": "exit-code",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E kacyiru@0.1.0 build\r\n\u003E tsc -b \u0026\u0026 vite build\r\n\r\n\u001B[36mvite v8.2.2 \u001B[32mbuilding client environment for production...\u001B[36m\u001B[39m\r\ntransforming...\r\n\u2713 295 modules transformed.\r\nrendering chunks...\r\ncomputing gzip size...\r\ndist/index.html                                     1.41 kB \u2502 gzip:  0.64 kB\r\ndist/assets/index-CvIJFp4M.css                    220.57 kB \u2502 gzip: 39.78 kB\r\ndist/assets/planLevels-CpVJrGzJ.js                  0.12 kB \u2502 gzip:  0.12 kB\r\ndist/assets/retiredUnits-DMj_I2wO.js                0.14 kB \u2502 gzip:  0.13 kB\r\ndist/assets/usePeopleAccess-DpxZhC_H.js             0.24 kB \u2502 gzip:  0.20 kB\r\ndist/assets/ActivityNew-Cf78UPlD.js                 0.24 kB \u2502 gzip:  0.21 kB\r\ndist/assets/ImportLink-CxhONt6V.js                  0.26 kB \u2502 gzip:  0.22 kB\r\ndist/assets/SystemLink-47SEXsNs.js                  0.29 kB \u2502 gzip:  0.23 kB\r\ndist/assets/fundLabels-C906SHOG.js                  0.51 kB \u2502 gzip:  0.32 kB\r\ndist/assets/caring-Dq99BbX3.js                      0.65 kB \u2502 gzip:  0.39 kB\r\ndist/assets/rolldown-runtime-hePW80VL.js            0.71 kB \u2502 gzip:  0.42 kB\r\ndist/assets/evangelism-DuBaBiBz.js                  0.71 kB \u2502 gzip:  0.41 kB\r\ndist/assets/charts-w0gcK1u_.js                      0.74 kB \u2502 gzip:  0.41 kB\r\ndist/assets/groups-DaiHuCvR.js                      0.91 kB \u2502 gzip:  0.51 kB\r\ndist/assets/fileKit-CaIa5zfE.js                     0.99 kB \u2502 gzip:  0.58 kB\r\ndist/assets/moneyBlock-VFm0ANG3.js                  0.99 kB \u2502 gzip:  0.55 kB\r\ndist/assets/systemSettings-DQWpXlsN.js              1.05 kB \u2502 gzip:  0.53 kB\r\ndist/assets/AttendanceChart-D_ehqJEV.js             1.09 kB \u2502 gzip:  0.57 kB\r\ndist/assets/work-D0G1aBii.js                        1.17 kB \u2502 gzip:  0.62 kB\r\ndist/assets/structure-h8frt8Yb.js                   1.19 kB \u2502 gzip:  0.54 kB\r\ndist/assets/music-DebsgGx-.js                       1.20 kB \u2502 gzip:  0.71 kB\r\ndist/assets/PersonPicker-BWPAWVmJ.js                1.23 kB \u2502 gzip:  0.66 kB\r\ndist/assets/PeopleDuplicatesPage-CMkDZpS7.js        1.44 kB \u2502 gzip:  0.70 kB\r\ndist/assets/reports-FYYi4uOA.js                     1.55 kB \u2502 gzip:  0.83 kB\r\ndist/assets/LoadState-HUOdpYMr.js                   1.56 kB \u2502 gzip:  0.56 kB\r\ndist/assets/ChoirSelect-Bl0099Ma.js                 1.67 kB \u2502 gzip:  0.92 kB\r\ndist/assets/AnnouncementsStrip-H1JwLwbg.js          1.79 kB \u2502 gzip:  0.77 kB\r\ndist/assets/governance-DDU6KnJy.js                  1.84 kB \u2502 gzip:  0.92 kB\r\ndist/assets/DeletedWorkPage-CaIvwOe_.js             1.85 kB \u2502 gzip:  0.92 kB\r\ndist/assets/PendingFiles-BKnHmRqc.js                1.89 kB \u2502 gzip:  0.88 kB\r\ndist/assets/ActivityByStatus-oPlZKEWp.js            1.90 kB \u2502 gzip:  0.86 kB\r\ndist/assets/money-D0cV1gO3.js                       2.00 kB \u2502 gzip:  0.97 kB\r\ndist/assets/DecisionsPage-B6qldUcc.js               2.03 kB \u2502 gzip:  0.97 kB\r\ndist/assets/access-BwQQ5dbj.js                      2.06 kB \u2502 gzip:  0.95 kB\r\ndist/assets/ProtocolReportsPage-CiN_ktq2.js         2.10 kB \u2502 gzip:  0.91 kB\r\ndist/assets/ChoirPage-BMepyvxm.js                   2.16 kB \u2502 gzip:  1.03 kB\r\ndist/assets/protocol-C-iP_ZUD.js                    2.18 kB \u2502 gzip:  1.00 kB\r\ndist/assets/FrontDoorContext-CBR_88xl.js            2.21 kB \u2502 gzip:  1.12 kB\r\ndist/assets/MovesPage-BmFIMomC.js                   2.32 kB \u2502 gzip:  0.93 kB\r\ndist/assets/OrgTreePage-zcMIEBEk.js                 2.40 kB \u2502 gzip:  1.03 kB\r\ndist/assets/MyAssignmentsPage-trEuVNu6.js           2.50 kB \u2502 gzip:  1.14 kB\r\ndist/assets/PreferencesPage-C2BlnHYt.js             2.52 kB \u2502 gzip:  1.11 kB\r\ndist/assets/MyContributionPage-DkMzGe46.js          2.68 kB \u2502 gzip:  0.99 kB\r\ndist/assets/peopleTools-DDR3HT94.js                 2.75 kB \u2502 gzip:  1.37 kB\r\ndist/assets/when-CucD3n16.js                        2.78 kB \u2502 gzip:  1.22 kB\r\ndist/assets/AddPersonPage-DCSPhLMV.js               2.86 kB \u2502 gzip:  1.21 kB\r\ndist/assets/PlanFiles-BsU08--G.js                   2.90 kB \u2502 gzip:  1.24 kB\r\ndist/assets/BaptismCohortPage-Dl9NrIxu.js           2.99 kB \u2502 gzip:  1.29 kB\r\ndist/assets/CouplesPage-F_99KrAj.js                 3.07 kB \u2502 gzip:  1.24 kB\r\ndist/assets/schedule-67w6Yagl.js                    3.\n\u2026[truncated]",
+        "durationMs": 96514
+      },
+      {
+        "name": "tests-pass",
+        "kind": "process",
+        "verificationMethod": "test-results",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": 0,
+        "outputSample": "\r\n\u003E kacyiru@0.1.0 test\r\n\u003E vitest run\r\n\r\n\r\n RUN  v5.0.0 C:/Users/ihimb/Music/kacyiru\r\n\r\n\r\n Test Files  52 passed (52)\r\n      Tests  296 passed (296)\r\n   Start at  16:43:54\r\n   Duration  29.16s (transform 47%, import 27%, tests 20%, worker 6%)\r\n\r\n  Transform  transforming modules took 14.22s \u00B7 47% of tracked time, re-done on every run\r\n             persist transforms across runs with fsModuleCache: true\r\n             learn more: https://vitest.dev/guide/improving-performance#caching-between-reruns\r\n\r\n",
+        "durationMs": 35945,
+        "testResults": {
+          "testFramework": "vitest",
+          "runnerDetectedFrom": "package_json",
+          "testsTotal": 296,
+          "testsPassed": 296,
+          "testsFailed": 0,
+          "testsSkipped": 0,
+          "parseFailed": false
+        }
+      },
+      {
+        "name": "dev-server-serves-home",
+        "kind": "http-probe",
+        "verificationMethod": "http-status",
+        "passed": true,
+        "timedOut": false,
+        "skipped": false,
+        "skippedReason": null,
+        "exitCode": null,
+        "outputSample": "HTTP 200\n\u003C!doctype html\u003E\n\u003Chtml lang=\u0022en\u0022\u003E\n  \u003Chead\u003E\n    \u003Cscript type=\u0022module\u0022\u003Eimport { injectIntoGlobalHook } from \u0022/@react-refresh\u0022;\ninjectIntoGlobalHook(window);\nwindow.$RefreshReg$ = () =\u003E {};\nwindow.$RefreshSig$ = () =\u003E (type) =\u003E type;\u003C/script\u003E\n\n    \u003Cscript type=\u0022module\u0022 src=\u0022/@vite/client\u0022\u003E\u003C/script\u003E\n\n    \u003Cmeta charset=\u0022UTF-8\u0022 /\u003E\n    \u003Clink rel=\u0022icon\u0022 type=\u0022image/svg\u002Bxml\u0022 href=\u0022/favicon.svg\u0022 /\u003E\n    \u003Clink rel=\u0022manifest\u0022 href=\u0022/manifest.webmanifest\u0022 /\u003E\n    \u003Cmeta name=\u0022theme-color\u0022 content=\u0022#1d4ed8\u0022 /\u003E\n    \u003Cmeta name=\u0022viewport\u0022 content=\u0022width=device-width, initial-scale=1.0\u0022 /\u003E\n    \u003Ctitle\u003EADEPR Kacyiru\u003C/title\u003E\n    \u003Cscript\u003E\n      (function () {\n        try {\n          var t = localStorage.getItem(\u0027adepr-theme\u0027);\n          if (t !== \u0027dark\u0027 \u0026\u0026 t !== \u0027light\u0027) t = \u0027light\u0027;\n          document.documentElement.dataset.theme = t;\n          document.documentElement.style.colorScheme = t;\n        } catch (e) {\n          document.documentElement.dataset.theme = \u0027light\u0027;\n        }\n      })();\n    \u003C/script\u003E\n    \u003Clink rel=\u0022preconnect\u0022 href=\u0022https://fonts.googleapis.com\u0022 /\u003E\n    \u003Clink rel=\u0022preconnect\u0022 href=\u0022https://fonts.gstatic.com\u0022 crossorigin /\u003E\n    \u003Clink\n      href=\u0022https://fonts.googleapis.com/css2?family=Plus\u002BJakarta\u002BSans:wght@400;500;600;700;800\u0026display=swap\u0022\n      rel=\u0022stylesheet\u0022\n    /\u003E\n  \u003C/head\u003E\n  \u003Cbody\u003E\n    \u003Cdiv id=\u0022root\u0022\u003E\u003C/div\u003E\n    \u003Cscript type=\u0022module\u0022 src=\u0022/src/main.tsx\u0022\u003E\u003C/script\u003E\n  \u003C/body\u003E\n\u003C/html\u003E\n\n--- server output ---\n\r\n\u003E kacyiru@0.1.0 dev\r\n\u003E vite --host localhost --port 5173 --strictPort\r\n\r\n\r\n  \u001B[32m\u001B[1mVITE\u001B[22m v8.2.2\u001B[39m  \u001B[2mready in \u001B[0m\u001B[1m5410\u001B[22m\u001B[2m\u001B[0m ms\u001B[22m\r\n\r\n  \u001B[32m\u279C\u001B[39m  \u001B[1mLocal\u001B[22m:   \u001B[36mhttp://localhost:\u001B[1m5173\u001B[22m/\u001B[39m\r\n",
+        "durationMs": 9582
+      }
+    ],
+    "executions": [
+      {
+        "source": "frontend-build",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "build"
+        ],
+        "cwd": "C:\\Users\\ihimb\\Music\\kacyiru",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "tests-pass",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "test"
+        ],
+        "cwd": "C:\\Users\\ihimb\\Music\\kacyiru",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      },
+      {
+        "source": "dev-server-serves-home",
+        "resolvedExecutable": "C:\\Program Files\\nodejs\\npm.CMD",
+        "args": [
+          "run",
+          "dev",
+          "--",
+          "--host",
+          "localhost",
+          "--port",
+          "5173",
+          "--strictPort"
+        ],
+        "cwd": "C:\\Users\\ihimb\\Music\\kacyiru",
+        "env": {},
+        "prependPath": [],
+        "platform": "win32"
+      }
+    ]
+  }
+}

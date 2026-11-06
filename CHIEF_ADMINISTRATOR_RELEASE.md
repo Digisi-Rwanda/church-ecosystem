@@ -5,7 +5,8 @@ No deployment, push, migration execution, or live role assignment was performed.
 The release now also includes scoped unit Person 360 recording/import for
 President, Vice President and Secretary, including baptism and marriage. See
 UNIT_PERSON_360_REVIEW.md. ADMINISTRATOR_COMMIT_FILES.txt is the exact combined
-38-file review list; staging that list excludes local preview/cache artifacts.
+review list; staging that list excludes local preview/cache artifacts. It also
+includes the scheduling form clarity updates requested during review.
 
 ## Compatibility and authority
 

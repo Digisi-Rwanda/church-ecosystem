@@ -17,6 +17,7 @@ const BASE: Record<P360Section, FieldDef[]> = {
   FAMILY: [
     { key: 'relation', type: 'select', required: true, options: ['SPOUSE', 'PARENT', 'CHILD', 'SIBLING', 'GUARDIAN', 'OTHER'] },
     { key: 'relatedPersonId', type: 'person' }, { key: 'name', type: 'text', max: 120 },
+    ...['phone', 'nationalId'].map(key => ({ key, type: 'text' as const, max: 30 })),
   ],
   BAPTISM: [{ key: 'date', type: 'date', required: true }, { key: 'place', type: 'text', max: 120 }, { key: 'baptisedBy', type: 'text', max: 120 }],
   MARRIAGE: [

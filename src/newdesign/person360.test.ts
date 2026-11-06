@@ -14,6 +14,7 @@ describe('person 360 helpers', () => {
   });
   it('family needs a person or a name', () => {
     expect(formData('FAMILY', { relation: 'CHILD' })).toBeNull();
+    expect(formData('FAMILY',{relation:'PARENT',name:'Parent',phone:'0780123456',nationalId:'0012345678901234'})).toMatchObject({phone:'0780123456',nationalId:'0012345678901234'});
     expect(formData('FAMILY', { relation: 'CHILD', name: 'Eric' })).toEqual({ relation: 'CHILD', name: 'Eric' });
     expect(formData('FAMILY', { relation: 'SPOUSE', relatedPersonId: 'p1' })).toEqual({ relation: 'SPOUSE', relatedPersonId: 'p1' });
   });
@@ -38,8 +39,8 @@ describe('person 360 helpers', () => {
   });
   it('a child carries a birth date and gender; other relations do not', () => {
     const keys = (v: Record<string, string>) => fieldsFor('FAMILY', v).map((f) => f.key);
-    expect(keys({ relation: 'CHILD' })).toEqual(['relation', 'relatedPersonId', 'name', 'dateOfBirth', 'gender', 'note']);
-    expect(keys({ relation: 'SPOUSE' })).toEqual(['relation', 'relatedPersonId', 'name']);
+    expect(keys({ relation: 'CHILD' })).toEqual(['relation', 'relatedPersonId', 'name', 'phone', 'nationalId', 'dateOfBirth', 'gender', 'note']);
+    expect(keys({ relation: 'SPOUSE' })).toEqual(['relation', 'relatedPersonId', 'name', 'phone', 'nationalId']);
     expect(formData('FAMILY', { relation: 'CHILD', name: 'Eric', dateOfBirth: '2019-05-02', gender: 'MALE', junk: 'x' })).toEqual({ relation: 'CHILD', name: 'Eric', dateOfBirth: '2019-05-02', gender: 'MALE' });
     expect(formData('FAMILY', { relation: 'CHILD' })).toBeNull();
   });

@@ -1,0 +1,86 @@
+[
+  {
+    "id": "sys-youth",
+    "name": "Youth Ministry"
+  },
+  {
+    "id": "sys-music",
+    "name": "Music Ministry"
+  },
+  {
+    "id": "sys-men",
+    "name": "Men Ministry"
+  },
+  {
+    "id": "sys-women",
+    "name": "Women Ministry"
+  },
+  {
+    "id": "sys-couples",
+    "name": "Family Ministry"
+  },
+  {
+    "id": "sys-children",
+    "name": "Children Ministry"
+  },
+  {
+    "id": "sys-elderly",
+    "name": "Elderly Ministry"
+  },
+  {
+    "id": "sys-evangelism",
+    "name": "Evangelism Ministry"
+  },
+  {
+    "id": "sys-intercessors",
+    "name": "Intercessors Ministry"
+  },
+  {
+    "id": "sys-deacon",
+    "name": "Deacon Ministry"
+  },
+  {
+    "id": "sys-worship",
+    "name": "Worship Team"
+  },
+  {
+    "id": "sys-protocol",
+    "name": "Protocol Team"
+  },
+  {
+    "id": "sys-media",
+    "name": "Media Team"
+  },
+  {
+    "id": "sys-choir",
+    "name": "Choir Ministry"
+  },
+  {
+    "id": "sys-choir-ijwi",
+    "name": "Ijwi ry' umwami Yesu"
+  },
+  {
+    "id": "sys-choir-elbethel",
+    "name": "El bethel"
+  },
+  {
+    "id": "sys-choir-integuza",
+    "name": "Integuza"
+  },
+  {
+    "id": "sys-choir-elim",
+    "name": "Elim"
+  },
+  {
+    "id": "sys-choir-beulah",
+    "name": "Beulah"
+  },
+  {
+    "id": "sys-choir-yerusalemu",
+    "name": "Yerusalemu"
+  },
+  {
+    "id": "sys-choir-hope",
+    "name": "Hope"
+  }
+]

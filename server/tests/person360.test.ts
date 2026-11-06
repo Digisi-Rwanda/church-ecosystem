@@ -5,6 +5,10 @@ import { bearer, seedWorld } from './world';
 import { accessFor, cleanData } from '../src/person360/rules';
 
 describe('person 360 rules', () => {
+  it('retains optional family contact identifiers as text and rejects overlong values',()=>{
+    expect(cleanData('FAMILY',{relation:'PARENT',name:'Parent',phone:' 0780123456 ',nationalId:'0012345678901234'})).toEqual({relation:'PARENT',name:'Parent',phone:'0780123456',nationalId:'0012345678901234'});
+    for(const key of ['phone','nationalId'])expect(cleanData('FAMILY',{relation:'PARENT',name:'Parent',[key]:'1'.repeat(31)})).toBeNull();
+  });
   it('cleans each section and drops unknown fields', () => {
     expect(cleanData('BAPTISM', { date: '2026-05-03', place: ' Kacyiru ', junk: 1 })).toEqual({ date: '2026-05-03', place: 'Kacyiru' });
     expect(cleanData('BAPTISM', { date: 'soon' })).toBeNull();

@@ -11,6 +11,7 @@ import {SECTION_ORDER} from './person360';
 describe('full Person 360 registration',()=>{
   it('round-trips every readable spreadsheet header to a recognized API field',()=>{
     const template=peopleImportTemplate(SECTION_ORDER);
+    expect(template).toContain('Family - Phone');expect(template).toContain('Family - National ID');
     const headers=parseCsv(template)[0];
     const mapped=mapImport([headers,headers.map((_,index)=>index===0?'New member':'value')]);
     expect(mapped.unknown).toEqual([]); expect(mapped.hasName).toBe(true);

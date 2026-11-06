@@ -1,0 +1,53 @@
+ M server/acceptance/scheduling-preview.test.ts
+ M server/acceptance/vitest.config.ts
+ M server/src/routes/music.ts
+ M server/src/scheduling/configRouter.ts
+ M server/src/scheduling/store.ts
+ M server/src/scheduling/types.ts
+ M server/tests/music.test.ts
+ M server/tests/schedulingConfig.test.ts
+ M src/api/frontDoorApi.ts
+ M src/i18n/messages/en.ts
+ M src/newdesign/ChoirsPage.tsx
+ M src/newdesign/DoorSchedulingConfigPage.test.ts
+ M src/newdesign/DoorSchedulingConfigPage.tsx
+ M src/newdesign/MonthPlanPage.tsx
+ M src/newdesign/MusicParticipationEditor.tsx
+ M src/newdesign/SchedulingConfigEditors.tsx
+ M src/newdesign/music.ts
+?? .tsupgrader/
+?? CHOIR_REGISTER_SYNC.md
+?? DRAFT_CONFIGURATION_LIFECYCLE.md
+?? acceptance-scheduling.html
+?? bulletins.commit.txt
+?? choir-register-sync-proof.jpg
+?? choir-sync-final-status.txt
+?? count.txt
+?? draft-version-preview-ready.jpg
+?? month-plan-without-category-counts.jpg
+?? out.txt
+?? scripts/_missing-keys.mjs
+?? scripts/scheduling-ui-preview.tsx
+?? server/scripts/verification-reporter.mjs
+?? server/src/scheduling/choirRegisterSync.ts
+?? server/verification-isolation-request.txt
+?? src/api/choirRegisterEvents.test.ts
+?? src/api/choirRegisterEvents.ts
+?? src/newdesign/MonthPlanPage.tsx.tmp
+?? src/newdesign/ProtocolTeamsPage.tsx.tmp
+?? src/newdesign/useChoirRegister.ts
+?? ui-music-availability-error.jpg
+?? ui-music-desktop.jpg
+?? ui-music-mobile.jpg
+?? ui-music-pinned-history.jpg
+?? ui-phases-final-status.txt
+?? ui-phases-start-status.txt
+?? ui-protocol-distribution.jpg
+?? ui-protocol-mobile.jpg
+?? verification-final-status.txt
+?? verification-followup-status.txt
+?? verification-migration-hashes.json
+?? verification-read-scope-findings.txt
+?? verification-stable-source-hashes.json
+?? verification-start-status.txt
+?? verification-unthrottled-source-hashes.json

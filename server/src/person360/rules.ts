@@ -64,7 +64,7 @@ const SHAPES = {
   /** A child also carries a birth date and gender, so the church can count and care for them. */
   FAMILY: z.object({
     relation: z.enum(['SPOUSE', 'PARENT', 'CHILD', 'SIBLING', 'GUARDIAN', 'OTHER']), relatedPersonId: opt(80), name: opt(120),
-    dateOfBirth: day.optional(), gender: z.enum(['MALE', 'FEMALE']).optional(), note: opt(300),
+    dateOfBirth: day.optional(), gender: z.enum(['MALE', 'FEMALE']).optional(), phone: opt(30), nationalId: opt(30), note: opt(300),
   }).refine((v) => !!v.relatedPersonId || !!v.name, { message: 'who' }),
   BAPTISM: z.object({ date: day, place: opt(120), baptisedBy: opt(120) }),
   /** `endedOn` + `endedBy: 'DEATH'` marks the spouse's passing: the person is then widowed. */
