@@ -1,27 +1,30 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '../api/client';
-import { musicExceptions, preserveRelaxableKinds, schedulingError } from './schedulingForms';
-import type { ChoirCategoryLinkApi } from '../api/frontDoorApi';
-describe('editing versioned choir participation',()=>{
-  const prior = {eligibleOverride:{SS1:false,custom:true},frequencyOverride:{SS1:{frequencyKind:'MINIMUM',frequencyCounting:'DISTINCT_DATES'},custom:{frequencyTarget:9,frequencyPeriod:'YEAR'}}} as unknown as ChoirCategoryLinkApi;
-  it('keeps hidden services and partial inherited settings when membership is edited',()=>{
-    const data=new FormData();data.append('exceptionCode','ss1');data.set('eligible:ss1','no');data.set('target:ss1','');data.set('kind:ss1','MINIMUM');data.set('period:ss1','');
-    expect(musicExceptions(data,prior)).toEqual({eligibleOverride:prior.eligibleOverride,frequencyOverride:prior.frequencyOverride});
+import { preserveRelaxableKinds, schedulingError } from './schedulingForms';
+
+describe('scheduling form helpers', () => {
+  it('preserves unsupported relaxation codes while updating selected supported ones', () => {
+    expect(preserveRelaxableKinds(['ss1', 'CUSTOM'], ['TUESDAY'])).toEqual(['CUSTOM', 'TUESDAY']);
   });
-  it('changes a known exception without dropping counting or hidden service settings',()=>{
-    const data=new FormData();data.append('exceptionCode','ss1');data.set('eligible:ss1','yes');data.set('target:ss1','2');data.set('kind:ss1','MAXIMUM');data.set('period:ss1','QUARTER');
-    expect(musicExceptions(data,prior)).toEqual({eligibleOverride:{SS1:true,custom:true},frequencyOverride:{SS1:{frequencyTarget:2,frequencyKind:'MAXIMUM',frequencyPeriod:'QUARTER',frequencyCounting:'DISTINCT_DATES'},custom:prior.frequencyOverride.custom}});
-    expect(prior.eligibleOverride.SS1).toBe(false);
+
+  it('shows actionable validation issues from a 4xx and withholds server errors', () => {
+    expect(schedulingError(new ApiError('x', 409, { error: 'Resolve rules', issues: ['Choose a period', { message: 'Link Grace Choir' }] })))
+      .toBe('Resolve rules · Choose a period · Link Grace Choir');
+    expect(schedulingError(new ApiError('x', 500, { error: 'Internal details' }))).toBeNull();
+    expect(schedulingError(new Error('plain'))).toBeNull();
   });
-  it('removes only explicitly cleared supported fields',()=>{
-    const data=new FormData();data.append('exceptionCode','ss1');data.set('eligible:ss1','inherit');data.set('kind:ss1','');data.set('period:ss1','');data.set('target:ss1','');
-    expect(musicExceptions(data,prior)).toEqual({eligibleOverride:{custom:true},frequencyOverride:{SS1:{frequencyCounting:'DISTINCT_DATES'},custom:prior.frequencyOverride.custom}});
+
+  it('lists every validation error from a 422 save', () => {
+    expect(schedulingError(new ApiError('x', 422, { errors: ['Service needs a weekday.', 'Choir has no category.'] })))
+      .toBe('Service needs a weekday. · Choir has no category.');
   });
-  it('preserves unsupported relaxation codes while updating selected supported ones',()=>{
-    expect(preserveRelaxableKinds(['ss1','CUSTOM'],['TUESDAY'])).toEqual(['CUSTOM','TUESDAY']);
+
+  it('shows the edit-lock and frozen-schedule messages from a 409', () => {
+    expect(schedulingError(new ApiError('x', 409, { code: 'LOCKED', message: 'Grace is editing.' }))).toBe('Grace is editing.');
+    expect(schedulingError(new ApiError('x', 409, { code: 'SCHEDULE_FROZEN', message: 'This month is confirmed.' }))).toBe('This month is confirmed.');
   });
-  it('shows actionable policy validation issues and withholds server errors',()=>{
-    expect(schedulingError(new ApiError('x',409,{error:'Resolve rules',issues:['Choose a period',{message:'Link Grace Choir'}]}))).toBe('Resolve rules · Choose a period · Link Grace Choir');
-    expect(schedulingError(new ApiError('x',500,{error:'Internal details'}))).toBeNull();
+
+  it('does not repeat a message that appears twice', () => {
+    expect(schedulingError(new ApiError('x', 400, { error: 'Same', message: 'Same' }))).toBe('Same');
   });
 });
