@@ -196,6 +196,10 @@ function EmptyOrLocked({ canEdit, empty, emptyKey }: { canEdit: boolean; empty: 
   return <p className="muted">{canEdit ? t("door.config.emptyDraft") : t(emptyKey)}</p>;
 }
 
+function Pill({ on, children }: { on: boolean; children: ReactNode }) {
+  return <span className={`scheduling-pill ${on ? 'is-on' : 'is-off'}`}>{children}</span>;
+}
+
 function SectionNotice({ children, tone = "info" }: { children: ReactNode; tone?: "info" | "warn" }) {
   return <p className={`scheduling-config-notice${tone === "warn" ? " is-warning" : ""}`}>{children}</p>;
 }
@@ -323,12 +327,12 @@ export function ServicesEditor({ systemId, canWrite }: Props) {
   const ask = useConfirmDelete();
   const [editing, setEditing] = useState<string | 'new' | null>(null);
   const rows = list.data?.services ?? [];
-  const yes = (v: boolean) => v ? t('door.config.form.yes') : t('door.config.form.no');
+  const yes = (v: boolean) => <Pill on={v}>{v ? t('door.config.form.yes') : t('door.config.form.no')}</Pill>;
   return <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
     {!isMusic && <SectionNotice>{t('door.config.sharedCalendarReadOnly')}</SectionNotice>}
     <FormNotice state={state} />
     {editable && editing === null && <button type="button" className="btn sm" onClick={() => { state.clear(); setEditing('new'); }}>{t('door.config.add')}</button>}
-    <table className="scheduling-table">
+    <div className="scheduling-table-scroll"><table className="scheduling-table">
       <thead><tr>
         <th>{t('door.config.col.name')}</th><th>{t('door.config.col.code')}</th><th>{t('door.config.col.weekday')}</th><th>{t('door.config.col.time')}</th>
         <th>{t('door.config.col.recurrence')}</th><th>{t('door.config.col.music')}</th><th>{t('door.config.col.protocol')}</th><th>{t('door.config.col.active')}</th><th />
@@ -340,14 +344,14 @@ export function ServicesEditor({ systemId, canWrite }: Props) {
           : <tr key={s.id} className={s.active ? undefined : 'is-inactive'}>
             <td>{s.name}</td><td>{s.code}</td><td>{dayName(t, s.weekday) || t('door.config.form.any')}</td><td>{s.time ?? '—'}</td>
             <td>{t(recurrenceKey(s.recurrence))}</td><td>{yes(s.musicRequired)}</td><td>{yes(s.protocolRequired)}</td>
-            <td>{s.active ? t('door.config.service.active') : t('door.config.service.inactive')}</td>
+            <td><Pill on={s.active}>{s.active ? t('door.config.service.active') : t('door.config.service.inactive')}</Pill></td>
             <td className="scheduling-table-actions">{editable && editing === null && <>
               <button type="button" className="btn ghost sm" onClick={() => { state.clear(); setEditing(s.id); }}>{t('door.settings.edit')}</button>
               {s.active && <button type="button" className="btn ghost sm" onClick={() => ask.ask(s.id, s.name)}>{t('door.config.delete')}</button>}
             </>}</td>
           </tr>)}
       </tbody>
-    </table>
+    </table></div>
     {rows.length === 0 && editing === null && <p className="muted">{editable ? t('door.config.emptyDraft') : t('door.config.services.empty')}</p>}
     <ConfirmDialog open={!!ask.target} busy={state.working} title={t('door.config.deleteService.title', { name: ask.target?.name ?? '' })}
       body={t('door.config.deleteService.body')} confirmLabel={t('door.config.delete')}
@@ -388,21 +392,21 @@ export function CategoriesEditor({ systemId, canWrite }: Props) {
   return <LoadState loading={list.loading} failed={list.failed} retry={list.reload}>
     <FormNotice state={state} />
     {editable && editing === null && <button type="button" className="btn sm" onClick={() => { state.clear(); setEditing('new'); }}>{t('door.config.add')}</button>}
-    <table className="scheduling-table">
+    <div className="scheduling-table-scroll"><table className="scheduling-table">
       <thead><tr><th>{t('door.config.col.name')}</th><th>{t('door.config.col.code')}</th><th>{t('door.config.col.active')}</th><th /></tr></thead>
       <tbody>
         {editing === 'new' && <CategoryEditRow row={null} state={state} onDone={() => setEditing(null)} onSaved={list.reload} />}
         {rows.map((c) => editing === c.id
           ? <CategoryEditRow key={c.id} row={c} state={state} onDone={() => setEditing(null)} onSaved={list.reload} />
           : <tr key={c.id} className={c.active ? undefined : 'is-inactive'}>
-            <td>{c.name}</td><td>{c.code}</td><td>{c.active ? t('door.config.service.active') : t('door.config.service.inactive')}</td>
+            <td>{c.name}</td><td>{c.code}</td><td><Pill on={c.active}>{c.active ? t('door.config.service.active') : t('door.config.service.inactive')}</Pill></td>
             <td className="scheduling-table-actions">{editable && editing === null && <>
               <button type="button" className="btn ghost sm" onClick={() => { state.clear(); setEditing(c.id); }}>{t('door.settings.edit')}</button>
               {c.active && <button type="button" className="btn ghost sm" onClick={() => ask.ask(c.id, c.name)}>{t('door.config.delete')}</button>}
             </>}</td>
           </tr>)}
       </tbody>
-    </table>
+    </table></div>
     {rows.length === 0 && editing === null && <p className="muted">{editable ? t('door.config.emptyDraft') : t('door.config.categories.empty')}</p>}
     <ConfirmDialog open={!!ask.target} busy={state.working} title={t('door.config.deleteCategory.title', { name: ask.target?.name ?? '' })}
       body={t('door.config.deleteCategory.body')} confirmLabel={t('door.config.delete')}
@@ -424,7 +428,7 @@ export function ChoirsEditor({ systemId, canWrite }: Props) {
   const rows = choirs.data?.choirs ?? [];
   return <LoadState loading={choirs.loading || cats.loading} failed={choirs.failed || cats.failed} retry={() => { choirs.reload(); cats.reload(); }}>
     <FormNotice state={state} />
-    <table className="scheduling-table">
+    <div className="scheduling-table-scroll"><table className="scheduling-table">
       <thead><tr><th>{t('door.config.col.choir')}</th><th>{t('door.config.col.category')}</th><th>{t('door.config.col.active')}</th><th /></tr></thead>
       <tbody>
         {rows.map((c) => {
@@ -440,7 +444,7 @@ export function ChoirsEditor({ systemId, canWrite }: Props) {
               </select>
               {!c.categoryId && c.active && <StatusChip tone="warn">{t('door.config.choir.unassigned')}</StatusChip>}
             </td>
-            <td>{c.active ? t('door.config.service.active') : t('door.config.service.inactive')}</td>
+            <td><Pill on={c.active}>{c.active ? t('door.config.service.active') : t('door.config.service.inactive')}</Pill></td>
             <td className="scheduling-table-actions">{editable && dirty && <>
               <button type="button" className="btn sm" disabled={state.working}
                 onClick={() => void state.run(() => setChoirCategory(c.id, value), choirs.reload).then((ok) => { if (ok) setPicked(({ [c.id]: _gone, ...rest }) => rest); })}>{t('door.settings.save')}</button>
@@ -450,7 +454,7 @@ export function ChoirsEditor({ systemId, canWrite }: Props) {
           </tr>;
         })}
       </tbody>
-    </table>
+    </table></div>
     {rows.length === 0 && <p className="muted">{t('door.config.choirs.empty')}</p>}
     <p className="muted">{t('door.config.choirs.registerNote')}</p>
     <details className="scheduling-config-advanced"><summary>{t('door.config.availability.heading')}</summary>
@@ -683,7 +687,7 @@ export function RulesEditor({ systemId, canWrite, goTo }: Props & { goTo: (tab: 
     {(rules.data?.warnings ?? []).map((w) => <SectionNotice key={w.choirId} tone="warn">{w.message}{' '}<button type="button" className="btn ghost sm" onClick={() => goTo('choirs')}>{t('door.config.rule.warning.fix')}</button></SectionNotice>)}
     <p className="scheduling-rules-preview" aria-label={t('door.config.rules.previewLabel')}>{sentences.length ? sentences.join(' ') : t('door.config.rules.previewEmpty')}</p>
     {editable && <button type="button" className="btn sm" onClick={() => { state.clear(); setDialog('new'); }}>{t('door.config.rule.add')}</button>}
-    <table className="scheduling-table">
+    <div className="scheduling-table-scroll"><table className="scheduling-table">
       <thead><tr>
         <th>{t('door.config.rule.services')}</th><th>{t('door.config.rule.target')}</th><th>{t('door.config.rule.arrangement')}</th>
         <th>{t('door.config.col.minMax')}</th><th>{t('door.config.rule.frequency')}</th><th>{t('door.config.rule.exceptions')}</th><th />
@@ -702,7 +706,7 @@ export function RulesEditor({ systemId, canWrite, goTo }: Props & { goTo: (tab: 
           </>}</td>
         </tr>)}
       </tbody>
-    </table>
+    </table></div>
     {rows.length === 0 && <p className="muted">{editable ? t('door.config.rules.emptyEditable') : t('door.config.rules.empty')}</p>}
     {dialog && <RuleDialog key={dialog === 'new' ? 'new' : dialog.id} rule={dialog === 'new' ? null : dialog} services={sv} categories={ck} choirs={ch}
       onClose={() => setDialog(null)} onSaved={reload} goTo={goTo} />}

@@ -137,14 +137,18 @@ export function DoorSchedulingConfigPage() {
     <section className="door-block scheduling-config" aria-labelledby="door-config-title">
       <PageHeader id="door-config-title" title={t("door.config.title")}
         meta={<StatusChip tone="info">{systemName}</StatusChip>} />
-      <p><Link className="btn ghost sm" to={systemId === "sys-music" ? "/s/sys-music/monthplan" : "/s/sys-protocol/teams"}>{t("door.scheduling.workspace")}</Link></p>
-      <p className="scheduling-config-intro">{t("door.config.intro")}</p>
-      <p className="muted" role="note">{t('door.config.live')}</p>
-      {lock === 'blocked' && <p className="door-error" role="alert">{t('door.config.lock.heldBy', { name: holderName })}</p>}
-      {lock === 'lost' && <p className="door-error" role="alert">{t('door.config.lock.lost')}</p>}
-      {mayEdit && lock === 'held' && <p className="muted" role="status">{t('door.config.lock.mine')}</p>}
-      {!mayEdit && <p className="muted" role="status">{t('door.config.readOnly')}</p>}
-      {validation.data && !validation.data.ok && <div className="panel" role="status">
+      <div className="scheduling-config-bar">
+        <Link className="btn ghost sm" to={systemId === "sys-music" ? "/s/sys-music/monthplan" : "/s/sys-protocol/teams"}>{t("door.scheduling.workspace")}</Link>
+        {lock === 'blocked' && <p className="scheduling-config-lock is-blocked" role="alert">{t('door.config.lock.heldBy', { name: holderName })}</p>}
+        {lock === 'lost' && <p className="scheduling-config-lock is-lost" role="alert">{t('door.config.lock.lost')}</p>}
+        {mayEdit && lock === 'held' && <p className="scheduling-config-lock is-mine" role="status">{t('door.config.lock.mine')}</p>}
+        {!mayEdit && <p className="scheduling-config-lock" role="status">{t('door.config.readOnly')}</p>}
+      </div>
+      <div className="scheduling-config-lead">
+        <p className="scheduling-config-intro">{t("door.config.intro")}</p>
+        <p className="scheduling-config-note" role="note">{t('door.config.live')}</p>
+      </div>
+      {validation.data && !validation.data.ok && <div className="panel scheduling-config-validation" role="status">
         <strong>{t('door.config.validation.heading')}</strong>
         <ul className="door-list">{validation.data.errors.map((message) => <li key={message}>{message}</li>)}</ul>
       </div>}

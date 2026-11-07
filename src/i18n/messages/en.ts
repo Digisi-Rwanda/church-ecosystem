@@ -2335,7 +2335,7 @@ export const en = {
   'door.config.rule.frequency.counting': 'Counted by',
   'door.config.rule.frequency.preview': 'Reads as: {value}',
   'door.config.rule.exceptions': 'Per-choir exceptions',
-  'door.config.rule.exceptions.count': '{count} choirs',
+  'door.config.rule.exceptions.count': 'View ({count})',
   'door.config.rule.exceptions.help': 'Let one choir differ from the rest of its category.',
   'door.config.rule.exception.eligible': 'Takes part?',
   'door.config.rule.exception.takesPart': 'Takes part',

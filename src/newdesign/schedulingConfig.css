@@ -1,15 +1,131 @@
-/* Scheduling configuration tables and the rule dialog. Plain structure; colours come from the app's tokens. */
-.scheduling-table { width: 100%; border-collapse: collapse; margin-block: 0.75rem; }
-.scheduling-table th, .scheduling-table td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid var(--border, #ddd); vertical-align: top; }
-.scheduling-table th { font-weight: 600; white-space: nowrap; }
-.scheduling-table tr.is-inactive td { opacity: 0.55; }
-.scheduling-table tr.is-editing td { background: var(--surface-2, rgba(0, 0, 0, 0.03)); }
-.scheduling-table input:not([type='checkbox']), .scheduling-table select { width: 100%; min-width: 5rem; }
-.scheduling-table-actions { white-space: nowrap; text-align: right; }
-.scheduling-table tr[data-shared] td:first-child { box-shadow: inset 3px 0 0 var(--accent, #6b7cff); }
-.scheduling-rules-preview { margin-block: 0.5rem; line-height: 1.5; }
-.scheduling-segmented { display: inline-flex; gap: 0.25rem; }
-.scheduling-rule-dialog fieldset { border: 0; padding: 0; margin: 0 0 1rem; display: grid; gap: 0.35rem; }
-.scheduling-rule-dialog legend { font-weight: 600; margin-bottom: 0.25rem; }
+/*
+ * Scheduling setup: page rhythm, tabs, tables, pills, forms.
+ * Everything uses the app's tokens, so light and dark both follow the theme.
+ * Scoped under .scheduling-config so nothing leaks into other pages.
+ */
+
+/* ── Page rhythm ── */
+.scheduling-config { gap: var(--space-4); }
+.scheduling-config > p, .scheduling-config-lead > p { margin: 0; }
+.scheduling-config-lead { display: grid; gap: var(--space-3); max-width: 62rem; }
+.scheduling-config .scheduling-config-intro { margin: 0; color: var(--ink-muted); }
+.scheduling-config-bar { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2) var(--space-3); }
+.scheduling-config-bar > p { margin: 0; }
+
+.scheduling-config-note {
+  margin: 0; padding: var(--space-2) var(--space-3);
+  border-left: 3px solid var(--info); border-radius: var(--radius-sm);
+  background: var(--info-soft); color: var(--ink);
+}
+
+/* Who may edit right now. A small pill beside the workspace link, so it reads as status, not as another paragraph. */
+.scheduling-config-lock {
+  display: inline-flex; align-items: center; gap: var(--space-2);
+  padding: 0.2rem 0.75rem; border-radius: var(--radius-pill);
+  font-size: 0.85rem; font-weight: 600; line-height: 1.4;
+  background: var(--paper-2); color: var(--ink-muted);
+}
+.scheduling-config-lock::before { content: ''; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; flex-shrink: 0; }
+.scheduling-config-lock.is-mine { background: var(--success-soft); color: color-mix(in srgb, var(--success) 65%, var(--ink)); }
+.scheduling-config-lock.is-blocked, .scheduling-config-lock.is-lost { background: var(--danger-soft); color: color-mix(in srgb, var(--danger) 70%, var(--ink)); }
+
+/* What stops this configuration from generating. */
+.scheduling-config-validation {
+  border-left: 3px solid var(--warn); background: var(--warn-soft); color: var(--ink);
+  padding: var(--space-3) var(--space-4); border-radius: var(--radius-sm);
+}
+.scheduling-config-validation strong { display: block; margin-bottom: var(--space-1); }
+.scheduling-config-validation ul { margin: 0; padding-left: 1.1rem; display: grid; gap: var(--space-1); }
+
+/* ── Tabs: an underline, not a filled pill ── */
+.scheduling-config .door-menu { gap: var(--space-1); padding-bottom: 0; border-bottom: 1px solid var(--line); }
+.scheduling-config .door-menu-link {
+  border-radius: var(--radius-sm) var(--radius-sm) 0 0; padding-inline: 0.9rem;
+  color: var(--ink-muted); transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.scheduling-config .door-menu-link:hover { background: color-mix(in srgb, var(--accent) 7%, transparent); color: var(--ink); }
+.scheduling-config .door-menu-link.active, .scheduling-config button.door-menu-link.active {
+  background: transparent; color: var(--ink); font-weight: 700; box-shadow: inset 0 -3px 0 var(--accent);
+}
+.scheduling-config .door-menu-link.active:focus-visible { box-shadow: inset 0 -3px 0 var(--accent), var(--focus-ring); }
+
+.scheduling-config-section { gap: var(--space-1); }
+.scheduling-config-section h3 { font-size: 1.15rem; letter-spacing: -0.02em; }
+
+/* ── Tables: a card with a quiet header. The wrapper scrolls sideways when a row needs more room than the page has. ── */
+.scheduling-table-scroll {
+  margin-block: var(--space-3); max-width: 100%; overflow-x: auto;
+  border: 1px solid var(--line); border-radius: var(--radius-sm);
+  background:
+    linear-gradient(to right, var(--surface-2) 30%, transparent) left center / 2rem 100% no-repeat local,
+    linear-gradient(to left, var(--surface-2) 30%, transparent) right center / 2rem 100% no-repeat local,
+    radial-gradient(farthest-side at 0 50%, color-mix(in srgb, var(--ink) 18%, transparent), transparent) left center / 0.6rem 100% no-repeat scroll,
+    radial-gradient(farthest-side at 100% 50%, color-mix(in srgb, var(--ink) 18%, transparent), transparent) right center / 0.6rem 100% no-repeat scroll,
+    var(--surface-2);
+}
+table.scheduling-table { width: 100%; min-width: 40rem; margin: 0; border-collapse: separate; border-spacing: 0; }
+.scheduling-table th, .scheduling-table td {
+  text-align: left; padding: 0.7rem 0.9rem; vertical-align: middle;
+  border-bottom: 1px solid var(--line); background: var(--surface-2);
+}
+.scheduling-table tbody tr:last-child td { border-bottom: 0; }
+.scheduling-table thead th {
+  background: var(--surface); color: var(--ink-muted); vertical-align: bottom;
+  font-size: 0.72rem; font-weight: 700; letter-spacing: 0.05em; text-transform: uppercase;
+}
+.scheduling-table tbody tr:hover td { background: color-mix(in srgb, var(--accent) 5%, var(--surface-2)); }
+.scheduling-table tr.is-inactive td { color: var(--ink-muted); }
+.scheduling-table tr.is-editing td, .scheduling-table tr.is-editing:hover td { background: var(--accent-soft); padding-block: 0.5rem; }
+.scheduling-table tr.is-editing td:not(:first-child) { padding-inline: 0.5rem; }
+.scheduling-table tr[data-shared] td:first-child { box-shadow: inset 3px 0 0 var(--accent); }
+.scheduling-table td:first-child { font-weight: 600; }
+.scheduling-table th:first-child, .scheduling-table td:first-child { position: sticky; left: 0; z-index: 1; }
+.scheduling-table-actions { white-space: nowrap; text-align: right !important; }
+.scheduling-table-actions .btn + .btn { margin-left: var(--space-1); }
+.scheduling-table input:not([type='checkbox']) { width: 100%; min-width: 5rem; }
+.scheduling-table td:first-child input:not([type='checkbox']) { min-width: 8rem; }
+.scheduling-table select { width: 100%; min-width: 8.75rem; }
+.scheduling-table input[type='time'] { min-width: 7rem; }
+.scheduling-table input[type='checkbox'] { width: 1.1rem; height: 1.1rem; accent-color: var(--accent); }
+
+/* Yes / No and Active / Inactive */
+.scheduling-pill {
+  display: inline-flex; align-items: center; gap: 0.4rem;
+  padding: 0.1rem 0.6rem; border-radius: var(--radius-pill);
+  font-size: 0.8rem; font-weight: 600; line-height: 1.5; white-space: nowrap;
+}
+.scheduling-pill::before { content: ''; width: 0.45rem; height: 0.45rem; border-radius: 50%; background: currentColor; }
+.scheduling-pill.is-on { background: var(--success-soft); color: color-mix(in srgb, var(--success) 65%, var(--ink)); }
+.scheduling-pill.is-off { background: var(--paper-2); color: var(--ink-muted); }
+
+/* The rules in words */
+.scheduling-rules-preview {
+  margin-block: var(--space-2); padding: var(--space-3) var(--space-4); line-height: 1.6;
+  border-left: 3px solid var(--accent); border-radius: var(--radius-sm); background: var(--accent-soft); color: var(--ink);
+}
+
+.scheduling-segmented { display: inline-flex; gap: var(--space-1); }
+.scheduling-rule-dialog fieldset { border: 0; padding: 0; margin: 0 0 var(--space-4); display: grid; gap: 0.35rem; }
+.scheduling-rule-dialog legend { font-weight: 600; margin-bottom: var(--space-1); }
 .scheduling-exceptions-dialog { max-width: 28rem; }
-@media (max-width: 720px) { .scheduling-table { display: block; overflow-x: auto; } }
+
+/* ── Forms (the Protocol duty form and the like): label over field ── */
+.scheduling-config .door-form { display: grid; gap: var(--space-3); max-width: 40rem; }
+.scheduling-config .door-form label { display: grid; gap: var(--space-1); font-weight: 600; }
+.scheduling-config .door-form label:has(> input[type='checkbox']) { display: flex; align-items: center; gap: var(--space-2); font-weight: 500; }
+.scheduling-config .door-form input:not([type='checkbox']), .scheduling-config .door-form select { width: 100%; max-width: 24rem; }
+.scheduling-config .panel { padding: var(--space-4); }
+.scheduling-config .panel p { margin-block: var(--space-1); }
+.scheduling-config .panel + .panel { margin-top: var(--space-4); }
+.scheduling-config .panel h4 { margin: var(--space-3) 0 var(--space-1); }
+.scheduling-config .panel > h4:first-child { margin-top: 0; }
+
+/* ── Small screens ── */
+@media (max-width: 720px) {
+  .scheduling-config-bar { align-items: flex-start; }
+  .scheduling-table th, .scheduling-table td { padding: 0.6rem 0.7rem; }
+  .scheduling-config .door-menu-link { min-height: 44px; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .scheduling-config .door-menu-link { transition: none; }
+}
