@@ -1,0 +1,300 @@
+import { useState, type FormEvent } from 'react';
+import {
+  closeMoneyAccount, decideMoneyEntry, fetchActivityMoney, openMoneyAccount, recordMoneyEntry, voidMoneyEntry,
+  type MoneyAccountItem, type MoneyEntryItem, type MoneyEntryKind, type MoneyOptions,
+} from '../api/frontDoorApi';
+import { SelectField, TextAreaField, TextField } from '../components/ui/Field';
+import { useI18n, useT } from '../i18n/I18nContext';
+import { errorCode } from './governance';
+import { categoryKey, formatRwf, moneyErrorKey, moneyStatusKey, parseAmount } from './money';
+import { PlanSelect } from './MoneyBlockParts';
+import { useLoad } from './useLoad';
+
+/** Which line of the plan this spending belongs to, and how much of it is left. Inside what is left it needs no second approval. */
+function LinePick({ planId, value, onChange }: { planId: string; value: string; onChange: (id: string, left: number | null) => void }) {
+  const t = useT();
+  const m = useLoad(() => fetchActivityMoney(planId), `line-pick|${planId}`);
+  const lines = m.data?.lines ?? [];
+  if (lines.length === 0) return null;
+  return (
+    <SelectField label={t('door.money.line.for')} name="m-line" hint={t('door.money.line.hint')} value={value} onChange={(e) => onChange(e.target.value, lines.find((l) => l.id === e.target.value)?.remaining ?? null)}>
+      <option value="">{t('door.money.line.none')}</option>
+      {lines.map((l) => (
+        <option key={l.id} value={l.id}>{l.title} · {t('door.money.line.left', { left: formatRwf(l.remaining) })}</option>
+      ))}
+    </SelectField>
+  );
+}
+
+/** Open a money account for a unit the treasurer serves. */
+export function AccountForm({ options, systemId, onDone, onCancel }: { options: MoneyOptions; systemId: string; onDone: () => void; onCancel: () => void }) {
+  const t = useT();
+  const units = options.units.filter((u) => u.systemId === systemId);
+  const [unitId, setUnitId] = useState(units.length === 1 ? units[0].id : '');
+  const [name, setName] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!unitId || !name.trim()) return setError(t('door.money.form.incomplete'));
+    setBusy(true);
+    setError('');
+    try {
+      await openMoneyAccount(unitId, name.trim());
+      onDone();
+    } catch (err) {
+      setError(t(moneyErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="panel door-form" onSubmit={submit} noValidate>
+      <h3>{t('door.money.account.new')}</h3>
+      {units.length > 1 && (
+        <SelectField label={t('door.work.form.unit')} name="m-unit" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+          <option value="">{t('door.gov.meeting.choose')}</option>
+          {units.map((u) => (
+            <option key={u.id} value={u.id}>
+              {u.name}
+            </option>
+          ))}
+        </SelectField>
+      )}
+      <TextField label={t('door.money.account.name')} name="m-name" value={name} maxLength={options.limits.nameMax} onChange={(e) => setName(e.target.value)} />
+      {error && (
+        <p className="door-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="door-row">
+        <button type="submit" className="btn" disabled={busy}>
+          {t('door.money.account.open')}
+        </button>
+        <button type="button" className="btn ghost" onClick={onCancel}>
+          {t('door.settings.cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** Record income (kept at once) or spending (waits for the president's approval). */
+export function EntryForm({ options, accounts, systemId, onDone, onCancel, fixedKind }: { fixedKind?: MoneyEntryKind; options: MoneyOptions; accounts: MoneyAccountItem[]; systemId: string; onDone: () => void; onCancel: () => void }) {
+  const t = useT();
+  const open = accounts.filter((a) => a.status === 'ACTIVE');
+  const [accountId, setAccountId] = useState(open.length === 1 ? open[0].id : '');
+  const [kind, setKind] = useState<MoneyEntryKind>(fixedKind ?? 'INCOME');
+  const [amount, setAmount] = useState('');
+  const [day, setDay] = useState(new Date().toISOString().slice(0, 10));
+  const [category, setCategory] = useState(options.categories[0] ?? 'OTHER');
+  const [note, setNote] = useState('');
+  const [planId, setPlanId] = useState('');
+  const [lineId, setLineId] = useState('');
+  const [lineLeft, setLineLeft] = useState<number | null>(null);
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+  const typed = parseAmount(amount);
+  const straight = kind === 'SPENDING' && !!lineId && lineLeft !== null && typed !== null && typed <= lineLeft;
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    const n = parseAmount(amount);
+    if (!accountId || !day) return setError(t('door.money.form.incomplete'));
+    if (n === null || n > options.limits.amountMax) return setError(t('door.money.err.amount'));
+    setBusy(true);
+    setError('');
+    try {
+      await recordMoneyEntry({ accountId, kind, amount: n, occurredOn: day, category, note: note.trim() || null, planId: planId || null, lineId: kind === 'SPENDING' && planId && lineId ? lineId : null });
+      onDone();
+    } catch (err) {
+      setError(t(moneyErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="panel door-form" onSubmit={submit} noValidate>
+      <h3>{t('door.money.entry.new')}</h3>
+      <SelectField label={t('door.money.entry.account')} name="m-acc" value={accountId} onChange={(e) => setAccountId(e.target.value)}>
+        <option value="">{t('door.gov.meeting.choose')}</option>
+        {open.map((a) => (
+          <option key={a.id} value={a.id}>
+            {a.name}
+          </option>
+        ))}
+      </SelectField>
+      {!fixedKind && (
+        <SelectField label={t('door.money.entry.kind')} name="m-kind" hint={kind === 'SPENDING' ? t('door.money.entry.spendingHint') : t('door.money.entry.incomeHint')} value={kind} onChange={(e) => setKind(e.target.value as MoneyEntryKind)}>
+        <option value="INCOME">{t('door.money.kind.INCOME')}</option>
+        <option value="SPENDING">{t('door.money.kind.SPENDING')}</option>
+      </SelectField>
+      )}
+      <TextField label={t('door.money.entry.amount')} name="m-amount" inputMode="numeric" value={amount} onChange={(e) => setAmount(e.target.value)} />
+      <TextField label={t('door.money.entry.day')} name="m-day" type="date" value={day} onChange={(e) => setDay(e.target.value)} />
+      <SelectField label={t('door.money.entry.category')} name="m-cat" value={category} onChange={(e) => setCategory(e.target.value)}>
+        {options.categories.map((c) => (
+          <option key={c} value={c}>
+            {t(categoryKey(c) as 'door.money.cat.OTHER')}
+          </option>
+        ))}
+      </SelectField>
+      <PlanSelect systemId={systemId} name="m-plan" value={planId} onChange={(v) => { setPlanId(v); setLineId(''); setLineLeft(null); }} />
+      {kind === 'SPENDING' && planId && <LinePick planId={planId} value={lineId} onChange={(id, left) => { setLineId(id); setLineLeft(left); }} />}
+      {straight && <p className="muted" role="status">{t('door.money.line.straight')}</p>}
+      <TextAreaField label={t('door.money.entry.note')} name="m-note" rows={2} value={note} maxLength={options.limits.noteMax} onChange={(e) => setNote(e.target.value)} />
+      {error && (
+        <p className="door-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="door-row">
+        <button type="submit" className="btn" disabled={busy}>
+          {kind === 'SPENDING' && !straight ? t('door.money.entry.askApproval') : t('door.money.entry.record')}
+        </button>
+        <button type="button" className="btn ghost" onClick={onCancel}>
+          {t('door.settings.cancel')}
+        </button>
+      </div>
+    </form>
+  );
+}
+
+/** One entry with the steps this person may take. Declining and voiding ask for a reason. */
+export function EntryRow({ entry, onChange }: { entry: MoneyEntryItem; onChange: () => void }) {
+  const t = useT();
+  const { locale } = useI18n();
+  const [ask, setAsk] = useState<'reject' | 'void' | null>(null);
+  const [reason, setReason] = useState('');
+  const [error, setError] = useState('');
+  const run = async (job: () => Promise<void>) => {
+    setError('');
+    try {
+      await job();
+      setAsk(null);
+      setReason('');
+      onChange();
+    } catch (err) {
+      setError(t(moneyErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+    }
+  };
+  const day = new Intl.DateTimeFormat(locale, { dateStyle: 'medium', timeZone: 'UTC' }).format(new Date(`${entry.occurredOn}T00:00:00Z`));
+  const sign = entry.kind === 'INCOME' ? '+' : '−';
+  return (
+    <li className="panel door-notice ledger">
+      <div className="door-notice-main">
+        <div className="door-row">
+          <strong className={`ledger-amt ${entry.kind === 'INCOME' ? 'in' : 'out'}`}>
+            {sign} {formatRwf(entry.amount)}
+          </strong>
+          <span className={`door-chip${entry.status === 'PENDING_APPROVAL' ? ' warn' : ''}`}>{t(moneyStatusKey(entry.status))}</span>
+        </div>
+        <p className="muted">
+          {day} · {entry.accountName} · {t(categoryKey(entry.category) as 'door.money.cat.OTHER')}{entry.planTitle ? ` · ${entry.planTitle}` : ''} · {t('door.money.entry.by', { name: entry.recordedByName })}
+        </p>
+        {entry.note && <p>{entry.note}</p>}
+        {entry.decidedByName && (
+          <p className="muted">
+            {t('door.money.entry.decidedBy', { name: entry.decidedByName })}
+            {entry.decisionNote ? ` — ${entry.decisionNote}` : ''}
+          </p>
+        )}
+        {ask ? (
+          <div className="door-form">
+            <TextField label={t('door.money.reason')} name={`m-reason-${entry.id}`} value={reason} onChange={(e) => setReason(e.target.value)} />
+            <div className="door-row">
+              <button
+                type="button"
+                className="btn"
+                disabled={!reason.trim()}
+                onClick={() => void run(() => (ask === 'reject' ? decideMoneyEntry(entry.id, false, reason.trim()) : voidMoneyEntry(entry.id, reason.trim())))}
+              >
+                {ask === 'reject' ? t('door.money.entry.decline') : t('door.money.entry.void')}
+              </button>
+              <button type="button" className="btn ghost" onClick={() => setAsk(null)}>
+                {t('door.settings.cancel')}
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="door-row">
+            {entry.canDecide && (
+              <>
+                <button type="button" className="btn sm" onClick={() => void run(() => decideMoneyEntry(entry.id, true))}>
+                  {t('door.money.entry.approve')}
+                </button>
+                <button type="button" className="btn ghost sm" onClick={() => setAsk('reject')}>
+                  {t('door.money.entry.decline')}
+                </button>
+              </>
+            )}
+            {entry.canVoid && (
+              <button type="button" className="btn ghost sm" onClick={() => setAsk('void')}>
+                {t('door.money.entry.void')}
+              </button>
+            )}
+          </div>
+        )}
+        {error && (
+          <p className="door-error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}
+
+export function AccountCard({ account, canClose, onChange }: { account: MoneyAccountItem; canClose: boolean; onChange: () => void }) {
+  const t = useT();
+  const [error, setError] = useState('');
+  const close = async () => {
+    setError('');
+    try {
+      await closeMoneyAccount(account.id);
+      onChange();
+    } catch (err) {
+      setError(t(moneyErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+    }
+  };
+  return (
+    <li className="panel acct-card">
+      <div className="acct-top">
+        <div>
+          <strong className="acct-name">{account.name}</strong>
+          <span className="acct-unit">{account.unitName}</span>
+        </div>
+        {account.status === 'CLOSED' && <span className="door-chip">{t('door.money.account.closed')}</span>}
+      </div>
+      <div className="acct-balance">
+        <span className="acct-label">{t('door.money.balance')}</span>
+        <strong>{formatRwf(account.balance)}</strong>
+      </div>
+      <dl className="acct-figs">
+        <div>
+          <dt>{t('door.money.income')}</dt>
+          <dd className="good">{formatRwf(account.income)}</dd>
+        </div>
+        <div>
+          <dt>{t('door.money.spent')}</dt>
+          <dd>{formatRwf(account.spent)}</dd>
+        </div>
+        {account.pending > 0 && (
+          <div>
+            <dt>{t('door.money.pending')}</dt>
+            <dd className="warn">{formatRwf(account.pending)}</dd>
+          </div>
+        )}
+      </dl>
+      <div className="acct-foot">
+        {canClose && account.status === 'ACTIVE' && (
+          <button type="button" className="btn ghost sm" onClick={() => void close()}>
+            {t('door.money.account.close')}
+          </button>
+        )}
+        {error && (
+          <p className="door-error" role="alert">
+            {error}
+          </p>
+        )}
+      </div>
+    </li>
+  );
+}

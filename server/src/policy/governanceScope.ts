@@ -5,10 +5,7 @@ import type { Position, SystemId } from './types.js';
  * Church Leader and Catechist keep every system. Keep in sync with
  * src/domain/governanceScope.ts (the SPA copy).
  */
-export const PASTOR_SYSTEM_IDS: readonly SystemId[] = [
-  'sys-main',
-  'sys-evangelism',
-];
+export const PASTOR_SYSTEM_IDS: readonly SystemId[] = ['sys-main'];
 
 export function isPastorScoped(p: Pick<Position, 'systemRole'>): boolean {
   return p.systemRole === 'PASTOR';
@@ -18,8 +15,7 @@ export function governanceSystemsFor(
   p: Pick<Position, 'systemRole'>,
   allSystemIds: SystemId[],
 ): SystemId[] {
-  if (isPastorScoped(p)) {
-    return allSystemIds.filter((id) => PASTOR_SYSTEM_IDS.includes(id));
-  }
-  return allSystemIds;
+  // Only the Church Leader (or the legacy all-systems flag with no named role) reaches every system.
+  if (p.systemRole === 'CHURCH_LEADER' || !p.systemRole) return allSystemIds;
+  return allSystemIds.filter((id) => id === 'sys-main');
 }

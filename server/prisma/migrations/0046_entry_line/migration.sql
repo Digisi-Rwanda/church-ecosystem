@@ -1,0 +1,1 @@
+ALTER TABLE "MoneyEntry" ADD COLUMN IF NOT EXISTS "lineId" TEXT;

@@ -11,7 +11,6 @@ export type PermissionGrant = {
   action: Action;
   source: string;
   reason: string;
-  fundId?: string;
 };
 
 export type Membership = {
@@ -35,7 +34,10 @@ export type Position = {
   systemRole?: SystemRole;
   ministryOffice?: string;
   choirOffice?: string;
+  /** The one office record (new); the older columns above stay until the engine moves to letters. */
+  office?: string;
   choirAdvisorRole?: string;
+  systemAdmin?: boolean;
   worshipOffice?: string;
   protocolOffice?: string;
   deaconOffice?: string;
@@ -64,17 +66,8 @@ export type WorkTask = {
   status: string;
   grantsSystemAccess?: boolean;
   dueAt?: string;
-};
-
-export type FundAccessGrant = {
-  id: string;
-  fundId: string;
-  personId: string;
-  action: 'VIEW' | 'MANAGE' | 'APPROVE' | string;
-  grantedByPersonId: string;
-  reason: string;
-  status: string;
-  startDate: string;
+  /** A task grants access only between these dates, as in the SPA (isTaskActive). */
+  startDate?: string;
   endDate?: string;
 };
 
@@ -83,7 +76,6 @@ export type AuthzRequest = {
   systemId: SystemId;
   resource: Resource;
   action: Action;
-  fundId?: string;
   now?: Date;
 };
 
@@ -93,7 +85,6 @@ export type AuthzDecision = {
   systemId: SystemId;
   resource: Resource;
   action: Action;
-  fundId?: string;
   matchedGrant?: PermissionGrant;
   reason: string;
   evaluatedAt: string;

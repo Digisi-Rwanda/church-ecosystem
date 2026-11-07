@@ -1,7 +1,6 @@
 import { prisma } from '../lib/prisma.js';
 import type {
   Assignment,
-  FundAccessGrant,
   Membership,
   Position,
   SystemId,
@@ -14,7 +13,6 @@ export type PolicyContext = {
   assignments: Assignment[];
   tasks: WorkTask[];
   allSystemIds: SystemId[];
-  fundGrants: FundAccessGrant[];
 };
 
 function iso(d: Date | null | undefined): string | undefined {
@@ -23,14 +21,13 @@ function iso(d: Date | null | undefined): string | undefined {
 }
 
 export async function loadPolicyContext(): Promise<PolicyContext> {
-  const [systems, memberships, positions, fundGrants, workTasks, assignments] =
+  const [systems, memberships, positions, workTasks, assignments] =
     await Promise.all([
       prisma.churchSystem.findMany({ select: { id: true } }),
       prisma.membership.findMany(),
       prisma.position.findMany(),
-      prisma.fundAccessGrant.findMany(),
       prisma.workTask.findMany({
-        where: { status: { in: ['TODO', 'IN_PROGRESS'] } },
+        where: { deletedAt: null, status: { in: ['TODO', 'IN_PROGRESS'] } },
       }),
       prisma.assignment.findMany({
         where: { status: 'ACTIVE' },
@@ -43,7 +40,7 @@ export async function loadPolicyContext(): Promise<PolicyContext> {
       (m): Membership => ({
         id: m.id,
         personId: m.personId,
-        systemId: m.systemId,
+        systemId: m.systemId ?? undefined,
         orgUnitId: m.orgUnitId ?? undefined,
         type: m.type,
         label: m.label ?? m.type,
@@ -59,9 +56,12 @@ export async function loadPolicyContext(): Promise<PolicyContext> {
         systemId: p.systemId ?? undefined,
         orgUnitId: p.orgUnitId ?? undefined,
         title: p.title,
+        office: p.office ?? undefined,
         systemRole: p.systemRole ?? undefined,
         ministryOffice: p.ministryOffice ?? undefined,
         choirOffice: p.choirOffice ?? undefined,
+        choirAdvisorRole: p.choirAdvisorRole ?? undefined,
+        systemAdmin: p.systemAdmin || undefined,
         worshipOffice: p.worshipOffice ?? undefined,
         protocolOffice: p.protocolOffice ?? undefined,
         deaconOffice: p.deaconOffice ?? undefined,
@@ -92,19 +92,8 @@ export async function loadPolicyContext(): Promise<PolicyContext> {
         status: t.status,
         grantsSystemAccess: t.grantsSystemAccess,
         dueAt: t.dueDate ? t.dueDate.toISOString() : undefined,
-      }),
-    ),
-    fundGrants: fundGrants.map(
-      (g): FundAccessGrant => ({
-        id: g.id,
-        fundId: g.fundId,
-        personId: g.personId,
-        action: g.action,
-        grantedByPersonId: g.grantedByPersonId,
-        reason: g.reason,
-        status: g.status,
-        startDate: iso(g.startDate) ?? '2000-01-01',
-        endDate: iso(g.endDate),
+        startDate: iso(t.startDate),
+        endDate: iso(t.endDate),
       }),
     ),
   };
