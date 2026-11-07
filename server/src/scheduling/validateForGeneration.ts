@@ -34,6 +34,8 @@ export interface GenerationService {
   time?: string | null;
   recurrence: string;
   selectedDates: string[];
+  /** Monthly services: 1–4 = nth weekday of the month, -1 = last. */
+  monthlyOccurrences?: number[];
 }
 
 export interface MusicGenerationSnapshot extends Omit<MusicConfigRulesSnapshot, 'services' | 'categories' | 'choirs'> {
@@ -95,10 +97,17 @@ function calendarErrors(services: GenerationService[]): string[] {
       // The engine would silently produce no services for this one.
       errors.push(`${label(s)} uses selected dates, so it needs at least one date.`);
     }
-    // The engine special-cases code IGABURO (no weekday = last Saturday of the month).
-    if (s.recurrence === 'MONTHLY' && !hasDates && s.weekday === null && s.code.toUpperCase() !== 'IGABURO') {
-      // The engine would silently produce no services for this one.
-      errors.push(`${label(s)} repeats monthly, so it needs a weekday or specific dates.`);
+    if (s.recurrence === 'MONTHLY' && !hasDates) {
+      // The engine would silently produce no services for either of these.
+      const picks = s.monthlyOccurrences ?? [];
+      if (s.weekday === null) {
+        errors.push(`${label(s)} repeats monthly, so it needs a weekday or specific dates.`);
+      } else if (picks.length === 0) {
+        errors.push(`${label(s)} repeats monthly, so choose which week(s) of the month: the 1st, 2nd, 3rd, 4th or last.`);
+      }
+    }
+    for (const pick of s.monthlyOccurrences ?? []) {
+      if (![1, 2, 3, 4, -1].includes(pick)) errors.push(`${label(s)} has an invalid week of the month. Use the 1st to 4th, or last.`);
     }
   }
   return errors;

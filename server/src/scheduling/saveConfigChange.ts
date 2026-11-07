@@ -68,7 +68,7 @@ export type ConfigOp =
 
 export interface ServiceInput {
   code: string; name: string; kind?: string; weekday?: number | null; time?: string | null; recurrence?: string;
-  selectedDates?: string[]; active?: boolean; musicRequired?: boolean; protocolRequired?: boolean;
+  selectedDates?: string[]; monthlyOccurrences?: number[]; active?: boolean; musicRequired?: boolean; protocolRequired?: boolean;
   maxChoirs?: number; displayOrder?: number;
 }
 export interface CategoryInput { code: string; name: string; description?: string; active?: boolean }
@@ -180,6 +180,7 @@ const defined = (o: Record<string, unknown>) => Object.fromEntries(Object.entrie
 const serviceFields = (p: Partial<ServiceInput>) => defined({
   code: p.code, name: p.name, kind: p.kind, weekday: p.weekday, time: p.time, recurrence: p.recurrence,
   selectedDatesJson: p.selectedDates === undefined ? undefined : stringifyJson(p.selectedDates),
+  monthlyOccurrencesJson: p.monthlyOccurrences === undefined ? undefined : stringifyJson(p.monthlyOccurrences),
   active: p.active, musicRequired: p.musicRequired, protocolRequired: p.protocolRequired,
   maxChoirs: p.maxChoirs, displayOrder: p.displayOrder,
 });
@@ -322,7 +323,7 @@ function applyOp(ctx: Ctx, change: ConfigOp) {
       if (same) return exists(ctx, change.op, same, toServiceView, 'SERVICE_EXISTS', `Service ${d.code} already exists`, { serviceId: same.id });
       const row = {
         ...stamp(ctx), systemId: MUSIC_SYSTEM, kind: 'SERVICE', weekday: null, time: null, recurrence: 'WEEKLY',
-        selectedDatesJson: '[]', active: true, musicRequired: false, protocolRequired: false, maxChoirs: 3,
+        selectedDatesJson: '[]', monthlyOccurrencesJson: '[]', active: true, musicRequired: false, protocolRequired: false, maxChoirs: 3,
         targetTeamSize: 10, displayOrder: 0, ...serviceFields(d),
       };
       insert(ctx, 'services', 'schedulingService', row);

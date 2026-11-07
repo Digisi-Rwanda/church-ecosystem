@@ -41,6 +41,8 @@ export interface SchedulingServiceView {
   time: string | null;
   recurrence: Recurrence;
   selectedDates: string[];
+  /** Monthly services: 1–4 = the 1st–4th of the weekday, -1 = the last. Several allowed. */
+  monthlyOccurrences: number[];
   active: boolean;
   musicRequired: boolean;
   protocolRequired: boolean;
@@ -158,6 +160,7 @@ export interface SchedulingServiceCreateInput {
   time?: string | null;
   recurrence?: Recurrence;
   selectedDates?: string[];
+  monthlyOccurrences?: number[];
   active?: boolean;
   musicRequired?: boolean;
   protocolRequired?: boolean;
@@ -224,6 +227,7 @@ export const toServiceView = (r: SchedulingService): SchedulingServiceView => ({
   id: r.id, systemId: r.systemId, code: r.code, name: r.name, kind: r.kind as ServiceKind,
   weekday: r.weekday, time: r.time, recurrence: r.recurrence as Recurrence,
   selectedDates: parseJson(r.selectedDatesJson, [] as string[]),
+  monthlyOccurrences: parseJson(r.monthlyOccurrencesJson, [] as number[]),
   active: r.active,
   musicRequired: r.musicRequired, protocolRequired: r.protocolRequired,
   maxChoirs: r.maxChoirs, targetTeamSize: r.targetTeamSize,

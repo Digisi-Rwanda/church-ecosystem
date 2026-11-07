@@ -71,6 +71,7 @@ const ServiceSchema = z.object({
   time: z.string().regex(/^\d{2}:\d{2}$/).optional().nullable(),
   recurrence: z.enum(['WEEKLY', 'MONTHLY', 'SELECTED_DATES', 'CUSTOM']).default('WEEKLY'),
   selectedDates: z.array(z.string()).default([]),
+  monthlyOccurrences: z.array(z.number().int().refine((n) => [1, 2, 3, 4, -1].includes(n), 'Use 1st to 4th, or last.')).max(5).default([]),
   active: z.boolean().default(true),
   musicRequired: z.boolean().default(false),
   protocolRequired: z.boolean().default(false),

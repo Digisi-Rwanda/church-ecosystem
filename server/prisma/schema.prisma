@@ -2128,6 +2128,8 @@ model SchedulingService {
   time              String?  // HH:MM
   recurrence        String   @default("WEEKLY") // WEEKLY | MONTHLY | SELECTED_DATES | CUSTOM
   selectedDatesJson String   @default("[]")
+  /// For a MONTHLY service with a weekday: which of that weekday in the month. JSON array of 1, 2, 3, 4 (nth) and -1 (last). Empty means the user has not chosen yet.
+  monthlyOccurrencesJson String @default("[]")
   active            Boolean  @default(true)
   musicRequired     Boolean  @default(false)
   protocolRequired  Boolean  @default(false)

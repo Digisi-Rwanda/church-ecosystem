@@ -624,7 +624,7 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
     { systemId: MUSIC, code: 'ss2', name: 'Sunday Service 2', kind: 'SERVICE', weekday: 0, time: '11:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, displayOrder: 1 },
     { systemId: MUSIC, code: 'tuesday', name: 'Tuesday Service', kind: 'SERVICE', weekday: 2, time: '18:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, displayOrder: 2 },
     { systemId: MUSIC, code: 'friday', name: 'Friday Service', kind: 'SERVICE', weekday: 5, time: '18:00', musicRequired: true, protocolRequired: false, maxChoirs: 3, displayOrder: 3 },
-    { systemId: MUSIC, code: 'igaburo', name: 'Igaburo (Holy Communion)', kind: 'SERVICE', weekday: null, time: null, recurrence: 'MONTHLY', musicRequired: true, protocolRequired: true, maxChoirs: 3, displayOrder: 4 },
+    { systemId: MUSIC, code: 'igaburo', name: 'Igaburo (Holy Communion)', kind: 'SERVICE', weekday: 6, time: null, recurrence: 'MONTHLY', monthlyOccurrences: [-1], musicRequired: true, protocolRequired: true, maxChoirs: 3, displayOrder: 4 },
   ];
   const serviceIds = new Map<string, string>();
   for (const s of services) {
@@ -637,7 +637,7 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
         data: {
           ...s, systemId: s.systemId, code: s.code, name: s.name, kind: s.kind,
           weekday: s.weekday, time: s.time, recurrence: s.recurrence ?? 'WEEKLY',
-          selectedDatesJson: '[]', active: true,
+          selectedDatesJson: '[]', monthlyOccurrencesJson: JSON.stringify((s as { monthlyOccurrences?: number[] }).monthlyOccurrences ?? []), active: true,
           musicRequired: s.musicRequired, protocolRequired: s.protocolRequired,
           displayOrder: s.displayOrder, createdByPersonId: actorId,
         },

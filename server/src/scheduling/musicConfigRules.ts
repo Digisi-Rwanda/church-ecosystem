@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { CategoryServicePolicyView, ChoirCategoryLinkView, FrequencyPeriod, SchedulingServiceView } from './types.js';
+import type { FrequencyPeriod, SchedulingServiceView } from './types.js';
 
 export const FREQUENCY_PERIODS = ['MONTH', 'QUARTER', 'HALF_YEAR', 'YEAR'] as const;
 export const FrequencyPeriodSchema = z.enum(FREQUENCY_PERIODS);
@@ -41,7 +41,7 @@ export interface MusicLinkRules {
 
 export interface MusicConfigRulesSnapshot {
   services: Array<Pick<SchedulingServiceView, 'id' | 'code' | 'name' | 'active' | 'musicRequired' | 'maxChoirs'> &
-    Partial<Pick<SchedulingServiceView, 'weekday' | 'recurrence' | 'selectedDates'>>>;
+    Partial<Pick<SchedulingServiceView, 'weekday' | 'recurrence' | 'selectedDates' | 'monthlyOccurrences'>>>;
   categories: Array<{ id: string; active: boolean; code?: string; name?: string }>;
   policies: MusicPolicyRules[];
   links: MusicLinkRules[];

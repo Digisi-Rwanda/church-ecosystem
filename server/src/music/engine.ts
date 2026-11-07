@@ -75,11 +75,16 @@ function nid(prefix: string): string {
   return `${prefix}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
+/** The service fields the configured calendar reads. `monthlyOccurrences` is optional so older callers still compile; empty means no monthly dates. */
+export type ConfiguredService =
+  Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired' | 'maxChoirs'> &
+  Partial<Pick<SchedulingServiceView, 'monthlyOccurrences'>>;
+
 /** Build empty service slots for one or more months. */
 export function buildMusicCalendar(
   startMonthKey: string,
   horizon: MusicHorizon = 'MONTH',
-  configServices?: readonly Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired' | 'maxChoirs'>[],
+  configServices?: readonly ConfiguredService[],
 ): MusicServiceSlot[] {
   if (configServices) return buildConfiguredMusicCalendar(startMonthKey, horizon, configServices);
   const services: MusicServiceSlot[] = [];
@@ -164,7 +169,7 @@ export function buildMusicCalendar(
 function buildConfiguredMusicCalendar(
   startMonthKey: string,
   horizon: MusicHorizon,
-  configServices: readonly Pick<SchedulingServiceView, 'code' | 'name' | 'weekday' | 'time' | 'recurrence' | 'selectedDates' | 'active' | 'musicRequired' | 'protocolRequired' | 'maxChoirs'>[],
+  configServices: readonly ConfiguredService[],
 ): MusicServiceSlot[] {
   const enabled = configServices.filter((service) => service.active);
   const duplicate = enabled.find((service, index) =>
@@ -185,19 +190,15 @@ function buildConfiguredMusicCalendar(
       } else if (service.recurrence === 'MONTHLY') {
         if (service.selectedDates.length) {
           for (const date of service.selectedDates) if (date.startsWith(`${periodKey}-`)) dates.add(date);
-        } else if (kind === 'IGABURO' && service.weekday === null) {
-          for (let day = days; day >= 1; day--) {
-            if (weekdayUtc(year, month, day) === 6) {
-              dates.add(isoDate(year, month, day));
-              break;
-            }
-          }
         } else if (service.weekday !== null) {
+          // The user's own rule: any of the 1st–4th of this weekday, and/or the last one.
+          const matches: string[] = [];
           for (let day = 1; day <= days; day++) {
-            if (weekdayUtc(year, month, day) === service.weekday) {
-              dates.add(isoDate(year, month, day));
-              break;
-            }
+            if (weekdayUtc(year, month, day) === service.weekday) matches.push(isoDate(year, month, day));
+          }
+          for (const pick of service.monthlyOccurrences ?? []) {
+            const date = pick === -1 ? matches[matches.length - 1] : matches[pick - 1];
+            if (date) dates.add(date);
           }
         }
       } else if (service.weekday !== null) {

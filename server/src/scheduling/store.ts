@@ -19,6 +19,7 @@ export function toServiceView(r: any): SchedulingServiceView {
     id: r.id, systemId: r.systemId, code: r.code, name: r.name, kind: r.kind as ServiceKind,
     weekday: r.weekday, time: r.time, recurrence: r.recurrence as Recurrence,
     selectedDates: parseJson(r.selectedDatesJson, []),
+    monthlyOccurrences: parseJson(r.monthlyOccurrencesJson, [] as number[]),
     active: r.active,
     musicRequired: r.musicRequired, protocolRequired: r.protocolRequired,
     maxChoirs: r.maxChoirs, targetTeamSize: r.targetTeamSize ?? 10,
