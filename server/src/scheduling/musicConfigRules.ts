@@ -75,8 +75,9 @@ export function validatePolicyValues(policy: Pick<MusicPolicyRules,
   if (policy.frequencyTarget !== null && (!Number.isInteger(policy.frequencyTarget) || policy.frequencyTarget <= 0)) {
     errors.push('A frequency target must be a positive whole number.');
   }
-  if (policy.frequencyTarget !== null && !FREQUENCY_PERIODS.includes(policy.frequencyPeriod as FrequencyPeriod)) {
-    errors.push('Choose whether the frequency target applies per month, quarter, half-year, or year.');
+  // No period is needed here: unless one is set, the frequency follows the period chosen when the schedule is generated.
+  if (policy.frequencyPeriod !== null && !FREQUENCY_PERIODS.includes(policy.frequencyPeriod as FrequencyPeriod)) {
+    errors.push('Choose a supported frequency period: month, quarter, half-year, or year.');
   }
   if (policy.frequencyTarget === null && policy.frequencyPeriod !== null) {
     errors.push('Choose a frequency target before setting its period.');
@@ -139,9 +140,9 @@ export function validateMusicConfigSnapshot(snapshot: MusicConfigRulesSnapshot):
       const override = frequencyOverrides.data[code];
       if (override) {
         const target = override.frequencyTarget ?? policy.frequencyTarget;
-        const period = override.frequencyPeriod ?? policy.frequencyPeriod;
-        if (target === null || target === undefined || !period) {
-          errors.push(`The frequency exception for ${service.name} needs a positive target and a defined period.`);
+        const period = override.frequencyPeriod ?? policy.frequencyPeriod ?? null;
+        if (target === null || target === undefined) {
+          errors.push(`The frequency exception for ${service.name} needs a positive target.`);
           continue;
         }
         errors.push(...validatePolicyValues({

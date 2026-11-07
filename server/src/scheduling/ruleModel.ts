@@ -80,7 +80,8 @@ import type {
 /* ─── Public shapes ─── */
 
 export type Arrangement = 'FIXED' | 'ROTATION' | 'MANUAL';
-export interface RuleFrequency { kind: FrequencyKind; target: number; period: FrequencyPeriod; counting: FrequencyCounting }
+/** `period` null means the period chosen when the schedule is generated. */
+export interface RuleFrequency { kind: FrequencyKind; target: number; period: FrequencyPeriod | null; counting: FrequencyCounting }
 export interface RuleException { choirId: string; eligible?: boolean; frequency?: Partial<RuleFrequency> }
 export type RuleTarget = { kind: 'category'; categoryId: string } | { kind: 'choir'; choirId: string };
 
@@ -149,7 +150,7 @@ const byName = (a: { name: string }, b: { name: string }) => a.name.localeCompar
 const frequencyOf = (p: CategoryServicePolicyView): RuleFrequency | null =>
   p.frequencyTarget === null || p.frequencyTarget === undefined
     ? null
-    : { kind: p.frequencyKind, target: p.frequencyTarget, period: p.frequencyPeriod as FrequencyPeriod, counting: p.frequencyCounting };
+    : { kind: p.frequencyKind, target: p.frequencyTarget, period: (p.frequencyPeriod as FrequencyPeriod | null) ?? null, counting: p.frequencyCounting };
 
 const toStoredFrequency = (f: Partial<RuleFrequency>) => Object.fromEntries(Object.entries({
   frequencyKind: f.kind, frequencyTarget: f.target, frequencyPeriod: f.period, frequencyCounting: f.counting,

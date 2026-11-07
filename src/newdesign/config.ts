@@ -170,7 +170,8 @@ const FREQUENCY_SYMBOL = { MINIMUM: '≥', TARGET: '=', MAXIMUM: '≤' } as cons
 /** "≥ 2 / month", "= 1 / quarter", "≤ 3 / year", or "—". Accepts the partial frequency of an exception. */
 export const formatFrequency = (f: Partial<RuleFrequencyApi> | null | undefined, t: TFn): string => {
   if (!f || (f.target === undefined && f.kind === undefined && f.period === undefined)) return '—';
-  const per = f.period ? ` / ${t(`door.config.rules.per.${f.period}` as MessageKey)}` : '';
+  const per = f.period ? ` / ${t(`door.config.rules.per.${f.period}` as MessageKey)}`
+    : f.period === null ? ` / ${t('door.config.rules.per.generated')}` : '';
   const dates = f.counting === 'DISTINCT_DATES' ? ` (${t('door.config.rules.perDates')})` : '';
   return `${f.kind ? FREQUENCY_SYMBOL[f.kind] + ' ' : ''}${f.target ?? ''}${per}${dates}`.trim();
 };

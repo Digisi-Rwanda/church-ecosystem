@@ -217,7 +217,8 @@ musicScheduleRouter.post('/drafts/generate', requireAuth, async (req: AuthedRequ
   if (start < nowMonth()) return fail(res, 400, 'PAST', 'Choose a period from this month on');
   const units = unitsFrom(await loadChoirs());
   // Configuration is live: whatever is saved now is what this draft is built from.
-  const cfg = await loadMusicConfig();
+  // Frequency rules count over the period chosen here (the horizon).
+  const cfg = await loadMusicConfig(horizon);
   if (!cfg.services.some((service) => service.active && service.musicRequired)) {
     return fail(res, 409, 'NO_CONFIG', 'Set up at least one Music service before generating a schedule.');
   }
@@ -305,7 +306,7 @@ musicScheduleRouter.post('/drafts/:id/edit', requireAuth, async (req: AuthedRequ
   const row = (await drafts()).find((d) => d.id === String(req.params.id));
   if (!row) return fail(res, 404, 'NOT_FOUND', 'Draft not found');
   const d = draftDoc(row);
-  const cfg = await loadMusicConfig();
+  const cfg = await loadMusicConfig(d.horizon);
   const history = historyOutside(d.services, await loadMonths());
   const r = applyEdit(d.services, d.assignments, parsed.data, unitsFrom(await loadChoirs()), cfg, history);
   if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code, warnings: 'warnings' in r ? r.warnings : [] });
@@ -335,7 +336,7 @@ async function takeMonthsOut(row: DraftRow, months: string[]) {
 
 async function confirmMonths(me: string, row: DraftRow, chosen: string[]): Promise<{ ok: true } | { ok: false; status: number; code: string; error: string }> {
   const d = draftDoc(row);
-  const config = await loadMusicConfig();
+  const config = await loadMusicConfig(d.horizon);
   const units = unitsFrom(await loadChoirs());
   const validation = validateLiveMusic(d.services, d.assignments, units, config, historyOutside(d.services, await loadMonths()));
   if (!validation.ok) {
@@ -395,7 +396,7 @@ async function publishMonths(me: string, months: string[]): Promise<{ ok: true }
   const units = unitsFrom(await loadChoirs());
   for (const month of chosen) {
     const doc = have.get(month)!;
-    const config = await loadMusicConfig();
+    const config = await loadMusicConfig((doc.batchHorizon as MusicHorizon | null | undefined) ?? 'MONTH');
     const validation = validateLiveMusic(
       doc.services, doc.assignments, units, config, historyOutside(doc.services, allMonths),
     );
@@ -437,7 +438,7 @@ musicScheduleRouter.post('/drafts/:id/publish', requireAuth, async (req: AuthedR
   const already = months.filter((m) => existing.get(m)?.state === 'PUBLISHED');
   const fresh = months.filter((m) => !already.includes(m));
   const units = unitsFrom(await loadChoirs());
-  const config = await loadMusicConfig();
+  const config = await loadMusicConfig(d.horizon);
   const validation = validateLiveMusic(d.services, d.assignments, units, config, historyOutside(d.services, await loadMonths()));
   if (!validation.ok) return fail(res, 409, 'CONFIG', validation.reason ?? 'The draft does not satisfy the current Music configuration.');
   for (const m of months) {
@@ -482,7 +483,7 @@ musicScheduleRouter.post('/months/:month/edit', requireAuth, async (req: AuthedR
   const before = (await loadMonths()).find((m) => m.periodKey === month);
   if (!before) return fail(res, 404, 'NOT_FOUND', 'No choir schedule for this month');
   const units = unitsFrom(await loadChoirs());
-  const cfg = await loadMusicConfig();
+  const cfg = await loadMusicConfig((before.batchHorizon as MusicHorizon | null | undefined) ?? 'MONTH');
   const history = historyOutside(before.services, await loadMonths());
   const r = applyEdit(before.services, before.assignments, parsed.data, units, cfg, history, false);
   if (!r.ok) return res.status(r.status).json({ error: r.error, code: r.code, warnings: 'warnings' in r ? r.warnings : [] });

@@ -2194,7 +2194,8 @@ export const updateProtocolDutyPolicy = (id: string, patch: object) =>
 export const retireSchedulingService = (id: string) => apiFetch(`${SC}/services/${encodeURIComponent(id)}/retire`, { method: 'POST', body: {} });
 
 /* ─── Rules: the only scheduling concept the Music setup screens speak. The tables behind them stay server-side. ─── */
-export type RuleFrequencyApi = { kind: FrequencyKind; target: number; period: FrequencyPeriod; counting: FrequencyCounting };
+/** `period` null: counted over the period chosen when the schedule is generated. */
+export type RuleFrequencyApi = { kind: FrequencyKind; target: number; period: FrequencyPeriod | null; counting: FrequencyCounting };
 export type RuleExceptionApi = { choirId: string; eligible?: boolean; frequency?: Partial<RuleFrequencyApi> };
 export type RuleTargetApi = { kind: 'category'; categoryId: string } | { kind: 'choir'; choirId: string };
 export type MusicRuleInputApi = {

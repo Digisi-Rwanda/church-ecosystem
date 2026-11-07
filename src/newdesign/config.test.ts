@@ -5,7 +5,7 @@ import type { MusicRuleApi } from '../api/frontDoorApi';
 // A tiny translator over the real phrase templates, so the sentences below are what users would read.
 const phrases: Record<string, string> = {
   'door.config.rules.per.MONTH': 'month', 'door.config.rules.per.QUARTER': 'quarter', 'door.config.rules.per.YEAR': 'year', 'door.config.rules.per.HALF_YEAR': 'half-year',
-  'door.config.rules.perDates': 'distinct dates',
+  'door.config.rules.perDates': 'distinct dates', 'door.config.rules.per.generated': 'schedule period',
   'door.config.rules.how.FIXED': 'is fixed', 'door.config.rules.how.ROTATION': 'rotates', 'door.config.rules.how.MANUAL': 'is placed by hand',
   'door.config.rules.count': '{min}–{max} choirs', 'door.config.rules.countMin': 'at least {min} choirs', 'door.config.rules.countMax': 'up to {max} choirs',
   'door.config.rules.everyChoir': 'every eligible choir', 'door.config.rules.sentence': '{target} {how} on {services}{extra}.',
@@ -29,6 +29,9 @@ describe('frequency text', () => {
     expect(formatFrequency({ kind: 'TARGET', target: 1, period: 'QUARTER', counting: 'ASSIGNMENTS' }, t)).toBe('= 1 / quarter');
     expect(formatFrequency({ kind: 'MAXIMUM', target: 3, period: 'YEAR', counting: 'DISTINCT_DATES' }, t)).toBe('≤ 3 / year (distinct dates)');
     expect(formatFrequency(null, t)).toBe('—');
+  });
+  it('says a rule with no period follows the period chosen at generation', () => {
+    expect(formatFrequency({ kind: 'MINIMUM', target: 2, period: null, counting: 'ASSIGNMENTS' }, t)).toBe('≥ 2 / schedule period');
   });
   it('copes with the partial frequency of an exception', () => {
     expect(formatFrequency({ target: 1 }, t)).toBe('1');

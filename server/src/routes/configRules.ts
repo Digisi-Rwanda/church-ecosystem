@@ -35,7 +35,7 @@ const Count = z.number().int().nonnegative();
 const Frequency = z.object({
   kind: z.enum(['MINIMUM', 'TARGET', 'MAXIMUM']),
   target: z.number().int().positive(),
-  period: FrequencyPeriodSchema,
+  period: FrequencyPeriodSchema.nullable().default(null), // null: follows the period chosen when generating
   counting: z.enum(['ASSIGNMENTS', 'DISTINCT_DATES']).default('ASSIGNMENTS'),
 }).strict();
 

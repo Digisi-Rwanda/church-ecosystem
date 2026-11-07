@@ -499,12 +499,12 @@ type RuleDraft = {
   scope: string[]; targetKind: 'category' | 'choir'; categoryId: string; choirId: string; arrangement: Arrangement;
   min: string; max: string; requireAll: boolean; freq: FreqDraft; exceptions: ExDraft[];
 };
-const emptyFreq: FreqDraft = { on: false, kind: 'MINIMUM', target: '1', period: 'MONTH', counting: 'ASSIGNMENTS' };
+const emptyFreq: FreqDraft = { on: false, kind: 'MINIMUM', target: '1', period: '', counting: 'ASSIGNMENTS' };
 const blankRule = (): RuleDraft => ({ scope: [], targetKind: 'category', categoryId: '', choirId: '', arrangement: 'ROTATION', min: '', max: '', requireAll: false, freq: emptyFreq, exceptions: [] });
 const ruleDraft = (r: MusicRuleApi): RuleDraft => ({
   scope: r.scope, targetKind: r.target.kind, categoryId: r.target.kind === 'category' ? r.target.categoryId : '', choirId: r.target.kind === 'choir' ? r.target.choirId : '',
   arrangement: r.arrangement, min: r.minCount === null ? '' : String(r.minCount), max: r.maxCount === null ? '' : String(r.maxCount), requireAll: r.requireAll,
-  freq: r.frequency ? { on: true, kind: r.frequency.kind, target: String(r.frequency.target), period: r.frequency.period, counting: r.frequency.counting } : emptyFreq,
+  freq: r.frequency ? { on: true, kind: r.frequency.kind, target: String(r.frequency.target), period: r.frequency.period ?? '', counting: r.frequency.counting } : emptyFreq,
   exceptions: r.exceptions.map((e) => ({
     key: crypto.randomUUID(), choirId: e.choirId, eligible: e.eligible === undefined ? 'inherit' : e.eligible ? 'yes' : 'no',
     fOn: !!e.frequency, fKind: e.frequency?.kind ?? '', fTarget: e.frequency?.target ? String(e.frequency.target) : '', fPeriod: e.frequency?.period ?? '',
@@ -518,7 +518,7 @@ const toInput = (d: RuleDraft): MusicRuleInputApi => {
     arrangement: d.arrangement,
     minCount: d.arrangement === 'ROTATION' ? int(d.min) : null, maxCount: d.arrangement === 'ROTATION' ? int(d.max) : null,
     requireAll: d.arrangement === 'ROTATION' && d.targetKind === 'category' ? d.requireAll : false,
-    frequency: d.freq.on ? { kind: d.freq.kind as RuleFrequencyApi['kind'], target: Number(d.freq.target), period: d.freq.period as RuleFrequencyApi['period'], counting: d.freq.counting as RuleFrequencyApi['counting'] } : null,
+    frequency: d.freq.on ? { kind: d.freq.kind as RuleFrequencyApi['kind'], target: Number(d.freq.target), period: (d.freq.period || null) as RuleFrequencyApi['period'], counting: d.freq.counting as RuleFrequencyApi['counting'] } : null,
     exceptions: d.targetKind === 'category' ? d.exceptions.filter((e) => e.choirId).map((e) => ({
       choirId: e.choirId,
       ...(e.eligible === 'inherit' ? {} : { eligible: e.eligible === 'yes' }),
@@ -592,7 +592,7 @@ function RuleDialog({ rule, services, categories, choirs, onClose, onSaved, goTo
       setErrors(body?.errors?.length ? body.errors : [body?.message ?? body?.error ?? (reason instanceof Error ? reason.message : t('door.config.err.server'))]);
     } finally { setWorking(false); }
   };
-  const freqPreview = draft.freq.on ? formatFrequency({ kind: draft.freq.kind as RuleFrequencyApi['kind'], target: Number(draft.freq.target) || 0, period: draft.freq.period as RuleFrequencyApi['period'], counting: draft.freq.counting as RuleFrequencyApi['counting'] }, t) : '—';
+  const freqPreview = draft.freq.on ? formatFrequency({ kind: draft.freq.kind as RuleFrequencyApi['kind'], target: Number(draft.freq.target) || 0, period: (draft.freq.period || null) as RuleFrequencyApi['period'], counting: draft.freq.counting as RuleFrequencyApi['counting'] }, t) : '—';
   return <SidePanel open title={rule ? t('door.config.rule.edit') : t('door.config.rule.add')} onClose={() => { setup.saved(); onClose(); }}
     onSave={() => void save()} saveLabel={t('door.settings.save')} saving={working}>
     <div className="pt-edit scheduling-rule-dialog">
@@ -647,6 +647,7 @@ function RuleDialog({ rule, services, categories, choirs, onClose, onSaved, goTo
             {['MINIMUM', 'TARGET', 'MAXIMUM'].map((k) => <option key={k} value={k}>{t(`door.config.frequencyChoice.${k}` as Parameters<Tn>[0])}</option>)}</select></label>
           <label>{t('door.config.rule.frequency.target')}<input type="number" min={1} value={draft.freq.target} onChange={(e) => set({ freq: { ...draft.freq, target: e.target.value } })} /></label>
           <label>{t('door.config.policy.period')}<select value={draft.freq.period} onChange={(e) => set({ freq: { ...draft.freq, period: e.target.value } })}>
+            <option value="">{t('door.config.period.generated')}</option>
             {['MONTH', 'QUARTER', 'HALF_YEAR', 'YEAR'].map((p) => <option key={p} value={p}>{t(`door.config.period.${p}` as Parameters<Tn>[0])}</option>)}</select></label>
           <label>{t('door.config.rule.frequency.counting')}<select value={draft.freq.counting} onChange={(e) => set({ freq: { ...draft.freq, counting: e.target.value } })}>
             {['ASSIGNMENTS', 'DISTINCT_DATES'].map((c) => <option key={c} value={c}>{t(`door.config.counting.${c}` as Parameters<Tn>[0])}</option>)}</select></label>

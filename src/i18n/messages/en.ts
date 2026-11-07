@@ -2363,6 +2363,8 @@ export const en = {
   'door.config.rules.per.QUARTER': 'quarter',
   'door.config.rules.per.HALF_YEAR': 'half-year',
   'door.config.rules.per.YEAR': 'year',
+  'door.config.rules.per.generated': 'schedule period',
+  'door.config.period.generated': 'The period I choose when I generate',
   'door.config.rules.perDates': 'distinct dates',
   'door.config.rules.how.FIXED': 'is fixed',
   'door.config.rules.how.ROTATION': 'rotates',

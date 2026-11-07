@@ -8,6 +8,7 @@
  * Availability (unavailability) was always live and is read the same way as before.
  */
 import { prisma } from '../lib/prisma.js';
+import type { MusicHorizon } from '../music/types.js';
 import {
   toServiceView,
   toCategoryView,
@@ -19,6 +20,7 @@ import {
 import type {
   CategoryServicePolicyView,
   ChoirCategoryLinkView,
+  FrequencyPeriod,
   ChoirCategoryView,
   MusicChoirUnavailabilityView,
   MusicFixedAssignmentView,
@@ -49,8 +51,17 @@ export type LoadedProtocolConfig = {
   dutyPolicy: ProtocolDutyPolicyView | null;
 };
 
-/** Load everything the Music engine needs. */
-export async function loadMusicConfig(): Promise<LoadedMusicConfig> {
+/** The frequency period that a generation horizon implies. */
+export const periodForHorizon = (horizon: MusicHorizon): FrequencyPeriod =>
+  horizon === 'MONTH' ? 'MONTH' : horizon === 'QUARTER' ? 'QUARTER' : horizon === 'HALF' ? 'HALF_YEAR' : 'YEAR';
+
+/**
+ * Load everything the Music engine needs.
+ * Frequency rules do not store a period. Pass the horizon the schedule is generated for and every rule
+ * that has no period of its own is counted over that period: a month schedule counts per month, a
+ * quarter schedule per quarter, and so on. A rule that does set its own period keeps it.
+ */
+export async function loadMusicConfig(horizon?: MusicHorizon): Promise<LoadedMusicConfig> {
   const live = { systemId: SYSTEM_MUSIC, active: true };
   const [services, categories, policies, links, fixedAssignments, unavailability] = await Promise.all([
     prisma.schedulingService.findMany({ where: live }),
@@ -71,7 +82,8 @@ export async function loadMusicConfig(): Promise<LoadedMusicConfig> {
   return {
     services: services.map(toServiceView),
     categories: categories.map(toCategoryView),
-    policies: policies.map(toPolicyView),
+    policies: policies.map(toPolicyView).map((p) =>
+      horizon && p.frequencyTarget !== null && !p.frequencyPeriod ? { ...p, frequencyPeriod: periodForHorizon(horizon) } : p),
     choirLinks,
     choirEligibilityOverrides,
     links: links.map(toLinkView),
