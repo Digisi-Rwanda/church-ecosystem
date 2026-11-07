@@ -75,6 +75,21 @@ export const planningModeKey = (m: PlanningMode): MessageKey => `door.config.pla
 export const extraDutyPolicyKey = (p: ProtocolDutyPolicyApi['extraDutyPolicy']): MessageKey =>
   `door.config.extraDuty.${p}`;
 
+/** The weeks a monthly service can fall on: the 1st to 4th of its weekday, or the last one. In calendar order. */
+export const MONTH_WEEKS = [1, 2, 3, 4, -1] as const;
+export const weekOfMonthKey = (week: number): MessageKey => `door.config.week.${week === -1 ? 'last' : week}` as MessageKey;
+
+/** "Every month · 1st, last". A monthly service with a weekday names its weeks; with none chosen it says so. */
+export const recurrenceLabel = (
+  s: Pick<SchedulingServiceApi, 'recurrence' | 'weekday'> & { selectedDates?: string[]; monthlyOccurrences?: number[] },
+  t: TFn,
+): string => {
+  const base = t(recurrenceKey(s.recurrence));
+  if (s.recurrence !== 'MONTHLY' || (s.selectedDates ?? []).length > 0 || s.weekday === null) return base;
+  const picks = MONTH_WEEKS.filter((w) => (s.monthlyOccurrences ?? []).includes(w));
+  return `${base} · ${picks.length ? picks.map((w) => t(weekOfMonthKey(w))).join(', ') : t('door.config.week.none')}`;
+};
+
 /** One line for a service row: "Sunday service · Every week · Active". */
 export const serviceSummary = (s: SchedulingServiceApi, t: TFn): string => {
   const parts: string[] = [s.name];
@@ -83,7 +98,7 @@ export const serviceSummary = (s: SchedulingServiceApi, t: TFn): string => {
   if (wd) when.push(wd);
   if (s.time) when.push(s.time);
   if (when.length) when.push('·');
-  when.push(t(recurrenceKey(s.recurrence)));
+  when.push(recurrenceLabel(s, t));
   if (when.length) parts.push(when.join(' '));
   parts.push(s.active ? t('door.config.service.active') : t('door.config.service.inactive'));
   return parts.join(' · ');

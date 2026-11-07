@@ -51,8 +51,11 @@ import {
   extraDutyPolicyName,
   formatFrequency,
   formatMinMax,
+  MONTH_WEEKS,
   recurrenceKey,
+  recurrenceLabel,
   ruleSentences,
+  weekOfMonthKey,
   serviceKindKey,
   type RuleNames,
 } from './config';
@@ -196,6 +199,28 @@ function EmptyOrLocked({ canEdit, empty, emptyKey }: { canEdit: boolean; empty: 
   return <p className="muted">{canEdit ? t("door.config.emptyDraft") : t(emptyKey)}</p>;
 }
 
+/** Which weeks of the month a monthly service falls on. Several can be ticked; "Last" is the final one of that day. */
+export function MonthlyWeeks({ hasWeekday, value, onChange }: { hasWeekday: boolean; value: number[]; onChange: (next: number[]) => void }) {
+  const t = useT();
+  if (!hasWeekday) return <p className="scheduling-weeks-hint">{t('door.config.service.weeksNeedDay')}</p>;
+  const toggle = (week: number, on: boolean) =>
+    onChange(MONTH_WEEKS.filter((w) => (w === week ? on : value.includes(w))));
+  return (
+    <fieldset className="scheduling-weeks">
+      <legend>{t('door.config.service.weeks')}</legend>
+      <div className="scheduling-weeks-options">
+        {MONTH_WEEKS.map((week) => (
+          <label key={week}>
+            <input type="checkbox" checked={value.includes(week)} onChange={(e) => toggle(week, e.target.checked)} />
+            {t(weekOfMonthKey(week))}
+          </label>
+        ))}
+      </div>
+      <p className="scheduling-weeks-hint">{t('door.config.service.weeksHint')}</p>
+    </fieldset>
+  );
+}
+
 function Pill({ on, children }: { on: boolean; children: ReactNode }) {
   return <span className={`scheduling-pill ${on ? 'is-on' : 'is-off'}`}>{children}</span>;
 }
@@ -257,13 +282,14 @@ function useDraft<T extends object>(initial: T) {
 
 type ServiceDraft = {
   name: string; code: string; weekday: string; time: string; recurrence: string; musicRequired: boolean; protocolRequired: boolean;
-  active: boolean; kind: string; maxChoirs: string; displayOrder: string; selectedDates: string;
+  active: boolean; kind: string; maxChoirs: string; displayOrder: string; selectedDates: string; monthlyOccurrences: number[];
 };
 const serviceDraft = (s: SchedulingServiceApi | null): ServiceDraft => ({
   name: s?.name ?? '', code: s?.code ?? '', weekday: s?.weekday == null ? '' : String(s.weekday), time: s?.time ?? '',
   recurrence: s?.recurrence ?? 'WEEKLY', musicRequired: s?.musicRequired ?? true, protocolRequired: s?.protocolRequired ?? true,
   active: s?.active ?? true, kind: s?.kind ?? 'SERVICE', maxChoirs: String(s?.maxChoirs ?? 3), displayOrder: String(s?.displayOrder ?? 0),
   selectedDates: (s?.selectedDates ?? []).join('\n'),
+  monthlyOccurrences: s?.monthlyOccurrences ?? [],
 });
 
 function ServiceEditRow({ row, state, onDone, onSaved }: { row: SchedulingServiceApi | null; state: SaveState; onDone: () => void; onSaved: () => void }) {
@@ -275,6 +301,7 @@ function ServiceEditRow({ row, state, onDone, onSaved }: { row: SchedulingServic
       code: draft.code.trim() || `SERVICE_${crypto.randomUUID().slice(0, 8)}`, name: draft.name.trim(), kind: draft.kind,
       weekday: draft.weekday === '' ? null : Number(draft.weekday), time: draft.time || null, recurrence: draft.recurrence,
       selectedDates: draft.selectedDates.split(/[\s,]+/).map((v) => v.trim()).filter(Boolean),
+      monthlyOccurrences: draft.recurrence === 'MONTHLY' ? draft.monthlyOccurrences : [],
       active: draft.active, musicRequired: draft.musicRequired, protocolRequired: draft.protocolRequired,
       maxChoirs: Number(draft.maxChoirs || 3), displayOrder: Number(draft.displayOrder || 0),
     };
@@ -303,6 +330,7 @@ function ServiceEditRow({ row, state, onDone, onSaved }: { row: SchedulingServic
       </td>
     </tr>
     <tr className="is-editing"><td colSpan={9}>
+      {draft.recurrence === 'MONTHLY' && <MonthlyWeeks hasWeekday={draft.weekday !== ''} value={draft.monthlyOccurrences} onChange={(monthlyOccurrences) => set({ monthlyOccurrences })} />}
       <details className="scheduling-config-advanced" open={draft.recurrence === 'SELECTED_DATES' || draft.recurrence === 'CUSTOM' || !!draft.selectedDates}>
         <summary>{t('door.config.help.advancedService')}</summary>
         <div className="door-form">
@@ -343,7 +371,7 @@ export function ServicesEditor({ systemId, canWrite }: Props) {
           ? <ServiceEditRow key={s.id} row={s} state={state} onDone={() => setEditing(null)} onSaved={list.reload} />
           : <tr key={s.id} className={s.active ? undefined : 'is-inactive'}>
             <td>{s.name}</td><td>{s.code}</td><td>{dayName(t, s.weekday) || t('door.config.form.any')}</td><td>{s.time ?? '—'}</td>
-            <td>{t(recurrenceKey(s.recurrence))}</td><td>{yes(s.musicRequired)}</td><td>{yes(s.protocolRequired)}</td>
+            <td>{recurrenceLabel(s, t)}</td><td>{yes(s.musicRequired)}</td><td>{yes(s.protocolRequired)}</td>
             <td><Pill on={s.active}>{s.active ? t('door.config.service.active') : t('door.config.service.inactive')}</Pill></td>
             <td className="scheduling-table-actions">{editable && editing === null && <>
               <button type="button" className="btn ghost sm" onClick={() => { state.clear(); setEditing(s.id); }}>{t('door.settings.edit')}</button>

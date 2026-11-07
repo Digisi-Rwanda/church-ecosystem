@@ -2107,6 +2107,8 @@ export async function recordMoneyEntryId(input: MoneyEntryInput): Promise<string
 export type SchedulingServiceApi = {
   id: string; systemId: string; code: string; name: string; kind: ServiceKind;
   weekday: number | null; time: string | null; recurrence: Recurrence; selectedDates: string[];
+  /** Monthly services: 1-4 = the 1st to 4th of the weekday, -1 = the last. */
+  monthlyOccurrences: number[];
   active: boolean;
   musicRequired: boolean; protocolRequired: boolean; maxChoirs: number; targetTeamSize: number;
   displayOrder: number;

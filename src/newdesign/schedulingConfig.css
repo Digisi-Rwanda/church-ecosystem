@@ -98,6 +98,18 @@ table.scheduling-table { width: 100%; min-width: 40rem; margin: 0; border-collap
 .scheduling-pill.is-on { background: var(--success-soft); color: color-mix(in srgb, var(--success) 65%, var(--ink)); }
 .scheduling-pill.is-off { background: var(--paper-2); color: var(--ink-muted); }
 
+/* Monthly services: which weeks of the month */
+.scheduling-weeks { border: 0; padding: 0; margin: 0 0 var(--space-3); display: grid; gap: var(--space-1); }
+.scheduling-weeks legend { font-weight: 600; padding: 0; margin-bottom: var(--space-1); }
+.scheduling-weeks-options { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+.scheduling-weeks-options label {
+  display: inline-flex; align-items: center; gap: var(--space-2); cursor: pointer;
+  padding: 0.35rem 0.8rem; border: 1px solid var(--line); border-radius: var(--radius-pill); background: var(--surface);
+}
+.scheduling-weeks-options label:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
+.scheduling-weeks-options label:has(input:focus-visible) { box-shadow: var(--focus-ring); }
+.scheduling-weeks-hint { margin: 0; color: var(--ink-muted); font-size: 0.9rem; }
+
 /* The rules in words */
 .scheduling-rules-preview {
   margin-block: var(--space-2); padding: var(--space-3) var(--space-4); line-height: 1.6;
