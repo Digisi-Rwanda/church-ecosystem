@@ -42,7 +42,7 @@ beforeAll(async () => {
   const app = express();
   app.use(express.json());
   app.use('/api/music/schedule', musicScheduleRouter);
-  await new Promise<void>((resolve) => { server = app.listen(0, resolve); });
+  await new Promise<void>((resolve) => { server = app.listen(0, () => resolve()); });
   base = `http://127.0.0.1:${(server.address() as AddressInfo).port}/api/music/schedule`;
 });
 afterAll(() => new Promise<void>((resolve) => server.close(() => resolve())));

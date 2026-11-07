@@ -591,7 +591,7 @@ async function main() {
   }
 
   // ─── Idempotent initial scheduling configuration (slice 3.17) ───
-  // Represents the verified legacy rules as versioned, tenant-scoped config.
+  // Represents the verified legacy rules as live, tenant-scoped config.
   // Rerunning the seed does not duplicate rows: every insert is guarded by an
   // existence check on the stable natural key (code, or system+category+service).
   try {
@@ -602,9 +602,8 @@ async function main() {
   }
 }
 
+/** Creates the initial live scheduling rows once. Never overwrites rows that already exist. */
 async function seedInitialSchedulingConfig(prisma: import('@prisma/client').PrismaClient): Promise<void> {
-  const now = new Date();
-
   // ── System tenants ──
   const MUSIC = 'sys-music';
   const PROTOCOL = 'sys-protocol';
@@ -617,51 +616,15 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
   }
   const actorId = actorPosition.personId;
 
-  // ── ConfigVersion v1 (ACTIVE) ──
-  let version = await prisma.configVersion.findFirst({ where: { systemId: MUSIC, version: 1 } });
-  if (!version) {
-    version = await prisma.configVersion.create({
-      data: {
-        systemId: MUSIC,
-        version: 1,
-        label: 'Initial scheduling configuration (legacy rules)',
-        status: 'ACTIVE',
-        effectiveFrom: now,
-        createdByPersonId: actorId,
-        reason: 'Initial seed reproducing verified legacy Music and Protocol scheduling rules',
-        notesJson: JSON.stringify({ source: 'legacy-hard-coded', slice: '3.17' }),
-        validationJson: JSON.stringify({}),
-        affectedSchedulesJson: JSON.stringify([]),
-      },
-    });
-  }
-  let protocolVersion = await prisma.configVersion.findFirst({ where: { systemId: PROTOCOL, version: 1 } });
-  if (!protocolVersion) {
-    protocolVersion = await prisma.configVersion.create({
-      data: {
-        systemId: PROTOCOL,
-        version: 1,
-        label: 'Initial Protocol scheduling configuration (legacy rules)',
-        status: 'ACTIVE',
-        effectiveFrom: now,
-        createdByPersonId: actorId,
-        reason: 'Initial seed reproducing verified legacy Protocol scheduling rules',
-        notesJson: JSON.stringify({ source: 'legacy-hard-coded', slice: '3.17' }),
-        validationJson: JSON.stringify({}),
-        affectedSchedulesJson: JSON.stringify([]),
-      },
-    });
-  }
-
   // ── Shared scheduling calendar (owned once by Music) ──
   // Five service types from the legacy engine: SS1, SS2, TUESDAY, FRIDAY, IGABURO.
   // SS1, SS2, TUESDAY, IGABURO are used by both Music and Protocol. FRIDAY is Music-only.
   const services = [
-    { systemId: MUSIC, code: 'ss1', name: 'Sunday Service 1', kind: 'SERVICE', weekday: 0, time: '09:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, configVersionId: version.id, displayOrder: 0 },
-    { systemId: MUSIC, code: 'ss2', name: 'Sunday Service 2', kind: 'SERVICE', weekday: 0, time: '11:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, configVersionId: version.id, displayOrder: 1 },
-    { systemId: MUSIC, code: 'tuesday', name: 'Tuesday Service', kind: 'SERVICE', weekday: 2, time: '18:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, configVersionId: version.id, displayOrder: 2 },
-    { systemId: MUSIC, code: 'friday', name: 'Friday Service', kind: 'SERVICE', weekday: 5, time: '18:00', musicRequired: true, protocolRequired: false, maxChoirs: 3, configVersionId: version.id, displayOrder: 3 },
-    { systemId: MUSIC, code: 'igaburo', name: 'Igaburo (Holy Communion)', kind: 'SERVICE', weekday: null, time: null, recurrence: 'MONTHLY', musicRequired: true, protocolRequired: true, maxChoirs: 3, configVersionId: version.id, displayOrder: 4 },
+    { systemId: MUSIC, code: 'ss1', name: 'Sunday Service 1', kind: 'SERVICE', weekday: 0, time: '09:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, displayOrder: 0 },
+    { systemId: MUSIC, code: 'ss2', name: 'Sunday Service 2', kind: 'SERVICE', weekday: 0, time: '11:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, displayOrder: 1 },
+    { systemId: MUSIC, code: 'tuesday', name: 'Tuesday Service', kind: 'SERVICE', weekday: 2, time: '18:00', musicRequired: true, protocolRequired: true, maxChoirs: 3, displayOrder: 2 },
+    { systemId: MUSIC, code: 'friday', name: 'Friday Service', kind: 'SERVICE', weekday: 5, time: '18:00', musicRequired: true, protocolRequired: false, maxChoirs: 3, displayOrder: 3 },
+    { systemId: MUSIC, code: 'igaburo', name: 'Igaburo (Holy Communion)', kind: 'SERVICE', weekday: null, time: null, recurrence: 'MONTHLY', musicRequired: true, protocolRequired: true, maxChoirs: 3, displayOrder: 4 },
   ];
   const serviceIds = new Map<string, string>();
   for (const s of services) {
@@ -674,7 +637,7 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
         data: {
           ...s, systemId: s.systemId, code: s.code, name: s.name, kind: s.kind,
           weekday: s.weekday, time: s.time, recurrence: s.recurrence ?? 'WEEKLY',
-          selectedDatesJson: '[]', active: true, effectiveFrom: now,
+          selectedDatesJson: '[]', active: true,
           musicRequired: s.musicRequired, protocolRequired: s.protocolRequired,
           displayOrder: s.displayOrder, createdByPersonId: actorId,
         },
@@ -702,7 +665,7 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
       const created = await prisma.choirCategory.create({
         data: {
           systemId: MUSIC, code: c.code, name: c.name, description: c.description,
-          active: true, effectiveFrom: now, configVersionId: version.id, createdByPersonId: actorId,
+          active: true, createdByPersonId: actorId,
         },
       });
       id = created.id;
@@ -762,8 +725,7 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
           minCount: p.minCount ?? null,
           maxCount: p.maxCount ?? null,
           requireAll: p.requireAll ?? false,
-          configVersionId: version.id,
-          effectiveFrom: now, createdByPersonId: actorId,
+          createdByPersonId: actorId,
         },
       });
     }
@@ -781,7 +743,7 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
   for (const r of protocolRuleRows) {
     const svcId = serviceIds.get(`${MUSIC}|${r.service}`);
     if (!svcId) continue;
-    const existing = await prisma.protocolServiceRule.findFirst({ where: { systemId: PROTOCOL, serviceId: svcId, configVersionId: protocolVersion.id } });
+    const existing = await prisma.protocolServiceRule.findFirst({ where: { systemId: PROTOCOL, serviceId: svcId } });
     if (!existing) {
       await prisma.protocolServiceRule.create({
         data: {
@@ -790,8 +752,7 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
           required: r.required, defaultTeamSize: r.defaultTeamSize,
           teamSizeOverridesJson: '{}',
           requireChoir: r.requireChoir, requireWorship: r.requireWorship,
-          relaxableKindsJson: '[]', configVersionId: protocolVersion.id,
-          effectiveFrom: now, createdByPersonId: actorId,
+          relaxableKindsJson: '[]', createdByPersonId: actorId,
         },
       });
     }
@@ -799,7 +760,7 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
 
   // ── Protocol duty policy ──
   // Legacy BASE_RULES: preferTarget=3, softMax=3, hardMax=4, defaultTeamSize=10.
-  const existingPolicy = await prisma.protocolDutyPolicy.findFirst({ where: { systemId: PROTOCOL, configVersionId: protocolVersion.id } });
+  const existingPolicy = await prisma.protocolDutyPolicy.findFirst({ where: { systemId: PROTOCOL } });
   if (!existingPolicy) {
       await prisma.protocolDutyPolicy.create({
         data: {
@@ -810,35 +771,12 @@ async function seedInitialSchedulingConfig(prisma: import('@prisma/client').Pris
           musicCompatibilityRequired: true,
           leadershipPrioritiesJson: '[]',
           exceptionsAllowed: true,
-          configVersionId: protocolVersion.id,
-          effectiveFrom: now, createdByPersonId: actorId,
+          createdByPersonId: actorId,
         },
       });
   }
 
-  // Pin pre-versioned schedules to the seeded legacy-rule snapshots once.
-  await prisma.musicMonth.updateMany({
-    where: { configVersionId: null },
-    data: { configVersionId: version.id },
-  });
-  await prisma.musicDraft.updateMany({
-    where: { configVersionId: null },
-    data: { configVersionId: version.id },
-  });
-  await prisma.musicLog.updateMany({
-    where: { configVersionId: null },
-    data: { configVersionId: version.id },
-  });
-  await prisma.protocolPlan.updateMany({
-    where: { configVersionId: null },
-    data: { configVersionId: protocolVersion.id },
-  });
-  await prisma.protocolHistory.updateMany({
-    where: { configVersionId: null },
-    data: { configVersionId: protocolVersion.id },
-  });
-
-  console.log(`  scheduling config: version v1, ${services.length} services, ${categories.length} categories, ${policyRows.length} policies, ${protocolRuleRows.length} protocol rules, 1 duty policy`);
+  console.log(`  scheduling config (live): ${services.length} services, ${categories.length} categories, ${policyRows.length} policies, ${protocolRuleRows.length} protocol rules, 1 duty policy`);
 }
 
 main()

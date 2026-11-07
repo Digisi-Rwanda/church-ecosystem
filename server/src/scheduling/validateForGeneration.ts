@@ -106,7 +106,7 @@ function calendarErrors(services: GenerationService[]): string[] {
 
 export function validateForGeneration(snapshot: MusicGenerationSnapshot): GenerationValidation {
   // First pass: the existing rules (policy values, overrides, fixed arrangements, capacity).
-  const errors: string[] = [...validateMusicConfigSnapshot(snapshot).errors];
+  const errors: string[] = [...validateMusicConfigSnapshot(snapshot as unknown as MusicConfigRulesSnapshot).errors];
 
   errors.push(...calendarErrors(snapshot.services));
 

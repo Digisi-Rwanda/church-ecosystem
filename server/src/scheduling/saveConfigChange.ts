@@ -385,7 +385,7 @@ function applyOp(ctx: Ctx, change: ConfigOp) {
       if (!s.services.some((r) => r.id === d.serviceId && r.active)) throw refuse(400, 'CONFIG_REFERENCE', 'Choose an active service');
       const same = s.policies.find((p) => p.active && p.categoryId === d.categoryId && p.serviceId === d.serviceId);
       if (same) return exists(ctx, change.op, same, toPolicyView, 'POLICY_EXISTS', `Policy for ${d.categoryId} × ${d.serviceId} already exists`, { policyId: same.id });
-      const row = { ...defaultPolicy(ctx, d.categoryId, d.serviceId), eligible: true, ...policyFields(d) };
+      const row: Row = { ...defaultPolicy(ctx, d.categoryId, d.serviceId), eligible: true, ...policyFields(d) };
       insert(ctx, 'policies', 'categoryServicePolicy', row);
       ctx.results.push({ op: change.op, status: 'CREATED', row: toPolicyView(row) });
       ctx.audits.push({ action: 'POLICY_CREATED', detail: `Created policy ${d.categoryId} × ${d.serviceId}`, meta: { policyId: row.id } });
@@ -468,7 +468,7 @@ function applyOp(ctx: Ctx, change: ConfigOp) {
         throw refuse(400, 'CONFIG_REFERENCE', 'This service does not occur on that date. Add the date to the service calendar first.');
       }
       // Case-insensitive exception lookup (the old route compared exception codes case-sensitively).
-      if (!isMusicChoirEligible({ choirActive: true, categoryId: policy.categoryId, serviceCode: service.code, policy, link: toLinkView(link) })) {
+      if (!isMusicChoirEligible({ choirActive: true, categoryId: policy.categoryId, serviceCode: service.code, policy: policy as { eligible: boolean }, link: toLinkView(link) })) {
         throw refuse(400, 'CONFIG_INELIGIBLE', 'This choir is not eligible for the selected service.');
       }
       const scopeKey = !b.serviceDate && !b.serviceTime ? 'ALL' : `${b.serviceDate ?? '*'}|${b.serviceTime ?? '*'}`;
