@@ -15,6 +15,23 @@ const now = new Date();
 const next = (n: number) => new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + n, 1)).toISOString().slice(0, 7);
 const START = next(1);
 
+it('saves Music assignment limits under the edit lock and loads the saved values', async () => {
+  const base = '/api/scheduling/config';
+  const url = `${base}/music/lineup-limits`;
+  const read = () => get(LEADER, `${url}?systemId=sys-music`);
+  const patch = (as: string, body: object) => request(app).patch(url).set(bearer(as)).send(body);
+  const limits = { primaryPerDay: 2, consecutivePerService: null };
+  expect((await read()).body.limits).toEqual({ primaryPerDay: 1, consecutivePerService: 2 });
+  expect((await patch('p-member', limits)).status).toBe(403);
+  expect((await patch(LEADER, limits)).status).toBe(409);
+  expect((await post(LEADER, `${base}/lock`, { systemId: 'sys-music' })).status).toBe(200);
+  expect((await patch(LEADER, { ...limits, primaryPerDay: 0 })).status).toBe(400);
+  expect((await patch(LEADER, limits)).status).toBe(200);
+  expect((await read()).body.limits).toEqual(limits);
+  const { loadMusicConfig } = await import('../src/scheduling/configLoader.js');
+  expect((await loadMusicConfig()).lineupLimits).toEqual(limits);
+});
+
 beforeEach(async () => {
   fake.__reset();
   const db = fake.__db;

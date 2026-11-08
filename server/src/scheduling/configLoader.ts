@@ -29,10 +29,20 @@ import type {
   SchedulingServiceView,
 } from './types.js';
 
+import { defaultMusicLineupLimits, MUSIC_LINEUP_LIMITS_KEY, musicLineupLimitsSchema, type MusicLineupLimits } from './musicLineupLimits.js';
+import { parseJson } from './types.js';
+
 export const SYSTEM_MUSIC = 'sys-music';
 export const SYSTEM_PROTOCOL = 'sys-protocol';
 
+export async function loadMusicLineupLimits(): Promise<MusicLineupLimits> {
+  const saved = await prisma.setting.findUnique({ where: { key: MUSIC_LINEUP_LIMITS_KEY } });
+  const result = musicLineupLimitsSchema.safeParse(parseJson(saved?.valueJson ?? '', null));
+  return result.success ? result.data : defaultMusicLineupLimits;
+}
+
 export type LoadedMusicConfig = {
+  lineupLimits: MusicLineupLimits;
   services: SchedulingServiceView[];
   categories: ChoirCategoryView[];
   policies: CategoryServicePolicyView[];
@@ -63,13 +73,14 @@ export const periodForHorizon = (horizon: MusicHorizon): FrequencyPeriod =>
  */
 export async function loadMusicConfig(horizon?: MusicHorizon): Promise<LoadedMusicConfig> {
   const live = { systemId: SYSTEM_MUSIC, active: true };
-  const [services, categories, policies, links, fixedAssignments, unavailability] = await Promise.all([
+  const [services, categories, policies, links, fixedAssignments, unavailability, lineupLimits] = await Promise.all([
     prisma.schedulingService.findMany({ where: live }),
     prisma.choirCategory.findMany({ where: live }),
     prisma.categoryServicePolicy.findMany({ where: live }),
     prisma.choirCategoryLink.findMany({ where: live }),
     prisma.musicFixedAssignment.findMany({ where: { systemId: SYSTEM_MUSIC } }),
     prisma.musicChoirUnavailability.findMany({ where: { systemId: SYSTEM_MUSIC, active: true } }),
+    loadMusicLineupLimits(),
   ]);
   const choirLinks = new Map<string, string[]>();
   const choirEligibilityOverrides = new Map<string, Record<string, unknown>>();
@@ -80,6 +91,7 @@ export async function loadMusicConfig(horizon?: MusicHorizon): Promise<LoadedMus
     choirEligibilityOverrides.set(l.choirId, toLinkView(l).eligibleOverride);
   }
   return {
+    lineupLimits,
     services: services.map(toServiceView),
     categories: categories.map(toCategoryView),
     policies: policies.map(toPolicyView).map((p) =>

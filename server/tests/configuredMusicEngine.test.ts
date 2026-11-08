@@ -57,6 +57,38 @@ const units: MusicScheduleUnit[] = [
 ];
 
 describe('configured Music candidate engine', () => {
+  it('uses the configured consecutive limit across saved months', () => {
+    const previous = [slot('2026-01', '2026-01-18'), slot('2026-01', '2026-01-25')];
+    const current = slot('2026-02', '2026-02-01');
+    const assigned = (service: MusicServiceSlot) => ({
+      id: service.id, serviceId: service.id, unitId: 'choir-a', source: 'MANUAL' as const,
+    });
+    for (const maximum of [3, null]) {
+      const input = {
+        services: [current], units,
+        rules: rules({ lineupLimits: { primaryPerDay: 1, consecutivePerService: maximum } }),
+        history: [{ services: previous, assignments: previous.map(assigned) }],
+        assignments: [assigned(current)],
+      };
+      expect(validateConfiguredMusicSchedule(input).ok).toBe(true);
+    }
+  });
+  it('allows editing a valid service when a different service has an inactive assignment', () => {
+    const edited = slot();
+    const unrelated = slot('2026-01', '2026-01-11');
+    const input = {
+      services: [edited, unrelated], units, rules: rules(),
+      assignments: [
+        { id: 'edited', serviceId: edited.id, unitId: 'choir-b', source: 'MANUAL' as const },
+        { id: 'unrelated', serviceId: unrelated.id, unitId: 'choir-inactive', source: 'ENGINE' as const },
+      ],
+    };
+    expect(validateConfiguredMusicSchedule(input).reason).toMatch(/inactive/);
+    expect(validateConfiguredMusicSchedule({
+      ...input, lineupChange: { serviceId: edited.id, unitId: 'choir-b', removedUnitId: 'choir-a' },
+    }).ok).toBe(true);
+  });
+
   it('chooses different primary choirs for SS1 and SS2 on the same day and refuses an invalid edit', () => {
     const first = slot();
     const second: MusicServiceSlot = { ...first, id: 'ss2', kind: 'SS2', label: 'Sunday Service 2' };
@@ -69,6 +101,8 @@ describe('configured Music candidate engine', () => {
     const firstChoir = generated.assignments[0]!.unitId;
     const edited = generated.assignments.map((row) => ({ ...row, unitId: firstChoir }));
     expect(validateConfiguredMusicSchedule({ ...input, assignments: edited, lineupChange: { serviceId: second.id, unitId: firstChoir } }).reason).toMatch(/only once per day/);
+    const relaxed = { ...input, rules: { ...config, lineupLimits: { primaryPerDay: 2, consecutivePerService: 2 } } };
+    expect(validateConfiguredMusicSchedule({ ...relaxed, assignments: edited }).ok).toBe(true);
   });
 
   it('uses adjacent saved occurrences across months and counts an unassigned service as a break', () => {

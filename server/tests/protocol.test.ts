@@ -132,6 +132,23 @@ async function musicReady(publish = false, includeProtocolConfig = true) {
 const joinRoster = async (ids = TEAM) => { for (const personId of ids) expect((await post(COORD, '/api/protocol/roster', { personId })).status).toBe(201); };
 const month = async (as = COORD) => (await get(as, `/api/protocol/months/${MONTH}`)).body;
 
+it.each(['DRAFT', 'REVIEW', 'PUBLISHED'])('deletes the %s team lineup and retains published history', async (status) => {
+  const updatedAt = new Date();
+  await fake.protocolPlan.create({ data: { monthKey: MONTH, status, version: 2, updatedAt, musicVersionBuiltOn: 1 } });
+  await fake.protocolSlot.create({ data: { monthKey: MONTH, serviceId: `psvc-ss1-${MONTH}-01`, personId: TEAM[0] } });
+  await fake.protocolHistory.create({ data: { monthKey: MONTH, version: 2, slotsJson: '[]' } });
+  const path = `/api/protocol/months/${MONTH}`;
+  const expected = { status, version: 2, updatedAt: updatedAt.toISOString() };
+  expect((await del(PRES, path).send(expected)).status).toBe(403);
+  expect((await del(COORD, path).send({ ...expected, version: 1 })).status).toBe(409);
+  expect((await del(COORD, path).send(expected)).status).toBe(204);
+  expect(await fake.protocolPlan.findUnique({ where: { monthKey: MONTH } })).toMatchObject({
+    status: 'OPEN', version: 2, musicVersionBuiltOn: null,
+  });
+  expect(await fake.protocolSlot.count({ where: { monthKey: MONTH } })).toBe(0);
+  expect(await fake.protocolHistory.count({ where: { monthKey: MONTH } })).toBe(1);
+});
+
 it('builds configured Friday teams using members who selected Friday', async () => {
   const createdAt = new Date();
   const friday = Array.from({ length: 7 }, (_, index) => new Date(`${MONTH}-0${index + 1}T00:00:00Z`))

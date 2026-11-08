@@ -40,6 +40,8 @@ import {
 import { toCategoryView, toDutyPolicyView, toLinkView, toPolicyView, toRuleView, toServiceView } from './store.js';
 import { configRulesRouter } from '../routes/configRules.js';
 import { acquireEditLock, refreshEditLock, releaseEditLock } from './editLock.js';
+import { loadMusicLineupLimits } from './configLoader.js';
+import { musicLineupLimitsSchema } from './musicLineupLimits.js';
 import {
   ConfigError, MUSIC_SYSTEM, PROTOCOL_SYSTEM, saveConfigChange, validateLiveConfig,
   type ConfigOp,
@@ -213,6 +215,17 @@ configRouter.get('/config/validation', requireAuth, async (req: AuthedRequest, r
 });
 
 /* ─── Services ─── */
+
+configRouter.get('/config/music/lineup-limits', requireAuth, async (req: AuthedRequest, res) => {
+  if (!(await readGate(req, res, MUSIC_SYSTEM))) return;
+  res.json({ limits: await loadMusicLineupLimits() });
+});
+
+configRouter.patch('/config/music/lineup-limits', requireAuth, async (req: AuthedRequest, res) => {
+  const parsed = musicLineupLimitsSchema.safeParse(req.body);
+  if (!parsed.success) return badInput(res, 'Use positive whole numbers or leave a limit blank.');
+  return save(req, res, MUSIC_SYSTEM, { op: 'musicLimits.update', data: parsed.data }, (limits) => ({ limits }));
+});
 
 configRouter.get('/config/services', requireAuth, async (req: AuthedRequest, res) => {
   if (!(await readGate(req, res))) return;

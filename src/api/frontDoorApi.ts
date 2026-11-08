@@ -1812,6 +1812,7 @@ export type ProtocolIssueView = {
   key: string; code: string; severity: 'BLOCKING' | 'WARNING'; message: string; serviceId: string | null; personId: string | null; overridden: boolean; canOverride: boolean;
 };
 export type ProtocolMonthView = {
+  updatedAt?: string | null;
   month: string; step: ProtocolStep; status: 'OPEN' | 'DRAFT' | 'REVIEW' | 'PUBLISHED'; version: number; configVersionId?: string | null; musicConfigVersionId?: string | null; music: { state: 'CONFIRMED' | 'PUBLISHED'; version: number; configVersionId?: string | null } | null;
   builtOnMusicVersion: number | null; stale: string[]; notes: string[]; relax: { tuesday: boolean; reason: string | null }; rules: { target: number; hardMax: number; teamSize: number };
   services: ProtocolServiceView[]; issues: ProtocolIssueView[]; overrides: Array<{ issueKey: string; reason: string; at: string }>; roster: Array<{ personId: string; name: string; load: number; previousDuties?: number }>;
@@ -1858,6 +1859,8 @@ export const submitProtocolMonth = (month: string) => prPost(`/months/${month}/s
 export const returnProtocolMonth = (month: string) => prPost(`/months/${month}/return`);
 export const publishProtocolMonth = (month: string) => prPost(`/months/${month}/publish`);
 export const fetchProtocolHistory = (month: string): Promise<{ versions: Array<{ version: number; publishedAt: string; by: string; slots: number }> }> => apiFetch(`${PR}/months/${month}/history`);
+export const deleteProtocolMonth = (month: string, expected: { status: ProtocolMonthView['status']; version: number; updatedAt: string }): Promise<void> =>
+  apiFetch(`${PR}/months/${month}`, { method: 'DELETE', body: expected });
 export const fetchProtocolHistoryVersion = (month: string, version: number): Promise<{
   legacy: boolean;
   services: Array<{ id: string; date: string | null; label: string; team: Array<Pick<ProtocolServiceView['team'][number], 'id' | 'name' | 'role' | 'slotKind'>> }>;
@@ -2161,6 +2164,11 @@ const scGet = <T>(path: string, systemId: string, params: Record<string, string>
   return apiFetch<T>(`${SC}${path}?${query}`);
 };
 const scPost = (path: string, body: object) => apiFetch(`${SC}${path}`, { method: 'POST', body });
+export type MusicLineupLimitsApi = { primaryPerDay: number | null; consecutivePerService: number | null };
+export const fetchMusicLineupLimits = (): Promise<{ limits: MusicLineupLimitsApi }> =>
+  scGet('/music/lineup-limits', 'sys-music');
+export const updateMusicLineupLimits = (limits: MusicLineupLimitsApi) =>
+  apiFetch(`${SC}/music/lineup-limits`, { method: 'PATCH', body: limits });
 
 /** Configuration is live: there are no versions to choose, so every read returns the one current set. */
 export const fetchSchedulingServices = (systemId: string, activeOnly = false): Promise<{ services: SchedulingServiceApi[] }> =>

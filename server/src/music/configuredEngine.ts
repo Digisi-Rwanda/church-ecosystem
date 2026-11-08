@@ -20,6 +20,8 @@ type HistoricalSchedule = {
   assignments: MusicAssignment[];
 };
 
+import { defaultMusicLineupLimits, type MusicLineupLimits } from '../scheduling/musicLineupLimits.js';
+
 type PolicyOverride = {
   target: number;
   period: FrequencyPeriod;
@@ -28,6 +30,7 @@ type PolicyOverride = {
 };
 
 export type ConfiguredMusicRules = {
+  lineupLimits?: MusicLineupLimits;
   services: SchedulingServiceView[];
   categories: ChoirCategoryView[];
   policies: CategoryServicePolicyView[];
@@ -47,6 +50,7 @@ const serviceCode = (slot: MusicServiceSlot) => slot.kind.toLowerCase();
 
 /** Shared by generation and validation. Each occurrence can break a run, even if it has no choir. */
 function lineupLimits(services: MusicServiceSlot[], rules: ConfiguredMusicRules, history: HistoricalSchedule[], current: MusicAssignment[] = []) {
+  const { primaryPerDay, consecutivePerService } = rules.lineupLimits ?? defaultMusicLineupLimits;
   const calendar = new Map(history.flatMap((month) => month.services).map((service) => [service.id, service]));
   for (const service of services) calendar.set(service.id, service);
   const byDate = new Map<string, MusicServiceSlot[]>();
@@ -76,16 +80,22 @@ function lineupLimits(services: MusicServiceSlot[], rules: ConfiguredMusicRules,
   for (const assignment of current) record(assignment);
   const conflict = (unit: MusicScheduleUnit, service: MusicServiceSlot): string | undefined => {
     const booked = (slot: MusicServiceSlot | undefined) => !!slot && assigned.get(slot.id)?.has(unit.id) === true;
-    if (primaryChoirs.has(unit.id) && byDate.get(service.date)?.some((other) => other.id !== service.id && booked(other))) {
-      return `${unit.name} is already scheduled on ${service.date}. A primary choir may serve only once per day.`;
+    if (primaryPerDay !== null && primaryChoirs.has(unit.id)) {
+      const sameDay = byDate.get(service.date)?.filter((other) => other.id !== service.id && booked(other)).length ?? 0;
+      if (sameDay >= primaryPerDay) {
+        const limit = primaryPerDay === 1 ? 'only once' : `at most ${primaryPerDay} times`;
+        return `${unit.name} is already scheduled on ${service.date}. A primary choir may serve ${limit} per day.`;
+      }
     }
     const index = position.get(service.id);
     const slots = byCode.get(serviceCode(service));
-    if (index === undefined || !slots) return;
-    const previous = booked(slots[index - 1]);
-    const next = booked(slots[index + 1]);
-    if ((previous && (next || booked(slots[index - 2]))) || (next && booked(slots[index + 2]))) {
-      return `${unit.name} may serve at most twice in a row on ${service.kind} (${service.date}).`;
+    if (consecutivePerService === null || index === undefined || !slots) return;
+    let consecutive = 1;
+    for (let i = index - 1; consecutive <= consecutivePerService && booked(slots[i]); i--) consecutive++;
+    for (let i = index + 1; consecutive <= consecutivePerService && booked(slots[i]); i++) consecutive++;
+    if (consecutive > consecutivePerService) {
+      const limit = consecutivePerService === 2 ? 'twice' : `${consecutivePerService} time(s)`;
+      return `${unit.name} may serve at most ${limit} in a row on ${service.kind} (${service.date}).`;
     }
   };
   return { record, conflict };
@@ -453,7 +463,7 @@ export function validateConfiguredMusicSchedule(input: {
   history?: HistoricalSchedule[];
   allowManualIncomplete?: boolean;
   /** Edits check the newly added choir so older lineups can be repaired one change at a time. */
-  lineupChange?: { serviceId: string; unitId?: string };
+  lineupChange?: { serviceId: string; unitId?: string; removedUnitId?: string };
 }): { ok: boolean; warnings: string[]; reason?: string; vacantFixedServiceIds?: string[] } {
   const warnings: string[] = [];
   const vacantFixedServiceIds = new Set<string>();
@@ -464,6 +474,7 @@ export function validateConfiguredMusicSchedule(input: {
   const limits = lineupLimits(input.services, input.rules, input.history ?? [], input.assignments);
 
   for (const assignment of input.assignments) {
+    if (input.lineupChange && assignment.serviceId !== input.lineupChange.serviceId) continue;
     const service = servicesById.get(assignment.serviceId);
     const unit = unitsById.get(assignment.unitId);
     if (!service || !unit) return { ok: false, warnings, reason: 'An assignment refers to a service or choir outside this schedule.' };
@@ -498,6 +509,7 @@ export function validateConfiguredMusicSchedule(input: {
   }
 
   for (const service of input.services) {
+    if (input.lineupChange && service.id !== input.lineupChange.serviceId) continue;
     const definition = slotForCode(input.rules, service);
     if (!definition?.musicRequired) continue;
     const assigned = assignedByService.get(service.id) ?? new Set<string>();
@@ -595,8 +607,10 @@ export function validateConfiguredMusicSchedule(input: {
   for (const policy of input.rules.policies.filter((row) => row.active)) {
     const code = input.rules.services.find((service) => service.id === policy.serviceId)?.code;
     if (!code) continue;
+    if (input.lineupChange && code.toLowerCase() !== serviceCode(servicesById.get(input.lineupChange.serviceId)!)) continue;
     const links = input.rules.links.filter((link) => link.active && link.categoryId === policy.categoryId);
     for (const link of links) {
+      if (input.lineupChange && link.choirId !== input.lineupChange.unitId && link.choirId !== input.lineupChange.removedUnitId) continue;
       const unit = unitsById.get(link.choirId);
       if (!unit || unit.active === false) continue;
       const override = policyOverride(policy, link, code);

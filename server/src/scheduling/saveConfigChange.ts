@@ -35,6 +35,7 @@ import { collapseRules, collapseChoirs, planRuleOp, type RuleOp, type RuleTables
 import { isMusicChoirEligible, validatePolicyValues } from './musicConfigRules.js';
 import { toCategoryView, toDutyPolicyView, toLinkView, toPolicyView, toRuleView, toServiceView } from './store.js';
 import { parseJson, stringifyJson } from './types.js';
+import { MUSIC_LINEUP_LIMITS_KEY, musicLineupLimitsSchema, type MusicLineupLimits } from './musicLineupLimits.js';
 import {
   validateForGeneration, validateProtocolForGeneration,
   type GenerationValidation,
@@ -46,6 +47,7 @@ export const PROTOCOL_SYSTEM = 'sys-protocol';
 /* ─── Public types ─── */
 
 export type ConfigOp =
+  | { op: 'musicLimits.update'; data: MusicLineupLimits }
   | { op: 'service.create'; data: ServiceInput }
   | { op: 'service.update'; id: string; patch: Partial<ServiceInput> }
   | { op: 'service.retire'; id: string }
@@ -121,7 +123,7 @@ interface State {
   services: Row[]; categories: Row[]; policies: Row[]; links: Row[]; fixed: Row[]; choirs: Row[];
   rules: Row[]; duty: Row[]; unavailability: Row[];
 }
-interface Write { model: string; kind: 'create' | 'update' | 'delete'; id?: string; data?: Row }
+interface Write { model: string; kind: 'create' | 'update' | 'delete' | 'upsertSetting'; id?: string; data?: Row }
 interface Audit { action: string; detail: string; meta: object }
 
 async function loadState(system: string): Promise<State> {
@@ -315,6 +317,15 @@ const exists = (ctx: Ctx, op: ChangeResult['op'], row: Row, view: (r: Row) => un
 function applyOp(ctx: Ctx, change: ConfigOp) {
   const s = ctx.state;
   switch (change.op) {
+    case 'musicLimits.update': {
+      needSystem(ctx, MUSIC_SYSTEM, 'Choir assignment limits');
+      const limits = musicLineupLimitsSchema.safeParse(change.data);
+      if (!limits.success) throw refuse(400, 'BAD_INPUT', 'Use positive whole numbers or leave a limit blank.');
+      ctx.writes.push({ model: 'setting', kind: 'upsertSetting', id: MUSIC_LINEUP_LIMITS_KEY, data: { valueJson: JSON.stringify(limits.data), updatedAt: new Date(), updatedById: ctx.me } });
+      ctx.results.push({ op: change.op, status: 'UPDATED', row: limits.data });
+      ctx.audits.push({ action: 'MUSIC_LINEUP_LIMITS_UPDATED', detail: 'Updated choir assignment limits', meta: limits.data });
+      break;
+    }
     /* Services (the shared calendar, owned by Music) */
     case 'service.create': {
       needSystem(ctx, MUSIC_SYSTEM, 'Shared calendar services');
@@ -664,6 +675,7 @@ export async function saveConfigChange(systemId: string, personId: string, chang
         const model = (tx as any)[w.model];
         if (w.kind === 'create') await model.create({ data: w.data });
         else if (w.kind === 'update') await model.update({ where: { id: w.id }, data: w.data });
+        else if (w.kind === 'upsertSetting') await tx.setting.upsert({ where: { key: w.id! }, create: { key: w.id!, valueJson: w.data!.valueJson, updatedAt: w.data!.updatedAt, updatedById: w.data!.updatedById }, update: w.data! });
         else await model.delete({ where: { id: w.id } });
       }
       for (const a of ctx.audits) {

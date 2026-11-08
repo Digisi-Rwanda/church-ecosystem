@@ -36,6 +36,7 @@ const SERVICE_PREFIX = 'psvc-';
 
 interface RosterRow { id: string; personId: string; office: string; serveDays: string; status: string; unavailableJson: string; allowedKindsJson: string; onlyServicesJson: string; notes?: string | null }
 interface PlanRow {
+  updatedAt?: Date | string;
   id: string; monthKey: string; status: string; version: number; notesJson: string; generatedAt?: Date | string | null; submittedAt?: Date | string | null; submittedById?: string | null;
   reviewedAt?: Date | string | null; reviewedById?: string | null; publishedAt?: Date | string | null; publishedById?: string | null; musicVersionBuiltOn?: number | null;
   musicSnapshotJson?: string | null; musicStaleNotified?: boolean; overridesJson: string; relaxTuesday: boolean; relaxReason?: string | null; relaxedById?: string | null; relaxedAt?: Date | string | null;
@@ -404,7 +405,7 @@ protocolRouter.get('/months/:month', requireAuth, async (req: AuthedRequest, res
   for (const s of c.slots) if (s.slotKind !== 'FILL_IN') count.set(s.personId, (count.get(s.personId) ?? 0) + 1);
   const status = c.planRow?.status ?? 'OPEN';
   res.json({
-    month, step: stepOf(c), status, version: c.planRow?.version ?? 0, music: planned ? { state: planned.state, version: planned.version, configVersionId: planned.configVersionId ?? null } : null,
+    month, step: stepOf(c), status, version: c.planRow?.version ?? 0, updatedAt: iso(c.planRow?.updatedAt), music: planned ? { state: planned.state, version: planned.version, configVersionId: planned.configVersionId ?? null } : null,
     configVersionId: c.planRow?.configVersionId ?? null, musicConfigVersionId: c.planRow?.musicConfigVersionId ?? null,
     builtOnMusicVersion: c.planRow?.musicVersionBuiltOn ?? null, stale, notes: parse<string[]>(c.planRow?.notesJson, []),
     relax: { tuesday: c.planRow?.relaxTuesday ?? false, reason: c.planRow?.relaxReason ?? null },
@@ -429,6 +430,58 @@ protocolRouter.get('/months/:month', requireAuth, async (req: AuthedRequest, res
 
 /** One build per month at a time: a second click (or a retry while the first still runs) would double every duty. */
 const building = new Set<string>();
+
+protocolRouter.delete('/months/:month', requireAuth, async (req: AuthedRequest, res) => {
+  const g = await gateCoordinator(req, res);
+  const month = g && monthParam(req, res);
+  if (!g || !month) return;
+  const expected = z.object({
+    status: z.enum(['DRAFT', 'REVIEW', 'PUBLISHED']),
+    version: z.number().int().nonnegative(),
+    updatedAt: z.string().datetime(),
+  }).safeParse(req.body);
+  if (!expected.success) return fail(res, 400, 'BAD_INPUT', 'Choose the team schedule to delete.');
+  if (building.has(month)) return fail(res, 409, 'BUSY', 'Wait for the team build to finish before deleting.');
+  building.add(month);
+  try {
+    const { status, version, updatedAt } = expected.data;
+    const result = await prisma.$transaction(async (db) => {
+      const plan = await db.protocolPlan.findUnique({ where: { monthKey: month } });
+      if (!plan || plan.status !== status || plan.version !== version || iso(plan.updatedAt) !== updatedAt) return 'changed';
+      const service = { serviceId: { startsWith: SERVICE_PREFIX, contains: `${month}-` } };
+      const records = await Promise.all([
+        db.protocolAttendance.findFirst({ where: service }),
+        db.protocolAbsence.findFirst({ where: service }),
+        db.protocolFillIn.findFirst({ where: service }),
+        db.protocolSwapProposal.findFirst({ where: service }),
+        db.protocolServiceReport.findFirst({ where: { monthKey: month } }),
+      ]);
+      if (records.some(Boolean)) return 'records';
+      const { count } = await db.protocolPlan.updateMany({
+        where: { id: plan.id, status, version, updatedAt: plan.updatedAt },
+        data: {
+          status: 'OPEN', updatedAt: new Date(), notesJson: '[]', overridesJson: '[]',
+          generatedAt: null, submittedAt: null, submittedById: null, reviewedAt: null, reviewedById: null,
+          publishedAt: null, publishedById: null, musicVersionBuiltOn: null, musicSnapshotJson: null,
+          musicStaleNotified: false, relaxTuesday: false, relaxReason: null, relaxedAt: null, relaxedById: null,
+          configVersionId: null, musicConfigVersionId: null,
+        },
+      });
+      if (count !== 1) return 'changed';
+      await db.protocolSlot.deleteMany({ where: { monthKey: month } });
+      await db.auditEvent.create({ data: {
+        at: new Date(), actorId: g.me, systemId: PROTOCOL, action: 'PROTOCOL_TEAMS_DELETED',
+        resource: 'SCHEDULING', detail: `Removed ${month} teams`, metaJson: JSON.stringify({ month, status, version }),
+      } });
+      return 'deleted';
+    });
+    if (result === 'changed') return fail(res, 409, 'SCHEDULE_CHANGED', 'The team schedule changed. Reload it before deleting.');
+    if (result === 'records') return fail(res, 409, 'TEAM_RECORDS_EXIST', 'This schedule has attendance, absence, replacement, swap, or service report records. Keep the schedule to preserve those records.');
+    res.status(204).end();
+  } finally {
+    building.delete(month);
+  }
+});
 
 protocolRouter.post('/months/:month/generate', requireAuth, async (req: AuthedRequest, res) => {
   const g = await gateCoordinator(req, res);

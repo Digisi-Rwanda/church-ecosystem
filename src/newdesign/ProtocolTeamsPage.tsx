@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   acknowledgeProtocolMusic, addProtocolSlot, approveProtocolRoles, fetchProtocolHistory, fetchProtocolMonth, fetchProtocolRoster, generateProtocolTeams, overrideProtocolIssue, publishProtocolMonth,
   relaxProtocolTuesday, removeProtocolSlot, replaceProtocolSlot, returnProtocolMonth, setProtocolRole, submitProtocolMonth, type ProtocolMonthView, type ProtocolRole,
-  fetchProtocolHistoryVersion, type ProtocolServiceView,
+  deleteProtocolMonth, fetchProtocolHistoryVersion, type ProtocolServiceView,
 } from '../api/frontDoorApi';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
@@ -18,7 +18,7 @@ import { downloadSchedulePdf, printNamedSheet } from './schedulePdf';
 import { MusicBulletin, ProtocolBulletin } from './Bulletins.tsx';
 import { DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
 import { useLoad } from './useLoad';
-import { EmptyState, PageHeader, SidePanel, StatusChip, Tabs, initialsOf } from './kit';
+import { ConfirmDialog, EmptyState, PageHeader, SidePanel, StatusChip, Tabs, initialsOf } from './kit';
 
 type Act = (job: () => Promise<unknown>) => void;
 const regular = (svc: ProtocolServiceView) => svc.team.filter((x) => x.slotKind !== 'FILL_IN').length;
@@ -224,6 +224,7 @@ export function ProtocolTeamsPage() {
   const [relax, setRelax] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [publication, setPublication] = useState<{ month: string; version: number } | null>(null);
+  const [deleting, setDeleting] = useState<{ month: string; status: ProtocolMonthView['status']; version: number; updatedAt: string } | null>(null);
   const [picked, setPicked] = useState<{ month: string; tab: PTab } | null>(null);
   const act: Act = (job) => {
     if (actionLock.current) return;
@@ -275,6 +276,19 @@ export function ProtocolTeamsPage() {
     </div>
   );
   const returnBtn = v && (v.can.reopen || v.can.review) && <button type="button" className="btn ghost" onClick={() => act(() => returnProtocolMonth(month))}>{t('door.sch.backToDraft')}</button>;
+  const deleteBtn = v && v.updatedAt && (v.can.edit || v.can.reopen) && v.status !== 'OPEN' && (
+    <button type="button" className="btn ghost" onClick={() => setDeleting({ month, status: v.status, version: v.version, updatedAt: v.updatedAt! })}>
+      {t('door.protocol.deleteTeams')}
+    </button>
+  );
+  const issueText = (issue: ProtocolMonthView['issues'][number]) => {
+    const service = v?.services.find((row) => row.id === issue.serviceId);
+    const member = service?.team.find((row) => row.personId === issue.personId);
+    if (!service || !member) return issue.message;
+    if (issue.code === 'NOT_ACTIVE') return t('door.protocol.issue.inactive', { service: service.label, name: member.name });
+    if (issue.code === 'CANNOT_SERVE') return t('door.protocol.issue.unavailableService', { service: service.label, name: member.name });
+    return issue.message;
+  };
   const tabs = [
     { key: 'choirsConfirmed' as const, label: t('door.sch.p.choirsConfirmed') },
     { key: 'choirsPublished' as const, label: t('door.sch.p.choirsPublished') },
@@ -303,6 +317,7 @@ export function ProtocolTeamsPage() {
               <span>{blocking > 0 ? <StatusChip tone="danger">{t('door.sch.problems', { count: String(blocking) })}</StatusChip> : <StatusChip tone="success">{t('door.sch.noProblems')}</StatusChip>}</span>
               <span className="pt-bar-actions">
                 <button type="button" className="btn secondary" onClick={() => pdf('draft')}>{t('door.sch.pdf')}</button>
+                {deleteBtn}
                 {v.can.edit && <button type="button" className="btn" disabled={blocking > 0} onClick={() => act(() => submitProtocolMonth(month))}>{t('door.sch.confirmTeams')}</button>}
               </span>
             </div>
@@ -311,7 +326,8 @@ export function ProtocolTeamsPage() {
                 <ul className="door-list">
                   {open.map((i) => (
                     <li key={i.key} className="pt-issue">
-                      <span className="door-error">{i.message}</span>
+                      <span className="door-error">{issueText(i)}</span>
+                      {v.can.edit && i.serviceId && <button type="button" className="btn ghost sm" onClick={() => setEditing(i.serviceId)}>{t('door.sch.edit')}</button>}
                       {v.can.edit && i.canOverride && (allowing === i.key ? (
                         <span className="pt-allow">
                           <TextField label={t('door.protocol.reason')} name={`ov-${i.key}`} value={reasons[i.key] ?? ''} onChange={(e) => setReasons({ ...reasons, [i.key]: e.target.value })} />
@@ -363,6 +379,7 @@ export function ProtocolTeamsPage() {
             <span className="muted">{!v.can.review ? t('door.sch.waitPresident') : ''}</span>
             <span className="pt-bar-actions">
               {returnBtn}
+              {deleteBtn}
               <button type="button" className="btn secondary" onClick={() => pdf('confirmed')}>{t('door.sch.pdf')}</button>
               {v.can.review && <button type="button" className="btn" disabled={busy || blocking > 0 || !!v.stale.length || v.music?.state !== 'PUBLISHED'} onClick={() => act(() => publishProtocolMonth(month))}>{t('door.sch.publishTeams')}</button>}
             </span>
@@ -377,6 +394,7 @@ export function ProtocolTeamsPage() {
             <span className="muted">v{v.version}</span>
             <span className="pt-bar-actions">
               {returnBtn}
+              {deleteBtn}
               <button type="button" className="btn secondary" onClick={() => pdf('published')}>{t('door.sch.pdf')}</button>
             </span>
           </div>
@@ -425,6 +443,20 @@ export function ProtocolTeamsPage() {
       </LoadState>
       {v?.can.edit && editSvc && <TeamEditor svc={editSvc} month={month} view={v} act={act} onClose={() => setEditing(null)} />}
       {publication && <PublishedLineup month={publication.month} version={publication.version} onClose={() => setPublication(null)} />}
+      <ConfirmDialog open={!!deleting} busy={busy} danger title={t('door.protocol.deleteTeams')}
+        body={t(deleting?.status === 'PUBLISHED' ? 'door.protocol.deletePublishedTeams' : 'door.protocol.deleteTeamsBody', { month: monthName(deleting?.month ?? month) })}
+        confirmLabel={t('door.protocol.deleteTeams')} onCancel={() => setDeleting(null)}
+        onConfirm={() => {
+          if (!deleting) return;
+          act(async () => {
+            try {
+              await deleteProtocolMonth(deleting.month, deleting);
+              go('draft');
+            } finally {
+              setDeleting(null);
+            }
+          });
+        }} />
     </section>
   );
 }

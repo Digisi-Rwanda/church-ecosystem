@@ -38,6 +38,7 @@ const draftDoc = (r: DraftRow): DraftDoc => ({
 const drafts = async (): Promise<DraftRow[]> => (await prisma.musicDraft.findMany()) as DraftRow[];
 type HistoricalSchedule = { services: MusicServiceSlot[]; assignments: MusicAssignment[] };
 const configuredRules = (config: LoadedMusicConfig) => ({
+  lineupLimits: config.lineupLimits,
   services: config.services,
   categories: config.categories,
   policies: config.policies,
@@ -59,7 +60,7 @@ function validateLiveMusic(
   config: LoadedMusicConfig,
   history: HistoricalSchedule[],
   allowManualIncomplete = false,
-  lineupChange?: { serviceId: string; unitId?: string },
+  lineupChange?: { serviceId: string; unitId?: string; removedUnitId?: string },
 ) {
   return validateConfiguredMusicSchedule({
     services, assignments, units, rules: configuredRules(config), history, allowManualIncomplete, lineupChange,
@@ -295,9 +296,14 @@ function applyEdit(
   }
   const after = withService(assignments, e.serviceId, next);
   const added = next.find((unitId) => !now.includes(unitId));
-  const validation = validateLiveMusic(services, after, units, cfg, history, allowManualIncomplete, { serviceId: e.serviceId, unitId: added });
+  const removed = now.find((unitId) => !next.includes(unitId));
+  const validation = validateLiveMusic(services, after, units, cfg, history, allowManualIncomplete, {
+    serviceId: e.serviceId, unitId: added, removedUnitId: removed,
+  });
   if (!validation.ok) return { ok: false as const, status: 409, code: 'CONFIG', error: validation.reason ?? 'This breaks a configuration policy', warnings: validation.warnings };
-  return { ok: true as const, assignments: after, warnings: validation.warnings };
+  const full = validateLiveMusic(services, after, units, cfg, history, allowManualIncomplete);
+  const warnings = [...new Set([...validation.warnings, ...full.warnings, ...(full.ok || !full.reason ? [] : [full.reason])])];
+  return { ok: true as const, assignments: after, warnings };
 }
 
 musicScheduleRouter.post('/drafts/:id/edit', requireAuth, async (req: AuthedRequest, res) => {
