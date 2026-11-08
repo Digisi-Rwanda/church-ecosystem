@@ -1793,7 +1793,7 @@ export const fetchDashboard = (systemId: string, range = 6): Promise<Dashboard> 
 // ── Protocol (slice 3.16): the old team engine ─────────────────────────────────
 export type ProtocolOffice = 'PRESIDENT' | 'VP' | 'SECRETARY' | 'TREASURER' | 'COORDINATOR' | 'MEMBER';
 export type ProtocolServeDays = 'SUNDAY' | 'TUESDAY' | 'BOTH';
-export type ProtocolKind = 'SS1' | 'SS2' | 'TUESDAY' | 'IGABURO';
+export type ProtocolKind = 'SS1' | 'SS2' | 'TUESDAY' | 'FRIDAY' | 'IGABURO';
 export type ProtocolRosterStatus = 'ACTIVE' | 'INACTIVE' | 'LEAVE';
 export type ProtocolRole = 'MEMBER' | 'TEAM_LEADER' | 'VICE_LEADER';
 export type ProtocolAttendanceStatus = 'PRESENT' | 'HALF_PRESENT' | 'EXCUSED' | 'ABSENT';
@@ -1858,6 +1858,10 @@ export const submitProtocolMonth = (month: string) => prPost(`/months/${month}/s
 export const returnProtocolMonth = (month: string) => prPost(`/months/${month}/return`);
 export const publishProtocolMonth = (month: string) => prPost(`/months/${month}/publish`);
 export const fetchProtocolHistory = (month: string): Promise<{ versions: Array<{ version: number; publishedAt: string; by: string; slots: number }> }> => apiFetch(`${PR}/months/${month}/history`);
+export const fetchProtocolHistoryVersion = (month: string, version: number): Promise<{
+  legacy: boolean;
+  services: Array<{ id: string; date: string | null; label: string; team: Array<Pick<ProtocolServiceView['team'][number], 'id' | 'name' | 'role' | 'slotKind'>> }>;
+}> => apiFetch(`${PR}/months/${month}/history/${version}`);
 export const fetchProtocolMine = (): Promise<ProtocolMine> => apiFetch(`${PR}/mine`);
 export const requestProtocolAbsence = (serviceId: string, reason: string) => prPost('/absences', { serviceId, reason });
 export const decideProtocolAbsence = (id: string, decision: 'EXCUSE' | 'DENY') => prPost(`/absences/${id}/decide`, { decision });

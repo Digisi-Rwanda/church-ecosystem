@@ -1,6 +1,6 @@
 import type { ProtocolIssueView, ProtocolKind, ProtocolRole, ProtocolStep } from '../api/frontDoorApi';
 
-export const KINDS: ProtocolKind[] = ['SS1', 'SS2', 'TUESDAY', 'IGABURO'];
+export const KINDS: ProtocolKind[] = ['SS1', 'SS2', 'TUESDAY', 'FRIDAY', 'IGABURO'];
 export const OFFICES = ['PRESIDENT', 'VP', 'SECRETARY', 'TREASURER', 'COORDINATOR', 'MEMBER'] as const;
 export const SERVE_DAYS = ['SUNDAY', 'TUESDAY', 'BOTH'] as const;
 export const ROSTER_STATUS = ['ACTIVE', 'INACTIVE', 'LEAVE'] as const;

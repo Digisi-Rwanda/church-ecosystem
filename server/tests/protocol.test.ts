@@ -131,6 +131,38 @@ async function musicReady(publish = false, includeProtocolConfig = true) {
 }
 const joinRoster = async (ids = TEAM) => { for (const personId of ids) expect((await post(COORD, '/api/protocol/roster', { personId })).status).toBe(201); };
 const month = async (as = COORD) => (await get(as, `/api/protocol/months/${MONTH}`)).body;
+
+it('builds configured Friday teams using members who selected Friday', async () => {
+  const createdAt = new Date();
+  const friday = Array.from({ length: 7 }, (_, index) => new Date(`${MONTH}-0${index + 1}T00:00:00Z`))
+    .find((date) => date.getUTCDay() === 5)!.toISOString().slice(0, 10);
+  await fake.schedulingService.create({ data: {
+    id: 'friday', systemId: 'sys-music', code: 'friday', name: 'Friday Service', kind: 'SERVICE',
+    active: true, protocolRequired: true, weekday: 5, recurrence: 'WEEKLY', createdAt,
+  } });
+  await fake.protocolServiceRule.create({ data: {
+    systemId: 'sys-protocol', serviceId: 'friday', active: true, required: true,
+    defaultTeamSize: 1, requireChoir: false, requireWorship: false, createdAt,
+  } });
+  await fake.musicMonth.create({ data: {
+    periodKey: MONTH, state: 'CONFIRMED', version: 1, assignmentsJson: '[]', warningsJson: '[]',
+    servicesJson: JSON.stringify([{
+      id: 'friday-occurrence', date: friday, kind: 'FRIDAY', label: 'Friday Service', protocolRequired: true,
+    }]),
+  } });
+  await joinRoster([TEAM[1]]);
+  const fridayMember = TEAM[0];
+  expect((await post(COORD, '/api/protocol/roster', {
+    personId: fridayMember, allowedServiceKinds: ['FRIDAY'],
+  })).status).toBe(201);
+  expect((await month()).can.build).toBe(true);
+  const result = await post(COORD, `/api/protocol/months/${MONTH}/generate`);
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  const fridayServices = (await month()).services.filter((service: { kind: string }) => service.kind === 'FRIDAY');
+  expect(fridayServices.length).toBeGreaterThan(0);
+  const assigned = fridayServices.flatMap((service: { team: { personId: string }[] }) => service.team.map((slot) => slot.personId));
+  expect([...new Set(assigned)]).toEqual([fridayMember]);
+});
 const built = async (publishMusic = true) => {
   await musicReady(publishMusic);
   await joinRoster();

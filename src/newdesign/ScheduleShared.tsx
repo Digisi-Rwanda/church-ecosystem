@@ -67,7 +67,7 @@ export function ScheduleList({ rows }: { rows: ScheduleRow[] }) {
         <tbody>
           {rows.map((r) => (
             <tr key={r.id}>
-              <td>{day(r.date)}</td>
+              <td>{r.date ? day(r.date) : '—'}</td>
               <td>{r.title}{r.chip && <> {r.chip}</>}</td>
               <td>{r.names.length ? r.names.map((n) => (n.tag ? `${n.name} (${n.tag})` : n.name)).join(', ') : '-'}{r.note && <span className="muted"> · {r.note}</span>}</td>
               <td>{r.onEdit && <button type="button" className="btn secondary sm" onClick={r.onEdit}>{t('door.sch.edit')}</button>}</td>

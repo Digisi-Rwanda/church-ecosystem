@@ -21,7 +21,7 @@ import type {
  * The service codes the Protocol engine knows how to staff. Single source of truth: the engine,
  * the Protocol routes and the generation validator all read this one list.
  */
-export const SUPPORTED_PROTOCOL_KINDS = ['SS1', 'SS2', 'TUESDAY', 'IGABURO'] as const satisfies readonly ProtocolServiceKind[];
+export const SUPPORTED_PROTOCOL_KINDS = ['SS1', 'SS2', 'TUESDAY', 'FRIDAY', 'IGABURO'] as const satisfies readonly ProtocolServiceKind[];
 
 /** personId → Music unit ids whose choir they belong to (empty = no choir). */
 export type ChoirUnitsByPerson = Map<string, Set<string>>;
@@ -46,6 +46,8 @@ export function canServeKind(
   if (member.allowedServiceKinds?.length) {
     return member.allowedServiceKinds.includes(kind);
   }
+  // Legacy serveDays preferences cover Sunday and Tuesday. Friday requires a roster selection.
+  if (kind === 'FRIDAY') return false;
   if (kind === 'TUESDAY') {
     return member.serveDays === 'TUESDAY' || member.serveDays === 'BOTH';
   }

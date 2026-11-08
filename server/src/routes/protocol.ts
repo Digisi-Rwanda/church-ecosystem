@@ -45,6 +45,8 @@ interface PlanRow {
 interface SlotRow { id: string; monthKey: string; serviceId: string; personId: string; source: string; role: string; recommendedRole?: string | null; roleStatus?: string | null; slotKind: string; replacedPersonId?: string | null }
 interface PersonRow { id: string; fullName: string; status?: string; archivedAt?: Date | string | null }
 interface Override { issueKey: string; reason: string; byPersonId: string; at: string }
+type HistoryService = { id: string; date: string | null; label: string };
+type HistorySnapshot = { services: HistoryService[]; memberNames: Record<string, string> };
 
 const accessOf = async (me: string) => (await loadAccessData(me)).data;
 async function audit(actorId: string, action: string, detail: string, meta: object) {
@@ -149,16 +151,18 @@ async function monthCtx(month: string) {
   }
   // Live configuration: the rules as saved right now. Built plans do not re-read them to rebuild themselves.
   const protocolConfig = await loadProtocolConfig();
-  const unsupportedServices = (planned?.services ?? [])
-    .filter((service) => service.protocolRequired !== false && !(SUPPORTED_PROTOCOL_KINDS as readonly string[]).includes(service.kind))
-    .map((service) => service.kind);
-  const services: ProtocolService[] = (planned?.services ?? [])
+  const requiredServices = (planned?.services ?? [])
     .filter((service) => {
-      if (service.protocolRequired === false || !(SUPPORTED_PROTOCOL_KINDS as readonly string[]).includes(service.kind)) return false;
+      if (service.protocolRequired === false) return false;
       const definition = protocolConfig.services.find((row) => row.code.toUpperCase() === service.kind.toUpperCase());
       const rule = definition && protocolConfig.rules.find((row) => row.serviceId === definition.id);
       return rule?.required ?? true;
-    })
+    });
+  const supportsKind = (kind: string): kind is ProtocolServiceKind =>
+    (SUPPORTED_PROTOCOL_KINDS as readonly string[]).includes(kind);
+  const unsupportedServices = [...new Set(requiredServices.map((service) => service.kind).filter((kind) => !supportsKind(kind)))];
+  const services: ProtocolService[] = requiredServices
+    .filter((service) => supportsKind(service.kind))
     .map((s) => {
       const service: ProtocolService = {
         id: serviceId(s.id), musicServiceId: s.id, monthKey: month, date: s.date,
@@ -171,12 +175,12 @@ async function monthCtx(month: string) {
       };
     })
     .sort((a, b) => a.date.localeCompare(b.date) || a.kind.localeCompare(b.kind));
-  const missingProtocolRules = services
-    .filter((service) => {
+  const missingProtocolRules = [...new Set(services.flatMap((service) => {
       const definition = protocolConfig.services.find((row) => row.code.toUpperCase() === service.kind.toUpperCase());
-      return !definition || !protocolConfig.rules.some((row) => row.serviceId === definition.id);
-    })
-    .map((service) => service.label);
+      return definition && protocolConfig.rules.some((row) => row.serviceId === definition.id)
+        ? []
+        : [definition?.name ?? service.kind];
+  }))];
   const rules = buildRulesFromConfig(
     protocolConfig.rules,
     protocolConfig.dutyPolicy,
@@ -285,7 +289,7 @@ const needMusic = (c: Ctx, res: Res) => {
 const rosterBody = z.object({
   office: z.enum(OFFICES).optional(), serveDays: z.enum(SERVE_DAYS).optional(), status: z.enum(ROSTER_STATUS).optional(),
   unavailableDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(80).optional(),
-  allowedServiceKinds: z.array(z.enum(SUPPORTED_PROTOCOL_KINDS)).max(4).optional(),
+  allowedServiceKinds: z.array(z.enum(SUPPORTED_PROTOCOL_KINDS)).max(SUPPORTED_PROTOCOL_KINDS.length).optional(),
   onlyServices: z.array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), kind: z.enum(SUPPORTED_PROTOCOL_KINDS) })).max(60).optional(),
   notes: z.string().max(300).optional(),
 });
@@ -655,9 +659,14 @@ protocolRouter.post('/months/:month/publish', requireAuth, async (req: AuthedReq
   if (staleOf(c).length) return fail(res, 409, 'MUSIC_CHANGED', 'Music changed since the teams were built');
   if (blockingOf(c).length) return fail(res, 409, 'BLOCKING', 'There are still blocking issues');
   const version = c.planRow.version + 1;
+  const snapshot: HistorySnapshot = {
+    services: c.services.map(({ id, date, label }) => ({ id, date, label })),
+    memberNames: Object.fromEntries(await names(c.slots.map((slot) => slot.personId))),
+  };
   await prisma.protocolHistory.create({ data: {
     monthKey: month, version, publishedAt: new Date(), publishedById: g.me, slotsJson: JSON.stringify(c.slots),
-    notesJson: c.planRow.notesJson, configVersionId: c.planRow.configVersionId ?? null,
+    notesJson: JSON.stringify({ notes: parse<string[]>(c.planRow.notesJson, []), snapshot }),
+    configVersionId: c.planRow.configVersionId ?? null,
     musicConfigVersionId: c.planRow.musicConfigVersionId ?? null,
   } });
   await setPlan(c.planRow.id, { status: 'PUBLISHED', version, reviewedAt: new Date(), reviewedById: g.me, publishedAt: new Date(), publishedById: g.me });
@@ -681,6 +690,37 @@ protocolRouter.get('/months/:month/history', requireAuth, async (req: AuthedRequ
     slots: parse<unknown[]>(r.slotsJson, []).length, configVersionId: r.configVersionId ?? null,
     musicConfigVersionId: r.musicConfigVersionId ?? null,
   })) });
+});
+
+protocolRouter.get('/months/:month/history/:version', requireAuth, async (req: AuthedRequest, res) => {
+  const g = await gateRead(req, res);
+  const month = g && monthParam(req, res);
+  if (!g || !month) return;
+  const version = Number(req.params.version);
+  if (!Number.isSafeInteger(version) || version < 1) return fail(res, 404, 'NOT_FOUND', 'Publication not found');
+  const row = await prisma.protocolHistory.findUnique({ where: { monthKey_version: { monthKey: month, version } } });
+  if (!row) return fail(res, 404, 'NOT_FOUND', 'Publication not found');
+  const slots = parse<ProtocolTeamSlot[]>(row.slotsJson, []);
+  const snapshot = parse<{ snapshot?: HistorySnapshot }>(row.notesJson, {})?.snapshot;
+  const savedNames = snapshot ? new Map(Object.entries(snapshot.memberNames)) : await names(slots.map((slot) => slot.personId));
+  let services = snapshot?.services;
+  if (!services) {
+    // Older publications stored assignment IDs and roles only. Recover labels where the calendar still has them.
+    const calendar = new Map((await getPlanned(month))?.services.map((service) => [serviceId(service.id), service]));
+    services = [...new Set(slots.map((slot) => slot.serviceId))].map((id) => ({
+      id, date: calendar.get(id)?.date ?? /\d{4}-\d{2}-\d{2}/.exec(id)?.[0] ?? null,
+      label: calendar.get(id)?.label ?? id,
+    })).sort((a, b) => (a.date ?? '').localeCompare(b.date ?? '') || a.label.localeCompare(b.label));
+  }
+  res.json({
+    legacy: !snapshot,
+    services: services.map((service) => ({
+      ...service,
+      team: slots.filter((slot) => slot.serviceId === service.id).map((slot) => ({
+        id: slot.id, name: savedNames.get(slot.personId) ?? slot.personId, role: slot.role, slotKind: slot.slotKind,
+      })),
+    })),
+  });
 });
 
 /* ───────────── Service life: mine, excuses, fill-ins, swaps ───────────── */

@@ -5,7 +5,7 @@ import { Link, useParams } from 'react-router-dom';
 import {
   acknowledgeProtocolMusic, addProtocolSlot, approveProtocolRoles, fetchProtocolHistory, fetchProtocolMonth, fetchProtocolRoster, generateProtocolTeams, overrideProtocolIssue, publishProtocolMonth,
   relaxProtocolTuesday, removeProtocolSlot, replaceProtocolSlot, returnProtocolMonth, setProtocolRole, submitProtocolMonth, type ProtocolMonthView, type ProtocolRole,
-  type ProtocolServiceView,
+  fetchProtocolHistoryVersion, type ProtocolServiceView,
 } from '../api/frontDoorApi';
 import { SelectField, TextField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
@@ -22,6 +22,28 @@ import { EmptyState, PageHeader, SidePanel, StatusChip, Tabs, initialsOf } from 
 
 type Act = (job: () => Promise<unknown>) => void;
 const regular = (svc: ProtocolServiceView) => svc.team.filter((x) => x.slotKind !== 'FILL_IN').length;
+
+function PublishedLineup({ month, version, onClose }: { month: string; version: number; onClose: () => void }) {
+  const t = useT();
+  const monthName = useMonthName();
+  const data = useLoad(() => fetchProtocolHistoryVersion(month, version), `protocol-history|${month}|${version}`);
+  return (
+    <SidePanel open wide title={t('door.protocol.historyLineup', { month: monthName(month), version })} onClose={onClose}>
+      <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>
+        {data.data?.legacy && <p className="muted">{t('door.protocol.historyLegacy')}</p>}
+        {data.data && <ScheduleList rows={data.data.services.map((service) => ({
+          id: service.id,
+          date: service.date ?? '',
+          title: service.label,
+          names: service.team.map((member) => ({
+            name: member.name,
+            tag: [t(`door.protocol.role.${member.role}`), member.slotKind !== 'REGULAR' ? t(`door.protocol.slot.${member.slotKind}`) : ''].filter(Boolean).join(' · '),
+          })),
+        }))} />}
+      </LoadState>
+    </SidePanel>
+  );
+}
 
 function ServiceCard({ svc, view, onEdit }: { svc: ProtocolServiceView; view: ProtocolMonthView; onEdit?: () => void }) {
   const t = useT();
@@ -201,6 +223,7 @@ export function ProtocolTeamsPage() {
   const [allowing, setAllowing] = useState<string | null>(null);
   const [relax, setRelax] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
+  const [publication, setPublication] = useState<{ month: string; version: number } | null>(null);
   const [picked, setPicked] = useState<{ month: string; tab: PTab } | null>(null);
   const act: Act = (job) => {
     if (actionLock.current) return;
@@ -270,7 +293,6 @@ export function ProtocolTeamsPage() {
         body = (
           <EmptyState
             title={t(v.music ? 'door.sch.emptyTeams.draft' : 'door.sch.waitMusic')}
-            action={v.can.build ? <button type="button" className="btn" onClick={() => act(() => generateProtocolTeams(month))}>{t('door.sch.buildTeams')}</button> : undefined}
           />
         );
       } else if (v.status === 'DRAFT') {
@@ -280,7 +302,6 @@ export function ProtocolTeamsPage() {
             <div className="pt-bar">
               <span>{blocking > 0 ? <StatusChip tone="danger">{t('door.sch.problems', { count: String(blocking) })}</StatusChip> : <StatusChip tone="success">{t('door.sch.noProblems')}</StatusChip>}</span>
               <span className="pt-bar-actions">
-                {v.can.build && <button type="button" className="btn ghost" onClick={() => act(() => generateProtocolTeams(month))}>{t('door.sch.rebuildTeams')}</button>}
                 <button type="button" className="btn secondary" onClick={() => pdf('draft')}>{t('door.sch.pdf')}</button>
                 {v.can.edit && <button type="button" className="btn" disabled={blocking > 0} onClick={() => act(() => submitProtocolMonth(month))}>{t('door.sch.confirmTeams')}</button>}
               </span>
@@ -360,21 +381,23 @@ export function ProtocolTeamsPage() {
             </span>
           </div>
           {grid(false)}
-          {history.data && history.data.versions.length > 0 && (
-            <details className="panel pt-more">
-              <summary>{t('door.protocol.history')}</summary>
-              <ul className="door-list">
-                {history.data.versions.map((h) => <li key={h.version} className="muted">{t('door.protocol.historyRow', { version: String(h.version), by: h.by, date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(h.publishedAt)), slots: String(h.slots) })}</li>)}
-              </ul>
-            </details>
-          )}
         </>
       );
     }
   }
   return (
     <section className="door-block pt-page" aria-labelledby="door-teams-title">
-      <PageHeader id="door-teams-title" title={t('door.own.teams')} meta={switcher} actions={<ViewSwitch value={layout} onChange={setLayout} />} />
+      <PageHeader id="door-teams-title" title={t('door.own.teams')} meta={switcher} actions={
+        <>
+          <ViewSwitch value={layout} onChange={setLayout} />
+          {!data.loading && !data.failed && v?.can.build && (
+            <button type="button" className="btn" disabled={busy} onClick={() => {
+              go('draft');
+              act(() => generateProtocolTeams(month));
+            }}>{t(v.status === 'DRAFT' ? 'door.sch.rebuildTeams' : 'door.sch.buildTeams')}</button>
+          )}
+        </>
+      } />
       {error && <p className="door-error" role="alert">{error}</p>}
       <Tabs items={tabs} value={tab} onChange={go} label={t('door.own.teams')} />
       <LoadState loading={data.loading} failed={data.failed} retry={data.reload}>
@@ -385,8 +408,23 @@ export function ProtocolTeamsPage() {
           <DutyDistribution view={v} />
         </>}
         <fieldset className="scheduling-workspace-actions" disabled={busy} aria-busy={busy}>{body}</fieldset>
+        {history.data && history.data.versions.length > 0 && (
+          <details key={month} className="panel pt-more">
+            <summary>{t('door.protocol.history')}</summary>
+            <ul className="door-list">
+              {history.data.versions.map((h) => (
+                <li key={h.version}>
+                  <button type="button" className="btn ghost" onClick={() => setPublication({ month, version: h.version })}>
+                    {t('door.protocol.historyRow', { version: String(h.version), by: h.by, date: new Intl.DateTimeFormat(locale, { dateStyle: 'medium' }).format(new Date(h.publishedAt)), slots: String(h.slots) })}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </details>
+        )}
       </LoadState>
       {v?.can.edit && editSvc && <TeamEditor svc={editSvc} month={month} view={v} act={act} onClose={() => setEditing(null)} />}
+      {publication && <PublishedLineup month={publication.month} version={publication.version} onClose={() => setPublication(null)} />}
     </section>
   );
 }
