@@ -180,6 +180,36 @@ it('builds configured Friday teams using members who selected Friday', async () 
   const assigned = fridayServices.flatMap((service: { team: { personId: string }[] }) => service.team.map((slot) => slot.personId));
   expect([...new Set(assigned)]).toEqual([fridayMember]);
 });
+
+it('skips Friday without a rule when the live calendar turns Protocol off after Music confirms', async () => {
+  const createdAt = new Date();
+  await fake.schedulingService.create({ data: {
+    id: 'friday', systemId: 'sys-music', code: 'friday', name: 'Friday Service',
+    active: true, protocolRequired: true, createdAt,
+  } });
+  await fake.schedulingService.create({ data: {
+    id: 'tuesday', systemId: 'sys-music', code: 'tuesday', name: 'Tuesday Service',
+    active: true, protocolRequired: true, createdAt,
+  } });
+  await fake.protocolServiceRule.create({ data: {
+    systemId: 'sys-protocol', serviceId: 'tuesday', active: true, required: true,
+    defaultTeamSize: 1, requireChoir: false, requireWorship: false, createdAt,
+  } });
+  const servicesJson = JSON.stringify([
+    { id: 'friday-occurrence', date: `${MONTH}-06`, kind: 'FRIDAY', label: 'Friday Service', protocolRequired: true },
+    { id: 'tuesday-occurrence', date: `${MONTH}-03`, kind: 'TUESDAY', label: 'Tuesday Service', protocolRequired: true },
+  ]);
+  await fake.musicMonth.create({ data: { periodKey: MONTH, state: 'CONFIRMED', version: 1, assignmentsJson: '[]', servicesJson } });
+  await joinRoster([TEAM[0]]);
+  const build = () => post(COORD, `/api/protocol/months/${MONTH}/generate`);
+  expect((await build()).body.code).toBe('PROTOCOL_RULE_MISSING');
+  await fake.schedulingService.update({ where: { id: 'friday' }, data: { protocolRequired: false } });
+  const result = await build();
+  expect(result.status, JSON.stringify(result.body)).toBe(200);
+  const view = await month();
+  expect(view.services).toMatchObject([{ kind: 'TUESDAY', team: [{ personId: TEAM[0] }] }]);
+  expect(await fake.musicMonth.findUnique({ where: { periodKey: MONTH } })).toMatchObject({ servicesJson, version: 1 });
+});
 const built = async (publishMusic = true) => {
   await musicReady(publishMusic);
   await joinRoster();

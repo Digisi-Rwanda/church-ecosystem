@@ -126,7 +126,7 @@ async function publishedHistoryLoad(excludeMonth: string): Promise<Map<string, n
   return load;
 }
 
-async function monthCtx(month: string) {
+async function monthCtx(month: string, forBuild = false) {
   const planned = await getPlanned(month);
   const planRow = ((await prisma.protocolPlan.findMany()) as PlanRow[]).find((p) => p.monthKey === month) ?? null;
   const { rows, members } = await rosterMembers();
@@ -152,10 +152,18 @@ async function monthCtx(month: string) {
   }
   // Live configuration: the rules as saved right now. Built plans do not re-read them to rebuild themselves.
   const protocolConfig = await loadProtocolConfig();
+  const builtServices = !forBuild && planRow && planRow.status !== 'OPEN'
+    ? parse<Record<string, string[]>>(planRow.musicSnapshotJson, {})
+    : {};
+  const assignedServices = new Set(forBuild ? [] : slotRows.map((slot) => slot.serviceId));
   const requiredServices = (planned?.services ?? [])
     .filter((service) => {
       if (service.protocolRequired === false) return false;
       const definition = protocolConfig.services.find((row) => row.code.toUpperCase() === service.kind.toUpperCase());
+      // Apply the live calendar opt-out to new builds. Keep previously built services visible until rebuilt.
+      if (definition?.protocolRequired === false &&
+          !Object.hasOwn(builtServices, snapKey(service.date, service.kind)) &&
+          !assignedServices.has(serviceId(service.id))) return false;
       const rule = definition && protocolConfig.rules.find((row) => row.serviceId === definition.id);
       return rule?.required ?? true;
     });
@@ -498,7 +506,7 @@ protocolRouter.post('/months/:month/generate', requireAuth, async (req: AuthedRe
 
 async function generateMonth(req: AuthedRequest, res: Res, g: { me: string }, month: string) {
   void req;
-  const c = await monthCtx(month);
+  const c = await monthCtx(month, true);
   // Frozen schedules: once teams are sent for review or published they are immutable, and configuration edits
   // never rebuild them. Only an OPEN or DRAFT plan can be (re)generated.
   // TODO(confirm): REVIEW counts as "confirmed" here (it is the Protocol equivalent of Music's CONFIRMED).
