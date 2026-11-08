@@ -12,12 +12,13 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
-import { KINDS, OFFICES, ROSTER_STATUS, SERVE_DAYS, protocolErrorKey, toggleKind, withDay, withoutDay } from './protocol';
+import { OFFICES, ROSTER_STATUS, SERVE_DAYS, protocolErrorKey, toggleKind, withDay, withoutDay } from './protocol';
+import type { ProtocolServiceChoice } from '../api/frontDoorApi';
 import { useLoad } from './useLoad';
 import { PageHeader, PrintButton } from './kit';
 
 /** One person's limits: office, serve days, the services their leader allows, dates they cannot come. */
-function MemberEditor({ m, onSave }: { m: ProtocolMemberRow; onSave: (patch: ProtocolRosterPatch) => void }) {
+function MemberEditor({ m, services, onSave }: { m: ProtocolMemberRow; services: ProtocolServiceChoice[]; onSave: (patch: ProtocolRosterPatch) => void }) {
   const t = useT();
   const [office, setOffice] = useState<ProtocolOffice>(m.office);
   const [days, setDays] = useState<ProtocolServeDays>(m.serveDays);
@@ -26,6 +27,8 @@ function MemberEditor({ m, onSave }: { m: ProtocolMemberRow; onSave: (patch: Pro
   const [away, setAway] = useState<string[]>(m.unavailableDates);
   const [newDay, setNewDay] = useState('');
   const [notes, setNotes] = useState(m.notes);
+  const choices = new Map(services.map(({ code, name }) => [code, name]));
+  for (const code of m.allowedServiceKinds) if (!choices.has(code)) choices.set(code, code);
   return (
     <div className="panel door-form">
       <SelectField label={t('door.protocol.office')} name={`o-${m.id}`} value={office} onChange={(e) => setOffice(e.target.value as ProtocolOffice)}>
@@ -40,9 +43,9 @@ function MemberEditor({ m, onSave }: { m: ProtocolMemberRow; onSave: (patch: Pro
       <fieldset className="door-fieldset">
         <legend>{t('door.protocol.onlyKinds')}</legend>
         <p className="muted">{t('door.protocol.onlyKindsHint')}</p>
-        {KINDS.map((k) => (
+        {[...choices].map(([k, label]) => (
           <label key={k} className="door-check">
-            <input type="checkbox" checked={kinds.includes(k)} onChange={() => setKinds(toggleKind(kinds, k))} /> {t(`door.music.kind.${k}` as 'door.music.kind.SS1')}
+            <input type="checkbox" checked={kinds.includes(k)} onChange={() => setKinds(toggleKind(kinds, k))} /> {label}
           </label>
         ))}
       </fieldset>
@@ -126,12 +129,12 @@ export function ProtocolRosterPage() {
                         </div>
                         <p className="muted">
                           {m.choirs.length > 0 && <>{t('door.protocol.choirs', { names: m.choirs.join(', ') })} · </>}
-                          {m.allowedServiceKinds.length > 0 && <>{t('door.protocol.limited', { kinds: m.allowedServiceKinds.map((k) => t(`door.music.kind.${k}` as 'door.music.kind.SS1')).join(', ') })} · </>}
+                          {m.allowedServiceKinds.length > 0 && <>{t('door.protocol.limited', { kinds: m.allowedServiceKinds.map((k) => data.data?.services?.find(({ code }) => code === k)?.name ?? k).join(', ') })} · </>}
                           {m.unavailableDates.length > 0 && <>{t('door.protocol.awayList', { days: dayList(m.unavailableDates) })} · </>}
                           {sc ? t('door.protocol.score', { points: sc.points, services: sc.services }) : t('door.protocol.noScore')}
                         </p>
                         {open === m.id && data.data!.canWrite && (
-                          <MemberEditor m={m} onSave={(patch) => void run(() => patchProtocolMember(m.id, patch), () => setOpen(''))} />
+                          <MemberEditor m={m} services={data.data?.services ?? []} onSave={(patch) => void run(() => patchProtocolMember(m.id, patch), () => setOpen(''))} />
                         )}
                       </div>
                       {data.data!.canWrite && (

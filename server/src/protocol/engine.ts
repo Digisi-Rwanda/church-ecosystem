@@ -17,12 +17,6 @@ import type {
   ProtocolTeamSlot,
 } from './types.js';
 
-/**
- * The service codes the Protocol engine knows how to staff. Single source of truth: the engine,
- * the Protocol routes and the generation validator all read this one list.
- */
-export const SUPPORTED_PROTOCOL_KINDS = ['SS1', 'SS2', 'TUESDAY', 'FRIDAY', 'IGABURO'] as const satisfies readonly ProtocolServiceKind[];
-
 /** personId → Music unit ids whose choir they belong to (empty = no choir). */
 export type ChoirUnitsByPerson = Map<string, Set<string>>;
 
@@ -46,13 +40,15 @@ export function canServeKind(
   if (member.allowedServiceKinds?.length) {
     return member.allowedServiceKinds.includes(kind);
   }
-  // Legacy serveDays preferences cover Sunday and Tuesday. Friday requires a roster selection.
+  // Legacy preferences retain their original meaning. Other services use their actual day.
   if (kind === 'FRIDAY') return false;
-  if (kind === 'TUESDAY') {
+  const legacySunday = kind === 'SS1' || kind === 'SS2' || kind === 'IGABURO';
+  const weekday = date ? new Date(`${date}T00:00:00Z`).getUTCDay() : undefined;
+  if (kind === 'TUESDAY' || (!legacySunday && weekday === 2)) {
     return member.serveDays === 'TUESDAY' || member.serveDays === 'BOTH';
   }
-  // SS1, SS2, IGABURO count as Sunday-family for serveDays
-  return member.serveDays === 'SUNDAY' || member.serveDays === 'BOTH';
+  return (legacySunday || weekday === 0)
+    && (member.serveDays === 'SUNDAY' || member.serveDays === 'BOTH');
 }
 
 function isUnavailable(member: ProtocolRosterMember, date: string): boolean {
@@ -606,8 +602,8 @@ export function buildRulesFromConfig(
   const serviceRequirements: NonNullable<ProtocolSchedulingRules['serviceRequirements']> = {};
   for (const rule of rules) {
     const service = services.find((candidate) => candidate.id === rule.serviceId);
-    const kind = service?.code.toUpperCase() as ProtocolServiceKind | undefined;
-    if (!kind || !SUPPORTED_PROTOCOL_KINDS.includes(kind)) continue;
+    const kind = service?.code.toUpperCase();
+    if (!kind) continue;
     serviceRequirements[kind] = {
       choir: rule.requireChoir,
       worship: rule.requireWorship,

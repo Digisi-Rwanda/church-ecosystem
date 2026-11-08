@@ -191,23 +191,34 @@ it('skips Friday without a rule when the live calendar turns Protocol off after 
     id: 'tuesday', systemId: 'sys-music', code: 'tuesday', name: 'Tuesday Service',
     active: true, protocolRequired: true, createdAt,
   } });
-  await fake.protocolServiceRule.create({ data: {
-    systemId: 'sys-protocol', serviceId: 'tuesday', active: true, required: true,
-    defaultTeamSize: 1, requireChoir: false, requireWorship: false, createdAt,
+  await fake.schedulingService.create({ data: {
+    id: 'ss3', systemId: 'sys-music', code: 'ss3', name: 'Sunday Service 3',
+    active: true, protocolRequired: true, createdAt,
   } });
+  for (const serviceId of ['tuesday', 'ss3']) {
+    await fake.protocolServiceRule.create({ data: {
+      systemId: 'sys-protocol', serviceId, active: true, required: true,
+      defaultTeamSize: 1, requireChoir: false, requireWorship: false, createdAt,
+    } });
+  }
   const servicesJson = JSON.stringify([
     { id: 'friday-occurrence', date: `${MONTH}-06`, kind: 'FRIDAY', label: 'Friday Service', protocolRequired: true },
     { id: 'tuesday-occurrence', date: `${MONTH}-03`, kind: 'TUESDAY', label: 'Tuesday Service', protocolRequired: true },
+    { id: 'ss3-occurrence', date: `${MONTH}-07`, kind: 'SS3', label: 'Sunday Service 3', protocolRequired: true },
   ]);
   await fake.musicMonth.create({ data: { periodKey: MONTH, state: 'CONFIRMED', version: 1, assignmentsJson: '[]', servicesJson } });
-  await joinRoster([TEAM[0]]);
+  expect((await post(COORD, '/api/protocol/roster', { personId: TEAM[0], allowedServiceKinds: ['TUESDAY', 'ss3'] })).status).toBe(201);
+  expect((await get(COORD, '/api/protocol/roster')).body.services).toContainEqual({ code: 'SS3', name: 'Sunday Service 3' });
   const build = () => post(COORD, `/api/protocol/months/${MONTH}/generate`);
   expect((await build()).body.code).toBe('PROTOCOL_RULE_MISSING');
   await fake.schedulingService.update({ where: { id: 'friday' }, data: { protocolRequired: false } });
   const result = await build();
   expect(result.status, JSON.stringify(result.body)).toBe(200);
   const view = await month();
-  expect(view.services).toMatchObject([{ kind: 'TUESDAY', team: [{ personId: TEAM[0] }] }]);
+  expect(view.services).toMatchObject([
+    { kind: 'TUESDAY', team: [{ personId: TEAM[0] }] },
+    { kind: 'SS3', team: [{ personId: TEAM[0] }] },
+  ]);
   expect(await fake.musicMonth.findUnique({ where: { periodKey: MONTH } })).toMatchObject({ servicesJson, version: 1 });
 });
 const built = async (publishMusic = true) => {

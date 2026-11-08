@@ -5,7 +5,7 @@
 
 export type BulletinService = { id: string; date: string; kind: string; label: string; names: string[]; editable?: boolean };
 export type ProtocolBulletinMember = { name: string; role: 'MEMBER' | 'TEAM_LEADER' | 'VICE_LEADER' };
-export type ProtocolBulletinService = { id: string; date: string; kind: string; team: ProtocolBulletinMember[] };
+export type ProtocolBulletinService = { id: string; date: string; kind: string; label?: string; team: ProtocolBulletinMember[] };
 
 /** Wording on the English choir sheet. */
 export const CHURCH_HEADING = 'ADEPR KACYIRU CHURCH';
@@ -107,14 +107,14 @@ export function paddedTeam(team: ProtocolBulletinMember[]): ProtocolTeamBlock['m
 }
 
 /** Service title as the protocol sheet writes it. */
-export function protocolServiceHeading(kind: string, date: string): string {
+export function protocolServiceHeading(kind: string, date: string, label = kind): string {
   const d = ddmmyyyy(date);
   if (kind === 'TUESDAY') return `Iteraniro ryo kuwa kabiri ${d}`;
   if (kind === 'FRIDAY') return `Iteraniro ryo kuwa gatanu ${d}`;
   if (kind === 'IGABURO') return `Iteraniro ryo ku igaburo ryera ${d}`;
   if (kind === 'SS1') return `Iteraniro rya mbere(1) kucyumweru ${d}`;
   if (kind === 'SS2') return `Iteraniro rya kabiri(2) kucyumweru ${d}`;
-  return `${kind} ${d}`;
+  return `${label} ${d}`;
 }
 
 export function protocolWeekHeading(number: number): string {
@@ -139,7 +139,7 @@ export function protocolWeeks(services: ProtocolBulletinService[]): ProtocolWeek
       id: s.id,
       date: s.date,
       kind: s.kind,
-      heading: protocolServiceHeading(s.kind, s.date),
+      heading: protocolServiceHeading(s.kind, s.date, s.label),
       members: paddedTeam(s.team),
     });
   }

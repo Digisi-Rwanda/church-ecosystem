@@ -1793,7 +1793,8 @@ export const fetchDashboard = (systemId: string, range = 6): Promise<Dashboard> 
 // ── Protocol (slice 3.16): the old team engine ─────────────────────────────────
 export type ProtocolOffice = 'PRESIDENT' | 'VP' | 'SECRETARY' | 'TREASURER' | 'COORDINATOR' | 'MEMBER';
 export type ProtocolServeDays = 'SUNDAY' | 'TUESDAY' | 'BOTH';
-export type ProtocolKind = 'SS1' | 'SS2' | 'TUESDAY' | 'FRIDAY' | 'IGABURO';
+export type ProtocolKind = string;
+export type ProtocolServiceChoice = { code: ProtocolKind; name: string };
 export type ProtocolRosterStatus = 'ACTIVE' | 'INACTIVE' | 'LEAVE';
 export type ProtocolRole = 'MEMBER' | 'TEAM_LEADER' | 'VICE_LEADER';
 export type ProtocolAttendanceStatus = 'PRESENT' | 'HALF_PRESENT' | 'EXCUSED' | 'ABSENT';
@@ -1837,7 +1838,7 @@ export type ProtocolReportParts = { challenges: string; solutions: string; issue
 export type ProtocolReportItem = ProtocolReportParts & { serviceId: string; date: string; kind: string; label: string; author: string; submittedAt: string | null };
 const PR = '/api/protocol';
 const prPost = async (path: string, body: object = {}): Promise<{ id?: string; version?: number }> => apiFetch(`${PR}${path}`, { method: 'POST', body });
-export const fetchProtocolRoster = (): Promise<{ canWrite: boolean; members: ProtocolMemberRow[] }> => apiFetch(`${PR}/roster`);
+export const fetchProtocolRoster = (): Promise<{ canWrite: boolean; members: ProtocolMemberRow[]; services?: ProtocolServiceChoice[] }> => apiFetch(`${PR}/roster`);
 export const addProtocolMember = (personId: string, office: ProtocolOffice = 'MEMBER', serveDays: ProtocolServeDays = 'BOTH') => prPost('/roster', { personId, office, serveDays });
 export async function patchProtocolMember(id: string, patch: ProtocolRosterPatch): Promise<void> {
   await apiFetch(`${PR}/roster/${id}`, { method: 'PATCH', body: patch });

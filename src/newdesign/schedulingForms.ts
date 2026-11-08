@@ -6,4 +6,5 @@ export function schedulingError(reason: unknown): string | null {
   const parts = [body?.message ?? body?.error, ...(body?.errors ?? []), ...(body?.issues ?? []).map(row => typeof row === 'string' ? row : row.message)];
   return [...new Set(parts.filter(Boolean))].join(' · ') || null;
 }
-export const preserveRelaxableKinds = (prior: string[], selected: string[]) => [...prior.filter(k => !['SS1', 'SS2', 'TUESDAY', 'IGABURO'].includes(k.toUpperCase())), ...selected];
+export const preserveRelaxableKinds = (prior: string[], selected: string[], editable: ReadonlySet<string>) =>
+  [...prior.filter((kind) => !editable.has(kind.toUpperCase())), ...selected];

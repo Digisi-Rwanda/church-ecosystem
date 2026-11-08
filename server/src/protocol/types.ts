@@ -45,7 +45,8 @@ export interface ProtocolRosterMember {
 }
 
 /** Protocol never staffs Friday — Music may still schedule choirs there. */
-export type ProtocolServiceKind = 'SS1' | 'SS2' | 'TUESDAY' | 'FRIDAY' | 'IGABURO';
+/** Uppercase code from the shared Music service calendar. */
+export type ProtocolServiceKind = string;
 
 /** One service slot synced from a published Music schedule (no Friday). */
 export interface ProtocolService {

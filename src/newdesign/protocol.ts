@@ -1,6 +1,10 @@
-import type { ProtocolIssueView, ProtocolKind, ProtocolRole, ProtocolStep } from '../api/frontDoorApi';
+import type { ProtocolIssueView, ProtocolRole, ProtocolStep } from '../api/frontDoorApi';
 
-export const KINDS: ProtocolKind[] = ['SS1', 'SS2', 'TUESDAY', 'FRIDAY', 'IGABURO'];
+export function protocolServiceLabel({ label, date }: { label: string; date: string | null }): string {
+  const suffix = ` · ${date}`;
+  return date && label.endsWith(suffix) ? label.slice(0, -suffix.length) : label;
+}
+
 export const OFFICES = ['PRESIDENT', 'VP', 'SECRETARY', 'TREASURER', 'COORDINATOR', 'MEMBER'] as const;
 export const SERVE_DAYS = ['SUNDAY', 'TUESDAY', 'BOTH'] as const;
 export const ROSTER_STATUS = ['ACTIVE', 'INACTIVE', 'LEAVE'] as const;

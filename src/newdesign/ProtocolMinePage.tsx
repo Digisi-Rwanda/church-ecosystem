@@ -1,3 +1,4 @@
+import { protocolServiceLabel } from './protocol';
 import { schedulingError } from "./schedulingForms";
 import { useRef, useState } from 'react';
 import {
@@ -52,7 +53,7 @@ function LeadingCard({ s, data, today, act, fail }: { s: ProtocolLeading; data: 
   return (
     <li className="panel door-notice">
       <div className="door-notice-main">
-        <div className="door-row"><strong>{day}</strong><span className="door-chip">{t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}</span></div>
+        <div className="door-row"><strong>{day}</strong><span className="door-chip">{protocolServiceLabel(s)}</span></div>
         {pending.map((a) => (
           <div key={a.id} className="door-row">
             <span>{t('door.protocol.asksExcuse', { name: a.person, reason: a.reason })}</span>
@@ -166,7 +167,7 @@ export function ProtocolMinePage() {
                     <div className="door-notice-main">
                       <div className="door-row">
                         <strong>{dayName(d.date)}</strong>
-                        <span className="door-chip">{t(`door.music.kind.${d.kind}` as 'door.music.kind.SS1')}</span>
+                        <span className="door-chip">{protocolServiceLabel(d)}</span>
                         {d.role !== 'MEMBER' && <span className="door-chip">{t(`door.protocol.role.${d.role}` as 'door.protocol.role.MEMBER')}</span>}
                         {d.slotKind === 'FILL_IN' && <span className="door-chip">{t('door.protocol.slot.FILL_IN')}</span>}
                         {d.attendance && <span className="door-chip">{t(`door.protocol.att.${d.attendance}` as 'door.protocol.att.PRESENT')}</span>}
@@ -190,7 +191,7 @@ export function ProtocolMinePage() {
                 <p className="muted">{t('door.protocol.swap.hint')}</p>
                 <SelectField label={t('door.protocol.swap.service')} name="sw-service" value={swapService} onChange={(e) => { setSwapService(e.target.value); setSwapTarget(''); }}>
                   <option value="">{t('door.gov.meeting.choose')}</option>
-                  {m.others.map((o) => <option key={o.serviceId} value={o.serviceId}>{`${dayName(o.date)} · ${t(`door.music.kind.${o.kind}` as 'door.music.kind.SS1')}`}</option>)}
+                  {m.others.map((o) => <option key={o.serviceId} value={o.serviceId}>{`${dayName(o.date)} · ${protocolServiceLabel(o)}`}</option>)}
                 </SelectField>
                 {other && (
                   <SelectField label={t('door.protocol.swap.person')} name="sw-person" value={swapTarget} onChange={(e) => setSwapTarget(e.target.value)}>

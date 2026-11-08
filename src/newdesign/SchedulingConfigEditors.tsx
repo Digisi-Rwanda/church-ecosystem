@@ -833,6 +833,7 @@ export function ProtocolRulesEditor({ systemId, canWrite }: Props) {
   const state = useSaveState();
   const [formOpen, setFormOpen] = useState(false);
   const [editing, setEditing] = useState<ProtocolServiceRuleApi | null>(null);
+  const activeServices = (services.data?.services ?? []).filter((service) => service.active);
   const rows = list.data?.rules ?? [];
   const cancel = () => { setEditing(null); setFormOpen(false); state.clear(); };
   const submit = async (data: FormData) => {
@@ -855,7 +856,7 @@ export function ProtocolRulesEditor({ systemId, canWrite }: Props) {
       required: flag(data, "required"), defaultTeamSize: num(data, "defaultTeamSize", 10),
       teamSizeOverrides, requireChoir: flag(data, "requireChoir"),
       requireWorship: flag(data, "requireWorship"),
-      relaxableKinds: preserveRelaxableKinds(editing?.relaxableKinds ?? [], data.getAll("relaxableKind").map(String)),
+      relaxableKinds: preserveRelaxableKinds(editing?.relaxableKinds ?? [], data.getAll("relaxableKind").map(String), new Set(activeServices.map((service) => service.code.toUpperCase()))),
     };
     const ok = await state.run(
       () => editing ? updateProtocolServiceRule(editing.id, patch)
@@ -898,9 +899,9 @@ export function ProtocolRulesEditor({ systemId, canWrite }: Props) {
         <CheckField label={t("door.config.protocol.requireWorship")} name="requireWorship" checked={editing?.requireWorship ?? true} />
         <fieldset className="scheduling-config-overrides">
           <legend>{t("door.config.protocol.relaxable")}</legend>
-          {(["SS1", "SS2", "TUESDAY", "IGABURO"] as const).map((kind) => (
-            <CheckField key={kind} label={t(`door.config.serviceCode.${kind}` as Parameters<typeof t>[0])}
-              name="relaxableKind" value={kind} checked={editing?.relaxableKinds.some((value) => value.toUpperCase() === kind) ?? false} />
+          {activeServices.map((service) => (
+            <CheckField key={service.id} label={service.name}
+              name="relaxableKind" value={service.code.toUpperCase()} checked={editing?.relaxableKinds.some((value) => value.toUpperCase() === service.code.toUpperCase()) ?? false} />
           ))}
         </fieldset>
       </SaveForm>}

@@ -15,7 +15,7 @@ import { getPlanned, loadChoirs } from '../music/store.js';
 import { parse } from '../music/schedule.js';
 import {
   buildProtocolTeams, canServeKind, musicConflictCode, musicRequirements, scoreAttendanceRow, validateProtocolTeamsDetailed,
-  buildRulesFromConfig, targetTeamSizeFor, SUPPORTED_PROTOCOL_KINDS,
+  buildRulesFromConfig, targetTeamSizeFor,
 } from '../protocol/engine.js';
 import type {
   ProtocolIssue, ProtocolRosterMember, ProtocolSchedulingRules, ProtocolService, ProtocolServiceKind, ProtocolTeamSlot,
@@ -167,15 +167,11 @@ async function monthCtx(month: string, forBuild = false) {
       const rule = definition && protocolConfig.rules.find((row) => row.serviceId === definition.id);
       return rule?.required ?? true;
     });
-  const supportsKind = (kind: string): kind is ProtocolServiceKind =>
-    (SUPPORTED_PROTOCOL_KINDS as readonly string[]).includes(kind);
-  const unsupportedServices = [...new Set(requiredServices.map((service) => service.kind).filter((kind) => !supportsKind(kind)))];
   const services: ProtocolService[] = requiredServices
-    .filter((service) => supportsKind(service.kind))
     .map((s) => {
       const service: ProtocolService = {
         id: serviceId(s.id), musicServiceId: s.id, monthKey: month, date: s.date,
-        kind: s.kind as ProtocolServiceKind, label: s.label, time: s.time ?? null,
+        kind: s.kind.toUpperCase(), label: s.label, time: s.time ?? null,
         targetTeamSize: 10,
       };
       return {
@@ -197,7 +193,7 @@ async function monthCtx(month: string, forBuild = false) {
     protocolConfig.services,
   );
   const historyLoad = await publishedHistoryLoad(month);
-  return { month, planned, planRow, protocolConfig, musicConfig, unsupportedServices, missingProtocolRules, historyLoad, rosterRows: rows, roster: members, slotRows, slots: slotRows.map(slotOf), services, rules, choirUnits, unitsOnService, kindOf: (u: string) => kindById.get(u) };
+  return { month, planned, planRow, protocolConfig, musicConfig, missingProtocolRules, historyLoad, rosterRows: rows, roster: members, slotRows, slots: slotRows.map(slotOf), services, rules, choirUnits, unitsOnService, kindOf: (u: string) => kindById.get(u) };
 }
 type Ctx = Awaited<ReturnType<typeof monthCtx>>;
 
@@ -295,11 +291,12 @@ const needMusic = (c: Ctx, res: Res) => {
 
 /* ───────────── Roster ───────────── */
 
+const rosterServiceCode = z.string().trim().regex(/^[a-zA-Z0-9_-]{1,40}$/).transform((code) => code.toUpperCase());
 const rosterBody = z.object({
   office: z.enum(OFFICES).optional(), serveDays: z.enum(SERVE_DAYS).optional(), status: z.enum(ROSTER_STATUS).optional(),
   unavailableDates: z.array(z.string().regex(/^\d{4}-\d{2}-\d{2}$/)).max(80).optional(),
-  allowedServiceKinds: z.array(z.enum(SUPPORTED_PROTOCOL_KINDS)).max(SUPPORTED_PROTOCOL_KINDS.length).optional(),
-  onlyServices: z.array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), kind: z.enum(SUPPORTED_PROTOCOL_KINDS) })).max(60).optional(),
+  allowedServiceKinds: z.array(rosterServiceCode).optional(),
+  onlyServices: z.array(z.object({ date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), kind: rosterServiceCode })).max(60).optional(),
   notes: z.string().max(300).optional(),
 });
 
@@ -317,6 +314,8 @@ protocolRouter.get('/roster', requireAuth, async (req: AuthedRequest, res) => {
   }
   res.json({
     canWrite: canWriteRoster(me, data),
+    services: (await loadProtocolConfig()).services.filter((service) => service.protocolRequired)
+      .map((service) => ({ code: service.code.toUpperCase(), name: service.name })),
     members: members.map((m) => ({
       id: m.id, personId: m.personId, name: nm.get(m.personId) ?? m.personId, office: m.office, serveDays: m.serveDays, status: m.status,
       unavailableDates: m.unavailableDates, allowedServiceKinds: m.allowedServiceKinds ?? [], onlyServices: m.onlyServices ?? [], notes: m.notes ?? '', choirs: inChoir.get(m.personId) ?? [],
@@ -518,9 +517,6 @@ async function generateMonth(req: AuthedRequest, res: Res, g: { me: string }, mo
   }
   if (!needMusic(c, res)) return;
   if (!c.protocolConfig.dutyPolicy && !c.protocolConfig.rules.length) return fail(res, 409, 'NO_PROTOCOL_CONFIG', 'Set up the Protocol team rules before building teams.');
-  if (c.unsupportedServices.length) {
-    return fail(res, 409, 'UNSUPPORTED_SERVICE', `Protocol is enabled for unsupported service codes: ${c.unsupportedServices.join(', ')}. Update the Protocol service rules before building teams.`);
-  }
   if (c.missingProtocolRules.length) {
     return fail(res, 409, 'PROTOCOL_RULE_MISSING', `Add Protocol team rules for: ${c.missingProtocolRules.join(', ')}.`);
   }

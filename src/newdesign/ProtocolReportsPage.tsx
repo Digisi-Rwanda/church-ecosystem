@@ -1,3 +1,4 @@
+import { protocolServiceLabel } from './protocol';
 import { useState } from 'react';
 import { fetchProtocolReports } from '../api/frontDoorApi';
 import { EmptyState } from '../components/ui/EmptyState';
@@ -33,7 +34,7 @@ export function ProtocolReportsPage() {
             {data.data.reports.map((r) => (
               <li key={r.serviceId} className="panel door-notice">
                 <div className="door-notice-main">
-                  <div className="door-row"><strong>{r.date ? dayName(r.date) : r.label}</strong><span className="door-chip">{t(`door.music.kind.${r.kind}` as 'door.music.kind.SS1')}</span></div>
+                  <div className="door-row"><strong>{r.date ? dayName(r.date) : r.label}</strong><span className="door-chip">{protocolServiceLabel(r)}</span></div>
                   <p className="muted">{t('door.protocol.reports.by', { name: r.author })}</p>
                   {PARTS.filter((p) => r[p]).map((p) => (
                     <p key={p}><strong>{t(`door.protocol.report.${p}` as 'door.protocol.report.challenges')}:</strong> {r[p]}</p>

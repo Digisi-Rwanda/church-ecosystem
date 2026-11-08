@@ -1,3 +1,4 @@
+import { protocolServiceLabel } from './protocol';
 import { schedulingError } from './schedulingForms';
 import { useFrontDoor } from './FrontDoorContext';
 import { useRef, useState, type ReactNode } from 'react';
@@ -55,7 +56,7 @@ function ServiceCard({ svc, view, onEdit }: { svc: ProtocolServiceView; view: Pr
       <div className="pt-card-head">
         <DateTile date={svc.date} />
         <div className="pt-card-title">
-          <strong>{t(`door.music.kind.${svc.kind}` as 'door.music.kind.SS1')}</strong>
+          <strong>{protocolServiceLabel(svc)}</strong>
           <span className="muted">{svc.music.length ? svc.music.join(' � ') : t('door.protocol.musicNone')}</span>
         </div>
         <StatusChip tone={tone}>{t('door.protocol.teamSize', { count: String(n), target: String(svc.target) })}</StatusChip>
@@ -87,7 +88,7 @@ function TeamEditor({ svc, month, view, act, onClose }: { svc: ProtocolServiceVi
   const day = new Intl.DateTimeFormat(locale, { dateStyle: 'full', timeZone: 'UTC' }).format(new Date(`${svc.date}T00:00:00Z`));
   const mine = issuesOfService(view.issues, svc.id);
   return (
-    <SidePanel open title={t('door.protocol.panel.title', { day })} purpose={t(`door.music.kind.${svc.kind}` as 'door.music.kind.SS1')} onClose={onClose}>
+    <SidePanel open title={t('door.protocol.panel.title', { day })} purpose={protocolServiceLabel(svc)} onClose={onClose}>
       <div className="pt-edit">
         {mine.length > 0 && (
           <ul className="door-list">
@@ -142,18 +143,18 @@ function ChoirSchedule({ view, state, layout }: { view: ProtocolMonthView; state
       return;
     }
     downloadSchedulePdf(`choir-schedule-${view.month}`, t('door.sch.pdfTitle', { state: t(`door.sch.tab.${state === 'PUBLISHED' ? 'published' : 'confirmed'}` as 'door.sch.tab.confirmed') }), monthName(view.month), [{
-      heading: monthName(view.month), lines: view.services.map((s) => `${day(s.date)} � ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}: ${s.music.join(', ') || '-'}`),
+      heading: monthName(view.month), lines: view.services.map((s) => `${day(s.date)} � ${protocolServiceLabel(s)}: ${s.music.join(', ') || '-'}`),
     }]);
   };
   return (
     <>
       <div className="pt-bar"><span className="muted">v{view.music.version}</span><span className="pt-bar-actions"><button type="button" className="btn secondary" onClick={pdf}>{t('door.sch.pdf')}</button></span></div>
-      {layout === 'list' && <ScheduleList rows={view.services.map((s) => ({ id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), names: s.music.map((n) => ({ name: n })) }))} />}
+      {layout === 'list' && <ScheduleList rows={view.services.map((s) => ({ id: s.id, date: s.date, title: protocolServiceLabel(s), names: s.music.map((n) => ({ name: n })) }))} />}
       {layout === 'bulletin' && <MusicBulletin month={view.month} services={view.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, label: s.label, names: s.music }))} />}
       {layout === 'cards' && <ul className="pt-grid">
         {view.services.map((s) => (
           <li key={s.id} className="pt-card">
-            <div className="pt-card-head"><DateTile date={s.date} /><div className="pt-card-title"><strong>{t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}</strong></div></div>
+            <div className="pt-card-head"><DateTile date={s.date} /><div className="pt-card-title"><strong>{protocolServiceLabel(s)}</strong></div></div>
             {s.music.length === 0 ? <p className="muted">{t('door.protocol.musicNone')}</p> : (
               <ul className="pt-people">{s.music.map((n) => <li key={n} className="pt-person"><span className="pt-avatar" aria-hidden>{n.slice(0, 2).toUpperCase()}</span><span className="pt-name">{n}</span></li>)}</ul>
             )}
@@ -254,17 +255,17 @@ export function ProtocolTeamsPage() {
       return;
     }
     downloadSchedulePdf(`teams-${state}-${month}`, t('door.sch.pdfTitleTeams', { state: t(`door.sch.p.${state}` as 'door.sch.p.draft') }), monthName(month), v.services.map((s) => ({
-      heading: `${day(s.date)} � ${t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1')}${s.music.length ? ` (${s.music.join(', ')})` : ''}`,
+      heading: `${day(s.date)} � ${protocolServiceLabel(s)}${s.music.length ? ` (${s.music.join(', ')})` : ''}`,
       lines: s.team.length ? s.team.map((m) => `${m.name}${m.role !== 'MEMBER' ? ` - ${t(`door.protocol.role.${m.role}` as 'door.protocol.role.MEMBER')}` : ''}${m.slotKind !== 'REGULAR' ? ` (${t(`door.protocol.slot.${m.slotKind}` as 'door.protocol.slot.EXTRA')})` : ''}`) : ['-'],
     })));
   };
   const teamRows = (edit: boolean): ScheduleRow[] => (v?.services ?? []).map((s) => ({
-    id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), note: s.music.join(', ') || undefined,
+    id: s.id, date: s.date, title: protocolServiceLabel(s), note: s.music.join(', ') || undefined,
     names: s.team.map((m) => ({ name: m.name, tag: m.role !== 'MEMBER' ? t(`door.protocol.role.${m.role}` as 'door.protocol.role.MEMBER') : undefined })),
     chip: <StatusChip tone={regular(s) >= s.target ? 'success' : 'warn'}>{t('door.protocol.teamSize', { count: String(regular(s)), target: String(s.target) })}</StatusChip>,
     onEdit: edit ? () => setEditing(s.id) : undefined,
   }));
-  const grid = (edit: boolean) => v && (layout === 'list' ? <ScheduleList rows={teamRows(edit)} /> : layout === 'bulletin' ? <ProtocolBulletin month={month} services={v.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, team: s.team.filter((m) => m.slotKind !== 'FILL_IN').map((m) => ({ name: m.name, role: m.role })) }))} /> : (
+  const grid = (edit: boolean) => v && (layout === 'list' ? <ScheduleList rows={teamRows(edit)} /> : layout === 'bulletin' ? <ProtocolBulletin month={month} services={v.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, label: protocolServiceLabel(s), team: s.team.filter((m) => m.slotKind !== 'FILL_IN').map((m) => ({ name: m.name, role: m.role })) }))} /> : (
     <ul className="pt-grid">
       {v.services.map((s) => <ServiceCard key={s.id} svc={s} view={v} onEdit={edit ? () => setEditing(s.id) : undefined} />)}
     </ul>

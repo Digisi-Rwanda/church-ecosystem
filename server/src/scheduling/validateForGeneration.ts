@@ -13,7 +13,6 @@
  * (see the "engine throw sites" notes on each block).
  */
 
-import { SUPPORTED_PROTOCOL_KINDS } from '../protocol/engine.js';
 import {
   isMusicChoirEligible, validateMusicConfigSnapshot,
   type MusicConfigRulesSnapshot, type MusicLinkRules, type MusicPolicyRules,
@@ -181,7 +180,6 @@ export function validateForGeneration(snapshot: MusicGenerationSnapshot): Genera
  */
 export function validateProtocolForGeneration(snapshot: ProtocolGenerationSnapshot): GenerationValidation {
   const errors: string[] = [];
-  const supported = SUPPORTED_PROTOCOL_KINDS as readonly string[];
 
   const policy = snapshot.dutyPolicy;
   if (!policy) {
@@ -215,10 +213,6 @@ export function validateProtocolForGeneration(snapshot: ProtocolGenerationSnapsh
   }
 
   for (const service of snapshot.services.filter((s) => s.active && s.protocolRequired)) {
-    if (!supported.includes(service.code.toUpperCase())) {
-      errors.push(`Protocol is enabled for ${label(service)}, but the Protocol engine cannot staff that service code. Supported: ${supported.join(', ')}.`);
-      continue;
-    }
     if (!activeRules.some((r) => r.serviceId === service.id)) {
       errors.push(`Add Protocol team rules for ${label(service)}.`);
     }

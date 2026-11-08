@@ -4,7 +4,7 @@ import { preserveRelaxableKinds, schedulingError } from './schedulingForms';
 
 describe('scheduling form helpers', () => {
   it('preserves unsupported relaxation codes while updating selected supported ones', () => {
-    expect(preserveRelaxableKinds(['ss1', 'CUSTOM'], ['TUESDAY'])).toEqual(['CUSTOM', 'TUESDAY']);
+    expect(preserveRelaxableKinds(['ss3', 'CUSTOM'], ['TUESDAY'], new Set(['SS3', 'TUESDAY']))).toEqual(['CUSTOM', 'TUESDAY']);
   });
 
   it('shows actionable validation issues from a 4xx and withholds server errors', () => {
