@@ -24,6 +24,7 @@ import {
   fetchChoirCategories,
   fetchConfigChoirs,
   fetchMusicAvailability,
+  fetchMusicLineupLimits,
   fetchMusicRules,
   fetchProtocolDutyPolicy,
   fetchProtocolServiceRules,
@@ -33,6 +34,7 @@ import {
   setChoirCategory,
   updateChoirCategory,
   updateMusicRule,
+  updateMusicLineupLimits,
   updateProtocolDutyPolicy,
   updateProtocolServiceRule,
   updateSchedulingService,
@@ -684,6 +686,35 @@ function RuleDialog({ rule, services, categories, choirs, onClose, onSaved, goTo
   </SidePanel>;
 }
 
+function MusicLineupLimitsEditor({ editable }: { editable: boolean }) {
+  const t = useT();
+  const settings = useLoad(fetchMusicLineupLimits, 'sched-config-music-lineup-limits');
+  const state = useSaveState();
+  const limits = settings.data?.limits;
+  return <section className="panel">
+    <h3>{t('door.config.lineupLimits')}</h3>
+    <LoadState loading={settings.loading} failed={settings.failed} retry={settings.reload}>
+      {limits && <form key={JSON.stringify(limits)} onSubmit={(event) => {
+        event.preventDefault();
+        const data = new FormData(event.currentTarget);
+        const limit = (key: string) => data.get(key) === '' ? null : Number(data.get(key));
+        void state.run(() => updateMusicLineupLimits({
+          primaryPerDay: limit('primaryPerDay'),
+          consecutivePerService: limit('consecutivePerService'),
+        }), settings.reload);
+      }}>
+        <div className="door-row">
+          <label>{t('door.config.lineupLimits.primary')} <input name="primaryPerDay" type="number" min={1} step={1} defaultValue={limits.primaryPerDay ?? ''} placeholder={t('door.config.lineupLimits.unlimited')} readOnly={!editable} /></label>
+          <label>{t('door.config.lineupLimits.consecutive')} <input name="consecutivePerService" type="number" min={1} step={1} defaultValue={limits.consecutivePerService ?? ''} placeholder={t('door.config.lineupLimits.unlimited')} readOnly={!editable} /></label>
+        </div>
+        <p className="muted">{t('door.config.lineupLimits.help')}</p>
+        {editable && <button type="submit" className="btn sm" disabled={state.working}>{t('kit.save')}</button>}
+        <FormNotice state={state} />
+      </form>}
+    </LoadState>
+  </section>;
+}
+
 export function RulesEditor({ systemId, canWrite, goTo }: Props & { goTo: (tab: string) => void }) {
   const t = useT();
   const editable = canWrite && systemId === 'sys-music';
@@ -712,6 +743,7 @@ export function RulesEditor({ systemId, canWrite, goTo }: Props & { goTo: (tab: 
   const sentences = ruleSentences(rows, names, t);
   return <LoadState loading={rules.loading || services.loading || cats.loading || choirs.loading}
     failed={rules.failed || services.failed || cats.failed || choirs.failed} retry={() => { rules.reload(); services.reload(); cats.reload(); choirs.reload(); }}>
+    {systemId === 'sys-music' && <MusicLineupLimitsEditor editable={editable} />}
     <FormNotice state={state} />
     {(rules.data?.warnings ?? []).map((w) => <SectionNotice key={w.choirId} tone="warn">{w.message}{' '}<button type="button" className="btn ghost sm" onClick={() => goTo('choirs')}>{t('door.config.rule.warning.fix')}</button></SectionNotice>)}
     <p className="scheduling-rules-preview" aria-label={t('door.config.rules.previewLabel')}>{sentences.length ? sentences.join(' ') : t('door.config.rules.previewEmpty')}</p>
