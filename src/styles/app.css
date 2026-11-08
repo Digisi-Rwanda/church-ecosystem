@@ -8588,11 +8588,8 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
 .bl-week th, .bl-week td { border: 1px solid #111; padding: 0.2rem 0.4rem; min-height: 1.6rem; height: 1.6rem; text-align: center; overflow-wrap: anywhere; }
 .bl-week td { text-align: left; }
 .bl-week .bl-band { background: #d9d9d9; font-size: 1rem; }
-.bl-week .bl-tue { background: #5b9bd5; color: #fff; }
-.bl-week .bl-fri { background: #fbe5d6; }
-.bl-week .bl-sun { background: #92d050; color: #1f5a8f; }
-.bl-week .bl-dates th { background: #fff; color: #1f5a8f; }
-.bl-week .bl-dates th.bl-left { color: #111; text-align: left; }
+.bl-week th[scope="col"] { background: #fff; color: #1f5a8f; }
+.bl-week .bl-date { display: block; margin-top: 0.2rem; color: #444; font-weight: 400; }
 .bl-special { background: #dfe3f3; border-top: 1px solid #111; }
 .bl-special h4 { margin: 0; background: #ffe699; padding: 0.3rem 0.5rem; font-size: 1.05rem; border-bottom: 1px solid #111; }
 .bl-special p { margin: 0; padding: 0.2rem 0.5rem; font-weight: 700; border-bottom: 1px solid #fff; }

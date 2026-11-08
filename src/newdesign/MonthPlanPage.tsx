@@ -4,16 +4,17 @@ import { MusicBulletin } from './Bulletins.tsx';
 import type { ScheduleRuleContext } from '../api/frontDoorApi';
 import { policySummary } from './config';
 import { ConfirmDialog, StatusChip } from './kit';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   publishScheduleDraft, confirmScheduleDraft, discardScheduleDraft, editScheduleDraft, editScheduleMonth, fetchScheduleDraft, fetchScheduleLog, fetchScheduleMonth, fetchScheduleState,
-  generateScheduleDraft, publishScheduleMonths, type MusicHorizonKey, type ScheduleEdit, type ScheduleService, type ScheduleState,
+  deleteScheduleMonth, generateScheduleDraft, publishScheduleMonths, type MusicHorizonKey, type ScheduleEdit, type ScheduleMonthView, type ScheduleService, type ScheduleState,
 } from '../api/frontDoorApi';
 import { SelectField } from '../components/ui/Field';
 import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { addableUnits, musicErrorKey, scheduleErrorText, servicesOfMonth } from './music';
+import { addMonths, thisMonth } from './schedule';
 import { DateTile, ScheduleList, ViewSwitch, useMonthName, useScheduleView, useShortDay, type ScheduleRow, type ScheduleViewKey } from './ScheduleShared';
 import { downloadSchedulePdf, printNamedSheet } from './schedulePdf';
 import { musicPdfFilename } from './bulletins';
@@ -59,7 +60,7 @@ function EditPanel({ svc, units, edit, onClose }: { svc: ScheduleService; units:
   const runEdit = async (change: ScheduleEdit) => { if (pending) return; setPending(true); setError(''); try { await edit(change); } catch(reason) { setError(scheduleErrorText(reason) ?? t(musicErrorKey(errorCode(reason)) as 'door.people.actionFailed')); } finally {setPending(false);} };
   const free = addableUnits(units, svc);
   return (
-    <SidePanel open title={`${day(svc.date)} � ${t(`door.music.kind.${svc.kind}` as 'door.music.kind.SS1')}`} onClose={onClose}>
+    <SidePanel open title={`${day(svc.date)} · ${svc.label}`} onClose={onClose}>
       <div className="pt-edit">{error && <p className="door-error" role="alert">{error}</p>}<fieldset className="scheduling-workspace-actions" disabled={pending} aria-busy={pending}>
         <ul className="pt-edit-list">
           {svc.units.map((u) => {
@@ -74,13 +75,13 @@ function EditPanel({ svc, units, edit, onClose }: { svc: ScheduleService; units:
                     {swaps.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
                   </SelectField>
                 )}
-                <button type="button" className="btn ghost sm" onClick={() => void edit({ serviceId: svc.id, action: 'remove', unitId: u.unitId })}>{t('door.groups.remove')}</button>
+                <button type="button" className="btn ghost sm" onClick={() => void runEdit({ serviceId: svc.id, action: 'remove', unitId: u.unitId })}>{t('door.groups.remove')}</button>
               </li>
             );
           })}
         </ul>
         {free.length > 0 && (
-          <SelectField label={t('door.music.addChoir')} name={`a-${svc.id}`} value="" onChange={(e) => e.target.value && void edit({ serviceId: svc.id, action: 'add', unitId: e.target.value })}>
+          <SelectField label={t('door.music.addChoir')} name={`a-${svc.id}`} value="" onChange={(e) => e.target.value && void runEdit({ serviceId: svc.id, action: 'add', unitId: e.target.value })}>
             <option value="">{t('door.gov.meeting.choose')}</option>
             {free.map((x) => <option key={x.id} value={x.id}>{x.name}</option>)}
           </SelectField>
@@ -93,6 +94,7 @@ function EditPanel({ svc, units, edit, onClose }: { svc: ScheduleService; units:
 
 /** The services of a schedule, grouped by month, with the edit panel. */
 function Services({ services, months, units, edit, view }: { services: ScheduleService[]; months: string[]; units: Units; edit?: Edit; view: ScheduleViewKey }) {
+  const t = useT();
   const monthName = useMonthName();
   const [editing, setEditing] = useState<string | null>(null);
   const cur = services.find((s) => s.id === editing);
@@ -102,7 +104,11 @@ function Services({ services, months, units, edit, view }: { services: ScheduleS
   }));
   return (
     <>
-      {view === 'bulletin' && months.map(month => <MusicBulletin key={month} month={month} services={servicesOfMonth(services, month).map(s => ({ id:s.id, date:s.date, kind:s.kind, names:s.units.map(u=>u.name) }))} />)}
+      {view === 'bulletin' && months.map(month => <MusicBulletin key={month} month={month}
+        onEdit={edit ? setEditing : undefined} editLabel={t('door.sch.edit')}
+        services={servicesOfMonth(services, month).map(s => ({
+          id: s.id, date: s.date, kind: s.kind, label: s.label, names: s.units.map(u => u.name), editable: s.musicRequired !== false,
+        }))} />)}
       {view === 'list' && <ScheduleList rows={rows} />}
       {view === 'cards' && months.map((m) => (
         <div key={m} className="pt-month-block">
@@ -210,8 +216,24 @@ function MonthBody({ month, mode, state, onDone, show, view }: { month: string; 
   const day = useShortDay();
   const monthName = useMonthName();
   const data = useLoad(() => fetchScheduleMonth(month), `music-month|${month}`);
+  const [deleting, setDeleting] = useState<Pick<ScheduleMonthView, 'state' | 'version'> | null>(null);
+  const [busy, setBusy] = useState(false);
   useChoirRegisterRefresh(data.reload);
   const m = data.data;
+  const remove = async () => {
+    if (busy || !deleting) return;
+    setBusy(true);
+    try {
+      await deleteScheduleMonth(month, deleting);
+      onDone();
+    } catch (err) {
+      show(err);
+      data.reload();
+    } finally {
+      setDeleting(null);
+      setBusy(false);
+    }
+  };
   const edit: Edit = async (e) => { try { await editScheduleMonth(month, e); data.reload(); onDone(); } catch (err) { show(err); throw err; } };
   const pdf = () => {
     if (!m) return;
@@ -231,7 +253,12 @@ function MonthBody({ month, mode, state, onDone, show, view }: { month: string; 
             <span><strong>{monthName(month)}</strong> <span className="muted">v{m.version}</span></span>
             <span className="pt-bar-actions">
               <button type="button" className="btn secondary" onClick={pdf}>{t('door.sch.pdf')}</button>
-              {mode === 'confirmed' && m.state === 'CONFIRMED' && m.canWrite && <button disabled={m.validation?.ok === false} type="button" className="btn" onClick={async () => { try { await publishScheduleMonths([month]); onDone('published'); } catch (err) { show(err); } }}>{t('door.sch.publish')}</button>}
+              {mode === 'confirmed' && m.state === 'CONFIRMED' && m.canWrite && <button disabled={busy || m.validation?.ok === false} type="button" className="btn" onClick={async () => {
+                setBusy(true);
+                try { await publishScheduleMonths([month]); onDone('published'); } catch (err) { show(err); } finally { setBusy(false); }
+              }}>{t('door.sch.publish')}</button>}
+              {m.canWrite && <button type="button" className="btn ghost" disabled={busy}
+                onClick={() => setDeleting({ state: m.state, version: m.version })}>{t('door.sch.deleteSchedule')}</button>}
             </span>
           </div>
           <StatusChip>{t("door.scheduling.savedState", { state: t(mode === "published" ? "door.sch.tab.published" : "door.sch.tab.confirmed") })}</StatusChip>
@@ -239,6 +266,9 @@ function MonthBody({ month, mode, state, onDone, show, view }: { month: string; 
           <Notes list={m.warnings} />
           <Services services={m.services} months={[month]} units={state.units} edit={m.canWrite ? edit : undefined} view={view} />
           {m.canWrite && <ChangeLog month={month} />}
+          <ConfirmDialog open={!!deleting} busy={busy} danger title={t('door.sch.deleteSchedule')}
+            body={t(deleting?.state === 'PUBLISHED' ? 'door.sch.deletePublished' : 'door.sch.deleteConfirmed', { month: monthName(month) })}
+            confirmLabel={t('door.sch.deleteSchedule')} onConfirm={() => void remove()} onCancel={() => { if (!busy) setDeleting(null); }} />
         </>
       )}
     </LoadState>
@@ -260,10 +290,24 @@ export function MonthPlanPage() {
   const [start, setStart] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  const [currentMonth, setCurrentMonth] = useState(() => thisMonth());
+  const reloadSchedule = state.reload;
+  useEffect(() => {
+    const refresh = () => {
+      const month = thisMonth();
+      if (month === currentMonth) return;
+      setCurrentMonth(month);
+      reloadSchedule();
+    };
+    const timer = window.setInterval(refresh, 30_000);
+    window.addEventListener('focus', refresh);
+    return () => { window.clearInterval(timer); window.removeEventListener('focus', refresh); };
+  }, [currentMonth, reloadSchedule]);
   const show = (err: unknown) => setError(scheduleErrorText(err) ?? t(musicErrorKey(errorCode(err)) as 'door.people.actionFailed'));
   const drafts = s?.drafts ?? [];
-  const confirmed = (s?.months ?? []).filter((m) => m.state === 'CONFIRMED');
-  const published = (s?.months ?? []).filter((m) => m.state === 'PUBLISHED');
+  const upcoming = [currentMonth, addMonths(currentMonth, 1)];
+  const confirmed = (s?.months ?? []).filter((m) => m.state === 'CONFIRMED' && upcoming.includes(m.periodKey));
+  const published = (s?.months ?? []).filter((m) => m.state === 'PUBLISHED' && upcoming.includes(m.periodKey));
   const canWrite = !!s?.canWrite;
   const current: Tab = tab ?? (!canWrite ? 'published' : drafts.length ? 'generated' : confirmed.length ? 'confirmed' : published.length ? 'published' : 'generated');
   const options = s?.options[horizon] ?? [];
@@ -285,10 +329,11 @@ export function MonthPlanPage() {
   };
   const items: Record<Tab, Array<{ key: string; label: string }>> = {
     generated: drafts.map((d) => ({ key: d.id, label: d.label })),
-    confirmed: confirmed.map((m) => ({ key: m.periodKey, label: monthName(m.periodKey) })),
-    published: published.map((m) => ({ key: m.periodKey, label: monthName(m.periodKey) })),
+    confirmed: upcoming.map((key) => ({ key, label: monthName(key) })),
+    published: upcoming.map((key) => ({ key, label: monthName(key) })),
   };
-  const sel = (k: Tab) => (items[k].some((i) => i.key === picked[k]) ? picked[k] : (items[k][k === 'published' ? items[k].length - 1 : 0]?.key ?? ''));
+  const sel = (k: Tab) => items[k].some((i) => i.key === picked[k]) ? picked[k] : (items[k][0]?.key ?? '');
+  const hasSchedule = current === 'generated' || (current === 'confirmed' ? confirmed : published).some((m) => m.periodKey === sel(current));
   const tabs = ([['generated', drafts.length], ['confirmed', confirmed.length], ['published', published.length]] as Array<[Tab, number]>)
     .filter(([k]) => canWrite || k === 'published')
     .map(([k, n]) => ({ key: k, label: t(`door.sch.tab.${k}` as 'door.sch.tab.generated'), count: n }));
@@ -314,7 +359,9 @@ export function MonthPlanPage() {
                 <Picker items={items[current]} value={sel(current)} onPick={(k) => setPicked({ ...picked, [current]: k })} />
                 {current === 'generated'
                   ? <DraftBody key={sel('generated')} id={sel('generated')} state={s} onDone={onDone} show={show} view={view} />
-                  : <MonthBody key={`${current}-${sel(current)}`} month={sel(current)} mode={current} state={s} onDone={onDone} show={show} view={view} />}
+                  : hasSchedule
+                    ? <MonthBody key={`${current}-${sel(current)}`} month={sel(current)} mode={current} state={s} onDone={onDone} show={show} view={view} />
+                    : <EmptyState title={empty[current]} />}
               </>
             )}
           </>

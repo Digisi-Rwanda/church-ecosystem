@@ -88,8 +88,9 @@ beforeEach(async () => {
 
 const lineup = async () => {
   const ids: Record<string, string> = {};
-  for (const [name, role] of [['Ijwi', 'PRIMARY'], ['Bethel', 'PRIMARY'], ['Elim', 'PRIMARY'], ['Integuza', 'PRIMARY'], ['Beulah', 'SECONDARY'], ['Yerusalemu', 'SECONDARY'], ['Hope', 'CHILDREN'], ['Worship', 'WORSHIP']]) {
-    ids[name] = (await post(LEADER, '/api/music/choirs', { name, role })).body.id;
+  for (const [name, role] of [['Ijwi', 'PRIMARY'], ['Bethel', 'PRIMARY'], ['Elim', 'PRIMARY'], ['Integuza', 'PRIMARY'], ['Beulah', 'SECONDARY'], ['Yerusalemu', 'SECONDARY'], ['Hope', 'CHILDREN'], ['Joy', 'CHILDREN'], ['Worship', 'WORSHIP'], ['Praise', 'WORSHIP']]) {
+    const choir = await fake.musicChoir.create({ data: { name, role, active: true, createdById: LEADER } });
+    ids[name] = choir.id;
     fake.__db.choirCategoryLink.push({
       id: `link-${ids[name]}`, systemId: 'sys-music', choirId: ids[name],
       categoryId: `category-${role.toLowerCase()}-v1`, eligibleOverrideJson: '{}',
@@ -106,9 +107,9 @@ const pinDraftVersion = (id: string, configVersionId: string) => {
   draft.configVersionId = configVersionId;
 };
 
-describe('generating a draft from the pinned configuration', () => {
+describe('generating a draft from live configuration', () => {
   it('requires explicit category membership for every active choir', async () => {
-    await post(LEADER, '/api/music/choirs', { name: 'Solo', role: 'PRIMARY' });
+    await fake.musicChoir.create({ data: { name: 'Solo', role: 'PRIMARY', active: true, createdById: LEADER } });
     const r = await generate();
     expect(r.status).toBe(422);
     expect(r.body.error).toMatch(/exactly one explicit choir-category link/);
@@ -120,23 +121,21 @@ describe('generating a draft from the pinned configuration', () => {
     const d = (await get(LEADER, `/api/music/schedule/drafts/${r.body.id}`)).body;
     const kinds = d.services.map((s: any) => s.kind);
     expect(kinds).toEqual(expect.arrayContaining(['SS1', 'SS2', 'TUESDAY', 'FRIDAY']));
-    for (const s of d.services.filter((x: any) => x.kind === 'SS1')) expect(s.units.map((u: any) => u.unitId)).toContain(ids.Hope);
+    for (const s of d.services.filter((x: any) => x.kind === 'SS1')) expect(s.units.some((u: any) => [ids.Hope, ids.Joy].includes(u.unitId))).toBe(true);
     for (const s of d.services.filter((x: any) => x.kind === 'TUESDAY')) {
-      expect(s.units.map((u: any) => u.unitId)).toContain(ids.Worship);
+      expect(s.units.some((u: any) => [ids.Worship, ids.Praise].includes(u.unitId))).toBe(true);
       expect(s.units.filter((u: any) => u.kind === 'PRIMARY')).toHaveLength(1);
     }
     for (const s of d.services.filter((x: any) => x.kind === 'IGABURO')) expect(s.units).toHaveLength(2);
     expect(d.months[0].periodKey).toBe(START);
   });
-  it('presents explicit pinned category names and validation to planners', async () => {
+  it('presents live category names and validation to planners', async () => {
     await lineup();
     const id = (await generate()).body.id;
     const category = fake.__db.choirCategory.find((row: any) => row.code === 'PRIMARY')!;
     category.name = 'Configured congregation choirs';
     const response = await get(LEADER, `/api/music/schedule/drafts/${id}`);
     expect(response.status).toBe(200);
-    expect(response.body.configVersionId).toBe('music-config-v1');
-    expect(response.body.configLabel).toBe('Music rules');
     expect(response.body.validation.ok).toBe(true);
     expect(response.body.rules).toEqual(expect.arrayContaining([expect.objectContaining({ categoryName: 'Configured congregation choirs', serviceCode: 'ss1' })]));
     const assignments = response.body.services.flatMap((service: any) => service.units);
@@ -158,6 +157,37 @@ describe('generating a draft from the pinned configuration', () => {
 });
 
 describe('editing a draft by hand', () => {
+  it.each(['generated', 'confirmed', 'published'])('edits the %s lineup and refuses a second primary assignment on the same day', async (stage) => {
+    const ids = await lineup();
+    const result = await generate();
+    expect(result.status, result.body.error).toBe(201);
+    const draftPath = `/api/music/schedule/drafts/${result.body.id}`;
+    const path = stage === 'generated' ? draftPath : `/api/music/schedule/months/${START}`;
+    if (stage !== 'generated') expect((await post(LEADER, `${draftPath}/confirm`)).status).toBe(200);
+    if (stage === 'published') expect((await post(LEADER, '/api/music/schedule/months/publish', { months: [START] })).status).toBe(200);
+    const view = (await get(LEADER, path)).body;
+    const ss1 = view.services.find((s: any) => s.kind === 'SS1');
+    const ss2 = view.services.find((s: any) => s.kind === 'SS2' && s.date === ss1.date);
+    const rejected = await post(LEADER, `${path}/edit`, { serviceId: ss2.id, action: 'replace',
+      unitId: ss2.units.find((u: any) => u.kind === 'PRIMARY').unitId,
+      toUnitId: ss1.units.find((u: any) => u.kind === 'PRIMARY').unitId });
+    expect(rejected.status).toBe(409);
+    expect(rejected.body.error).toMatch(/only once per day/);
+    expect((await get(LEADER, path)).body.services).toEqual(view.services);
+
+    const friday = view.services.find((s: any) => s.kind === 'FRIDAY');
+    const other = [ids.Ijwi, ids.Bethel, ids.Elim, ids.Integuza].filter((id) => !friday.units.some((u: any) => u.unitId === id));
+    let added = false;
+    for (const unitId of other) {
+      const edit = await post(LEADER, `${path}/edit`, { serviceId: friday.id, action: 'add', unitId });
+      if (edit.status !== 200) continue;
+      added = true;
+      expect((await get(LEADER, path)).body.services.find((s: any) => s.id === friday.id).units).toEqual(expect.arrayContaining([expect.objectContaining({ unitId })]));
+      expect((await post(LEADER, `${path}/edit`, { serviceId: friday.id, action: 'remove', unitId })).status).toBe(200);
+      break;
+    }
+    expect(added).toBe(true);
+  });
   it('hard rules refuse, with the engine’s own reason', async () => {
     const ids = await lineup();
     const id = (await generate()).body.id;
@@ -207,12 +237,19 @@ describe('confirm, publish and edit', () => {
     expect((await post(LEADER,`/api/music/schedule/drafts/${id}/confirm`,{})).status).toBe(200);
     expect((await post(LEADER,'/api/music/schedule/months/publish',{months:[START]})).status).toBe(200);
   });
-  const confirmed = async (configVersionId?: string) => {
+  const confirmed = async (configVersionId?: string, keepReplacement = false) => {
     const ids = await lineup();
     const id = (await generate()).body.id as string;
     if (configVersionId) pinDraftVersion(id, configVersionId);
+    let replacementId: string | undefined;
+    if (keepReplacement) {
+      const draft = await fake.musicDraft.findUnique({ where: { id } });
+      const { id: originalId, ...data } = draft;
+      if (!originalId) throw new Error('Missing original draft');
+      replacementId = (await fake.musicDraft.create({ data })).id;
+    }
     const c = await post(LEADER, `/api/music/schedule/drafts/${id}/confirm`, {});
-    return { ids, id, c };
+    return { ids, id, c, replacementId };
   };
   it('confirming makes the month available to Protocol but hidden from readers; the draft is used up', async () => {
     const { c, id } = await confirmed();
@@ -265,15 +302,14 @@ describe('confirm, publish and edit', () => {
     expect(edit.changes.length).toBe(2);
   });
   it('a published month cannot be confirmed again from a draft; publishing a draft replaces it with the next version', async () => {
-    await confirmed();
+    const { replacementId: again } = await confirmed(undefined, true);
     await post(LEADER, '/api/music/schedule/months/publish', { months: [START] });
-    const again = (await generate()).body.id as string;
     expect((await post(LEADER, `/api/music/schedule/drafts/${again}/confirm`, {})).body.code).toBe('PUBLISHED');
     expect((await post(LEADER, `/api/music/schedule/drafts/${again}/publish`, {})).status).toBe(200);
     expect((await get(LEADER, '/api/music/schedule/state')).body.months[0]).toMatchObject({ periodKey: START, state: 'PUBLISHED', version: 2 });
   });
   it('replacing a published month records the new draft version without changing prior history', async () => {
-    await confirmed('music-config-v1');
+    const { replacementId } = await confirmed('music-config-v1', true);
     await post(LEADER, '/api/music/schedule/months/publish', { months: [START] });
     const oldHistory = fake.__db.musicLog
       .filter((entry: any) => entry.periodKey === START)
@@ -282,35 +318,7 @@ describe('confirm, publish and edit', () => {
         servicesSnapshotJson: entry.servicesSnapshotJson, assignmentsSnapshotJson: entry.assignmentsSnapshotJson,
       }));
 
-    const replacementId = (await generate()).body.id as string;
-    const cloned = {
-      ...fake.__db.configVersion.find((row: any) => row.id === 'music-config-v1'),
-      id: 'music-v2', version: 2, status: 'SUPERSEDED',
-    };
-    fake.__db.configVersion.push(cloned);
-    const serviceIds = new Map<string, string>();
-    for (const original of fake.__db.schedulingService.filter((row: any) => row.configVersionId === 'music-config-v1')) {
-      serviceIds.set(original.id, `${original.id}-v2`);
-      fake.__db.schedulingService.push({ ...original, id: `${original.id}-v2`, configVersionId: 'music-v2' });
-    }
-    const categoryIds = new Map<string, string>();
-    for (const original of fake.__db.choirCategory.filter((row: any) => row.configVersionId === 'music-config-v1')) {
-      categoryIds.set(original.id, `${original.id}-v2`);
-      fake.__db.choirCategory.push({ ...original, id: `${original.id}-v2`, configVersionId: 'music-v2' });
-    }
-    for (const original of fake.__db.categoryServicePolicy.filter((row: any) => row.configVersionId === 'music-config-v1')) {
-      fake.__db.categoryServicePolicy.push({
-        ...original, id: `${original.id}-v2`, configVersionId: 'music-v2',
-        categoryId: categoryIds.get(original.categoryId), serviceId: serviceIds.get(original.serviceId),
-      });
-    }
-    for (const original of fake.__db.choirCategoryLink.filter((row: any) => row.configVersionId === 'music-config-v1')) {
-      fake.__db.choirCategoryLink.push({
-        ...original, id: `${original.id}-v2`, configVersionId: 'music-v2',
-        categoryId: categoryIds.get(original.categoryId),
-      });
-    }
-    pinDraftVersion(replacementId, 'music-v2');
+    pinDraftVersion(replacementId!, 'music-v2');
     expect((await post(LEADER, `/api/music/schedule/drafts/${replacementId}/publish`, {})).status).toBe(200);
 
     const monthRow = fake.__db.musicMonth.find((m: any) => m.periodKey === START);
@@ -326,10 +334,9 @@ describe('confirm, publish and edit', () => {
       }))).toEqual(oldHistory);
   });
   it('replacing a published month with the same version keeps that version', async () => {
-    await confirmed('music-config-v1');
+    const { replacementId } = await confirmed('music-config-v1', true);
     await post(LEADER, '/api/music/schedule/months/publish', { months: [START] });
-    const replacementId = (await generate()).body.id as string;
-    pinDraftVersion(replacementId, 'music-config-v1');
+    pinDraftVersion(replacementId!, 'music-config-v1');
 
     expect((await post(LEADER, `/api/music/schedule/drafts/${replacementId}/publish`, {})).status).toBe(200);
     expect(fake.__db.musicMonth.find((m: any) => m.periodKey === START))

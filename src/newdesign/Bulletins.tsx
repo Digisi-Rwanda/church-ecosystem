@@ -3,9 +3,17 @@ import {
   type BulletinService, type ProtocolBulletinService, type ProtocolTeamBlock,
 } from './bulletins';
 
-/** The choir schedule as the church pins it up: one table per week, Tuesday, Friday, then the two Sunday services. */
-export function MusicBulletin({ month, services }: { month: string; services: BulletinService[] }) {
+/** The choir schedule as the church pins it up, with one column for each scheduled service. */
+export function MusicBulletin({ month, services, onEdit, editLabel }: {
+  month: string;
+  services: BulletinService[];
+  onEdit?: (id: string) => void;
+  editLabel?: string;
+}) {
   const { weeks, specials } = musicWeeks(services);
+  const editButton = (service: BulletinService) => onEdit && service.editable && (
+    <button type="button" className="btn ghost sm no-print" aria-label={`${editLabel} ${service.label}`} onClick={() => onEdit(service.id)}>{editLabel}</button>
+  );
   return (
     <article id="music-schedule-bulletin" className="bl-sheet print-sheet" aria-label={musicTitle(month)}>
       <header className="bl-head">
@@ -18,26 +26,17 @@ export function MusicBulletin({ month, services }: { month: string; services: Bu
         return (
           <table key={w.from} className={`bl-week bl-t${wi % 4}`}>
             <thead>
-              <tr><th colSpan={4} className="bl-band">{weekTitle(w)}</th></tr>
+              <tr><th colSpan={w.services.length} className="bl-band">{weekTitle(w)}</th></tr>
               <tr>
-                <th className="bl-tue">TUESDAY</th>
-                <th className="bl-fri">FRIDAY</th>
-                <th colSpan={2} className="bl-sun">{w.sunday ? `ON SUNDAY: ${ddmmyyyy(w.sunday.date)}` : 'ON SUNDAY'}</th>
-              </tr>
-              <tr className="bl-dates">
-                <th>{w.tuesday ? ddmmyyyy(w.tuesday.date) : ''}</th>
-                <th>{w.friday ? ddmmyyyy(w.friday.date) : ''}</th>
-                <th className="bl-left">FIRST SERVICE</th>
-                <th className="bl-left">SECOND SERVICE</th>
+                {w.services.map((service) => (
+                  <th key={service.id} scope="col">{service.label}<small className="bl-date">{ddmmyyyy(service.date)}</small>{editButton(service)}</th>
+                ))}
               </tr>
             </thead>
             <tbody>
               {Array.from({ length: rows }, (_, i) => (
                 <tr key={i}>
-                  <td>{w.tuesday?.names[i] ?? ''}</td>
-                  <td>{w.friday?.names[i] ?? ''}</td>
-                  <td>{w.sunday?.first[i] ?? ''}</td>
-                  <td>{w.sunday?.second[i] ?? ''}</td>
+                  {w.services.map((service) => <td key={service.id}>{service.names[i] ?? ''}</td>)}
                 </tr>
               ))}
             </tbody>
@@ -46,7 +45,8 @@ export function MusicBulletin({ month, services }: { month: string; services: Bu
       })}
       {specials.map((s) => (
         <section key={s.id} className="bl-special">
-          <h4>{`HOLY COMMUNION ON ${ddmmyyyy(s.date)}`}</h4>
+          <h4>{s.label} · {ddmmyyyy(s.date)}</h4>
+          {editButton(s)}
           {s.names.length === 0 ? <p>-</p> : s.names.map((n) => <p key={n}>{`Chorale ${n}`}</p>)}
         </section>
       ))}

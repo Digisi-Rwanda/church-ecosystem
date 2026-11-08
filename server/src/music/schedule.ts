@@ -28,7 +28,7 @@ export interface DraftDoc {
   configVersionId?: string | null;
 }
 export interface LogChange { kind: 'ADDED' | 'REMOVED' | 'SERVICE_ADDED' | 'SERVICE_REMOVED' | 'RESCHEDULED'; serviceId: string; text: string }
-export type LogAction = 'CONFIRMED' | 'RECONFIRMED' | 'PUBLISHED' | 'EDITED';
+export type LogAction = 'CONFIRMED' | 'RECONFIRMED' | 'PUBLISHED' | 'EDITED' | 'DELETED';
 
 export const parse = <T>(json: string | null | undefined, fallback: T): T => {
   try {
@@ -124,6 +124,7 @@ export function diffLineup(
 }
 
 export function summarise(action: LogAction, stage: string, changes: LogChange[]): string {
+  if (action === 'DELETED') return `Deleted the ${stage.toLowerCase()} schedule`;
   if (changes.length === 0) {
     return action === 'EDITED'
       ? `Saved with no change to the choir lineup (${stage.toLowerCase()})`

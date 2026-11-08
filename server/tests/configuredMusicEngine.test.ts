@@ -57,6 +57,44 @@ const units: MusicScheduleUnit[] = [
 ];
 
 describe('configured Music candidate engine', () => {
+  it('chooses different primary choirs for SS1 and SS2 on the same day and refuses an invalid edit', () => {
+    const first = slot();
+    const second: MusicServiceSlot = { ...first, id: 'ss2', kind: 'SS2', label: 'Sunday Service 2' };
+    const secondDefinition = { ...serviceDefinition, id: 'ss2-v1', code: 'ss2' };
+    const config = rules({ services: [serviceDefinition, secondDefinition], policies: [policy(), policy({ id: 'p2', serviceId: secondDefinition.id })] });
+    const input = { services: [first, second], units, rules: config };
+    const generated = generateConfiguredMusicSchedule(input);
+    expect(generated.ok, generated.reason).toBe(true);
+    expect(new Set(generated.assignments.map((row) => row.unitId)).size).toBe(2);
+    const firstChoir = generated.assignments[0]!.unitId;
+    const edited = generated.assignments.map((row) => ({ ...row, unitId: firstChoir }));
+    expect(validateConfiguredMusicSchedule({ ...input, assignments: edited, lineupChange: { serviceId: second.id, unitId: firstChoir } }).reason).toMatch(/only once per day/);
+  });
+
+  it('uses adjacent saved occurrences across months and counts an unassigned service as a break', () => {
+    const previous = [slot('2026-01', '2026-01-18'), slot('2026-01', '2026-01-25')];
+    const current = slot('2026-02', '2026-02-01');
+    const assigned = (service: MusicServiceSlot, unitId = 'choir-a') => ({
+      id: `assignment-${service.id}`, serviceId: service.id, unitId, source: 'MANUAL' as const,
+    });
+    const history = [{ services: previous, assignments: previous.map((service) => assigned(service)) }];
+    const input = { services: [current], units, rules: rules(), history };
+    expect(generateConfiguredMusicSchedule(input).assignments[0]?.unitId).toBe('choir-b');
+    expect(validateConfiguredMusicSchedule({ ...input, assignments: [assigned(current)] }).reason).toMatch(/at most twice in a row/);
+    expect(validateConfiguredMusicSchedule({ ...input, assignments: [assigned(current)], history: [{ services: previous, assignments: [assigned(previous[0]!)] }] }).ok).toBe(true);
+  });
+
+  it('refuses filling the middle of a three-occurrence run even if the last service is already published', () => {
+    const first = slot('2026-01', '2026-01-25');
+    const middle = slot('2026-02', '2026-02-01');
+    const last = slot('2026-03', '2026-03-01');
+    const assignment = (service: MusicServiceSlot) => ({ id: service.id, serviceId: service.id, unitId: 'choir-a', source: 'MANUAL' as const });
+    const result = validateConfiguredMusicSchedule({ services: [middle], units, rules: rules(), assignments: [assignment(middle)],
+      history: [{ services: [first, last], assignments: [assignment(first), assignment(last)] }],
+      lineupChange: { serviceId: middle.id, unitId: 'choir-a' },
+    });
+    expect(result.reason).toMatch(/at most twice in a row/);
+  });
   const designation = (extra: object = {}) => ({id:'fixed-slot',systemId:'sys-music',configVersionId:'music-v1',categoryServicePolicyId:'policy-primary',choirId:'choir-a',displayOrder:0,createdByPersonId:'leader',createdAt:'2026-01-01T00:00:00.000Z',...extra});
   it('keeps unavailable fixed slots vacant with warnings and allows an eligible manual replacement', () => {
     const p = policy({planningMode:'FIXED'});

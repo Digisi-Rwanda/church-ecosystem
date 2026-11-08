@@ -1697,6 +1697,9 @@ export async function publishScheduleDraft(id: string): Promise<void> {
 export async function publishScheduleMonths(months: string[]): Promise<void> {
   await apiFetch(`${MS}/months/publish`, { method: 'POST', body: { months } });
 }
+export async function deleteScheduleMonth(month: string, expected: Pick<ScheduleMonthView, 'state' | 'version'>): Promise<void> {
+  await apiFetch(`${MS}/months/${encodeURIComponent(month)}`, { method: 'DELETE', body: expected });
+}
 export async function editScheduleMonth(month: string, edit: ScheduleEdit): Promise<{ warnings: string[]; version: number }> {
   return apiFetch(`${MS}/months/${encodeURIComponent(month)}/edit`, { method: 'POST', body: edit });
 }

@@ -1,10 +1,13 @@
 import { describe, expect, it } from 'vitest';
+import { createElement } from 'react';
+import { renderToStaticMarkup } from 'react-dom/server';
+import { MusicBulletin } from './Bulletins.tsx';
 import {
   ddmmyyyy, mondayOf, monthWord, musicPdfFilename, musicTitle, musicWeeks, numberedTeam, paddedTeam,
   protocolPdfFilename, protocolTitle, protocolWeeks, weekRows, weekTitle,
 } from './bulletins';
 
-const svc = (id: string, date: string, kind: string, names: string[] = []) => ({ id, date, kind, names });
+const svc = (id: string, date: string, kind: string, names: string[] = [], label = kind) => ({ id, date, kind, label, names });
 
 describe('music bulletin', () => {
   const services = [
@@ -20,11 +23,24 @@ describe('music bulletin', () => {
   it('groups a week Monday to Sunday and keeps Igaburo apart', () => {
     const { weeks, specials } = musicWeeks(services);
     expect(weeks.map((w) => w.from)).toEqual(['2026-10-05', '2026-10-19']);
-    expect(weeks[0]!.tuesday?.date).toBe('2026-10-06');
-    expect(weeks[0]!.friday?.names).toEqual(["Ijwi ry'Umwami Yesu"]);
-    expect(weeks[0]!.sunday).toEqual({ date: '2026-10-11', first: ['Hope', 'Elimu', 'Integuza'], second: ['El Bethel', "Ijwi ry'Umwami Yesu", 'Beulah'] });
-    expect(weeks[1]!.sunday).toBeNull();
-    expect(specials).toEqual([{ id: 'f', date: '2026-10-24', names: ['El Bethel', "Ijwi ry'Umwami Yesu"] }]);
+    expect(weeks[0]!.services).toEqual(services.slice(0, 4));
+    expect(weeks[1]!.services).toEqual([services[4]]);
+    expect(specials).toEqual([services[5]]);
+  });
+  it('prints each configured service in its own column and drops absent services', () => {
+    const sunday = svc('ss1', '2026-11-08', 'SS1', ['Grace Choir'], 'Sunday Service 1');
+    const third = svc('ss3', '2026-11-08', 'OTHER', ['Elim'], 'Sunday Service 3');
+    const extra = svc('extra', '2026-11-08', 'SS1', [], 'Evening Service');
+    const render = (entries: typeof services) => renderToStaticMarkup(createElement(MusicBulletin, { month: '2026-11', services: entries }));
+    const html = render([sunday, third, extra]);
+    expect(html).toContain('colSpan="3"');
+    expect(html).toContain('Sunday Service 3');
+    expect(html).toContain('<td>Grace Choir</td><td>Elim</td><td></td>');
+    expect(html).toContain('Evening Service');
+    expect(html).not.toContain('SECOND SERVICE');
+    const afterRemoval = render([sunday, extra]);
+    expect(afterRemoval).toContain('colSpan="2"');
+    expect(afterRemoval).not.toContain('Sunday Service 3');
   });
   it('titles and sizes the weeks like the sheet', () => {
     const { weeks } = musicWeeks(services);

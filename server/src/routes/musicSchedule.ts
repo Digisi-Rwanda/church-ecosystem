@@ -27,7 +27,7 @@ type Res = import('express').Response;
 const fail = (res: Res, status: number, code: string, error: string) => res.status(status).json({ error, code });
 const iso = (v: Date | string | null | undefined) => (v ? (v instanceof Date ? v : new Date(v)).toISOString() : null);
 const HORIZONS = ['MONTH', 'QUARTER', 'HALF', 'YEAR'] as const;
-const nowMonth = () => new Date().toISOString().slice(0, 7);
+const nowMonth = () => new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString().slice(0, 7); // Kigali is UTC+2.
 
 interface DraftRow { id: string; label: string; horizon: string; startMonth: string; servicesJson: string; assignmentsJson: string; warningsJson?: string | null; configVersionId?: string | null; createdAt?: Date | string | null }
 const draftDoc = (r: DraftRow): DraftDoc => ({
@@ -59,17 +59,18 @@ function validateLiveMusic(
   config: LoadedMusicConfig,
   history: HistoricalSchedule[],
   allowManualIncomplete = false,
+  lineupChange?: { serviceId: string; unitId?: string },
 ) {
   return validateConfiguredMusicSchedule({
-    services, assignments, units, rules: configuredRules(config), history, allowManualIncomplete,
+    services, assignments, units, rules: configuredRules(config), history, allowManualIncomplete, lineupChange,
   });
 }
 
-async function audit(actorId: string, action: string, detail: string, meta: object) {
-  await prisma.auditEvent.create({ data: { at: new Date(), actorId, systemId: MUSIC, action, resource: 'SCHEDULING', detail, metaJson: JSON.stringify(meta) } });
+async function audit(actorId: string, action: string, detail: string, meta: object, db: Pick<typeof prisma, 'auditEvent'> = prisma) {
+  await db.auditEvent.create({ data: { at: new Date(), actorId, systemId: MUSIC, action, resource: 'SCHEDULING', detail, metaJson: JSON.stringify(meta) } });
 }
-async function writeLog(periodKey: string, stage: 'CONFIRMED' | 'PUBLISHED', action: LogAction, version: number, byId: string, changes: LogChange[], doc?: MonthDoc) {
-  await prisma.musicLog.create({ data: {
+async function writeLog(periodKey: string, stage: 'CONFIRMED' | 'PUBLISHED', action: LogAction, version: number, byId: string, changes: LogChange[], doc?: MonthDoc, db: Pick<typeof prisma, 'musicLog'> = prisma) {
+  await db.musicLog.create({ data: {
     periodKey, stage, action, version, byId, summary: summarise(action, stage, changes), changesJson: JSON.stringify(changes),
     configVersionId: doc?.configVersionId ?? null,
     servicesSnapshotJson: doc ? JSON.stringify(doc.services) : null,
@@ -293,7 +294,8 @@ function applyEdit(
     next = now.map((x) => (x === e.unitId ? e.toUnitId! : x));
   }
   const after = withService(assignments, e.serviceId, next);
-  const validation = validateLiveMusic(services, after, units, cfg, history, allowManualIncomplete);
+  const added = next.find((unitId) => !now.includes(unitId));
+  const validation = validateLiveMusic(services, after, units, cfg, history, allowManualIncomplete, { serviceId: e.serviceId, unitId: added });
   if (!validation.ok) return { ok: false as const, status: 409, code: 'CONFIG', error: validation.reason ?? 'This breaks a configuration policy', warnings: validation.warnings };
   return { ok: true as const, assignments: after, warnings: validation.warnings };
 }
@@ -363,7 +365,10 @@ async function confirmMonths(me: string, row: DraftRow, chosen: string[]): Promi
   for (const month of chosen) {
     const slice = sliceMonth(d, month);
     const before = existing.get(month) ?? null;
-    const doc: MonthDoc = { periodKey: month, state: 'CONFIRMED', version: (before?.version ?? 0) + 1, batchId, batchHorizon: d.horizon, services: slice.services, assignments: slice.assignments, warnings: d.warnings, configVersionId: d.configVersionId ?? null };
+    const lastDeletion = before ? null : await prisma.musicLog.findFirst({
+      where: { periodKey: month, action: 'DELETED' }, orderBy: { version: 'desc' }, select: { version: true },
+    });
+    const doc: MonthDoc = { periodKey: month, state: 'CONFIRMED', version: (before?.version ?? lastDeletion?.version ?? 0) + 1, batchId, batchHorizon: d.horizon, services: slice.services, assignments: slice.assignments, warnings: d.warnings, configVersionId: d.configVersionId ?? null };
     await saveMonth(doc, { confirmedAt: before ? undefined : at, confirmedById: me, updatedAt: at, updatedById: me, ...(before ? {} : {}) });
     await writeLog(month, 'CONFIRMED', before ? 'RECONFIRMED' : 'CONFIRMED', doc.version, me, before ? diffLineup(before, doc, nameFor(units)) : [], doc);
   }
@@ -473,6 +478,41 @@ musicScheduleRouter.post('/drafts/:id/publish', requireAuth, async (req: AuthedR
 });
 
 /* ───────────── Editing a decided month ───────────── */
+
+musicScheduleRouter.delete('/months/:month', requireAuth, async (req: AuthedRequest, res) => {
+  const g = await gate(req, res, true);
+  if (!g) return;
+  const month = String(req.params.month);
+  const expected = z.object({ state: z.enum(['CONFIRMED', 'PUBLISHED']), version: z.number().int().positive() }).safeParse(req.body);
+  if (!isMonth(month) || !expected.success) return fail(res, 400, 'BAD_INPUT', 'Choose a schedule to delete.');
+
+  const result = await prisma.$transaction(async (db) => {
+    const row = await db.musicMonth.findUnique({ where: { periodKey: month } });
+    if (!row) return 'missing';
+    if (row.state !== expected.data.state || row.version !== expected.data.version) return 'changed';
+    const plan = await db.protocolPlan.findUnique({ where: { monthKey: month } });
+    const slot = await db.protocolSlot.findFirst({ where: { monthKey: month }, select: { id: true } });
+    if ((plan && (plan.status !== 'OPEN' || plan.musicVersionBuiltOn != null)) || slot) return 'protocol';
+
+    const { count } = await db.musicMonth.deleteMany({ where: { id: row.id, ...expected.data } });
+    if (count !== 1) return 'changed';
+    const doc = toDoc(row);
+    await writeLog(month, doc.state, 'DELETED', doc.version, g.me, [], doc, db);
+    await audit(g.me, 'MONTH_DELETED', `Deleted ${month} (v${doc.version})`, { month, state: doc.state, version: doc.version }, db);
+    return 'deleted';
+  });
+  if (result === 'missing') return fail(res, 404, 'NOT_FOUND', 'No schedule for this month.');
+  if (result === 'changed') return fail(res, 409, 'SCHEDULE_CHANGED', 'This schedule changed. Reload the month and review it before deleting.');
+  if (result === 'protocol') return fail(res, 409, 'PROTOCOL_DEPENDENCY', 'The Protocol team plan uses this schedule, so it cannot be deleted here.');
+  const key = `music-delete:${month}:v${expected.data.version}`;
+  const title = 'Choir schedule removed';
+  const body = `Music removed the choir schedule for ${month}.`;
+  await Promise.allSettled([
+    tellProtocol(title, body, `${key}:protocol`),
+    ...(expected.data.state === 'PUBLISHED' ? [tellChoirs(title, body, key)] : []),
+  ]);
+  res.status(204).end();
+});
 
 musicScheduleRouter.post('/months/:month/edit', requireAuth, async (req: AuthedRequest, res) => {
   const g = await gate(req, res, true);

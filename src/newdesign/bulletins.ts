@@ -3,7 +3,7 @@
  * (one column per week). This file only arranges data; Bulletins.tsx draws it. Dates are plain YYYY-MM-DD strings.
  */
 
-export type BulletinService = { id: string; date: string; kind: string; names: string[] };
+export type BulletinService = { id: string; date: string; kind: string; label: string; names: string[]; editable?: boolean };
 export type ProtocolBulletinMember = { name: string; role: 'MEMBER' | 'TEAM_LEADER' | 'VICE_LEADER' };
 export type ProtocolBulletinService = { id: string; date: string; kind: string; team: ProtocolBulletinMember[] };
 
@@ -37,36 +37,27 @@ export function mondayOf(d: string): string {
 
 export type MusicWeek = {
   number: number; from: string; to: string;
-  tuesday: { date: string; names: string[] } | null;
-  friday: { date: string; names: string[] } | null;
-  sunday: { date: string; first: string[]; second: string[] } | null;
+  services: BulletinService[];
 };
-export type MusicSpecial = { id: string; date: string; names: string[] };
 
 /** Weeks Monday to Sunday that have at least one service, numbered from the first week shown. */
-export function musicWeeks(services: BulletinService[]): { weeks: MusicWeek[]; specials: MusicSpecial[] } {
+export function musicWeeks(services: BulletinService[]): { weeks: MusicWeek[]; specials: BulletinService[] } {
   const weeks = new Map<string, MusicWeek>();
-  const specials: MusicSpecial[] = [];
-  const week = (date: string): MusicWeek => {
-    const from = mondayOf(date);
-    let w = weeks.get(from);
-    if (!w) { w = { number: 0, from, to: fromMs(toMs(from) + 6 * DAY), tuesday: null, friday: null, sunday: null }; weeks.set(from, w); }
-    return w;
-  };
-  const join = (a: string[], b: string[]) => [...a, ...b.filter((n) => !a.includes(n))];
-  for (const s of [...services].sort((a, b) => a.date.localeCompare(b.date) || a.id.localeCompare(b.id))) {
-    if (s.kind === 'IGABURO') { specials.push({ id: s.id, date: s.date, names: s.names }); continue; }
-    const w = week(s.date);
-    if (s.kind === 'TUESDAY') w.tuesday = { date: s.date, names: join(w.tuesday?.names ?? [], s.names) };
-    else if (s.kind === 'FRIDAY') w.friday = { date: s.date, names: join(w.friday?.names ?? [], s.names) };
-    else if (s.kind === 'SS1' || s.kind === 'SS2') {
-      w.sunday ??= { date: s.date, first: [], second: [] };
-      if (s.kind === 'SS1') w.sunday.first = join(w.sunday.first, s.names); else w.sunday.second = join(w.sunday.second, s.names);
+  const specials: BulletinService[] = [];
+  for (const service of [...services].sort((a, b) => a.date.localeCompare(b.date))) {
+    if (service.kind === 'IGABURO') {
+      specials.push(service);
+      continue;
     }
+    const from = mondayOf(service.date);
+    let w = weeks.get(from);
+    if (!w) {
+      w = { number: weeks.size + 1, from, to: fromMs(toMs(from) + 6 * DAY), services: [] };
+      weeks.set(from, w);
+    }
+    w.services.push(service);
   }
-  const list = [...weeks.values()].sort((a, b) => a.from.localeCompare(b.from));
-  list.forEach((w, i) => { w.number = i + 1; });
-  return { weeks: list, specials };
+  return { weeks: [...weeks.values()], specials };
 }
 
 /** "FIRST WEEK: 05/10/2026 - 11/10/2026" */
@@ -77,7 +68,7 @@ export function weekTitle(w: MusicWeek): string {
 
 /** The choir sheet always shows three name rows, more if a cell is fuller. */
 export function weekRows(w: MusicWeek): number {
-  return Math.max(3, w.tuesday?.names.length ?? 0, w.friday?.names.length ?? 0, w.sunday?.first.length ?? 0, w.sunday?.second.length ?? 0);
+  return Math.max(3, ...w.services.map((service) => service.names.length));
 }
 
 export type ProtocolTeamBlock = {

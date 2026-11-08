@@ -44,6 +44,52 @@ export type ConfiguredMusicResult = {
 };
 
 const serviceCode = (slot: MusicServiceSlot) => slot.kind.toLowerCase();
+
+/** Shared by generation and validation. Each occurrence can break a run, even if it has no choir. */
+function lineupLimits(services: MusicServiceSlot[], rules: ConfiguredMusicRules, history: HistoricalSchedule[], current: MusicAssignment[] = []) {
+  const calendar = new Map(history.flatMap((month) => month.services).map((service) => [service.id, service]));
+  for (const service of services) calendar.set(service.id, service);
+  const byDate = new Map<string, MusicServiceSlot[]>();
+  const byCode = new Map<string, MusicServiceSlot[]>();
+  const position = new Map<string, number>();
+  const assigned = new Map<string, Set<string>>();
+  const primaryIds = new Set(rules.categories.filter((category) => category.active && category.code.toUpperCase() === 'PRIMARY').map((category) => category.id));
+  const primaryChoirs = new Set(rules.links.filter((link) => link.active && primaryIds.has(link.categoryId)).map((link) => link.choirId));
+  for (const service of [...calendar.values()].sort((a, b) =>
+    a.date.localeCompare(b.date) || (a.time ?? '').localeCompare(b.time ?? '') || a.id.localeCompare(b.id))) {
+    if (service.musicRequired === false) continue;
+    const dateSlots = byDate.get(service.date) ?? [];
+    dateSlots.push(service);
+    byDate.set(service.date, dateSlots);
+    const code = serviceCode(service);
+    const codeSlots = byCode.get(code) ?? [];
+    position.set(service.id, codeSlots.length);
+    codeSlots.push(service);
+    byCode.set(code, codeSlots);
+  }
+  const record = (assignment: MusicAssignment) => {
+    const lineup = assigned.get(assignment.serviceId) ?? new Set<string>();
+    lineup.add(assignment.unitId);
+    assigned.set(assignment.serviceId, lineup);
+  };
+  for (const month of history) for (const assignment of month.assignments) record(assignment);
+  for (const assignment of current) record(assignment);
+  const conflict = (unit: MusicScheduleUnit, service: MusicServiceSlot): string | undefined => {
+    const booked = (slot: MusicServiceSlot | undefined) => !!slot && assigned.get(slot.id)?.has(unit.id) === true;
+    if (primaryChoirs.has(unit.id) && byDate.get(service.date)?.some((other) => other.id !== service.id && booked(other))) {
+      return `${unit.name} is already scheduled on ${service.date}. A primary choir may serve only once per day.`;
+    }
+    const index = position.get(service.id);
+    const slots = byCode.get(serviceCode(service));
+    if (index === undefined || !slots) return;
+    const previous = booked(slots[index - 1]);
+    const next = booked(slots[index + 1]);
+    if ((previous && (next || booked(slots[index - 2]))) || (next && booked(slots[index + 2]))) {
+      return `${unit.name} may serve at most twice in a row on ${service.kind} (${service.date}).`;
+    }
+  };
+  return { record, conflict };
+}
 const tieHash = (seed: number, serviceId: string, unitId: string) => {
   let value = seed >>> 0;
   for (const char of `${serviceId}|${unitId}`) {
@@ -200,6 +246,7 @@ export function generateConfiguredMusicSchedule(input: {
   const seed = input.seed ?? 0;
   const linksByChoir = activeLinksByChoir(input.rules.links);
   const activeUnits = input.units.filter((unit) => unit.active !== false);
+  const limits = lineupLimits(input.services, input.rules, input.history ?? []);
 
   for (const unit of activeUnits) {
     const links = linksByChoir.get(unit.id) ?? [];
@@ -216,7 +263,8 @@ export function generateConfiguredMusicSchedule(input: {
   }
 
   const orderedServices = [...input.services].sort((a, b) =>
-    a.date.localeCompare(b.date) || serviceCode(a).localeCompare(serviceCode(b)),
+    a.date.localeCompare(b.date) || serviceCode(a).localeCompare(serviceCode(b)) ||
+    (a.time ?? '').localeCompare(b.time ?? '') || a.id.localeCompare(b.id),
   );
   const processedPolicyKeys = new Set<string>();
 
@@ -252,7 +300,12 @@ export function generateConfiguredMusicSchedule(input: {
           const candidate = candidates.find((item) => item.unit.id === row.choirId);
           const setting = candidate ? policyOverride(policy,candidate.link,definition.code) : null;
           const atMaximum = setting?.kind === 'MAXIMUM' && frequencyCount(countFor(row.choirId,definition.code,setting.period,service.periodKey,input.services,assignments,input.history ?? []),setting.counting) >= setting.target;
-          if (!candidate || atMaximum) {warnings.push(fixedVacancyWarning(service,row.choirId,input.units));continue;}
+          const conflict = candidate && limits.conflict(candidate.unit, service);
+          if (!candidate || atMaximum || conflict) {
+            warnings.push(fixedVacancyWarning(service, row.choirId, input.units));
+            if (conflict) warnings.push(conflict);
+            continue;
+          }
           chosen.push(candidate);
         }
         if (policy.planningMode === 'ROTATION') {
@@ -260,7 +313,7 @@ export function generateConfiguredMusicSchedule(input: {
           const needed = policy.requireAll ? candidates.length : Math.max(chosen.length,(policy.minCount ?? 0) - vacancies);
           for (const candidate of candidates) {
             if (chosen.length >= needed) break;
-            if (scopedFixed.some(row=>row.choirId === candidate.unit.id) || chosen.some(row=>row.unit.id === candidate.unit.id)) continue;
+            if (scopedFixed.some(row=>row.choirId === candidate.unit.id) || chosen.some(row=>row.unit.id === candidate.unit.id) || limits.conflict(candidate.unit, service)) continue;
             const setting = policyOverride(policy,candidate.link,definition.code);
             if (setting?.kind === 'MAXIMUM' && frequencyCount(countFor(candidate.unit.id,definition.code,setting.period,service.periodKey,input.services,assignments,input.history ?? []),setting.counting) >= setting.target) continue;
             chosen.push(candidate);
@@ -312,7 +365,7 @@ export function generateConfiguredMusicSchedule(input: {
         });
         const selected = new Set<string>();
         const take = (candidate: typeof candidates[number]) => {
-          if (selected.has(candidate.unit.id) || chosen.length >= maxCategory) return false;
+          if (selected.has(candidate.unit.id) || chosen.length >= maxCategory || limits.conflict(candidate.unit, service)) return false;
           const setting = policyOverride(policy, candidate.link, definition.code);
           if (setting?.kind === 'MAXIMUM') {
             const count = frequencyCount(countFor(candidate.unit.id, definition.code, setting.period, service.periodKey, input.services, assignments, input.history ?? []), setting.counting);
@@ -323,7 +376,7 @@ export function generateConfiguredMusicSchedule(input: {
           return true;
         };
         for (const item of requiredAll) {
-          if (!take(item)) return failure(`${service.label}: the required ${category.name} choirs exceed the category limit.`);
+          if (!take(item)) return failure(limits.conflict(item.unit, service) ?? `${service.label}: the required ${category.name} choirs exceed the category limit.`);
         }
         for (const candidate of sortedCandidates) {
           if (chosen.length >= targetCount) break;
@@ -351,7 +404,8 @@ export function generateConfiguredMusicSchedule(input: {
           take(candidate);
         }
         if (chosen.length < (policy.minCount ?? 0)) {
-          return failure(`${service.label}: ${category.name} needs at least ${policy.minCount} choirs, but the available category or service capacity is too small.`);
+          const conflict = candidates.map(({ unit }) => limits.conflict(unit, service)).find(Boolean);
+          return failure(`${service.label}: ${category.name} needs at least ${policy.minCount} choirs, but there are not enough available slots or choirs.${conflict ? ` ${conflict}` : ''}`);
         }
       }
 
@@ -367,12 +421,14 @@ export function generateConfiguredMusicSchedule(input: {
         if (assignments.filter((item) => item.serviceId === service.id).length >= definition.maxChoirs) {
           return failure(`${service.label} exceeds its configured capacity of ${definition.maxChoirs} choirs.`);
         }
-        assignments.push({
+        const assignment: MusicAssignment = {
           id: `masg-${service.id}-${candidate.unit.id}`,
           serviceId: service.id,
           unitId: candidate.unit.id,
           source: 'ENGINE',
-        });
+        };
+        assignments.push(assignment);
+        limits.record(assignment);
       }
     }
   }
@@ -396,6 +452,8 @@ export function validateConfiguredMusicSchedule(input: {
   rules: ConfiguredMusicRules;
   history?: HistoricalSchedule[];
   allowManualIncomplete?: boolean;
+  /** Edits check the newly added choir so older lineups can be repaired one change at a time. */
+  lineupChange?: { serviceId: string; unitId?: string };
 }): { ok: boolean; warnings: string[]; reason?: string; vacantFixedServiceIds?: string[] } {
   const warnings: string[] = [];
   const vacantFixedServiceIds = new Set<string>();
@@ -403,6 +461,7 @@ export function validateConfiguredMusicSchedule(input: {
   const linksByChoir = activeLinksByChoir(input.rules.links);
   const servicesById = new Map(input.services.map((service) => [service.id, service]));
   const assignedByService = new Map<string, Set<string>>();
+  const limits = lineupLimits(input.services, input.rules, input.history ?? [], input.assignments);
 
   for (const assignment of input.assignments) {
     const service = servicesById.get(assignment.serviceId);
@@ -429,6 +488,10 @@ export function validateConfiguredMusicSchedule(input: {
     }
     if (isUnavailable(unit.id, service, input.rules.unavailability)) {
       return { ok: false, warnings, reason: `${unit.name} is marked unavailable for ${service.label}.` };
+    }
+    if (!input.lineupChange || (input.lineupChange.serviceId === service.id && input.lineupChange.unitId === unit.id)) {
+      const conflict = limits.conflict(unit, service);
+      if (conflict) return { ok: false, warnings, reason: conflict };
     }
     // Eligible manual replacements are allowed; service-level checks retain designated
     // available choirs and limit replacements to vacant fixed slots.
@@ -473,7 +536,7 @@ export function validateConfiguredMusicSchedule(input: {
           const candidate = categoryCandidates.find(c=>c.unit.id === row.choirId)!;
           const setting = policyOverride(policy,candidate.link,definition.code);
           const capped = setting?.kind === 'MAXIMUM' && frequencyCount(countFor(row.choirId,definition.code,setting.period,service.periodKey,input.services,input.assignments,input.history ?? []),setting.counting) >= setting.target;
-          if (!capped) return {ok:false,warnings,reason:`${service.label}: keep the available designated choir ${candidate.unit.name}.`};
+          if (!capped && !limits.conflict(candidate.unit, service)) return {ok:false,warnings,reason:`${service.label}: keep the available designated choir ${candidate.unit.name}.`};
         }
         if (assignedCategoryIds.length > fixedSlots) return {ok:false,warnings,reason:`${service.label}: there are no additional vacant fixed slots for this category.`};
         for (const row of fixed.filter(row => !assigned.has(row.choirId))) warnings.push(assignedCategoryIds.length < fixedSlots
@@ -508,7 +571,8 @@ export function validateConfiguredMusicSchedule(input: {
       const actual = setting.counting === 'DISTINCT_DATES' ? dates.size : count;
       if (setting.kind === 'MINIMUM' && actual < setting.target) {
         const vacantFixed = matchingServices.some(service => frequencyBucket(service.periodKey,setting.period) === bucket && fixedFor(input.rules,policy.id,service).some(row=>row.choirId === unitId)
-          && !eligibleCandidates({service,policy,rules:input.rules,units:input.units,linksByChoir}).some(candidate=>candidate.unit.id === unitId));
+          && !eligibleCandidates({service,policy,rules:input.rules,units:input.units,linksByChoir})
+            .some(candidate=>candidate.unit.id === unitId && !limits.conflict(candidate.unit, service)));
         if (vacantFixed) {warnings.push(`Frequency minimum for ${unitId} could not be met because a fixed slot is unavailable or ineligible.`);continue;}
         return `Frequency minimum for ${unitId} is ${setting.target} in ${bucket}; found ${actual}.`;
       }

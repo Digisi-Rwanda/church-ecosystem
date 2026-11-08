@@ -127,7 +127,7 @@ function ChoirSchedule({ view, state, layout }: { view: ProtocolMonthView; state
     <>
       <div className="pt-bar"><span className="muted">v{view.music.version}</span><span className="pt-bar-actions"><button type="button" className="btn secondary" onClick={pdf}>{t('door.sch.pdf')}</button></span></div>
       {layout === 'list' && <ScheduleList rows={view.services.map((s) => ({ id: s.id, date: s.date, title: t(`door.music.kind.${s.kind}` as 'door.music.kind.SS1'), names: s.music.map((n) => ({ name: n })) }))} />}
-      {layout === 'bulletin' && <MusicBulletin month={view.month} services={view.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, names: s.music }))} />}
+      {layout === 'bulletin' && <MusicBulletin month={view.month} services={view.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, label: s.label, names: s.music }))} />}
       {layout === 'cards' && <ul className="pt-grid">
         {view.services.map((s) => (
           <li key={s.id} className="pt-card">
