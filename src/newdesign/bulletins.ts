@@ -1,23 +1,20 @@
 /**
  * The two printed bulletins the church pins up: the choir schedule (week by week) and the protocol teams
- * (one column per week). This file only arranges data; Bulletins.tsx draws it. Dates are plain YYYY-MM-DD strings.
+ * (one column per service). This file only arranges data; Bulletins.tsx draws it. Dates are plain YYYY-MM-DD strings.
  */
 
 export type BulletinService = { id: string; date: string; kind: string; label: string; names: string[]; editable?: boolean };
 export type ProtocolBulletinMember = { name: string; role: 'MEMBER' | 'TEAM_LEADER' | 'VICE_LEADER' };
-export type ProtocolBulletinService = { id: string; date: string; kind: string; label?: string; team: ProtocolBulletinMember[] };
+export type ProtocolBulletinService = { id: string; date: string; kind: string; label: string; choirs: string[]; team: ProtocolBulletinMember[] };
 
 /** Wording on the English choir sheet. */
 export const CHURCH_HEADING = 'ADEPR KACYIRU CHURCH';
 /** Wording on the protocol sheet. */
 export const PROTOCOL_CHURCH_HEADING = 'ADEPR KACYIRU';
-export const PROTOCOL_TEAM_SIZE = 10;
 export const PROTOCOL_NB =
   "NB: Abayobozi b'amatsinda (Team Leaders) bagomba gutanga raporo y'ubwitabire nyuma y'iteraniro.";
 
 const WEEK_EN = ['FIRST', 'SECOND', 'THIRD', 'FOURTH', 'FIFTH', 'SIXTH'];
-const WEEK_RW = ['MBERE', 'KABIRI', 'GATATU', 'KANE', 'GATANU', 'GATANDATU'];
-const KIND_ORDER = ['TUESDAY', 'FRIDAY', 'IGABURO', 'SS1', 'SS2'] as const;
 
 const DAY = 86_400_000;
 const toMs = (d: string) => Date.parse(`${d}T00:00:00Z`);
@@ -71,88 +68,33 @@ export function weekRows(w: MusicWeek): number {
   return Math.max(3, ...w.services.map((service) => service.names.length));
 }
 
-export type ProtocolTeamBlock = {
-  id: string;
-  date: string;
-  kind: string;
-  heading: string;
-  members: Array<{ n: number; name: string; tag?: string }>;
-};
-
-export type ProtocolWeek = {
-  number: number;
-  from: string;
-  to: string;
-  heading: string;
-  services: ProtocolTeamBlock[];
-};
-
 const ROLE_ORDER = { TEAM_LEADER: 0, VICE_LEADER: 1, MEMBER: 2 } as const;
-const TAG = { TEAM_LEADER: 'Team Lead', VICE_LEADER: 'V/s Team Lead' } as const;
+const TAG = { TEAM_LEADER: 'L', VICE_LEADER: 'VL' } as const;
 
-/** Leader first, then the vice leader, then the rest in the order given; numbered 1, 2, 3 ... */
-export function numberedTeam(team: ProtocolBulletinMember[]): ProtocolTeamBlock['members'] {
-  return team
-    .map((m, i) => ({ m, i }))
-    .sort((a, b) => ROLE_ORDER[a.m.role] - ROLE_ORDER[b.m.role] || a.i - b.i)
-    .map(({ m }, k) => ({ n: k + 1, name: m.name, tag: m.role === 'MEMBER' ? undefined : TAG[m.role] }));
+export function numberedTeam(team: ProtocolBulletinMember[]) {
+  return [...team]
+    .sort((a, b) => ROLE_ORDER[a.role] - ROLE_ORDER[b.role])
+    .map(({ name, role }, i) => ({ n: i + 1, name, tag: role === 'MEMBER' ? undefined : TAG[role] }));
 }
 
-/** Empty numbered seats so every team prints as ten lines. */
-export function paddedTeam(team: ProtocolBulletinMember[]): ProtocolTeamBlock['members'] {
-  const listed = numberedTeam(team);
-  const out = listed.slice(0, PROTOCOL_TEAM_SIZE);
-  while (out.length < PROTOCOL_TEAM_SIZE) out.push({ n: out.length + 1, name: '' });
-  return out;
-}
+const weekday = (date: string) => (new Date(toMs(date)).getUTCDay() + 6) % 7;
 
-/** Service title as the protocol sheet writes it. */
-export function protocolServiceHeading(kind: string, date: string, label = kind): string {
-  const d = ddmmyyyy(date);
-  if (kind === 'TUESDAY') return `Iteraniro ryo kuwa kabiri ${d}`;
-  if (kind === 'FRIDAY') return `Iteraniro ryo kuwa gatanu ${d}`;
-  if (kind === 'IGABURO') return `Iteraniro ryo ku igaburo ryera ${d}`;
-  if (kind === 'SS1') return `Iteraniro rya mbere(1) kucyumweru ${d}`;
-  if (kind === 'SS2') return `Iteraniro rya kabiri(2) kucyumweru ${d}`;
-  return `${label} ${d}`;
-}
-
-export function protocolWeekHeading(number: number): string {
-  const ord = WEEK_RW[number - 1];
-  return ord ? `ICYUMWERU CYA ${ord} (${number})` : `ICYUMWERU (${number})`;
-}
-
-/**
- * The protocol sheet is four (or five) weekly columns. Each week stacks Tuesday, Friday,
- * Holy Communion, then the two Sunday services.
- */
-export function protocolWeeks(services: ProtocolBulletinService[]): ProtocolWeek[] {
-  const weeks = new Map<string, ProtocolWeek>();
-  for (const s of [...services].sort((a, b) => a.date.localeCompare(b.date) || KIND_ORDER.indexOf(a.kind as typeof KIND_ORDER[number]) - KIND_ORDER.indexOf(b.kind as typeof KIND_ORDER[number]) || a.id.localeCompare(b.id))) {
-    const from = mondayOf(s.date);
-    let w = weeks.get(from);
-    if (!w) {
-      w = { number: 0, from, to: fromMs(toMs(from) + 6 * DAY), heading: '', services: [] };
-      weeks.set(from, w);
-    }
-    w.services.push({
-      id: s.id,
-      date: s.date,
-      kind: s.kind,
-      heading: protocolServiceHeading(s.kind, s.date, s.label),
-      members: paddedTeam(s.team),
-    });
+/** Group the selected schedule's occurrences by service code, with Monday first. */
+export function protocolColumns(services: ProtocolBulletinService[]) {
+  const byService = new Map<string, ProtocolBulletinService[]>();
+  for (const service of [...services].sort((a, b) => a.date.localeCompare(b.date))) {
+    const code = service.kind.toUpperCase();
+    const column = byService.get(code);
+    if (column) column.push(service);
+    else byService.set(code, [service]);
   }
-  const list = [...weeks.values()].sort((a, b) => a.from.localeCompare(b.from));
-  list.forEach((w, i) => {
-    w.number = i + 1;
-    w.heading = protocolWeekHeading(w.number);
-  });
-  return list;
+  return [...byService.entries()].sort(([codeA, a], [codeB, b]) =>
+    weekday(a[0]!.date) - weekday(b[0]!.date) || codeA.localeCompare(codeB, 'en', { numeric: true }));
 }
 
-/** "GAHUNDA YA PROTOCOLE Y'UKWEZI KWA 09" */
-export const protocolTitle = (month: string): string => `GAHUNDA YA PROTOCOLE Y'UKWEZI KWA ${month.slice(5, 7)}`;
+export const protocolTitle = (month: string): string =>
+  `PROTOCOL DUTIES SCHEDULE ${month.slice(5, 7)}, ${month.slice(0, 4)}`;
+
 /** "HOW THE CHOIRS WILL SERVE IN THE SERVICES, OCTOBER 2026" */
 export const musicTitle = (month: string): string =>
   `HOW THE CHOIRS WILL SERVE IN THE SERVICES, ${monthWord(month)} ${month.slice(0, 4)}`;

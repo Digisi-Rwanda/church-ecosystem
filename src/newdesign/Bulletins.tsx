@@ -1,6 +1,6 @@
 import {
-  CHURCH_HEADING, PROTOCOL_CHURCH_HEADING, PROTOCOL_NB, ddmmyyyy, musicTitle, musicWeeks, protocolTitle, protocolWeeks, weekRows, weekTitle,
-  type BulletinService, type ProtocolBulletinService, type ProtocolTeamBlock,
+  CHURCH_HEADING, PROTOCOL_CHURCH_HEADING, PROTOCOL_NB, ddmmyyyy, musicTitle, musicWeeks, numberedTeam, protocolColumns, protocolTitle, weekRows, weekTitle,
+  type BulletinService, type ProtocolBulletinService,
 } from './bulletins';
 
 /** The choir schedule as the church pins it up, with one column for each scheduled service. */
@@ -54,22 +54,22 @@ export function MusicBulletin({ month, services, onEdit, editLabel }: {
   );
 }
 
-function TeamBlock({ block }: { block: ProtocolTeamBlock }) {
+function TeamBlock({ service }: { service: ProtocolBulletinService }) {
   return (
     <section className="bl-team">
-      <h4 className={block.kind === 'IGABURO' ? 'bl-igaburo' : undefined}><span aria-hidden>➤ </span>{block.heading}</h4>
+      <h4><span aria-hidden>▸ </span>{service.label} ({ddmmyyyy(service.date)})</h4>
       <ol>
-        {block.members.map((m) => (
-          <li key={`${block.id}-${m.n}`}>{m.name}{m.tag && <> <strong>({m.tag})</strong></>}</li>
+        {numberedTeam(service.team).map((member) => (
+          <li key={member.n}>{member.name}{member.tag && <> <strong>({member.tag})</strong></>}</li>
         ))}
       </ol>
+      {service.choirs.length > 0 && <p><strong>Choir:</strong> {service.choirs.join(', ')}</p>}
     </section>
   );
 }
 
-/** The protocol teams as weekly columns, matching the church's printed Protocol_Schedule PDF. */
 export function ProtocolBulletin({ month, services }: { month: string; services: ProtocolBulletinService[] }) {
-  const weeks = protocolWeeks(services);
+  const columns = protocolColumns(services);
   return (
     <article id="protocol-schedule-bulletin" className="bl-sheet bl-protocol print-sheet" aria-label={protocolTitle(month)}>
       <header className="bl-head">
@@ -77,15 +77,17 @@ export function ProtocolBulletin({ month, services }: { month: string; services:
         <img src="/brand/adepr-logo.png" alt="" width={64} height={64} />
         <h3 className="bl-title bl-blue">{protocolTitle(month)}</h3>
       </header>
-      <div className="bl-pweeks" style={{ gridTemplateColumns: `repeat(${Math.max(weeks.length, 1)}, minmax(11rem, 1fr))` }}>
-        {weeks.map((w) => (
-          <div key={w.from} className="bl-pweek">
-            <h4 className="bl-pweek-title">{w.heading}</h4>
-            {w.services.map((b) => <TeamBlock key={b.id} block={b} />)}
+      <div className="bl-pservices">
+        {columns.map(([code, occurrences]) => (
+          <div key={code} className="bl-pservice">
+            {occurrences.map((service) => <TeamBlock key={service.id} service={service} />)}
           </div>
         ))}
       </div>
-      <p className="bl-pfoot">{PROTOCOL_NB}</p>
+      <footer className="bl-pfoot">
+        <p><strong>Note:</strong> (L) = Team Leader · (VL) = Vice Team Leader</p>
+        <p>{PROTOCOL_NB}</p>
+      </footer>
     </article>
   );
 }

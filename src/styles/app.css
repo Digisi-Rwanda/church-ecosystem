@@ -8576,7 +8576,7 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
 .pager ul { list-style: none; display: flex; flex-wrap: wrap; gap: 0.35rem; margin: 0; padding: 0; align-items: center; }
 .pager .btn[aria-current="page"] { cursor: default; }
 
-/* ── Printed bulletins: choir schedule (weeks) and protocol teams (four columns) ── */
+/* ── Printed bulletins: choir schedule (weeks) and protocol teams (grouped by service) ── */
 .bl-sheet { background: #fff; color: #111; border: 2px solid #111; max-width: 56rem; margin: 0 auto; width: 100%; font-family: Arial, Helvetica, sans-serif; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
 .bl-head { padding: 0.5rem 0.75rem; display: grid; gap: 0.35rem; justify-items: start; }
 .bl-church { margin: 0; color: #1f6fb0; font-weight: 700; font-size: 0.95rem; }
@@ -8597,31 +8597,30 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
 .bl-col { padding: 0.6rem 0.5rem; display: grid; gap: 1rem; align-content: start; font-size: 0.85rem; border-right: 1px solid #999; }
 .bl-col:last-child { border-right: 0; }
 .bl-c1 { background: #eaf0fb; } .bl-c2 { background: #f0edf8; } .bl-c3 { background: #f2f2f2; } .bl-c4 { background: #eaf5ea; }
-.bl-team h4 { margin: 0 0 0.4rem; font-size: 0.85rem; background: #d9d9d9; display: inline-block; padding: 0.1rem 0.3rem; }
-.bl-team h4.bl-igaburo { background: #ffe699; }
-.bl-team ol { margin: 0; padding: 0; list-style: none; display: grid; gap: 0.15rem; counter-reset: bl; }
-.bl-team li { counter-increment: bl; min-height: 1.15em; }
-.bl-team li::before { content: counter(bl) '. '; }
-.bl-team p { margin: 0; }
+.bl-team { padding: 0.65rem; overflow-wrap: anywhere; }
+.bl-team + .bl-team { border-top: 1px solid #b8c0cb; }
+.bl-team h4 { margin: 0 0 0.4rem; font-size: 0.85rem; }
+.bl-team ol { margin: 0; padding-inline-start: 1.25rem; display: grid; gap: 0.15rem; }
+.bl-team p { margin: 0.45rem 0 0; }
 .bl-announce { margin: 0; text-align: center; font-size: 1rem; }
 .bl-notes { width: 100%; border: 1px dashed #9a9a9a; background: transparent; font: inherit; font-weight: 700; padding: 0.3rem; resize: vertical; }
 .bl-notes-print { display: none; white-space: pre-wrap; font-weight: 700; }
 .bl-protocol { max-width: 72rem; }
-.bl-pweeks { display: grid; gap: 0; overflow-x: auto; border-top: 1px solid #111; }
-.bl-pweek { padding: 0.45rem 0.4rem 0.7rem; display: grid; gap: 0.7rem; align-content: start; font-size: 0.78rem; border-right: 1px solid #999; min-width: 0; }
-.bl-pweek:last-child { border-right: 0; }
-.bl-pweek:nth-child(4n+1) { background: #eaf0fb; }
-.bl-pweek:nth-child(4n+2) { background: #f0edf8; }
-.bl-pweek:nth-child(4n+3) { background: #f2f2f2; }
-.bl-pweek:nth-child(4n+4) { background: #eaf5ea; }
-.bl-pweek-title { margin: 0; text-align: center; font-size: 0.82rem; color: #1f6fb0; text-transform: uppercase; }
-.bl-pfoot { margin: 0; padding: 0.45rem 0.6rem; font-size: 0.8rem; font-style: italic; border-top: 1px solid #111; }
+.bl-pservices { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 13rem), 1fr)); gap: 1px; background: #aab3bf; }
+.bl-pservice { min-width: 0; font-size: 0.8rem; }
+.bl-pservice:nth-child(4n+1) { background: #eaf0fb; }
+.bl-pservice:nth-child(4n+2) { background: #f0edf8; }
+.bl-pservice:nth-child(4n+3) { background: #f2f2f2; }
+.bl-pservice:nth-child(4n+4) { background: #eaf5ea; }
+.bl-pfoot { padding: 0.45rem 0.6rem; font-size: 0.8rem; border-top: 1px solid #aab3bf; }
+.bl-pfoot p { margin: 0.15rem 0; }
 @media (max-width: 720px) { .bl-cols { grid-template-columns: repeat(2, minmax(0, 1fr)); } .bl-week { font-size: 0.8rem; } }
 @media print {
   .bl-notes { display: none; }
   .bl-notes-print { display: block; }
   .bl-sheet { max-width: none; }
-  .bl-week, .bl-pweek { break-inside: avoid; }
+  .bl-week, .bl-team { break-inside: avoid; }
+  .bl-pservices { grid-template-columns: repeat(auto-fit, minmax(min(100%, 9rem), 1fr)); }
   body:has(.bl-sheet.print-sheet) * { visibility: hidden; }
   .bl-sheet.print-sheet, .bl-sheet.print-sheet * { visibility: visible; }
   .bl-sheet.print-sheet { position: absolute; left: 0; top: 0; width: 100%; border: 0; }

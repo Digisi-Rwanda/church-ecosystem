@@ -265,7 +265,7 @@ export function ProtocolTeamsPage() {
     chip: <StatusChip tone={regular(s) >= s.target ? 'success' : 'warn'}>{t('door.protocol.teamSize', { count: String(regular(s)), target: String(s.target) })}</StatusChip>,
     onEdit: edit ? () => setEditing(s.id) : undefined,
   }));
-  const grid = (edit: boolean) => v && (layout === 'list' ? <ScheduleList rows={teamRows(edit)} /> : layout === 'bulletin' ? <ProtocolBulletin month={month} services={v.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, label: protocolServiceLabel(s), team: s.team.filter((m) => m.slotKind !== 'FILL_IN').map((m) => ({ name: m.name, role: m.role })) }))} /> : (
+  const grid = (edit: boolean) => v && (layout === 'list' ? <ScheduleList rows={teamRows(edit)} /> : layout === 'bulletin' ? <ProtocolBulletin month={month} services={v.services.map((s) => ({ id: s.id, date: s.date, kind: s.kind, label: protocolServiceLabel(s), choirs: s.music, team: s.team.filter((m) => m.slotKind !== 'FILL_IN').map((m) => ({ name: m.name, role: m.role })) }))} /> : (
     <ul className="pt-grid">
       {v.services.map((s) => <ServiceCard key={s.id} svc={s} view={v} onEdit={edit ? () => setEditing(s.id) : undefined} />)}
     </ul>

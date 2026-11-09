@@ -1,10 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import { MusicBulletin } from './Bulletins.tsx';
+import { MusicBulletin, ProtocolBulletin } from './Bulletins.tsx';
 import {
-  ddmmyyyy, mondayOf, monthWord, musicPdfFilename, musicTitle, musicWeeks, numberedTeam, paddedTeam,
-  protocolPdfFilename, protocolTitle, protocolWeeks, weekRows, weekTitle,
+  ddmmyyyy, mondayOf, monthWord, musicPdfFilename, musicTitle, musicWeeks, numberedTeam, protocolColumns,
+  protocolPdfFilename, protocolTitle, type ProtocolBulletinService, weekRows, weekTitle,
 } from './bulletins';
 
 const svc = (id: string, date: string, kind: string, names: string[] = [], label = kind) => ({ id, date, kind, label, names });
@@ -57,32 +57,30 @@ describe('music bulletin', () => {
 describe('protocol bulletin', () => {
   it('puts the leader first, then the vice leader, and numbers everyone', () => {
     const t = numberedTeam([{ name: 'B', role: 'MEMBER' }, { name: 'V', role: 'VICE_LEADER' }, { name: 'C', role: 'MEMBER' }, { name: 'L', role: 'TEAM_LEADER' }]);
-    expect(t).toEqual([{ n: 1, name: 'L', tag: 'Team Lead' }, { n: 2, name: 'V', tag: 'V/s Team Lead' }, { n: 3, name: 'B', tag: undefined }, { n: 4, name: 'C', tag: undefined }]);
+    expect(t).toEqual([{ n: 1, name: 'L', tag: 'L' }, { n: 2, name: 'V', tag: 'VL' }, { n: 3, name: 'B', tag: undefined }, { n: 4, name: 'C', tag: undefined }]);
   });
-  it('pads every team to ten lines', () => {
-    const t = paddedTeam([{ name: 'A', role: 'MEMBER' }]);
-    expect(t).toHaveLength(10);
-    expect(t[0]).toEqual({ n: 1, name: 'A', tag: undefined });
-    expect(t[9]).toEqual({ n: 10, name: '' });
-  });
-  it('stacks each week as a column, Tuesday through the two Sunday services', () => {
-    const team = [{ name: 'X', role: 'MEMBER' as const }];
-    const weeks = protocolWeeks([
-      { id: '3', date: '2026-09-13', kind: 'SS1', team }, { id: '1', date: '2026-09-05', kind: 'IGABURO', team }, { id: '2', date: '2026-09-06', kind: 'SS1', team },
-      { id: '4', date: '2026-09-06', kind: 'SS2', team }, { id: '5', date: '2026-09-08', kind: 'TUESDAY', team },
+  it('adds and removes service columns and renders configured names and the full lineup', () => {
+    const team = Array.from({ length: 11 }, (_, index) => ({ name: `Member ${index + 1}`, role: 'MEMBER' as const }));
+    const tuesday = { id: '1', date: '2026-11-03', kind: 'TUESDAY', label: 'Tuesday Service', team, choirs: [] };
+    const third = { id: '2', date: '2026-11-08', kind: 'ss3', label: 'Sunday Service 3', team, choirs: ['Elim'] };
+    const nextThird = { ...third, id: '3', date: '2026-11-15', kind: 'SS3' };
+    const friday = { ...tuesday, id: '4', date: '2026-11-06', kind: 'FRIDAY', label: 'Friday Service' };
+    const services = [nextThird, friday, tuesday, third];
+    expect(protocolColumns(services).map(([code, occurrences]) => [code, occurrences.map((service) => service.id)])).toEqual([
+      ['TUESDAY', ['1']], ['FRIDAY', ['4']], ['SS3', ['2', '3']],
     ]);
-    expect(weeks.map((w) => w.heading)).toEqual(['ICYUMWERU CYA MBERE (1)', 'ICYUMWERU CYA KABIRI (2)']);
-    expect(weeks[0]!.services.map((b) => b.heading)).toEqual([
-      'Iteraniro ryo ku igaburo ryera 05/09/2026',
-      'Iteraniro rya mbere(1) kucyumweru 06/09/2026',
-      'Iteraniro rya kabiri(2) kucyumweru 06/09/2026',
-    ]);
-    expect(weeks[1]!.services.map((b) => b.heading)).toEqual([
-      'Iteraniro ryo kuwa kabiri 08/09/2026',
-      'Iteraniro rya mbere(1) kucyumweru 13/09/2026',
-    ]);
-    expect(weeks[0]!.services[0]!.members).toHaveLength(10);
-    expect(protocolTitle('2026-09')).toBe("GAHUNDA YA PROTOCOLE Y'UKWEZI KWA 09");
-    expect(protocolPdfFilename('2026-09')).toBe('Protocol_Schedule_September_2026.pdf');
+    const render = (entries: ProtocolBulletinService[]) =>
+      renderToStaticMarkup(createElement(ProtocolBulletin, { month: '2026-11', services: entries }));
+    const html = render(services);
+    expect(html).toContain('Sunday Service 3 (08/11/2026)');
+    expect(html).toContain('Sunday Service 3 (15/11/2026)');
+    expect(html).toContain('Friday Service');
+    expect(html).toContain('Member 11');
+    expect(html).toContain('Choir:</strong> Elim');
+    const updated = services.filter((service) => service !== friday);
+    expect(protocolColumns(updated).map(([code]) => code)).toEqual(['TUESDAY', 'SS3']);
+    expect(render(updated)).not.toContain('Friday Service');
+    expect(protocolTitle('2026-11')).toBe('PROTOCOL DUTIES SCHEDULE 11, 2026');
+    expect(protocolPdfFilename('2026-11')).toBe('Protocol_Schedule_November_2026.pdf');
   });
 });
