@@ -1,0 +1,140 @@
+import { useState, type FormEvent } from 'react';
+import { PendingFiles, uploadPending } from './PendingFiles';
+import { createPlan, editPlan, PLAN_TYPES, type DirectoryPerson, type PlanDetail, type PlanOptions, type PlanType, type WorkVisibility } from '../api/frontDoorApi';
+import { CheckboxField, SelectField, TextAreaField, TextField } from '../components/ui/Field';
+import { useT } from '../i18n/I18nContext';
+import { errorCode } from './governance';
+import { PersonPicker } from './PersonPicker';
+import { planErrorKey } from './plans';
+import { WhenFields } from './WhenFields';
+import { emptyWhen, whenOf, whenProblem, whenToInput } from './when';
+
+/** One page to write an activity (or, with `existing`, to change a draft): what, which unit, when, who leads, where, and who takes part. */
+export function PlanForm({
+  options,
+  systemId,
+  existing,
+  planType: startType,
+  onDone,
+  onCancel,
+}: {
+  options: PlanOptions;
+  systemId: string;
+  existing?: PlanDetail;
+  planType?: PlanType;
+  onDone: (plan: PlanDetail) => void;
+  onCancel: () => void;
+}) {
+  const t = useT();
+  const units = options.units.filter((u) => u.systemId === systemId);
+  const [unitId, setUnitId] = useState(existing?.orgUnitId ?? (units.length === 1 ? units[0].id : ''));
+  const [planType, setPlanType] = useState<PlanType>(existing?.planType ?? startType ?? 'EVENT');
+  const [title, setTitle] = useState(existing?.title ?? '');
+  const [aim, setAim] = useState(existing?.aim ?? '');
+  const [needs, setNeeds] = useState(existing?.needs ?? '');
+  const [location, setLocation] = useState(existing?.location ?? '');
+  const [when, setWhen] = useState(existing ? whenOf(existing) : emptyWhen());
+  const [leader, setLeader] = useState<{ id: string; name: string } | null>(existing ? { id: existing.leaderId, name: existing.leaderName } : null);
+  const [team, setTeam] = useState<Array<{ personId: string; name: string; role: string }>>(existing?.team ?? []);
+  const [role, setRole] = useState('');
+  const [visibility, setVisibility] = useState<WorkVisibility>(existing?.visibility ?? 'SYSTEM');
+  const [fundraising, setFundraising] = useState(existing?.fundraising ?? false);
+  const [target, setTarget] = useState(existing?.fundTarget ? String(existing.fundTarget) : '');
+  const [files, setFiles] = useState<File[]>([]);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  const addMember = (p: DirectoryPerson) => {
+    if (!role.trim()) return setError(t('door.plan.form.roleFirst'));
+    setError('');
+    if (!team.some((m) => m.personId === p.id) && team.length < options.limits.teamMax) setTeam([...team, { personId: p.id, name: p.fullName, role: role.trim() }]);
+    setRole('');
+  };
+
+  const submit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!title.trim() || !leader || (!existing && !unitId)) return setError(t('door.plan.form.incomplete'));
+    const bad = whenProblem(when);
+    if (bad) return setError(t(planErrorKey(bad) as 'door.people.actionFailed'));
+    const raise = planType === 'EVENT' && fundraising;
+    const goal = Math.max(0, Math.floor(Number(target) || 0));
+    if (raise && goal < 1) return setError(t(planErrorKey('TARGET_NEEDED') as 'door.people.actionFailed'));
+    const input = {
+      fundraising: raise, fundTarget: raise ? goal : null,
+      title: title.trim(), aim: aim.trim(), needs: needs.trim() || null, location: location.trim() || null,
+      ...whenToInput(when), leaderId: leader.id,
+      team: team.map((m) => ({ personId: m.personId, role: m.role })), beyondUnit: false, visibility, planType,
+    };
+    setBusy(true);
+    setError('');
+    try {
+      const saved = existing ? await editPlan(existing.id, input) : await createPlan(unitId, input);
+      if (!existing && files.length > 0) await uploadPending(saved.id, files);
+      onDone(saved);
+    } catch (err) {
+      setError(t(planErrorKey(errorCode(err)) as 'door.people.actionFailed'));
+      setBusy(false);
+    }
+  };
+
+  return (
+    <form className="panel door-form" onSubmit={submit} noValidate>
+      <h3>{existing ? t('door.plan.form.edit') : t('door.plan.form.new')}</h3>
+      <TextField label={t('door.plan.form.title')} name="p-title" value={title} maxLength={options.limits.titleMax} onChange={(e) => setTitle(e.target.value)} />
+      <div className="door-row">
+        <SelectField label={t('door.plan.type')} name="p-type" value={planType} onChange={(e) => setPlanType(e.target.value as PlanType)}>
+          {PLAN_TYPES.map((k) => (<option key={k} value={k}>{t(`door.plan.type.${k}` as 'door.plan.type.PROGRAM')}</option>))}
+        </SelectField>
+        {!existing && units.length > 1 && (
+          <SelectField label={t('door.work.form.unit')} name="p-unit" value={unitId} onChange={(e) => setUnitId(e.target.value)}>
+            <option value="">{t('door.gov.meeting.choose')}</option>
+            {units.map((u) => (<option key={u.id} value={u.id}>{u.name}</option>))}
+          </SelectField>
+        )}
+      </div>
+      {planType === 'EVENT' && (
+        <>
+          <CheckboxField id="p-fund" label={t('door.plan.form.fundraising')} checked={fundraising} onChange={setFundraising} />
+          {fundraising && <TextField label={t('door.plan.form.fundTarget')} name="p-target" inputMode="numeric" value={target} onChange={(e) => setTarget(e.target.value)} />}
+        </>
+      )}
+      <WhenFields value={when} onChange={setWhen} idPrefix="p-when" />
+      <TextField label={t('door.plan.form.location')} name="p-loc" value={location} maxLength={options.limits.titleMax} onChange={(e) => setLocation(e.target.value)} />
+      <p>
+        <strong>{t('door.plan.leader')}:</strong> {leader ? leader.name : <span className="muted">{t('door.work.form.nobody')}</span>}
+      </p>
+      <PersonPicker label={t('door.plan.form.pickLeader')} name="p-leader" onPick={(p) => setLeader({ id: p.id, name: p.fullName })} />
+      <TextAreaField label={t('door.plan.form.aim')} name="p-aim" rows={3} value={aim} maxLength={options.limits.textMax} onChange={(e) => setAim(e.target.value)} />
+      <TextAreaField label={t('door.plan.form.needs')} name="p-needs" rows={2} value={needs} maxLength={options.limits.textMax} onChange={(e) => setNeeds(e.target.value)} />
+      {team.length > 0 && (
+        <ul className="door-chips">
+          {team.map((m) => (
+            <li key={m.personId}>
+              <button type="button" className="door-chip" onClick={() => setTeam(team.filter((x) => x.personId !== m.personId))} aria-label={t('door.work.form.removeHelper', { name: m.name })}>
+                {m.name} · {m.role} ×
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+      <TextField label={t('door.plan.form.role')} name="p-role" value={role} maxLength={options.limits.roleMax} placeholder={t('door.sched.rolePlaceholder')} onChange={(e) => setRole(e.target.value)} />
+      <PersonPicker label={t('door.plan.form.pickMember')} name="p-member" onPick={addMember} />
+      <SelectField label={t('door.work.form.visibility')} name="p-vis" hint={t(`door.work.visibility.${visibility}.hint` as const)} value={visibility} onChange={(e) => setVisibility(e.target.value as WorkVisibility)}>
+        {options.visibilities.map((v) => (<option key={v} value={v}>{t(`door.work.visibility.${v}` as const)}</option>))}
+      </SelectField>
+      {!existing && (
+        <fieldset className="door-fieldset">
+          <legend>{t('door.plan.files.heading')}</legend>
+          <p className="muted">{t('door.plan.files.optional')}</p>
+          <PendingFiles files={files} onChange={setFiles} disabled={busy} />
+        </fieldset>
+      )}
+      <p className="muted">{t('door.plan.form.approvalHint')}</p>
+      {error && (<p className="door-error" role="alert">{error}</p>)}
+      <div className="door-row">
+        <button type="submit" className="btn" disabled={busy}>{existing ? t('door.work.form.save') : t('door.plan.form.create')}</button>
+        <button type="button" className="btn ghost" onClick={onCancel}>{t('door.settings.cancel')}</button>
+      </div>
+    </form>
+  );
+}

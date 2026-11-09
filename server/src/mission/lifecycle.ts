@@ -1,9 +1,7 @@
 import { prisma } from '../lib/prisma.js';
 import {
-  confirmedFundingTotal,
   deliveryReadyToClose,
   mergeStewardship,
-  openAdvances,
   parseStewardship,
   requiredDeliveryOpen,
   serializeStewardship,
@@ -28,7 +26,7 @@ export async function personIsChurchLeadership(
       status: 'ACTIVE',
       startDate: { lte: now },
       OR: [{ endDate: null }, { endDate: { gte: now } }],
-      systemRole: { in: ['CHURCH_LEADER', 'PASTOR', 'CATECHIST'] },
+      systemRole: { in: ['CHURCH_LEADER', 'PASTOR', 'ASSISTANT_PASTOR', 'CATECHIST'] },
     },
   });
   return n > 0;
@@ -66,7 +64,7 @@ export async function approveProgram(id: string, approverPersonId: string) {
     return {
       ok: false as const,
       status: 403,
-      error: 'Church Leader (or Pastor) must approve',
+      error: 'Church Leader (or Assistant Pastor) must approve',
     };
   }
   const program = await prisma.program.findUnique({ where: { id } });
@@ -100,12 +98,10 @@ export async function startProgram(id: string) {
     where: { id },
     data: { status: 'ACTIVE' },
   });
-  const gap = (Number(s.plannedCost) || 0) - confirmedFundingTotal(s);
   const openReq = requiredDeliveryOpen(s).length;
   return {
     ok: true as const,
     entity,
-    gap: gap > 0 ? gap : undefined,
     openRequired: openReq > 0 ? openReq : undefined,
   };
 }
@@ -167,14 +163,10 @@ export async function endProgram(
   opts: {
     closedByPersonId: string;
     workSummary: string;
-    moneySummary: string;
-    leftoverDecision: string;
-    leftoverNote?: string;
     narrative?: string;
     forceClose?: boolean;
-    /** Required when forceClose skips open advances / delivery / tasks. */
+    /** Required when forceClose skips open delivery / tasks. */
     forceReason?: string;
-    usedCost?: number;
   },
 ) {
   let program = await prisma.program.findUnique({ where: { id } });
@@ -195,22 +187,13 @@ export async function endProgram(
     };
   }
   const s = stewardshipOf(program);
-  const openAdv = openAdvances(s);
-  const needsForce =
-    !deliveryReadyToClose(s) || openAdv.length > 0;
+  const needsForce = !deliveryReadyToClose(s);
   if (needsForce && !opts.forceClose) {
-    if (!deliveryReadyToClose(s)) {
-      const open = requiredDeliveryOpen(s);
-      return {
-        ok: false as const,
-        status: 400,
-        error: `${open.length} required delivery item(s) still open — finish, waive, or force`,
-      };
-    }
+    const open = requiredDeliveryOpen(s);
     return {
       ok: false as const,
       status: 400,
-      error: `${openAdv.length} open advance(s) must be retired — or force close`,
+      error: `${open.length} required delivery item(s) still open — finish, waive, or force`,
     };
   }
   if (opts.forceClose && needsForce) {
@@ -223,29 +206,17 @@ export async function endProgram(
       };
     }
   }
-  const used =
-    opts.usedCost !== undefined
-      ? opts.usedCost
-      : s.usedCost !== undefined
-        ? Number(s.usedCost)
-        : 0;
   const closeout = {
     closedAt: new Date().toISOString(),
     closedByPersonId: opts.closedByPersonId,
     workSummary: opts.workSummary,
-    moneySummary: opts.moneySummary,
-    leftoverDecision: opts.leftoverDecision,
-    leftoverNote: opts.leftoverNote,
     narrative: opts.narrative,
     forceReason:
       opts.forceClose && needsForce
         ? (opts.forceReason ?? '').trim()
         : undefined,
-    plannedCostSnapshot: s.plannedCost,
-    usedCostSnapshot: used,
-    confirmedFundingSnapshot: confirmedFundingTotal(s),
   };
-  const next = mergeStewardship(s, { usedCost: used, closeout });
+  const next = mergeStewardship(s, { closeout });
   const today = new Date();
   await prisma.programEnrollment.updateMany({
     where: { programId: id, status: 'ACTIVE' },
@@ -315,7 +286,7 @@ export async function approveProjectSimple(
     return {
       ok: false as const,
       status: 403,
-      error: 'Church Leader (or Pastor) must approve',
+      error: 'Church Leader (or Assistant Pastor) must approve',
     };
   }
   const project = await prisma.churchProject.findUnique({ where: { id } });
@@ -453,10 +424,7 @@ export async function approveEventLevel(input: {
   return { ok: true as const, entity, approvals: next };
 }
 
-export async function startProject(
-  id: string,
-  opts?: { forceSpendGap?: boolean; forceReason?: string },
-) {
+export async function startProject(id: string) {
   const project = await prisma.churchProject.findUnique({ where: { id } });
   if (!project) return { ok: false as const, status: 404, error: 'Project not found' };
   if (project.status !== 'PLANNED') {
@@ -467,49 +435,17 @@ export async function startProject(
     };
   }
   const s = parseStewardship(project.stewardshipJson);
-  const gap = (Number(s.plannedCost) || 0) - confirmedFundingTotal(s);
-  if (project.willSpend && gap > 0) {
-    if (!opts?.forceSpendGap) {
-      return {
-        ok: false as const,
-        status: 400,
-        error: `Funding gap ${Math.round(gap)} RWF — confirm funding or force start with a reason`,
-        gap,
-      };
-    }
-    const reason = (opts.forceReason ?? '').trim();
-    if (reason.length < 8) {
-      return {
-        ok: false as const,
-        status: 400,
-        error: 'Force start requires a reason (at least 8 characters)',
-        gap,
-      };
-    }
-  }
-  const nextSteward =
-    opts?.forceSpendGap && gap > 0
-      ? {
-          ...s,
-          forceStartReason: (opts.forceReason ?? '').trim(),
-          forceStartAt: new Date().toISOString(),
-        }
-      : s;
   const entity = await prisma.churchProject.update({
     where: { id },
     data: {
       status: 'ACTIVE',
       startsOn: project.startsOn ?? new Date(),
-      ...(opts?.forceSpendGap && gap > 0
-        ? { stewardshipJson: serializeStewardship(nextSteward) }
-        : {}),
     },
   });
   const openReq = requiredDeliveryOpen(s).length;
   return {
     ok: true as const,
     entity,
-    gap: gap > 0 ? gap : undefined,
     openRequired: openReq > 0 ? openReq : undefined,
   };
 }
@@ -550,13 +486,9 @@ export async function completeProject(
   opts: {
     closedByPersonId: string;
     workSummary: string;
-    moneySummary: string;
-    leftoverDecision: string;
-    leftoverNote?: string;
     narrative?: string;
     forceClose?: boolean;
     forceReason?: string;
-    usedCost?: number;
   },
 ) {
   let project = await prisma.churchProject.findUnique({ where: { id } });
@@ -587,7 +519,6 @@ export async function completeProject(
     };
   }
   const s = parseStewardship(project.stewardshipJson);
-  const openAdv = openAdvances(s);
   const openTasks = await prisma.workTask.count({
     where: {
       contextType: 'PROJECT',
@@ -595,8 +526,7 @@ export async function completeProject(
       status: { in: ['TODO', 'IN_PROGRESS'] },
     },
   });
-  const needsForce =
-    !deliveryReadyToClose(s) || openAdv.length > 0 || openTasks > 0;
+  const needsForce = !deliveryReadyToClose(s) || openTasks > 0;
   if (needsForce && !opts.forceClose) {
     if (!deliveryReadyToClose(s)) {
       const openDel = requiredDeliveryOpen(s);
@@ -604,13 +534,6 @@ export async function completeProject(
         ok: false as const,
         status: 400,
         error: `${openDel.length} required delivery item(s) still open — finish, waive, or force`,
-      };
-    }
-    if (openAdv.length > 0) {
-      return {
-        ok: false as const,
-        status: 400,
-        error: `${openAdv.length} open advance(s) must be retired — or force close`,
       };
     }
     return {
@@ -630,29 +553,17 @@ export async function completeProject(
       };
     }
   }
-  const used =
-    opts.usedCost !== undefined
-      ? opts.usedCost
-      : s.usedCost !== undefined
-        ? Number(s.usedCost)
-        : 0;
   const closeout = {
     closedAt: new Date().toISOString(),
     closedByPersonId: opts.closedByPersonId,
     workSummary: opts.workSummary,
-    moneySummary: opts.moneySummary,
-    leftoverDecision: opts.leftoverDecision,
-    leftoverNote: opts.leftoverNote,
     narrative: opts.narrative,
     forceReason:
       opts.forceClose && needsForce
         ? (opts.forceReason ?? '').trim()
         : undefined,
-    plannedCostSnapshot: s.plannedCost,
-    usedCostSnapshot: used,
-    confirmedFundingSnapshot: confirmedFundingTotal(s),
   };
-  const next = mergeStewardship(s, { usedCost: used, closeout });
+  const next = mergeStewardship(s, { closeout });
   const entity = await prisma.churchProject.update({
     where: { id },
     data: {

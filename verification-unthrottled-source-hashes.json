@@ -1,0 +1,9 @@
+{
+  "server/src/music/configuredEngine.ts": "05b19e6f1be242885575fada62ac9774169d67bfe058262920db38afcbf2f8e3",
+  "server/tests/configuredMusicEngine.test.ts": "af9e8428fa3dead42cfb11feaf5176ec80b54793fe589768cdc4b710a9a0efdb",
+  "server/tests/musicSchedule.test.ts": "ed24082617c24266e2faeecfc8bb88c9eaa592a03a43e450c07eea3bdef4af6a",
+  "server/tests/protocol.test.ts": "a544f8a09875a72c114b256b07c4bfe61806f30e6568d62ef45c46c958a00726",
+  "server/tests/choirWork.test.ts": "2e379a4fc416188a4438108076b7aa656e7f236a8431603180ecb810f0c25e71",
+  "server/tests/isolation.test.ts": "0b727bcd210c803b25b9ca0a532d83e4885a546ffb331df3a546eb01926fc2a4",
+  "src/newdesign/NewDesignRoutes.tsx": "3b78e0c7c17f4743f809dc69676d91ed7ce9586490e8e1f1532883781082f657"
+}

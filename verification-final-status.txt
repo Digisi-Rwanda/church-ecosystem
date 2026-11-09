@@ -1,0 +1,94 @@
+ M server/prisma/schema.postgres.prisma
+ M server/prisma/schema.prisma
+ M server/src/music/engine.ts
+ M server/src/m# Moriah — Resolve the Remaining Backend Read-Scope Failure
+
+Continue from the October 31 Scheduling Verification Report.
+
+The full backend suite completed with 1,075 passed, 1 failed and 8 opt-in skips. All 8 benchmarks passed separately. Focused scheduling tests, frontend tests, builds, bundle, boundaries, translations and schema validation passed.
+
+## Scope
+
+Investigate and resolve only the Catechist read-scope failure:
+
+`server/tests/isolation.test.ts`
+`firm walls between systems > nobody reads another system's records, by list or by id`
+
+Affected endpoints:
+- `/api/people/filter-options`
+- `/api/people/filter-schema`
+- `/api/work/:id`
+- `/api/work-plans/:id`
+- `/api/reports/:id`
+
+## Requirements
+
+1. Inspect the exact failing assertions and route authorization logic.
+2. Reproduce the failure and identify its root cause.
+3. Determine whether it is a real cross-system access vulnerability, an incorrect capability policy, a fixture problem or nondeterministic test behavior.
+4. Fix only the demonstrated cause.
+5. Preserve the intended system boundaries and Catechist access restrictions.
+6. Add focused regression tests.
+7. Rerun the affected isolation tests and then the full backend suite if feasible.
+8. Report exact results and any remaining uncertainty.
+
+## Strict boundaries
+
+- Do not redesign tenant architecture.
+- Do not add tenant identifiers.
+- Do not redesign authentication.
+- Do not modify Music or Protocol scheduling behavior.
+- Do not weaken or remove security assertions.
+- Do not change unrelated permissions.
+- Do not modify or apply migrations.
+- Do not access or modify any database.
+- Do not commit, push or deploy.
+- Preserve all existing modified and untracked files.
+
+If the failure cannot be reproduced consistently, investigate the test-order or fixture dependency rather than guessing at a fix.
+
+After resolving this issue, stop and report. Do not automatically start the remaining UI phases in the same task.usic/types.ts
+ M server/src/protocol/engine.ts
+ M server/src/protocol/types.ts
+ M server/src/routes/musicSchedule.ts
+ M server/src/routes/protocol.ts
+ M server/src/scheduling/configLoader.ts
+ M server/src/scheduling/configRouter.ts
+ M server/src/scheduling/store.ts
+ M server/src/scheduling/types.ts
+ M server/tests/choirWork.test.ts
+ M server/tests/musicEngine.test.ts
+ M server/tests/musicSchedule.test.ts
+ M server/tests/protocol.test.ts
+ M server/tests/protocolEngine.test.ts
+ M server/tests/schedulingConfig.test.ts
+ M src/i18n/messages/en.ts
+ M src/newdesign/DoorSchedulingConfigPage.test.ts
+ M src/newdesign/DoorSchedulingConfigPage.tsx
+ M src/newdesign/NewDesignRoutes.tsx
+ M src/newdesign/SchedulingConfigEditors.tsx
+ M src/newdesign/config.ts
+ M src/styles/app.css
+?? .tsupgrader/runtime-validation/.gitignore
+?? .tsupgrader/runtime-validation/eval-plan.json
+?? .tsupgrader/runtime-validation/standalone-result.json
+?? SCHEDULING_RESUME_REPORT.md
+?? SCHEDULING_VERIFICATION_2026-10-31.md
+?? bulletins.commit.txt
+?? count.txt
+?? out.txt
+?? scripts/_missing-keys.mjs
+?? server/prisma/migrations/0060_music_foundation_rules/migration.sql
+?? server/prisma/migrations/0061_legacy_choir_category_backfill/migration.sql
+?? server/prisma/migrations/0062_protocol_music_config_version/migration.sql
+?? server/scripts/verification-reporter.mjs
+?? server/src/music/configuredEngine.ts
+?? server/src/scheduling/musicConfigRules.ts
+?? server/tests/configuredMusicEngine.test.ts
+?? server/tests/musicConfigRules.test.ts
+?? server/verification-isolation-request.txt
+?? src/newdesign/MonthPlanPage.tsx.tmp
+?? src/newdesign/ProtocolTeamsPage.tsx.tmp
+?? verification-final-status.txt
+?? verification-migration-hashes.json
+?? verification-start-status.txt

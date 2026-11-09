@@ -1,0 +1,36 @@
+{
+  "generatedAt": "2026-10-31T15:45:00Z",
+  "generatedOnPlatform": "win32",
+  "projectType": "webapp",
+  "setup": [],
+  "assertions": [
+    {
+      "name": "frontend-build",
+      "kind": "process",
+      "command": "npm",
+      "args": ["run", "build"],
+      "verificationMethod": "exit-code",
+      "expected": "0",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "tests-pass",
+      "kind": "process",
+      "command": "npm",
+      "args": ["test"],
+      "verificationMethod": "test-results",
+      "expected": "0",
+      "timeoutSeconds": 300
+    },
+    {
+      "name": "dev-server-serves-home",
+      "kind": "http-probe",
+      "startCommand": "npm",
+      "startArgs": ["run", "dev", "--", "--host", "localhost", "--port", "5173", "--strictPort"],
+      "url": "http://localhost:5173/",
+      "verificationMethod": "http-status",
+      "expected": "200",
+      "timeoutSeconds": 120
+    }
+  ]
+}
