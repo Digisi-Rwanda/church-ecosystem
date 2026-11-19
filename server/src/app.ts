@@ -45,6 +45,7 @@ import { dashboardRouter } from './routes/dashboard.js';
 import { protocolRouter } from './routes/protocol.js';
 import { musicScheduleRouter } from './routes/musicSchedule.js';
 import { evangelismRouter } from './routes/evangelism.js';
+import { servicePrepRouter } from './routes/servicePrep.js';
 import { musicRouter } from './routes/music.js';
 import { choirWorkRouter } from './routes/choirWork.js';
 import { centralRouter } from './routes/central.js';
@@ -154,6 +155,7 @@ export function createApp() {
   app.use('/api/music/schedule', musicScheduleRouter);
   app.use('/api/scheduling', configRouter);
   app.use('/api/evangelism', evangelismRouter);
+  app.use('/api/service-prep', servicePrepRouter);
   app.use('/api/music', musicRouter);
   app.use('/api/choir', choirWorkRouter);
   app.use('/api/central', centralRouter);

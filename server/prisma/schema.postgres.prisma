@@ -1230,6 +1230,42 @@ model PulpitSlot {
 
   @@index([serviceOn])
 }
+model ServicePulpitRole {
+  id           String   @id @default(cuid())
+  code         String   @unique
+  name         String
+  displayOrder Int      @default(0)
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now())
+}
+
+/// Who fills a pulpit role at one service. serviceCode empty means the whole day. A member, a registered guest or a visiting speaker typed by name.
+model ServicePulpitEntry {
+  id          String   @id @default(cuid())
+  serviceDate String
+  serviceCode String?
+  roleId      String
+  personId    String?
+  guestId     String?
+  guestName   String?
+  theme       String?
+  bibleText   String?
+  /// PLANNED | DONE | CANCELLED
+  status      String   @default("PLANNED")
+  createdById String
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @default(now())
+
+  @@index([serviceDate])
+}
+
+/// A coordinator the Church Leader lets edit Service preparation.
+model ServicePrepEditor {
+  personId    String   @id
+  grantedById String
+  createdAt   DateTime @default(now())
+}
+
 
 /// A choir or worship team of the Music ministry (the register of who sings is MusicChoirMember).
 model MusicChoir {
