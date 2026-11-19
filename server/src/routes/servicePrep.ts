@@ -13,6 +13,7 @@ import { loadChoirs, loadMonthRows } from '../music/store.js';
 import { parse } from '../music/schedule.js';
 import type { MusicAssignment, MusicServiceSlot } from '../music/types.js';
 import { loadMusicConfig } from '../scheduling/configLoader.js';
+import { MAX_ITEMS, OWNER_KINDS, TIME_RE, TITLE_MAX, chain, endTimeOf, ownerProblem, runWarnings, type OwnerKind } from '../servicePrep/runSheet.js';
 import {
   CHURCH, DEFAULT_ROLE, ENTRY_STATUSES, NAME_MAX, SHORT_MAX, canRead, canWrite, codeKey, isDay, isLeader, monthOf, whoProblem,
 } from '../servicePrep/rules.js';
@@ -332,5 +333,187 @@ servicePrepRouter.delete('/editors/:personId', requireAuth, async (req: AuthedRe
     await prisma.servicePrepEditor.delete({ where: { personId: id } });
     await audit(w.me, 'SERVICE_PREP_EDITOR_REMOVED', 'Removed a coordinator from Service preparation', { personId: id });
   }
+  res.json({ ok: true });
+});
+
+/* ───────────── The run-sheet of a service, and the church's template ───────────── */
+
+interface RunItemRow {
+  id: string; position: number; title: string; startTime: string; minutes: number; ownerKind: string;
+  personId: string | null; roleId: string | null; ownerLabel: string | null; note: string | null;
+}
+interface TemplateRow { id: string; position: number; title: string; minutes: number; ownerKind: string; roleId: string | null; ownerLabel: string | null; note: string | null }
+
+const itemBody = z.object({
+  title: z.string().trim().min(1).max(TITLE_MAX),
+  minutes: z.number().int().min(1).max(600),
+  ownerKind: z.enum(OWNER_KINDS),
+  roleId: z.string().min(1).nullish(),
+  ownerLabel: z.string().trim().max(NAME_MAX).nullish(),
+  note: z.string().trim().max(200).nullish(),
+});
+const sheetItem = itemBody.extend({ startTime: z.string().regex(TIME_RE), personId: z.string().min(1).nullish() });
+const sheetBody = z.object({ endTime: z.string().regex(TIME_RE).nullish(), items: z.array(sheetItem).max(MAX_ITEMS) });
+const templateBody = z.object({ items: z.array(itemBody).max(MAX_ITEMS) });
+
+/** The service of a date and code, with its month; null when there is no such service. */
+async function findService(date: string, code: string) {
+  const [rows, cfg] = await Promise.all([loadMonthRows(), loadMusicConfig()]);
+  const m = await monthServices(monthOf(date), rows, cfg.services);
+  const slot = m.services.find((s) => s.date === date && codeKey(s.kind) === code);
+  return slot ? { slot, m } : null;
+}
+
+async function roleProblem(roleId: string | null | undefined, res: Res): Promise<boolean> {
+  if (!roleId) return true;
+  if (!(await roles()).some((r) => r.id === roleId)) { fail(res, 400, 'BAD_ROLE', 'Choose a pulpit role that exists'); return false; }
+  return true;
+}
+
+/** Names for the owners of a service's items: members, the pulpit role's planned person, the choirs, the Protocol team. */
+async function ownerNames(items: Array<{ ownerKind: string; personId?: string | null; roleId?: string | null; ownerLabel?: string | null }>, date: string, code: string, found: NonNullable<Awaited<ReturnType<typeof findService>>>) {
+  const entries = (await prisma.servicePulpitEntry.findMany({ where: { serviceDate: date } })) as EntryRow[];
+  const live = entries.filter((e) => e.status !== 'CANCELLED' && entryOn(e, date, code));
+  const nm = await nameMaps([...items.map((i) => i.personId), ...live.map((e) => e.personId)], []);
+  const choirNames = new Map((await loadChoirs()).map((c) => [c.id, c.name]));
+  const choirs = found.m.musicState === 'PUBLISHED'
+    ? [...new Set(found.m.assignments.filter((a) => a.serviceId === found.slot.id).map((a) => a.unitId))].map((id) => choirNames.get(id) ?? id).join(', ')
+    : '';
+  return (i: { ownerKind: string; personId?: string | null; roleId?: string | null; ownerLabel?: string | null }): string => {
+    if (i.ownerKind === 'PERSON') return (i.personId && nm.people.get(i.personId)) || '';
+    if (i.ownerKind === 'PULPIT') {
+      const e = live.find((x) => x.roleId === i.roleId);
+      return e ? (e.personId ? nm.people.get(e.personId) ?? '' : e.guestName ?? '') : '';
+    }
+    if (i.ownerKind === 'CHOIR') return choirs;
+    if (i.ownerKind === 'PROTOCOL') return '';
+    return i.ownerLabel ?? '';
+  };
+}
+
+servicePrepRouter.get('/run/:date/:code', requireAuth, async (req: AuthedRequest, res) => {
+  const w = await who(req.auth!.personId);
+  if (!w.read) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  const date = String(req.params.date);
+  const code = codeKey(String(req.params.code));
+  if (!isDay(date)) return fail(res, 400, 'BAD_DATE', 'Check the date');
+  const found = await findService(date, code);
+  if (!found) return fail(res, 404, 'NOT_FOUND', 'No such service on that date');
+  const [rows, sheet, template, roleRows] = await Promise.all([
+    prisma.serviceRunItem.findMany({ where: { serviceDate: date, serviceCode: code } }) as Promise<RunItemRow[]>,
+    prisma.serviceRunSheet.findUnique({ where: { serviceDate_serviceCode: { serviceDate: date, serviceCode: code } } }) as Promise<{ endTime: string | null } | null>,
+    prisma.serviceRunTemplateItem.count({ where: { serviceCode: code } }) as Promise<number>,
+    roles(),
+  ]);
+  const items = rows.sort((a, b) => a.position - b.position);
+  const name = await ownerNames(items, date, code, found);
+  const nm = await nameMaps(items.map((i) => i.personId), []);
+  const endTime = sheet?.endTime ?? null;
+  res.json({
+    canWrite: w.write, startTime: found.slot.time ?? null, endTime, hasTemplate: template > 0, roles: roleRows.filter((r) => r.active),
+    items: items.map((i) => ({
+      id: i.id, title: i.title, startTime: i.startTime, minutes: i.minutes, endTime: endTimeOf(i), ownerKind: i.ownerKind as OwnerKind,
+      personId: i.personId, personName: i.personId ? nm.people.get(i.personId) ?? '' : '', roleId: i.roleId, ownerLabel: i.ownerLabel ?? '', ownerName: name(i), note: i.note ?? '',
+    })),
+    warnings: runWarnings(items, endTime),
+  });
+});
+
+/** Save the whole run-sheet in the order given. */
+servicePrepRouter.put('/run/:date/:code', requireAuth, async (req: AuthedRequest, res) => {
+  const w = await who(req.auth!.personId);
+  if (!w.read) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (!w.write) return fail(res, 403, 'FORBIDDEN', 'You may not change the run-sheet');
+  const date = String(req.params.date);
+  const code = codeKey(String(req.params.code));
+  if (!isDay(date)) return fail(res, 400, 'BAD_DATE', 'Check the date');
+  if (!(await findService(date, code))) return fail(res, 404, 'NOT_FOUND', 'No such service on that date');
+  const parsed = sheetBody.safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the run-sheet');
+  const { items, endTime } = parsed.data;
+  for (const it of items) {
+    const problem = ownerProblem(it);
+    if (problem) return fail(res, 400, 'OWNER', problem);
+    if (!(await roleProblem(it.roleId, res))) return;
+    if (it.ownerKind === 'PERSON' && it.personId) {
+      const p = (await prisma.person.findUnique({ where: { id: it.personId } })) as PersonRow | null;
+      if (!p || p.archivedAt || (p.status && p.status !== 'ACTIVE')) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose an active member');
+    }
+  }
+  const keep = (i: (typeof items)[number]) => ({
+    personId: i.ownerKind === 'PERSON' ? i.personId ?? null : null, roleId: i.ownerKind === 'PULPIT' ? i.roleId ?? null : null,
+    ownerLabel: i.ownerKind === 'TEXT' ? i.ownerLabel?.trim() || null : null, note: i.note || null,
+  });
+  await prisma.$transaction([
+    prisma.serviceRunItem.deleteMany({ where: { serviceDate: date, serviceCode: code } }),
+    prisma.serviceRunItem.createMany({
+      data: items.map((i, n) => ({ serviceDate: date, serviceCode: code, position: n, title: i.title, startTime: i.startTime, minutes: i.minutes, ownerKind: i.ownerKind, ...keep(i) })),
+    }),
+    prisma.serviceRunSheet.upsert({
+      where: { serviceDate_serviceCode: { serviceDate: date, serviceCode: code } },
+      create: { serviceDate: date, serviceCode: code, endTime: endTime ?? null, updatedById: w.me, updatedAt: new Date() },
+      update: { endTime: endTime ?? null, updatedById: w.me, updatedAt: new Date() },
+    }),
+  ]);
+  await audit(w.me, 'SERVICE_RUN_SAVED', `Saved the run-sheet for ${date} (${code})`, { date, code, items: items.length });
+  res.json({ ok: true, warnings: runWarnings(items, endTime ?? null) });
+});
+
+/** Replace the run-sheet with the church's template, laid out from the service's start time. */
+servicePrepRouter.post('/run/:date/:code/from-template', requireAuth, async (req: AuthedRequest, res) => {
+  const w = await who(req.auth!.personId);
+  if (!w.read) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (!w.write) return fail(res, 403, 'FORBIDDEN', 'You may not change the run-sheet');
+  const date = String(req.params.date);
+  const code = codeKey(String(req.params.code));
+  if (!isDay(date)) return fail(res, 400, 'BAD_DATE', 'Check the date');
+  const found = await findService(date, code);
+  if (!found) return fail(res, 404, 'NOT_FOUND', 'No such service on that date');
+  const start = found.slot.time;
+  if (!start || !TIME_RE.test(start)) return fail(res, 400, 'NO_START', 'This service has no start time, so the template cannot be laid out');
+  const tpl = ((await prisma.serviceRunTemplateItem.findMany({ where: { serviceCode: code } })) as TemplateRow[]).sort((a, b) => a.position - b.position);
+  if (tpl.length === 0) return fail(res, 404, 'NO_TEMPLATE', 'There is no template for this kind of service yet');
+  const rows = chain(start, tpl);
+  await prisma.$transaction([
+    prisma.serviceRunItem.deleteMany({ where: { serviceDate: date, serviceCode: code } }),
+    prisma.serviceRunItem.createMany({
+      data: rows.map((r, n) => ({ serviceDate: date, serviceCode: code, position: n, title: r.title, startTime: r.startTime, minutes: r.minutes, ownerKind: r.ownerKind, personId: null, roleId: r.roleId, ownerLabel: r.ownerLabel, note: r.note })),
+    }),
+  ]);
+  await audit(w.me, 'SERVICE_RUN_FROM_TEMPLATE', `Started the run-sheet for ${date} (${code}) from the template`, { date, code, items: rows.length });
+  res.json({ ok: true });
+});
+
+servicePrepRouter.get('/run-template/:code', requireAuth, async (req: AuthedRequest, res) => {
+  const w = await who(req.auth!.personId);
+  if (!w.read) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  const code = codeKey(String(req.params.code));
+  const rows = ((await prisma.serviceRunTemplateItem.findMany({ where: { serviceCode: code } })) as TemplateRow[]).sort((a, b) => a.position - b.position);
+  res.json({ canWrite: w.write, code, roles: (await roles()).filter((r) => r.active), items: rows.map((r) => ({ title: r.title, minutes: r.minutes, ownerKind: r.ownerKind as OwnerKind, roleId: r.roleId, ownerLabel: r.ownerLabel ?? '', note: r.note ?? '' })) });
+});
+
+servicePrepRouter.put('/run-template/:code', requireAuth, async (req: AuthedRequest, res) => {
+  const w = await who(req.auth!.personId);
+  if (!w.read) return fail(res, 404, 'NOT_FOUND', 'Not found');
+  if (!w.write) return fail(res, 403, 'FORBIDDEN', 'You may not change the template');
+  const code = codeKey(String(req.params.code));
+  const parsed = templateBody.safeParse(req.body);
+  if (!parsed.success) return fail(res, 400, 'BAD_INPUT', 'Check the template');
+  for (const it of parsed.data.items) {
+    if (it.ownerKind === 'PERSON') return fail(res, 400, 'OWNER', 'A template names a role or a group, not a person');
+    const problem = ownerProblem(it);
+    if (problem) return fail(res, 400, 'OWNER', problem);
+    if (!(await roleProblem(it.roleId, res))) return;
+  }
+  await prisma.$transaction([
+    prisma.serviceRunTemplateItem.deleteMany({ where: { serviceCode: code } }),
+    prisma.serviceRunTemplateItem.createMany({
+      data: parsed.data.items.map((i, n) => ({
+        serviceCode: code, position: n, title: i.title, minutes: i.minutes, ownerKind: i.ownerKind,
+        roleId: i.ownerKind === 'PULPIT' ? i.roleId ?? null : null, ownerLabel: i.ownerKind === 'TEXT' ? i.ownerLabel?.trim() || null : null, note: i.note || null,
+      })),
+    }),
+  ]);
+  await audit(w.me, 'SERVICE_RUN_TEMPLATE_SAVED', `Saved the run-sheet template for ${code}`, { code, items: parsed.data.items.length });
   res.json({ ok: true });
 });

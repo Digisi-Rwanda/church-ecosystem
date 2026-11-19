@@ -1265,6 +1265,51 @@ model ServicePrepEditor {
   createdAt   DateTime @default(now())
 }
 
+/// The run-sheet of one service: who is in charge of each activity and when it starts.
+model ServiceRunSheet {
+  serviceDate String
+  serviceCode String
+  /// HH:MM, when the service is meant to end (optional; the sheet warns when the plan runs past it)
+  endTime     String?
+  updatedById String
+  updatedAt   DateTime @default(now())
+
+  @@id([serviceDate, serviceCode])
+}
+
+model ServiceRunItem {
+  id          String  @id @default(cuid())
+  serviceDate String
+  serviceCode String
+  position    Int
+  title       String
+  startTime   String
+  minutes     Int
+  /// PERSON | PULPIT | CHOIR | PROTOCOL | TEXT
+  ownerKind   String
+  personId    String?
+  roleId      String?
+  ownerLabel  String?
+  note        String?
+
+  @@index([serviceDate, serviceCode])
+}
+
+/// The church's own starting run-sheet for a kind of service; applying it lays the items out from the service's start time.
+model ServiceRunTemplateItem {
+  id          String  @id @default(cuid())
+  serviceCode String
+  position    Int
+  title       String
+  minutes     Int
+  ownerKind   String
+  roleId      String?
+  ownerLabel  String?
+  note        String?
+
+  @@index([serviceCode])
+}
+
 
 /// A choir or worship team of the Music ministry (the register of who sings is MusicChoirMember).
 model MusicChoir {
