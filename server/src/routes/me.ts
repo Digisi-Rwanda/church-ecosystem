@@ -50,7 +50,9 @@ async function standing(personId: string) {
   // the Catechist enter Central alone. Belonging to a system as a member opens nothing.
   const mayEnter = enterableSystemIds(personId, access, now);
   const enterable = systems.filter((s) => open(s) && mayEnter.has(s.id));
-  return { grants, positions, memberships, enterable, access };
+  // A coordinator the Church Leader let edit Service preparation (they may enter no church-wide system, so they get the page wherever they can enter).
+  const serviceEditor = !!(await prisma.servicePrepEditor.findUnique({ where: { personId } }));
+  return { grants, positions, memberships, enterable, access, serviceEditor };
 }
 
 function roleLabel(
@@ -97,8 +99,8 @@ portalRouter.get('/', requireAuth, async (req: AuthedRequest, res) => {
  */
 const SYSTEMS_WITH_ORGANISATION = ['sys-music', 'sys-deacon'];
 
-function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, holdings: ReturnType<typeof liveHoldings>) {
-  const own: Array<{ key: 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'pulpit' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves' | 'config'; letters: AccessLetter[]; variant?: string }> = [];
+function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, holdings: ReturnType<typeof liveHoldings>, serviceEditor = false) {
+  const own: Array<{ key: 'organisation' | 'central' | 'governance' | 'settings' | 'groups' | 'couples' | 'visits' | 'watches' | 'contacts' | 'services' | 'collections' | 'monthplan' | 'choirs' | 'oversight' | 'rehearsals' | 'repertoire' | 'sponsorship' | 'roster' | 'teams' | 'mine' | 'deaconreports' | 'moves' | 'config'; letters: AccessLetter[]; variant?: string }> = [];
   // Central Administration home (slice 2.4): the main church's leaders see the whole church at a glance.
   if (systemId === 'sys-main' && (modules.GOVERNANCE ?? []).length > 0) own.push({ key: 'central', letters: modules.GOVERNANCE });
   // Only a system that has units beneath it shows an Organisation: Music (its choirs) and Deacon (Protocol).
@@ -110,9 +112,10 @@ function ownBlocks(systemId: string, modules: Record<string, AccessLetter[]>, ho
   if (systemId === ELDERLY && (modules.PEOPLE ?? []).includes('W')) own.push({ key: 'visits', letters: modules.PEOPLE });
   if (systemId === INTERCESSORS && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'watches', letters: modules.SCHEDULING });
   if (systemId === EVANGELISM && (modules.PEOPLE ?? []).length > 0) own.push({ key: 'contacts', letters: modules.PEOPLE });
-  if (systemId === EVANGELISM && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'pulpit', letters: modules.SCHEDULING });
-  // The Church Leader (and anyone holding a church-wide office) sees the pulpit plan from Central Administration too.
-  if (systemId === 'sys-main' && holdings.some((h) => h.scope === 'CHURCH' && h.letters.PEOPLE?.includes('W'))) own.push({ key: 'pulpit', letters: ['R', 'W'] });
+  // Service preparation: the Church Leader (and a coordinator the leader chose) edits it; the Music and Protocol schedulers read it.
+  const leads = systemId === 'sys-main' && holdings.some((h) => h.scope === 'CHURCH' && h.letters.PEOPLE?.includes('W'));
+  if (leads || serviceEditor) own.push({ key: 'services', letters: ['R', 'W'] });
+  else if ((systemId === MUSIC || systemId === 'sys-protocol') && (modules.SCHEDULING ?? []).length > 0) own.push({ key: 'services', letters: ['R'] });
   // Collections (offerings counted at services) belong to Central Administration only.
   // Collections: the Church Treasurer records them and the Church Leader reads them; nobody else sees the page.
   if (systemId === 'sys-main' && holdings.some((h) => h.via === 'OFFICE' && h.scope === 'CHURCH' && (h.office === 'CHURCH_TREASURER' || h.office === 'CHURCH_LEADER'))) own.push({ key: 'collections', letters: holdings.some((h) => h.office === 'CHURCH_TREASURER') ? ['R', 'W'] : ['R'] });
@@ -157,7 +160,7 @@ function buildCapabilities(personId: string, s: Standing) {
       return {
         id: sys.id,
         blocks: blocksFromModules(modules),
-        own: ownBlocks(sys.id, modules, holdings),
+        own: ownBlocks(sys.id, modules, holdings, s.serviceEditor),
       };
     }),
     blockOrder: SHARED_BLOCKS,

@@ -43,7 +43,7 @@ import {
   ProtocolReportsPage,
   ProtocolRosterPage,
   ProtocolTeamsPage,
-  PulpitPage,
+  ServicesPage,
   RehearsalsPage,
   RepertoirePage,
   ReportPage,
@@ -144,7 +144,7 @@ export function newDesignRoutes() {
           <Route path="watches" element={<WatchesPage />} />
           <Route path="contacts" element={<ContactsPage />} />
           <Route path="contacts/:contactId" element={<ContactPage />} />
-          <Route path="pulpit" element={<PulpitPage />} />
+          <Route path="services" element={<ServicesPage />} />
           <Route path="collections" element={<CollectionsPage />} />
           <Route path="choirs" element={<ChoirsPage />} />
           <Route path="choirs/:choirId" element={<ChoirPage />} />

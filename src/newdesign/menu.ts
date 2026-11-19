@@ -51,8 +51,7 @@ export type OwnMenuItem = { block: OwnBlock; letters: AccessLetter[]; variant?: 
 /** A system's own blocks after the six shared ones (Governance, and Settings in Central Administration), from the server's answer. */
 export function buildOwnMenu(caps: Capabilities | null, systemId: string): OwnMenuItem[] {
   const own = caps?.systems.find((s) => s.id === systemId)?.own ?? [];
-  // The Pulpit is not offered for now: it is left out of every menu and tile.
-  return own.filter((o) => o.letters.length > 0 && o.key !== 'pulpit' && o.key !== 'central').map((o) => ({ block: o.key, letters: o.letters, variant: o.variant }));
+  return own.filter((o) => o.letters.length > 0 && o.key !== 'central').map((o) => ({ block: o.key, letters: o.letters, variant: o.variant }));
 }
 
 /**
@@ -124,7 +123,7 @@ export function buildModules(caps: Capabilities | null, systemId: string): NavMo
       : [],
     schedule: [
       ...(shared.has('schedule') && !hasOwnSchedule(systemId) ? [place('schedule', 'schedule', 'door.block.schedule')] : []),
-      ...some(['monthplan', 'teams', 'mine', 'watches', 'pulpit', 'config'].map(ownPlace)),
+      ...some(['monthplan', 'teams', 'mine', 'watches', 'services', 'config'].map(ownPlace)),
     ],
     ministry: some(['choirs', 'rehearsals', 'repertoire', 'sponsorship', 'roster'].map(ownPlace)),
     // Funds (with its Contributions tab), Budget and Accounting. The contribution lists are a tab of Funds, not a menu item.

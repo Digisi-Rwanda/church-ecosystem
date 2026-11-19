@@ -2249,3 +2249,47 @@ export const removeMusicFixedAssignment = (id: string) => apiFetch(SC + '/fixed-
 export const fetchMusicAvailability = (date = '') => scGet<{ availability: MusicAvailabilityApi[] }>('/availability', 'sys-music', date ? { serviceDate: date } : {});
 export const addMusicAvailability = (body: object) => scPost('/availability', { ...body, systemId: 'sys-music' });
 export const removeMusicAvailability = (id: string) => apiFetch(SC + '/availability/' + encodeURIComponent(id), { method: 'DELETE' });
+
+/* ───────────── Service preparation ───────────── */
+const SP = '/api/service-prep';
+export type ServicePulpitRole = { id: string; code: string; name: string; displayOrder: number; active: boolean };
+export type ServicePrepState = { canWrite: boolean; isLeader: boolean; roles: ServicePulpitRole[]; editors: Array<{ personId: string; name: string }> };
+export type ServiceListItem = {
+  date: string; code: string; label: string; time: string | null;
+  pulpit: { roles: number; filled: number };
+  choir: { required: boolean; state: 'CONFIRMED' | 'PUBLISHED' | null; count: number | null };
+  protocol: { required: boolean; state: 'NONE' | 'IN_PROGRESS' | 'PUBLISHED'; count: number | null };
+};
+export type ServicePulpitEntryItem = {
+  id: string; roleId: string; roleName: string; wholeDay: boolean; personId: string | null; guestId: string | null; guestName: string | null;
+  name: string; theme: string; bibleText: string; status: 'PLANNED' | 'DONE' | 'CANCELLED';
+};
+export type ServiceDetail = {
+  canWrite: boolean;
+  service: { date: string; code: string; label: string; time: string | null };
+  pulpit: { roles: ServicePulpitRole[]; entries: ServicePulpitEntryItem[] };
+  choir: { required: boolean; state: 'CONFIRMED' | 'PUBLISHED' | null; choirs: Array<{ id: string; name: string }> };
+  protocol: { required: boolean; state: 'NONE' | 'IN_PROGRESS' | 'PUBLISHED'; team: Array<{ personId: string; name: string; role: string }> };
+};
+export type ServiceEntryInput = { personId?: string | null; guestName?: string | null; theme?: string | null; bibleText?: string | null; status?: 'PLANNED' | 'DONE' | 'CANCELLED' };
+export const fetchServicePrepState = (): Promise<ServicePrepState> => apiFetch(`${SP}/state`);
+export const fetchServiceList = (): Promise<{ canWrite: boolean; from: string; to: string; services: ServiceListItem[] }> => apiFetch(`${SP}/services`);
+export const fetchServiceDetail = (date: string, code: string): Promise<ServiceDetail> => apiFetch(`${SP}/services/${encodeURIComponent(date)}/${encodeURIComponent(code)}`);
+export async function addServiceEntry(input: ServiceEntryInput & { serviceDate: string; serviceCode: string | null; roleId: string }): Promise<void> {
+  await apiFetch(`${SP}/entries`, { method: 'POST', body: input });
+}
+export async function changeServiceEntry(id: string, input: ServiceEntryInput): Promise<void> {
+  await apiFetch(`${SP}/entries/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function addServiceRole(name: string): Promise<void> {
+  await apiFetch(`${SP}/roles`, { method: 'POST', body: { name } });
+}
+export async function changeServiceRole(id: string, input: { name?: string; active?: boolean }): Promise<void> {
+  await apiFetch(`${SP}/roles/${encodeURIComponent(id)}`, { method: 'PATCH', body: input });
+}
+export async function addServiceEditor(personId: string): Promise<void> {
+  await apiFetch(`${SP}/editors`, { method: 'POST', body: { personId } });
+}
+export async function removeServiceEditor(personId: string): Promise<void> {
+  await apiFetch(`${SP}/editors/${encodeURIComponent(personId)}`, { method: 'DELETE' });
+}

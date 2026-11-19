@@ -92,8 +92,8 @@ const loadProtocolRosterPage = () => import('./ProtocolRosterPage').then((m) => 
 export const ProtocolRosterPage = lazy(loadProtocolRosterPage);
 const loadProtocolTeamsPage = () => import('./ProtocolTeamsPage').then((m) => ({ default: m.ProtocolTeamsPage }));
 export const ProtocolTeamsPage = lazy(loadProtocolTeamsPage);
-const loadPulpitPage = () => import('./PulpitPage').then((m) => ({ default: m.PulpitPage }));
-export const PulpitPage = lazy(loadPulpitPage);
+const loadServicesPage = () => import('./ServicesPage').then((m) => ({ default: m.ServicesPage }));
+export const ServicesPage = lazy(loadServicesPage);
 const loadRehearsalsPage = () => import('./RehearsalsPage').then((m) => ({ default: m.RehearsalsPage }));
 export const RehearsalsPage = lazy(loadRehearsalsPage);
 const loadRepertoirePage = () => import('./RepertoirePage').then((m) => ({ default: m.RepertoirePage }));
@@ -177,7 +177,7 @@ export const pageLoaders: Record<string, () => Promise<unknown>> = {
   ProtocolReportsPage: loadProtocolReportsPage,
   ProtocolRosterPage: loadProtocolRosterPage,
   ProtocolTeamsPage: loadProtocolTeamsPage,
-  PulpitPage: loadPulpitPage,
+  ServicesPage: loadServicesPage,
   RehearsalsPage: loadRehearsalsPage,
   RepertoirePage: loadRepertoirePage,
   ReportPage: loadReportPage,
