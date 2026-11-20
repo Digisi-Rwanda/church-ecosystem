@@ -10,6 +10,7 @@ import { useI18n, useT } from '../i18n/I18nContext';
 import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
+import { RunSheetPanel } from './RunSheetPanel';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
 
@@ -131,6 +132,7 @@ function ServiceView({ date, code, onBack }: { date: string; code: string; onBac
                 : d.protocol.team.length === 0 ? <p className="muted">{t('door.svc.noTeam')}</p>
                 : <ul className="door-list">{d.protocol.team.map((p) => <li key={`${p.personId}-${p.role}`}>{p.name}{p.role ? ` · ${p.role}` : ''}</li>)}</ul>}
             </div>
+            <RunSheetPanel date={date} code={code} />
           </>
         )}
       </LoadState>

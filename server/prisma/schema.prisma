@@ -1289,6 +1289,8 @@ model ServiceRunItem {
   ownerKind   String
   personId    String?
   roleId      String?
+  /// a specific choir, when ownerKind is CHOIR (empty = whichever choir the Music schedule gives that service)
+  choirId     String?
   ownerLabel  String?
   note        String?
 
@@ -1304,6 +1306,7 @@ model ServiceRunTemplateItem {
   minutes     Int
   ownerKind   String
   roleId      String?
+  choirId     String?
   ownerLabel  String?
   note        String?
 

@@ -340,15 +340,16 @@ servicePrepRouter.delete('/editors/:personId', requireAuth, async (req: AuthedRe
 
 interface RunItemRow {
   id: string; position: number; title: string; startTime: string; minutes: number; ownerKind: string;
-  personId: string | null; roleId: string | null; ownerLabel: string | null; note: string | null;
+  personId: string | null; roleId: string | null; choirId: string | null; ownerLabel: string | null; note: string | null;
 }
-interface TemplateRow { id: string; position: number; title: string; minutes: number; ownerKind: string; roleId: string | null; ownerLabel: string | null; note: string | null }
+interface TemplateRow { id: string; position: number; title: string; minutes: number; ownerKind: string; roleId: string | null; choirId: string | null; ownerLabel: string | null; note: string | null }
 
 const itemBody = z.object({
   title: z.string().trim().min(1).max(TITLE_MAX),
   minutes: z.number().int().min(1).max(600),
   ownerKind: z.enum(OWNER_KINDS),
   roleId: z.string().min(1).nullish(),
+  choirId: z.string().min(1).nullish(),
   ownerLabel: z.string().trim().max(NAME_MAX).nullish(),
   note: z.string().trim().max(200).nullish(),
 });
@@ -370,8 +371,16 @@ async function roleProblem(roleId: string | null | undefined, res: Res): Promise
   return true;
 }
 
+const activeChoirs = async () => (await loadChoirs()).filter((c) => c.active).map((c) => ({ id: c.id, name: c.name })).sort((a, b) => a.name.localeCompare(b.name));
+
+async function choirProblem(choirId: string | null | undefined, res: Res): Promise<boolean> {
+  if (!choirId) return true;
+  if (!(await loadChoirs()).some((c) => c.id === choirId)) { fail(res, 400, 'BAD_CHOIR', 'Choose a choir that exists'); return false; }
+  return true;
+}
+
 /** Names for the owners of a service's items: members, the pulpit role's planned person, the choirs, the Protocol team. */
-async function ownerNames(items: Array<{ ownerKind: string; personId?: string | null; roleId?: string | null; ownerLabel?: string | null }>, date: string, code: string, found: NonNullable<Awaited<ReturnType<typeof findService>>>) {
+async function ownerNames(items: Array<{ ownerKind: string; personId?: string | null; roleId?: string | null; choirId?: string | null; ownerLabel?: string | null }>, date: string, code: string, found: NonNullable<Awaited<ReturnType<typeof findService>>>) {
   const entries = (await prisma.servicePulpitEntry.findMany({ where: { serviceDate: date } })) as EntryRow[];
   const live = entries.filter((e) => e.status !== 'CANCELLED' && entryOn(e, date, code));
   const nm = await nameMaps([...items.map((i) => i.personId), ...live.map((e) => e.personId)], []);
@@ -379,13 +388,13 @@ async function ownerNames(items: Array<{ ownerKind: string; personId?: string | 
   const choirs = found.m.musicState === 'PUBLISHED'
     ? [...new Set(found.m.assignments.filter((a) => a.serviceId === found.slot.id).map((a) => a.unitId))].map((id) => choirNames.get(id) ?? id).join(', ')
     : '';
-  return (i: { ownerKind: string; personId?: string | null; roleId?: string | null; ownerLabel?: string | null }): string => {
+  return (i: { ownerKind: string; personId?: string | null; roleId?: string | null; choirId?: string | null; ownerLabel?: string | null }): string => {
     if (i.ownerKind === 'PERSON') return (i.personId && nm.people.get(i.personId)) || '';
     if (i.ownerKind === 'PULPIT') {
       const e = live.find((x) => x.roleId === i.roleId);
       return e ? (e.personId ? nm.people.get(e.personId) ?? '' : e.guestName ?? '') : '';
     }
-    if (i.ownerKind === 'CHOIR') return choirs;
+    if (i.ownerKind === 'CHOIR') return i.choirId ? choirNames.get(i.choirId) ?? '' : choirs;
     if (i.ownerKind === 'PROTOCOL') return '';
     return i.ownerLabel ?? '';
   };
@@ -410,10 +419,10 @@ servicePrepRouter.get('/run/:date/:code', requireAuth, async (req: AuthedRequest
   const nm = await nameMaps(items.map((i) => i.personId), []);
   const endTime = sheet?.endTime ?? null;
   res.json({
-    canWrite: w.write, startTime: found.slot.time ?? null, endTime, hasTemplate: template > 0, roles: roleRows.filter((r) => r.active),
+    canWrite: w.write, startTime: found.slot.time ?? null, endTime, hasTemplate: template > 0, roles: roleRows.filter((r) => r.active), choirs: await activeChoirs(),
     items: items.map((i) => ({
       id: i.id, title: i.title, startTime: i.startTime, minutes: i.minutes, endTime: endTimeOf(i), ownerKind: i.ownerKind as OwnerKind,
-      personId: i.personId, personName: i.personId ? nm.people.get(i.personId) ?? '' : '', roleId: i.roleId, ownerLabel: i.ownerLabel ?? '', ownerName: name(i), note: i.note ?? '',
+      personId: i.personId, personName: i.personId ? nm.people.get(i.personId) ?? '' : '', roleId: i.roleId, choirId: i.choirId, ownerLabel: i.ownerLabel ?? '', ownerName: name(i), note: i.note ?? '',
     })),
     warnings: runWarnings(items, endTime),
   });
@@ -435,13 +444,14 @@ servicePrepRouter.put('/run/:date/:code', requireAuth, async (req: AuthedRequest
     const problem = ownerProblem(it);
     if (problem) return fail(res, 400, 'OWNER', problem);
     if (!(await roleProblem(it.roleId, res))) return;
+    if (!(await choirProblem(it.ownerKind === 'CHOIR' ? it.choirId : null, res))) return;
     if (it.ownerKind === 'PERSON' && it.personId) {
       const p = (await prisma.person.findUnique({ where: { id: it.personId } })) as PersonRow | null;
       if (!p || p.archivedAt || (p.status && p.status !== 'ACTIVE')) return fail(res, 400, 'PERSON_NOT_ACTIVE', 'Choose an active member');
     }
   }
   const keep = (i: (typeof items)[number]) => ({
-    personId: i.ownerKind === 'PERSON' ? i.personId ?? null : null, roleId: i.ownerKind === 'PULPIT' ? i.roleId ?? null : null,
+    personId: i.ownerKind === 'PERSON' ? i.personId ?? null : null, roleId: i.ownerKind === 'PULPIT' ? i.roleId ?? null : null, choirId: i.ownerKind === 'CHOIR' ? i.choirId ?? null : null,
     ownerLabel: i.ownerKind === 'TEXT' ? i.ownerLabel?.trim() || null : null, note: i.note || null,
   });
   await prisma.$transaction([
@@ -477,7 +487,7 @@ servicePrepRouter.post('/run/:date/:code/from-template', requireAuth, async (req
   await prisma.$transaction([
     prisma.serviceRunItem.deleteMany({ where: { serviceDate: date, serviceCode: code } }),
     prisma.serviceRunItem.createMany({
-      data: rows.map((r, n) => ({ serviceDate: date, serviceCode: code, position: n, title: r.title, startTime: r.startTime, minutes: r.minutes, ownerKind: r.ownerKind, personId: null, roleId: r.roleId, ownerLabel: r.ownerLabel, note: r.note })),
+      data: rows.map((r, n) => ({ serviceDate: date, serviceCode: code, position: n, title: r.title, startTime: r.startTime, minutes: r.minutes, ownerKind: r.ownerKind, personId: null, roleId: r.roleId, choirId: r.choirId, ownerLabel: r.ownerLabel, note: r.note })),
     }),
   ]);
   await audit(w.me, 'SERVICE_RUN_FROM_TEMPLATE', `Started the run-sheet for ${date} (${code}) from the template`, { date, code, items: rows.length });
@@ -489,7 +499,7 @@ servicePrepRouter.get('/run-template/:code', requireAuth, async (req: AuthedRequ
   if (!w.read) return fail(res, 404, 'NOT_FOUND', 'Not found');
   const code = codeKey(String(req.params.code));
   const rows = ((await prisma.serviceRunTemplateItem.findMany({ where: { serviceCode: code } })) as TemplateRow[]).sort((a, b) => a.position - b.position);
-  res.json({ canWrite: w.write, code, roles: (await roles()).filter((r) => r.active), items: rows.map((r) => ({ title: r.title, minutes: r.minutes, ownerKind: r.ownerKind as OwnerKind, roleId: r.roleId, ownerLabel: r.ownerLabel ?? '', note: r.note ?? '' })) });
+  res.json({ canWrite: w.write, code, roles: (await roles()).filter((r) => r.active), choirs: await activeChoirs(), items: rows.map((r) => ({ title: r.title, minutes: r.minutes, ownerKind: r.ownerKind as OwnerKind, roleId: r.roleId, choirId: r.choirId, ownerLabel: r.ownerLabel ?? '', note: r.note ?? '' })) });
 });
 
 servicePrepRouter.put('/run-template/:code', requireAuth, async (req: AuthedRequest, res) => {
@@ -504,13 +514,14 @@ servicePrepRouter.put('/run-template/:code', requireAuth, async (req: AuthedRequ
     const problem = ownerProblem(it);
     if (problem) return fail(res, 400, 'OWNER', problem);
     if (!(await roleProblem(it.roleId, res))) return;
+    if (!(await choirProblem(it.ownerKind === 'CHOIR' ? it.choirId : null, res))) return;
   }
   await prisma.$transaction([
     prisma.serviceRunTemplateItem.deleteMany({ where: { serviceCode: code } }),
     prisma.serviceRunTemplateItem.createMany({
       data: parsed.data.items.map((i, n) => ({
         serviceCode: code, position: n, title: i.title, minutes: i.minutes, ownerKind: i.ownerKind,
-        roleId: i.ownerKind === 'PULPIT' ? i.roleId ?? null : null, ownerLabel: i.ownerKind === 'TEXT' ? i.ownerLabel?.trim() || null : null, note: i.note || null,
+        roleId: i.ownerKind === 'PULPIT' ? i.roleId ?? null : null, choirId: i.ownerKind === 'CHOIR' ? i.choirId ?? null : null, ownerLabel: i.ownerKind === 'TEXT' ? i.ownerLabel?.trim() || null : null, note: i.note || null,
       })),
     }),
   ]);

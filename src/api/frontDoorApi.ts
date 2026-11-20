@@ -2293,3 +2293,33 @@ export async function addServiceEditor(personId: string): Promise<void> {
 export async function removeServiceEditor(personId: string): Promise<void> {
   await apiFetch(`${SP}/editors/${encodeURIComponent(personId)}`, { method: 'DELETE' });
 }
+
+export type RunOwnerKind = 'PERSON' | 'PULPIT' | 'CHOIR' | 'PROTOCOL' | 'TEXT';
+export type RunItemInput = {
+  title: string; startTime: string; minutes: number; ownerKind: RunOwnerKind;
+  personId?: string | null; roleId?: string | null; choirId?: string | null; ownerLabel?: string | null; note?: string | null;
+};
+export type RunItemView = {
+  id: string; title: string; startTime: string; minutes: number; endTime: string; ownerKind: RunOwnerKind;
+  personId: string | null; personName: string; roleId: string | null; choirId: string | null; ownerLabel: string; ownerName: string; note: string;
+};
+export type RunSheetView = {
+  canWrite: boolean; startTime: string | null; endTime: string | null; hasTemplate: boolean;
+  roles: ServicePulpitRole[]; choirs: Array<{ id: string; name: string }>; items: RunItemView[];
+  warnings: Array<{ kind: 'OVERLAP' | 'OVERRUN'; index: number }>;
+};
+export type RunTemplateView = {
+  canWrite: boolean; code: string; roles: ServicePulpitRole[]; choirs: Array<{ id: string; name: string }>;
+  items: Array<{ title: string; minutes: number; ownerKind: RunOwnerKind; roleId: string | null; choirId: string | null; ownerLabel: string; note: string }>;
+};
+export const fetchRunSheet = (date: string, code: string): Promise<RunSheetView> => apiFetch(`${SP}/run/${encodeURIComponent(date)}/${encodeURIComponent(code)}`);
+export async function saveRunSheet(date: string, code: string, body: { endTime: string | null; items: RunItemInput[] }): Promise<void> {
+  await apiFetch(`${SP}/run/${encodeURIComponent(date)}/${encodeURIComponent(code)}`, { method: 'PUT', body });
+}
+export async function applyRunTemplate(date: string, code: string): Promise<void> {
+  await apiFetch(`${SP}/run/${encodeURIComponent(date)}/${encodeURIComponent(code)}/from-template`, { method: 'POST', body: {} });
+}
+export const fetchRunTemplate = (code: string): Promise<RunTemplateView> => apiFetch(`${SP}/run-template/${encodeURIComponent(code)}`);
+export async function saveRunTemplate(code: string, items: Array<Omit<RunItemInput, 'startTime' | 'personId'>>): Promise<void> {
+  await apiFetch(`${SP}/run-template/${encodeURIComponent(code)}`, { method: 'PUT', body: { items } });
+}
