@@ -8801,3 +8801,23 @@ html[data-theme='dark'] body { --success-ink: var(--success); --warn-ink: var(--
   .run-line { grid-template-columns: 6.5rem 1fr; }
   .run-line .run-owner { grid-column: 2; }
 }
+
+/* ---- Service bulletin: a clean sheet to read, print or save as PDF ---- */
+.bulletin { display: grid; gap: 1rem; padding: 1.25rem 1.5rem; border: 1px solid var(--line); border-radius: 14px; background: var(--surface, transparent); }
+.bulletin-head { display: grid; gap: 0.15rem; border-bottom: 2px solid var(--accent, currentColor); padding-bottom: 0.75rem; }
+.bulletin-head h2 { margin: 0; font-size: 1.6rem; letter-spacing: -0.02em; }
+.bulletin-kicker { margin: 0; text-transform: uppercase; letter-spacing: 0.08em; font-size: 0.75rem; font-weight: 650; }
+.bulletin-when { margin: 0; font-size: 1.05rem; }
+.bulletin h3 { margin: 0.4rem 0 0.25rem; font-size: 1rem; }
+.bulletin-table { width: 100%; border-collapse: collapse; }
+.bulletin-table th { text-align: left; font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--ink-muted); padding: 0.35rem 0.5rem; border-bottom: 1px solid var(--line); }
+.bulletin-table td { padding: 0.5rem; border-bottom: 1px solid var(--line); vertical-align: top; }
+.bulletin-time { white-space: nowrap; font-variant-numeric: tabular-nums; font-weight: 650; width: 8.5rem; }
+.bulletin-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr)); gap: 1.25rem; }
+.bulletin-list { margin: 0; padding-left: 1.1rem; display: grid; gap: 0.3rem; }
+@media (max-width: 640px) { .bulletin { padding: 1rem; } .bulletin-time { width: auto; } }
+@media print {
+  .bulletin { border: 0; padding: 0; background: #fff; color: #000; }
+  .bulletin .muted { color: #444; }
+  .bulletin-table tr { break-inside: avoid; }
+}

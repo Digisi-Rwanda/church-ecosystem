@@ -11,6 +11,7 @@ import { errorCode } from './governance';
 import { LoadState } from './LoadState';
 import { PersonPicker } from './PersonPicker';
 import { RunSheetPanel } from './RunSheetPanel';
+import { ServiceBulletin } from './ServiceBulletin';
 import { useLoad } from './useLoad';
 import { PageHeader } from './kit';
 
@@ -97,7 +98,7 @@ function RoleRow({ role, entry, date, code, canWrite, onChange }: {
   );
 }
 
-function ServiceView({ date, code, onBack }: { date: string; code: string; onBack: () => void }) {
+function ServiceView({ date, code, onBack, onBulletin }: { date: string; code: string; onBack: () => void; onBulletin: () => void }) {
   const t = useT();
   const fmt = useFmt();
   const load = useLoad<ServiceDetail>(() => fetchServiceDetail(date, code), `svc-${date}-${code}`);
@@ -105,7 +106,10 @@ function ServiceView({ date, code, onBack }: { date: string; code: string; onBac
   const roles = (d?.pulpit.roles ?? []).filter((r) => r.active);
   return (
     <section className="door-block" aria-labelledby="door-svc-title">
-      <div className="door-row"><button type="button" className="btn ghost" onClick={onBack}>{t('door.svc.back')}</button></div>
+      <div className="door-row">
+        <button type="button" className="btn ghost" onClick={onBack}>{t('door.svc.back')}</button>
+        <button type="button" className="btn ghost" onClick={onBulletin}>{t('door.svc.bulletin')}</button>
+      </div>
       <PageHeader id="door-svc-title" title={d ? `${d.service.label} · ${fmt(date)}` : fmt(date)} />
       <LoadState loading={load.loading} failed={load.failed} retry={load.reload}>
         {d && (
@@ -187,7 +191,7 @@ function ManagePanel({ state, onChange }: { state: ServicePrepState; onChange: (
   );
 }
 
-function ServiceCard({ s, onOpen }: { s: ServiceListItem; onOpen: () => void }) {
+function ServiceCard({ s, onOpen, onBulletin }: { s: ServiceListItem; onOpen: () => void; onBulletin: () => void }) {
   const t = useT();
   const choirKey = `door.svc.choir.${s.choir.state === 'PUBLISHED' ? 'PUBLISHED' : s.choir.state === 'CONFIRMED' ? 'CONFIRMED' : 'NONE'}` as 'door.svc.choir.NONE';
   return (
@@ -200,7 +204,10 @@ function ServiceCard({ s, onOpen }: { s: ServiceListItem; onOpen: () => void }) 
         <p>{t('door.svc.pulpitCount', { filled: String(s.pulpit.filled), total: String(s.pulpit.roles) })}</p>
         {s.choir.required && <p className="muted">{t(choirKey, { count: String(s.choir.count ?? 0) })}</p>}
         {s.protocol.required && <p className="muted">{t(`door.svc.protocol.${s.protocol.state}` as 'door.svc.protocol.NONE', { count: String(s.protocol.count ?? 0) })}</p>}
-        <div className="door-row"><button type="button" className="btn ghost" onClick={onOpen}>{s.pulpit.filled ? t('door.svc.change') : t('door.svc.set')}</button></div>
+        <div className="door-row">
+          <button type="button" className="btn ghost" onClick={onOpen}>{s.pulpit.filled ? t('door.svc.change') : t('door.svc.set')}</button>
+          <button type="button" className="btn ghost" onClick={onBulletin}>{t('door.svc.bulletin')}</button>
+        </div>
       </div>
     </li>
   );
@@ -210,10 +217,11 @@ function ServiceCard({ s, onOpen }: { s: ServiceListItem; onOpen: () => void }) 
 export function ServicesPage() {
   const t = useT();
   const fmt = useFmt();
-  const [open, setOpen] = useState<{ date: string; code: string } | null>(null);
+  const [open, setOpen] = useState<{ date: string; code: string; bulletin?: boolean } | null>(null);
   const state = useLoad<ServicePrepState>(() => fetchServicePrepState(), 'svc-state');
   const list = useLoad(() => fetchServiceList(), 'svc-list');
-  if (open) return <ServiceView date={open.date} code={open.code} onBack={() => { setOpen(null); list.reload(); }} />;
+  if (open?.bulletin) return <ServiceBulletin date={open.date} code={open.code} onBack={() => setOpen({ date: open.date, code: open.code })} />;
+  if (open) return <ServiceView date={open.date} code={open.code} onBack={() => { setOpen(null); list.reload(); }} onBulletin={() => setOpen({ ...open, bulletin: true })} />;
   const byDate = new Map<string, ServiceListItem[]>();
   for (const s of list.data?.services ?? []) byDate.set(s.date, [...(byDate.get(s.date) ?? []), s]);
   return (
@@ -227,7 +235,7 @@ export function ServicesPage() {
           [...byDate.entries()].map(([day, items]) => (
             <div key={day}>
               <h3>{fmt(day)}</h3>
-              <ul className="door-notices">{items.map((s) => <ServiceCard key={`${s.date}-${s.code}`} s={s} onOpen={() => setOpen({ date: s.date, code: s.code })} />)}</ul>
+              <ul className="door-notices">{items.map((s) => <ServiceCard key={`${s.date}-${s.code}`} s={s} onOpen={() => setOpen({ date: s.date, code: s.code })} onBulletin={() => setOpen({ date: s.date, code: s.code, bulletin: true })} />)}</ul>
             </div>
           ))
         )}
