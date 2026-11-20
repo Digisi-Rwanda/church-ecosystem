@@ -34,9 +34,46 @@ export type IconName =
   | 'wallet'
   | 'layers'
   | 'hand'
-  | 'menu';
+  | 'menu'
+  | 'megaphone'
+  | 'clock'
+  | 'document'
+  | 'org'
+  | 'exclaim';
 
 const PATHS: Record<IconName, ReactNode> = {
+  megaphone: (
+    <>
+      <path d="M4 10v4a1 1 0 0 0 1 1h2.5l6 4V5l-6 4H5a1 1 0 0 0-1 1Z" />
+      <path d="M17 9.5a4 4 0 0 1 0 5M19.5 7a7.5 7.5 0 0 1 0 10" />
+    </>
+  ),
+  clock: (
+    <>
+      <circle cx="12" cy="12" r="8.5" />
+      <path d="M12 7.5V12l3 2" />
+    </>
+  ),
+  document: (
+    <>
+      <path d="M7 3.5h7l4 4V20a.5.5 0 0 1-.5.5h-10A.5.5 0 0 1 7 20V3.5Z" />
+      <path d="M14 3.5v4h4M9.5 12h5M9.5 15.5h5" />
+    </>
+  ),
+  org: (
+    <>
+      <rect x="9" y="3.5" width="6" height="4.5" rx="1" />
+      <rect x="3.5" y="15.5" width="6" height="4.5" rx="1" />
+      <rect x="14.5" y="15.5" width="6" height="4.5" rx="1" />
+      <path d="M12 8v3.5M6.5 15.5v-4h11v4" />
+    </>
+  ),
+  exclaim: (
+    <>
+      <circle cx="12" cy="12" r="9" />
+      <path d="M12 7.5v5.5M12 16.2v.3" />
+    </>
+  ),
   search: (
     <>
       <circle cx="11" cy="11" r="7" />

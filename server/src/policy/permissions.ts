@@ -30,21 +30,19 @@ export function grantMatches(
   systemId: SystemId,
   resource: Resource,
   action: Action,
-  fundId?: string,
 ): boolean {
   if (grant.systemId !== systemId) return false;
   if (grant.resource !== resource) return false;
-  if (fundId) {
-    if (grant.fundId && grant.fundId !== fundId) return false;
-    if (!grant.fundId && resource === 'FINANCE') return false;
-  }
   return actionSatisfied(grant.action, action);
 }
 
 export function isTaskActive(task: WorkTask, now = new Date()): boolean {
   if (task.status !== 'TODO' && task.status !== 'IN_PROGRESS') return false;
-  if (!task.dueAt) return true;
-  // Active work items stay valid until closed — due date is informational.
-  void now;
+  const start = new Date(task.startDate ?? '');
+  if (Number.isNaN(start.getTime()) || start > now) return false;
+  if (task.endDate) {
+    const end = new Date(task.endDate);
+    if (!Number.isNaN(end.getTime()) && end < now) return false;
+  }
   return true;
 }

@@ -1,0 +1,856 @@
+[
+  {
+    "id": "sys-youth",
+    "name": "Youth Ministry",
+    "familyRelations": [
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "YOUTH",
+    "work": true,
+    "marriage": false,
+    "review": "YOUTH_APPROVED_FOR_GOOGLE"
+  },
+  {
+    "id": "sys-music",
+    "name": "Music Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": false,
+    "collect": false,
+    "profile": "AGGREGATED_FROM_CHOIRS",
+    "work": false,
+    "marriage": false,
+    "review": "NOT_YET_REVISED"
+  },
+  {
+    "id": "sys-men",
+    "name": "Men Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-women",
+    "name": "Women Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-couples",
+    "name": "Family Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-children",
+    "name": "Children Ministry",
+    "familyRelations": [
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [
+      "phone",
+      "email",
+      "nationalId",
+      "joinedChurchOn"
+    ],
+    "education": false,
+    "collect": true,
+    "profile": "CHILDREN",
+    "work": false,
+    "marriage": false,
+    "review": "CHILDREN_REVIEW_PREPARED"
+  },
+  {
+    "id": "sys-elderly",
+    "name": "Elderly Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-evangelism",
+    "name": "Evangelism Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-intercessors",
+    "name": "Intercessors Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-deacon",
+    "name": "Deacon Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-worship",
+    "name": "Worship Team",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-protocol",
+    "name": "Protocol Team",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-media",
+    "name": "Media Team",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "ADULT_UNIT",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-choir",
+    "name": "Choir Ministry",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "CHOIR",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-choir-ijwi",
+    "name": "Ijwi ry' umwami Yesu",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "CHOIR",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-choir-elbethel",
+    "name": "El bethel",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "CHOIR",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-choir-integuza",
+    "name": "Integuza",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "CHOIR",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-choir-elim",
+    "name": "Elim",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "CHOIR",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-choir-beulah",
+    "name": "Beulah",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "CHOIR",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-choir-yerusalemu",
+    "name": "Yerusalemu",
+    "familyRelations": [
+      {
+        "code": "SPOUSE",
+        "label": "Spouse"
+      },
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "CHOIR",
+    "work": true,
+    "marriage": true,
+    "review": "APPROVED_FOR_ROLLOUT"
+  },
+  {
+    "id": "sys-choir-hope",
+    "name": "Hope",
+    "familyRelations": [
+      {
+        "code": "PARENT",
+        "label": "Parent"
+      },
+      {
+        "code": "CHILD",
+        "label": "Child"
+      },
+      {
+        "code": "SIBLING",
+        "label": "Brother or sister"
+      },
+      {
+        "code": "GUARDIAN",
+        "label": "Guardian"
+      },
+      {
+        "code": "OTHER",
+        "label": "Other"
+      }
+    ],
+    "familyContactFields": [
+      "phone",
+      "nationalId"
+    ],
+    "optionalBasicFields": [],
+    "education": true,
+    "collect": true,
+    "profile": "CHOIR",
+    "work": true,
+    "marriage": true,
+    "review": "NOT_YET_REVISED"
+  }
+]

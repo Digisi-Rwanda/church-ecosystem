@@ -1,0 +1,19 @@
+import { isCentralOnly, lettersInSystem, type AccessData } from '../capabilities/engine.js';
+import { CENTRAL_ONLY_KINDS, CHURCH_WIDE, SOURCE, type ReportKind } from './builders.js';
+import { accessFor } from '../person360/rules.js';
+
+const held = (me: string, systemId: string, data: AccessData, now: Date) => lettersInSystem(me, systemId, data, now).REPORTS as string[];
+/** Reports are sent to Central: the Church Leader and the Catechist read every unit's published reports there. */
+export const canReadReports = (me: string, s: string, d: AccessData, now = new Date()) => isCentralOnly(me, d, now) || held(me, s, d, now).includes('R');
+export const canCompose = (me: string, s: string, d: AccessData, now = new Date()) => held(me, s, d, now).includes('W');
+export const canPublish = (me: string, s: string, d: AccessData, now = new Date()) => held(me, s, d, now).includes('P');
+/** To compose a report from records, the composer must be allowed to read those records. */
+export function canReadSource(me: string, s: string, kind: ReportKind, d: AccessData, now = new Date()): boolean {
+  if (CHURCH_WIDE.includes(kind)) {
+    if (s !== 'sys-main') return false;
+    return accessFor(me, d, now).read.includes(kind === 'MARRIAGES' ? 'MARRIAGE' : 'BAPTISM');
+  }
+  // Offerings are counted and handed over church-wide, so their summary is a Central Administration report only.
+  if (CENTRAL_ONLY_KINDS.includes(kind) && s !== 'sys-main') return false;
+  return (lettersInSystem(me, s, d, now)[SOURCE[kind]] as string[]).includes('R');
+}

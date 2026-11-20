@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useId, useRef } from 'react';
+import { useT } from '../../i18n/I18nContext';
 
 export function Drawer({
   open,
@@ -15,8 +16,9 @@ export function Drawer({
   onClose: () => void;
   children: ReactNode;
   footer?: ReactNode;
-  wide?: boolean;
+  wide?: boolean | 'xl';
 }) {
+  const t = useT();
   const titleId = useId();
   const panelRef = useRef<HTMLDivElement>(null);
   const previouslyFocused = useRef<HTMLElement | null>(null);
@@ -75,13 +77,13 @@ export function Drawer({
       <button
         type="button"
         className="drawer-backdrop"
-        aria-label="Close"
+        aria-label={t('kit.close')}
         onClick={onClose}
         tabIndex={-1}
       />
       <div
         ref={panelRef}
-        className={`drawer-panel ${wide ? 'wide' : ''}`}
+        className={`drawer-panel ${wide === 'xl' ? 'xl' : wide ? 'wide' : ''}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={titleId}
@@ -93,7 +95,7 @@ export function Drawer({
             {subtitle ? <p className="drawer-subtitle">{subtitle}</p> : null}
           </div>
           <button type="button" className="btn ghost sm" onClick={onClose}>
-            Close
+            {t('kit.close')}
           </button>
         </div>
         <div className="drawer-body">{children}</div>

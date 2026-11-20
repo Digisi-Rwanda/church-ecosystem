@@ -38,10 +38,29 @@ function matches(row: Row, where?: Row): boolean {
   return true;
 }
 
+/** Apply Prisma-style { increment: n } on numeric fields, plain values otherwise. */
+function applyData(row: Row, data: Row) {
+  for (const [k, v] of Object.entries(data)) {
+    if (v !== null && typeof v === 'object' && !(v instanceof Date) && 'increment' in v) row[k] = (row[k] ?? 0) + v.increment;
+    else row[k] = v;
+  }
+}
+
 function model(store: Row[]) {
   const api: Record<string, any> = {
     findMany: async (a: Row = {}) => {
       let out = store.filter((r) => matches(r, a.where));
+      if (a.orderBy) {
+        const keys = (Array.isArray(a.orderBy) ? a.orderBy : [a.orderBy]).map((o: Row) => Object.entries(o)[0] as [string, string]);
+        out = [...out].sort((x, y) => {
+          for (const [k, dir] of keys) {
+            const c = x[k] === y[k] ? 0 : x[k] == null ? 1 : y[k] == null ? -1 : x[k] < y[k] ? -1 : 1;
+            if (c) return dir === 'desc' ? -c : c;
+          }
+          return 0;
+        });
+      }
+      if (a.skip) out = out.slice(a.skip);
       if (a.take) out = out.slice(0, a.take);
       return out.map((r) => ({ ...r }));
     },
@@ -62,7 +81,7 @@ function model(store: Row[]) {
     update: async (a: Row) => {
       const r = store.find((x) => matches(x, a.where));
       if (!r) throw new Error('Record not found');
-      Object.assign(r, a.data);
+      applyData(r, a.data);
       return { ...r };
     },
     updateMany: async (a: Row) => {
@@ -72,7 +91,7 @@ function model(store: Row[]) {
     },
     upsert: async (a: Row) => {
       const r = store.find((x) => matches(x, a.where));
-      if (r) { Object.assign(r, a.update); return { ...r }; }
+      if (r) { applyData(r, a.update); return { ...r }; }
       return api.create({ data: { ...a.where, ...a.create } });
     },
     delete: async (a: Row) => {

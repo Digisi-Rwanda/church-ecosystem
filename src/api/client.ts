@@ -1,4 +1,5 @@
 import { apiBaseUrl } from './config';
+import { isKeptPath, readOffline, saveOffline, setStaleSince } from './offlineStore';
 
 const TOKEN_KEY = 'adepr.apiToken';
 
@@ -43,6 +44,23 @@ export class ApiError extends Error {
   }
 }
 
+/** What went wrong, in the terms a screen cares about (never the server's own words). */
+export type ApiErrorKind = 'auth' | 'forbidden' | 'notFound' | 'invalid' | 'offline' | 'server';
+
+export function errorKind(e: unknown): ApiErrorKind {
+  const status = e instanceof ApiError ? e.status : 0;
+  if (status === 0) return 'offline';
+  if (status === 401) return 'auth';
+  if (status === 403) return 'forbidden';
+  if (status === 404) return 'notFound';
+  if (status === 429) return 'server';
+  if (status >= 400 && status < 500) return 'invalid';
+  return 'server';
+}
+
+/** Sent when the server refuses a request that carried a token: the session has ended. */
+export const SESSION_EXPIRED_EVENT = 'adepr:session-expired';
+
 type RequestOpts = {
   method?: string;
   body?: unknown;
@@ -77,6 +95,14 @@ export async function apiFetch<T>(
       body: opts.body !== undefined ? JSON.stringify(opts.body) : undefined,
     });
   } catch (e) {
+    // No signal: a screen that may be read offline shows the last saved copy, labelled with its time.
+    if ((opts.method ?? 'GET') === 'GET' && opts.body === undefined) {
+      const kept = readOffline<T>(path, token);
+      if (kept) {
+        setStaleSince(kept.at);
+        return kept.data;
+      }
+    }
     throw new ApiError(
       e instanceof Error ? e.message : 'Network error',
       0,
@@ -101,9 +127,16 @@ export async function apiFetch<T>(
       typeof (data as { error: unknown }).error === 'string'
         ? (data as { error: string }).error
         : `HTTP ${res.status}`;
-    throw new ApiError(msg, res.status, data);
+    // A signed-in request that is refused as unauthenticated means the session ended: tell the app once.
+    if (res.status === 401 && token && typeof window !== 'undefined') window.dispatchEvent(new Event(SESSION_EXPIRED_EVENT));
+    // Whatever a server or proxy says about its own failure is not for the screen.
+    throw new ApiError(res.status >= 500 ? `HTTP ${res.status}` : msg, res.status, data);
   }
 
+  if ((opts.method ?? 'GET') === 'GET' && opts.body === undefined && isKeptPath(path)) {
+    saveOffline(path, token, data);
+    setStaleSince(null);
+  }
   return data as T;
 }
 

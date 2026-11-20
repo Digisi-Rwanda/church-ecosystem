@@ -1,4 +1,3 @@
-import { authorizeFinanceFund, fundGrantsToPermissions } from './financeAccess.js';
 import {
   CHOIR_MEMBERSHIP_GRANTS,
   CHOIR_OFFICE_GRANTS,
@@ -11,12 +10,12 @@ import {
   rolesFromPositions,
 } from './participation.js';
 import { grantMatches, isTaskActive } from './permissions.js';
+import { isChoirSystem } from '../lib/ministryOrgs.js';
 import type {
   Assignment,
   AuthzDecision,
   AuthzRequest,
   ChoirOffice,
-  FundAccessGrant,
   Membership,
   PermissionGrant,
   Position,
@@ -40,8 +39,7 @@ function pushGrant(grants: PermissionGrant[], grant: PermissionGrant) {
       g.resource === grant.resource &&
       g.action === grant.action &&
       g.source === grant.source &&
-      g.reason === grant.reason &&
-      g.fundId === grant.fundId,
+      g.reason === grant.reason,
   );
   if (!exists) grants.push(grant);
 }
@@ -60,12 +58,14 @@ function mainChurchGovernanceSpecs(
   const kind = canonicalGovRole(role);
   const enter: Array<Pick<PermissionGrant, 'resource' | 'action'>> = [
     { resource: 'SYSTEM', action: 'ENTER' },
-    { resource: 'PERSON', action: 'VIEW_FULL' },
     { resource: 'AUDIT', action: 'VIEW' },
   ];
+  // People module: Leader sees everything (VIEW_FULL via MANAGE); Catechist gets the
+  // basic tier (PERSON VIEW → limited fields); Pastor has no People module, only own profile.
   if (kind === 'CHURCH_LEADER') {
     return [
       ...enter,
+      { resource: 'PERSON', action: 'VIEW_FULL' },
       { resource: 'PERSON', action: 'MANAGE' },
       { resource: 'ORG_UNIT', action: 'MANAGE' },
       { resource: 'MEMBERSHIP', action: 'MANAGE' },
@@ -82,6 +82,7 @@ function mainChurchGovernanceSpecs(
   if (kind === 'CATECHIST') {
     return [
       ...enter,
+      { resource: 'PERSON', action: 'VIEW' },
       { resource: 'ORG_UNIT', action: 'VIEW' },
       { resource: 'MEMBERSHIP', action: 'MANAGE' },
       { resource: 'POSITION', action: 'VIEW' },
@@ -250,7 +251,6 @@ export function buildEffectiveAccess(
     assignments: Assignment[];
     tasks: WorkTask[];
     allSystemIds: SystemId[];
-    fundGrants: FundAccessGrant[];
   },
   now = new Date(),
 ): PermissionGrant[] {
@@ -295,10 +295,10 @@ export function buildEffectiveAccess(
     }
     if (m.systemId) {
       grantMemberBaseline(grants, m.systemId, m.label);
-      if (m.systemId === 'sys-choir') {
+      if (isChoirSystem(m.systemId)) {
         for (const spec of CHOIR_MEMBERSHIP_GRANTS) {
           pushGrant(grants, {
-            systemId: 'sys-choir',
+            systemId: m.systemId,
             resource: spec.resource,
             action: spec.action,
             source: 'MEMBERSHIP',
@@ -458,7 +458,7 @@ export function buildEffectiveAccess(
         });
       }
 
-      const choirScoped = p.systemId === 'sys-choir' && p.choirOffice;
+      const choirScoped = isChoirSystem(p.systemId) && p.choirOffice;
       const office =
         p.ministryOffice ??
         p.choirOffice ??
@@ -503,7 +503,6 @@ export function buildEffectiveAccess(
         source: 'POSITION',
         reason: `${p.title} — treasury audit`,
       });
-      // Church treasury is a Main module; vault ops still need FundAccessGrant.
     }
 
     // Mission board leaders: President / VP / Secretary / Treasurer
@@ -575,7 +574,7 @@ export function buildEffectiveAccess(
     // Choir leadership is granted only via choirOffice matrix (choirAccess.ts).
     // Ministry heads are identified by their office in that system, never by a main-church role.
 
-    if (p.systemId === 'sys-choir' && p.choirOffice) {
+    if (isChoirSystem(p.systemId) && p.choirOffice) {
       const office = p.choirOffice as ChoirOffice;
       const reason =
         office === 'ADVISOR' && p.choirAdvisorRole
@@ -586,7 +585,7 @@ export function buildEffectiveAccess(
       if (officeGrants) {
         for (const spec of officeGrants) {
           pushGrant(grants, {
-            systemId: 'sys-choir',
+            systemId: p.systemId as string,
             resource: spec.resource,
             action: spec.action,
             source: 'POSITION',
@@ -816,6 +815,13 @@ export function buildEffectiveAccess(
           source: 'POSITION',
           reason: p.title,
         });
+        pushGrant(grants, {
+          systemId: 'sys-deacon',
+          resource: 'ASSIGNMENT',
+          action: 'MANAGE',
+          source: 'POSITION',
+          reason: `${p.title} · assign within Deacon`,
+        });
         grantPeopleDirectoryView(grants, p.title);
       }
     }
@@ -940,7 +946,7 @@ export function buildEffectiveAccess(
         });
         grantPeopleDirectoryView(grants, p.title);
       }
-      // Treasurer: schedule VIEW only (already granted); fund via FundAccessGrant
+      // Treasurer: schedule VIEW only (already granted)
     }
   }
 
@@ -974,9 +980,9 @@ export function buildEffectiveAccess(
       source: 'ASSIGNMENT',
       reason: `${a.title} · ${a.contextLabel}`,
     });
-    if (a.systemId === 'sys-choir') {
+    if (isChoirSystem(a.systemId)) {
       pushGrant(grants, {
-        systemId: 'sys-choir',
+        systemId: a.systemId,
         resource: 'CHOIR_ROSTER',
         action: 'UPDATE',
         source: 'ASSIGNMENT',
@@ -1021,11 +1027,6 @@ export function buildEffectiveAccess(
     }
   }
 
-  // ORG_PRIVATE finance: only explicit fund grants — never governance.
-  for (const g of fundGrantsToPermissions(personId, input.fundGrants, now)) {
-    pushGrant(grants, g);
-  }
-
   return grants;
 }
 
@@ -1047,23 +1048,12 @@ export function authorize(
   const now = request.now ?? new Date();
   const evaluatedAt = now.toISOString();
 
-  if (request.resource === 'FINANCE' && request.fundId) {
-    return authorizeFinanceFund(
-      request.personId,
-      request.fundId,
-      request.action,
-      grants,
-      now,
-    );
-  }
-
   const matched = grants.find((g) =>
     grantMatches(
       g,
       request.systemId,
       request.resource,
       request.action,
-      request.fundId,
     ),
   );
 
@@ -1074,17 +1064,13 @@ export function authorize(
       systemId: request.systemId,
       resource: request.resource,
       action: request.action,
-      fundId: request.fundId,
       matchedGrant: matched,
       reason: matched.reason,
       evaluatedAt,
     };
   }
 
-  const privateDenied =
-    request.resource === 'FINANCE'
-      ? 'ORG_PRIVATE finance — no fund grant from the owning organization (pastor cannot bypass)'
-      : 'No matching permission grant for this context';
+  const privateDenied = 'No matching permission grant for this context';
 
   return {
     allowed: false,
@@ -1092,7 +1078,6 @@ export function authorize(
     systemId: request.systemId,
     resource: request.resource,
     action: request.action,
-    fundId: request.fundId,
     reason: privateDenied,
     evaluatedAt,
   };

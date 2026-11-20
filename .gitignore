@@ -35,6 +35,7 @@ server/prisma/*.db-journal
 server/prisma/*.db-shm
 server/prisma/*.db-wal
 server/prisma/dev.db*
+server/dev.db
 
 # Local event waitlist offer windows (W3)
 server/data/event-offers.json

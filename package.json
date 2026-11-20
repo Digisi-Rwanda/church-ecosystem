@@ -13,17 +13,21 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "boundaries": "node scripts/check-boundaries.mjs",
-    "check": "npm run lint && npm run boundaries && npm run test && npm run build && npm run test --prefix server && npm run test:policy --prefix server",
+    "bundle": "node scripts/check-bundle.mjs",
+    "i18n": "node scripts/check-i18n.mjs",
+    "check": "npm run lint && npm run boundaries && npm run i18n && npm run test && npm run build && npm run bundle && npm run db:generate:pg --prefix server && npm run build --prefix server && npm run test --prefix server && npm run test:policy --prefix server",
     "api:setup": "npm run setup --prefix server",
     "api:seed": "npm run db:seed --prefix server"
   },
   "dependencies": {
+    "qrcode": "^1.5.4",
     "react": "^19.2.8",
     "react-dom": "^19.2.8",
     "react-router-dom": "^7.18.3"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",
+    "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.18",
     "@types/react-dom": "^19.2.4",
     "@vitejs/plugin-react": "^6.1.0",

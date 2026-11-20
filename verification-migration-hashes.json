@@ -1,0 +1,5 @@
+{
+  "server/prisma/migrations/0060_music_foundation_rules/migration.sql": "491991cc44c3625adf1ffbc613f4142dcb9a24bca82439b51045e4454c11e154",
+  "server/prisma/migrations/0061_legacy_choir_category_backfill/migration.sql": "f904fcc3bd1d4ca98b15aab07aa2726c269d3d75a58c0cf82f696d333e215ea4",
+  "server/prisma/migrations/0062_protocol_music_config_version/migration.sql": "6b454632288452c77872afade26a8a03e67e07323992223d8786119ef805bf0e"
+}

@@ -1,0 +1,76 @@
+ M server/prisma/schema.postgres.prisma
+ M server/prisma/schema.prisma
+ M server/src/music/engine.ts
+ M server/src/music/types.ts
+ M server/src/protocol/engine.ts
+ M server/src/protocol/types.ts
+ M server/src/routes/musicSchedule.ts
+ M server/src/routes/protocol.ts
+ M server/src/scheduling/configLoader.ts
+ M server/src/scheduling/configRouter.ts
+ M server/src/scheduling/store.ts
+ M server/src/scheduling/types.ts
+ M server/tests/choirWork.test.ts
+ M server/tests/isolation.test.ts
+ M server/tests/musicEngine.test.ts
+ M server/tests/musicSchedule.test.ts
+ M server/tests/protocol.test.ts
+ M server/tests/protocolEngine.test.ts
+ M server/tests/schedulingConfig.test.ts
+ M src/api/frontDoorApi.ts
+ M src/i18n/messages/en.ts
+ M src/newdesign/DoorSchedulingConfigPage.test.ts
+ M src/newdesign/DoorSchedulingConfigPage.tsx
+ M src/newdesign/MonthPlanPage.tsx
+ M src/newdesign/NewDesignRoutes.tsx
+ M src/newdesign/ProtocolMinePage.tsx
+ M src/newdesign/ProtocolRosterPage.tsx
+ M src/newdesign/ProtocolTeamsPage.tsx
+ M src/newdesign/SchedulingConfigEditors.tsx
+ M src/newdesign/config.ts
+ M src/newdesign/music.test.ts
+ M src/newdesign/music.ts
+ M src/styles/app.css
+?? .tsupgrader/
+?? SCHEDULING_RESUME_REPORT.md
+?? SCHEDULING_UI_DELIVERY.md
+?? SCHEDULING_UI_PHASE_MAP.md
+?? SCHEDULING_VERIFICATION_2026-10-31.md
+?? SCHEDULING_VERIFICATION_FOLLOWUP_2026-10-31.md
+?? acceptance-scheduling.html
+?? bulletins.commit.txt
+?? count.txt
+?? out.txt
+?? scripts/_missing-keys.mjs
+?? scripts/scheduling-ui-preview.tsx
+?? server/acceptance/
+?? server/prisma/migrations/0060_music_foundation_rules/
+?? server/prisma/migrations/0061_legacy_choir_category_backfill/
+?? server/prisma/migrations/0062_protocol_music_config_version/
+?? server/scripts/verification-reporter.mjs
+?? server/src/music/configuredEngine.ts
+?? server/src/scheduling/musicConfigRules.ts
+?? server/tests/configuredMusicEngine.test.ts
+?? server/tests/musicConfigRules.test.ts
+?? server/verification-isolation-request.txt
+?? src/newdesign/MonthPlanPage.tsx.tmp
+?? src/newdesign/MusicParticipationEditor.tsx
+?? src/newdesign/ProtocolMinePage.test.ts
+?? src/newdesign/ProtocolTeamsPage.tsx.tmp
+?? src/newdesign/schedulingForms.test.ts
+?? src/newdesign/schedulingForms.ts
+?? ui-music-availability-error.jpg
+?? ui-music-desktop.jpg
+?? ui-music-mobile.jpg
+?? ui-music-pinned-history.jpg
+?? ui-phases-final-status.txt
+?? ui-phases-start-status.txt
+?? ui-protocol-distribution.jpg
+?? ui-protocol-mobile.jpg
+?? verification-final-status.txt
+?? verification-followup-status.txt
+?? verification-migration-hashes.json
+?? verification-read-scope-findings.txt
+?? verification-stable-source-hashes.json
+?? verification-start-status.txt
+?? verification-unthrottled-source-hashes.json

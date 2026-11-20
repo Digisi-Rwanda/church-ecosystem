@@ -1,0 +1,40 @@
+ M server/prisma/schema.postgres.prisma
+ M server/prisma/schema.prisma
+ M server/src/music/engine.ts
+ M server/src/music/types.ts
+ M server/src/protocol/engine.ts
+ M server/src/protocol/types.ts
+ M server/src/routes/musicSchedule.ts
+ M server/src/routes/protocol.ts
+ M server/src/scheduling/configLoader.ts
+ M server/src/scheduling/configRouter.ts
+ M server/src/scheduling/store.ts
+ M server/src/scheduling/types.ts
+ M server/tests/musicEngine.test.ts
+ M server/tests/musicSchedule.test.ts
+ M server/tests/protocol.test.ts
+ M server/tests/protocolEngine.test.ts
+ M server/tests/schedulingConfig.test.ts
+ M src/i18n/messages/en.ts
+ M src/newdesign/DoorSchedulingConfigPage.test.ts
+ M src/newdesign/DoorSchedulingConfigPage.tsx
+ M src/newdesign/SchedulingConfigEditors.tsx
+ M src/newdesign/config.ts
+ M src/styles/app.css
+?? .tsupgrader/runtime-validation/.gitignore
+?? .tsupgrader/runtime-validation/eval-plan.json
+?? .tsupgrader/runtime-validation/standalone-result.json
+?? SCHEDULING_RESUME_REPORT.md
+?? bulletins.commit.txt
+?? count.txt
+?? out.txt
+?? scripts/_missing-keys.mjs
+?? server/prisma/migrations/0060_music_foundation_rules/migration.sql
+?? server/prisma/migrations/0061_legacy_choir_category_backfill/migration.sql
+?? server/prisma/migrations/0062_protocol_music_config_version/migration.sql
+?? server/src/music/configuredEngine.ts
+?? server/src/scheduling/musicConfigRules.ts
+?? server/tests/configuredMusicEngine.test.ts
+?? server/tests/musicConfigRules.test.ts
+?? src/newdesign/MonthPlanPage.tsx.tmp
+?? src/newdesign/ProtocolTeamsPage.tsx.tmp

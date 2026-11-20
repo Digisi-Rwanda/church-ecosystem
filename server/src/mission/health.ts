@@ -1,6 +1,4 @@
 import {
-  confirmedFundingTotal,
-  openAdvances,
   parseStewardship,
   requiredDeliveryOpen,
   type StewardshipBlob,
@@ -19,17 +17,9 @@ export type PulseDto = {
     label: string;
     parts: {
       schedule: number;
-      money: number;
       delivery: number;
       people: number;
     };
-  };
-  money: {
-    plannedCost: number;
-    confirmedFunding: number;
-    usedCost: number;
-    gap: number;
-    openAdvances: number;
   };
   openRequiredDelivery: Array<{ id?: string; title?: string; status?: string }>;
   nextSession?: {
@@ -58,7 +48,6 @@ export type PulseDto = {
   }>;
   impact?: {
     participantsServed: number;
-    impactPerFranc: number | null;
   };
 };
 
@@ -101,19 +90,6 @@ export function computeHealthBlob(
             ? 100
             : 50);
 
-  let money = 70;
-  const planned = Number(s.plannedCost) || 0;
-  const confirmed = confirmedFundingTotal(s);
-  const used = Number(s.usedCost) || 0;
-  const advances = openAdvances(s).length;
-  if (planned <= 0) money = 85;
-  else {
-    money = clamp(Math.round((confirmed / planned) * 100));
-    if (planned - confirmed > planned * 0.25) money = Math.min(money, 45);
-    if (used > planned * 1.1) money = Math.min(money, 35);
-  }
-  if (advances > 0) money = Math.min(money, 50);
-
   let delivery = 80;
   const items = s.deliveryItems ?? [];
   const required = items.filter((d) => d.tier === 'REQUIRED');
@@ -128,14 +104,14 @@ export function computeHealthBlob(
 
   const people = opts.peopleScore ?? (status === 'ACTIVE' ? 75 : 60);
   const score = clamp(
-    Math.round(schedule * 0.3 + money * 0.25 + delivery * 0.3 + people * 0.15),
+    Math.round(schedule * 0.4 + delivery * 0.4 + people * 0.2),
   );
   const tone = toneOf(score);
   return {
     score,
     tone,
     label: labelOf(tone),
-    parts: { schedule, money, delivery, people },
+    parts: { schedule, delivery, people },
   };
 }
 
@@ -150,9 +126,6 @@ export function buildPulseFromStewardship(input: {
   scheduleScore?: number;
 }): PulseDto {
   const s = parseStewardship(input.stewardshipJson);
-  const planned = Number(s.plannedCost) || 0;
-  const confirmed = confirmedFundingTotal(s);
-  const used = Number(s.usedCost) || 0;
   const peopleScore =
     input.enrollmentCount == null
       ? undefined
@@ -180,9 +153,6 @@ export function buildPulseFromStewardship(input: {
   if (openReq.length) {
     needsMeHints.push(`${openReq.length} required delivery open`);
   }
-  if (openAdvances(s).length) {
-    needsMeHints.push(`${openAdvances(s).length} open advance(s)`);
-  }
   const openBlocks = (s.blockers ?? []).filter(
     (b) => b.status !== 'RESOLVED' && typeof b.id === 'string',
   );
@@ -200,13 +170,6 @@ export function buildPulseFromStewardship(input: {
     name: input.name,
     status: input.status,
     health,
-    money: {
-      plannedCost: planned,
-      confirmedFunding: confirmed,
-      usedCost: used,
-      gap: planned - confirmed,
-      openAdvances: openAdvances(s).length,
-    },
     openRequiredDelivery: openReq.map((d) => ({
       id: typeof d.id === 'string' ? d.id : undefined,
       title: typeof d.title === 'string' ? d.title : undefined,
@@ -245,14 +208,6 @@ export function buildPulseFromStewardship(input: {
     }),
     impact: {
       participantsServed: Math.max(0, Number(input.enrollmentCount) || 0),
-      impactPerFranc:
-        used > 0
-          ? Math.round(
-              ((Math.max(0, Number(input.enrollmentCount) || 0) / used) *
-                1000) *
-                100,
-            ) / 100
-          : null,
     },
   };
 }

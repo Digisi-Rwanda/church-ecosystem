@@ -1,0 +1,7 @@
+# Scheduling UI phase map
+Branch: staging; existing work preserved. Earlier verification report remains unchanged; the FOLLOWUP report currently contains this new UI request, so prior backend results are also read from the chat and logs.
+
+2. Existing: version selection/cloning/activation, service/category/link forms, Protocol team-size overrides, roster availability. Gaps: frequency period/mode, service capacity, explicit required Protocol flag, exceptions, fixed designations, Music unavailability, readable activation issues; preserve unknown relaxation values.
+3. Existing: generated/confirmed/published tabs, edits, logs, PDFs. Gaps: legacy role filtering, missing configured categories/pinned rule context in route responses, missing Music bulletin render, draft replacement action, busy/error handling.
+4. Existing: team review, head/vice assignment, roster, member absence/fill-in/swap screens. Gaps: navigation to those screens, ordinary-versus-voluntary duty summary, configured/pinned history context, raw validation messages, stale/blocked publication and request busy guards. Reuse existing lifecycle screens.
+5. Verify mock-backed leader workflows and responsive layouts without accessing any database; full frontend/build/bundle/boundaries/i18n; focused backend tests/build for additive presentation metadata. Do not claim tenant isolation, atomicity, unsupported policy controls, or unsupported historical snapshot browsing.

@@ -254,3 +254,76 @@ you have added a Music director position.
 
 Write down anything that surprises you, with the page and the person. Fix, then
 repeat on fresh data (a new Neon branch makes this quick).
+
+---
+
+## Two environments: staging and production
+
+| | Staging | Production |
+| --- | --- | --- |
+| Git branch | `staging` | `main` (protected; changes arrive by pull request from `staging`) |
+| Who uses it | leaders testing, developers | the congregation |
+| Neon database | the existing one (test data is fine) | a **new, separate** project, never shared with staging |
+| Render service | the existing `kacyiru-api`, branch set to `staging` | new `kacyiru-api-prod` from `render.prod.yaml`, paid plan (always on) |
+| Vercel project | the existing one, production branch set to `staging` | new project from the same repo, production branch `main` |
+| `VITE_API_URL` | the staging Render URL | the production Render URL |
+| `CORS_ORIGIN` | the staging Vercel URL | the production site URL |
+| `JWT_SECRET` | its own | its own, different |
+| Demo accounts / fallback | may be on while rehearsing | off: no `SEED_DEMO_ACCOUNTS`, `VITE_API_FALLBACK=false`, `VITE_DEMO_SEED=false` |
+| Real roster | optional rehearsal copy | imported at launch only |
+
+### Moving the existing deployment to staging (one time)
+
+1. Create the branch from the current `main` and push it: `git checkout main`, `git pull`, `git checkout -b staging`, `git push -u origin staging`.
+2. Render, existing service, Settings, Build & Deploy, Branch: `staging`, Save. It redeploys with the same URL, database and settings.
+3. Vercel, existing project, Settings, Git, Production Branch: `staging`, Save, then redeploy the latest `staging` deployment.
+4. Check the staging site still signs in and the sync badge is green. Nothing else changes for the people testing.
+
+### Creating production
+
+1. Neon: new project. Copy its connection string.
+2. Render: New, Blueprint, same repo, Blueprint path `render.prod.yaml`. Fill in `DATABASE_URL`, `CORS_ORIGIN` (you can set it after Vercel gives the URL), and the two `BOOTSTRAP_*` passwords.
+3. Vercel: Add New Project, same repo, Production Branch `main`, environment variables `VITE_API_URL` (the production Render URL), `VITE_API_FALLBACK=false`, `VITE_DEMO_SEED=false`.
+4. Back on Render, set `CORS_ORIGIN` to the production Vercel URL (with `https://`), and redeploy.
+5. Check: `https://PROD-API/api/health` answers, you can sign in as `pastor`, and the sync badge (if shown) is green.
+
+### Everyday flow
+
+Work on a feature branch, merge into `staging`, let the leaders test on the staging site, then open a pull request from `staging` to `main`. CI must be green. Merging deploys production. If something is wrong, redeploy the previous deployment in Render and Vercel (or reset `main` to the `live-before-protocol` tag for the very first rollback).
+
+### Settings for each environment (exact values)
+
+The code is the same in both. Only these settings differ.
+
+**Staging: practice data so leaders can test as if the system were in use**
+
+| Where | Setting | Value |
+| --- | --- | --- |
+| Render | `APP_ENV` | `staging` |
+| Render | `SEED_DEMO_ACCOUNTS` | `true` (creates the role sign-ins: `music`, `protocol`, `protocolpres`, `choir`, ...) |
+| Render | `SEED_DEFAULT_CHOIRS` | `true` (demo choirs exist on the server) |
+| Render | `SCHEDULE_GUARD` | `warn`, later `enforce` for the second rehearsal round |
+| Render | `SCHEDULE_READ_FILTER` | `off` for the first round (the demo role sign-ins hold no server roles, so with the filter on they would see nothing), `on` for the second round with imported real people |
+| Vercel | `VITE_APP_ENV` | `staging` |
+| Vercel | `VITE_API_URL` | the staging Render address |
+| Vercel | `VITE_API_FALLBACK` | `false`. Keep it off even on staging: the demo sign-ins live on the server, and a silent fallback would give sessions that are not shared (this already caused one confusing incident) |
+| Vercel | `VITE_DEMO_SEED` | unset (demo roster and demo choirs on) |
+
+Two rehearsal rounds: round one with the demo role sign-ins; round two after importing the real team CSV with `--accounts`, with the read filter on and the guard on `enforce`.
+
+**Production: real members only**
+
+| Where | Setting | Value |
+| --- | --- | --- |
+| Render | `APP_ENV` | `production` (the API refuses to start with any demo setting) |
+| Render | `SEED_DEMO_ACCOUNTS`, `SEED_DEFAULT_CHOIRS` | not set |
+| Render | `SCHEDULE_READ_FILTER` | `on` |
+| Render | `SCHEDULE_GUARD` | `warn` at first, `enforce` once the real office holders are recorded |
+| Render | `BOOTSTRAP_PASTOR_PASSWORD` | 10+ characters |
+| Vercel | `VITE_APP_ENV` | `production` (the build fails unless the next three are right) |
+| Vercel | `VITE_API_URL` | the production Render address |
+| Vercel | `VITE_API_FALLBACK` | `false` |
+| Vercel | `VITE_DEMO_SEED` | `false` |
+
+Check an environment from outside: `GET /api/health` now answers with `"env": "production"`, `"staging"` or `"unspecified"`.
+

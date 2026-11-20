@@ -1,0 +1,154 @@
+<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Children Ministry Person 360 — Revised template</title>
+<style>*{box-sizing:border-box}body{margin:0;background:#f3f0f8;color:#292333;font:16px/1.5 system-ui,sans-serif}main{max-width:760px;margin:32px auto;padding:0 18px 40px}header,section{background:white;border:1px solid #ddd5e8;border-radius:12px;margin:18px 0;padding:24px}header{border-top:9px solid #7047a3}h1{font-size:28px;line-height:1.2}h2{font-size:21px;margin:0 0 18px}label{display:block;margin:18px 0 8px}input:not([type=checkbox]),select{display:block;width:100%;border:1px solid #bfb5cc;border-radius:6px;padding:12px;font:inherit;background:white}button{border:0;border-radius:7px;padding:11px 17px;font:inherit;cursor:pointer;background:#7047a3;color:white}button.secondary{background:#f0eaf7;color:#583680}.checks label{display:flex;align-items:center;gap:12px;margin:10px 0}.checks input{width:19px;height:19px}.family{border-top:1px solid #ddd5e8;margin:24px 0;padding-top:18px}.family h3{margin:0}.muted{color:#6b6274;font-size:14px}#error{color:#a11}#family-add{margin-top:16px}[hidden]{display:none!important}.buttons{display:flex;gap:12px;flex-wrap:wrap}label:has(+ input[required])::after,label:has(+ select[required])::after{content:" *";color:#a11}</style>
+<main><header><span class="muted">Children Ministry template · Review</span><h1>Children Ministry Person 360 registration</h1><div class="muted">Dates: DD-MM-YYYY</div></header><form id="registration"><div id="sections"></div><p id="error" role="alert"></p><div class="buttons"><button type="submit">Download import CSV</button><button type="reset" class="secondary">Clear</button></div></form></main>
+<script>const CHOIR_V2={"version":"53f096c96d129ee4","columns":[{"key":"fullName","header":"Full name","section":"BASICS","type":"text","max":120,"question":"What is your full name?","required":true},{"key":"preferredName","header":"Preferred name","section":"BASICS","type":"text","max":120,"question":"What name do you prefer to be called?","required":true},{"key":"phone","header":"Phone","section":"BASICS","type":"text","max":30,"question":"What is your phone number?","required":false},{"key":"email","header":"Email","section":"BASICS","type":"email","question":"What is your email address?","required":false},{"key":"dateOfBirth","header":"Date of birth","section":"BASICS","type":"date","question":"What is your date of birth?","required":true},{"key":"nationalId","header":"National ID","section":"BASICS","type":"text","max":30,"question":"What is your National ID number?","required":false},{"key":"gender","header":"Gender","section":"BASICS","type":"select","question":"What is your gender?","choices":[{"code":"MALE","label":"Male"},{"code":"FEMALE","label":"Female"}],"required":true},{"key":"joinedChurchOn","header":"Joined church on","section":"BASICS","type":"date","question":"When did you join the church?","required":false},{"key":"address","header":"Address","section":"BASICS","type":"text","max":200,"question":"Where do you live?","required":true},{"key":"BAPTISM.date","header":"Baptism - Date","section":"BAPTISM","type":"date","question":"When were you baptised?","required":false},{"key":"BAPTISM.place","header":"Baptism - Place","section":"BAPTISM","type":"text","max":120,"question":"Where were you baptised?","required":false},{"key":"BAPTISM.baptisedBy","header":"Baptism - Baptised by","section":"BAPTISM","type":"text","max":120,"question":"Who baptised you?","required":false}],"headers":["Full name","Preferred name","Phone","Email","Date of birth","National ID","Gender","Status","Joined church on","Address","Contact - Label","Contact - Value","Work - Situation","Work - Sector","Work - Employer","Work - Role","Work - Since","Work - Business","Work - School","Work - Field of study","Education - Level","Education - Field of study","Education - School","Education - Start year","Education - End year","Calling - Name","Calling - Since","Calling - Notes","Family - Relationship","Family - Name","Family - Phone","Family - National ID","Family - Date of birth","Family - Gender","Family - Notes","Baptism - Date","Baptism - Place","Baptism - Baptised by","Marriage - Date","Marriage - Spouse name","Marriage - Place","Marriage - Blessed by","Marriage - Certificate reference","Marriage - Marriage ended by","Marriage - Marriage ended on","CALLING","FAMILY"],"callings":["Evangelist","Intercessor","Teach Sunday school","Deacon","Protocol","Singer","Instrumentalist","Media"],"familyLimit":20,"relations":[{"code":"PARENT","label":"Parent"},{"code":"CHILD","label":"Child"},{"code":"SIBLING","label":"Brother or sister"},{"code":"GUARDIAN","label":"Guardian"},{"code":"OTHER","label":"Other"}]};
+/** Creates exactly one unpublished review template. Existing unit forms are not modified. */
+function createChoirReview() {
+  const properties=PropertiesService.getScriptProperties();
+  const property='MORIAH_CHOIR_REVIEW:'+CHOIR_V2.version;
+  const prior=JSON.parse(properties.getProperty(property)||'null');
+  if(prior) {
+    if(prior.state!=='READY')throw new Error('The review form is unfinished. Inspect it before retrying.');
+    console.log('CHOIR_REVIEW '+JSON.stringify(prior));return;
+  }
+  const form=FormApp.create('Choir Person 360 — Revised template review',false);
+  const state={state:'CREATING',formId:form.getId(),items:{},version:CHOIR_V2.version};
+  properties.setProperty(property,JSON.stringify(state));
+  form.setTitle('Choir Person 360 — Revised template review').setDescription('Choir registration').setCollectEmail(false).setPublishingSummary(false).setProgressBar(false);
+  const map=function(item,key){state.items[String(item.getId())]=key;return item;};
+  const page=function(title){return form.addPageBreakItem().setTitle(title);};
+  const fields=function(section){CHOIR_V2.columns.filter(function(column){return column.section===section && column.key!=='MARRIAGE.endedOn' && column.key!=='MARRIAGE.endedBy';}).forEach(function(column){
+    const item=column.choices?form.addListItem():form.addTextItem();item.setTitle(column.question).setRequired(!!column.required);
+    if(column.choices)item.setChoiceValues(column.choices.map(function(choice){return choice.label;}));
+    else {
+      const validation=FormApp.createTextValidation();
+      if(column.type==='date'){item.setHelpText('DD-MM-YYYY');validation.requireTextMatchesPattern('^\\d{2}-\\d{2}-\\d{4}$').setHelpText('Use DD-MM-YYYY.');}
+      else if(column.type==='email')validation.requireTextIsEmail();
+      else if(column.type==='number')validation.requireTextMatchesPattern('^(19[3-9][0-9]|20[0-9]{2}|2100)$');
+      else validation.requireTextLengthLessThanOrEqualTo(column.max||200);
+      item.setValidation(validation.build());
+    }
+    map(item,column.key);
+  });};
+  form.addSectionHeaderItem().setTitle('About you');fields('BASICS');
+  page('Work');fields('EMPLOYMENT');
+  page('Education');fields('EDUCATION');
+  page('Serving in the church');
+  map(form.addCheckboxItem().setTitle('How do you serve in the church?').setChoiceValues(CHOIR_V2.callings).showOtherOption(true),'callings');
+  page('Family');
+  const startFamily=form.addMultipleChoiceItem().setTitle('Would you like to record a family member?').setRequired(true);
+  const familyPages=[];const more=[];
+  for(let index=0;index<CHOIR_V2.familyLimit;index++){
+    familyPages.push(page('Family member '+(index+1)));
+    map(form.addListItem().setTitle('How is this person related to you?').setChoiceValues(CHOIR_V2.relations.map(function(row){return row.label;})).setRequired(true),'family.'+index+'.relation');
+    map(form.addTextItem().setTitle('What is this family member’s full name?').setRequired(true).setValidation(FormApp.createTextValidation().requireTextLengthLessThanOrEqualTo(120).build()),'family.'+index+'.name');
+    map(form.addTextItem().setTitle('What is this family member’s date of birth?').setHelpText('DD-MM-YYYY').setValidation(FormApp.createTextValidation().requireTextMatchesPattern('^\\d{2}-\\d{2}-\\d{4}$').build()),'family.'+index+'.dateOfBirth');
+    map(form.addListItem().setTitle('What is this family member’s gender?').setChoiceValues(['Male','Female']),'family.'+index+'.gender');
+    ['phone','nationalId'].forEach(function(key){map(form.addTextItem().setTitle(key==='phone'?'What is this family member’s phone number?':'What is this family member’s National ID number?').setValidation(FormApp.createTextValidation().requireTextLengthLessThanOrEqualTo(30).build()),'family.'+index+'.'+key);});
+    if(index<CHOIR_V2.familyLimit-1)more.push(form.addMultipleChoiceItem().setTitle('Add another family member?').setRequired(true));
+  }
+  const baptism=page('Baptism');fields('BAPTISM');
+  page('Marriage');fields('MARRIAGE');
+  const widowed=map(form.addMultipleChoiceItem().setTitle('Has your spouse passed away?').setRequired(true),'MARRIAGE.endedBy');
+  const widowPage=page('Spouse’s passing');
+  const ended=CHOIR_V2.columns.find(function(column){return column.key==='MARRIAGE.endedOn';});
+  map(form.addTextItem().setTitle(ended.question).setHelpText('DD-MM-YYYY').setRequired(true).setValidation(FormApp.createTextValidation().requireTextMatchesPattern('^\\d{2}-\\d{2}-\\d{4}$').build()),ended.key);
+  startFamily.setChoices([startFamily.createChoice('Yes',familyPages[0]),startFamily.createChoice('No',baptism)]);
+  more.forEach(function(item,index){item.setChoices([item.createChoice('Yes',familyPages[index+1]),item.createChoice('No',baptism)]);});
+  widowed.setChoices([widowed.createChoice('Yes',widowPage),widowed.createChoice('No',FormApp.PageNavigationType.SUBMIT)]);
+  const sheet=SpreadsheetApp.create('Choir revised template — Review responses');form.setDestination(FormApp.DestinationType.SPREADSHEET,sheet.getId());
+  Object.assign(state,{state:'READY',editUrl:form.getEditUrl(),responderUrl:form.getPublishedUrl(),sheetUrl:sheet.getUrl()});properties.setProperty(property,JSON.stringify(state));
+  console.log('CHOIR_REVIEW '+JSON.stringify(state));
+}
+
+function choirReviewDate_(raw){
+  if(!raw)return '';
+  const match=/^(\d{2})-(\d{2})-(\d{4})$/.exec(String(raw).trim());
+  if(!match)throw new Error('Use DD-MM-YYYY.');
+  const iso=match[3]+'-'+match[2]+'-'+match[1];const date=new Date(iso+'T00:00:00Z');
+  if(!Number.isFinite(date.getTime())||date.toISOString().slice(0,10)!==iso)throw new Error('Enter a real date.');
+  return iso;
+}
+
+/** Converts form answers into the existing import contract; no database or Google calls. */
+function choirReviewRow_(answers){
+  const row={};
+  CHOIR_V2.columns.forEach(function(column){
+    let value=answers[column.key];if(value==null||String(value).trim()===''){if(column.required)throw new Error(column.question+' is required.');return;}
+    if(typeof value!=='string')throw new Error('Expected text for '+column.header);
+    value=value.trim();if(!value)return;
+    if(column.choices){const choice=column.choices.find(function(item){return item.label===value||item.code===value;});if(!choice)throw new Error('Invalid choice for '+column.header);value=choice.code;}
+    else if(column.type==='date')value=choirReviewDate_(value);
+    else if(column.type==='number'&&(!/^\d{4}$/.test(value)||Number(value)<1930||Number(value)>2100))throw new Error('Enter a year from 1930 to 2100.');
+    if(column.max&&value.length>column.max)throw new Error('Answer too long: '+column.header);
+    row[column.header]=value;
+  });
+  if(!row['Full name'])throw new Error('Full name is required.');
+  const choices=answers.callings||[];if(!Array.isArray(choices))throw new Error('Select one or more serving roles.');
+  const callings=[...new Set(choices.map(function(value){return String(value).trim();}).filter(Boolean))];
+  if(callings.some(function(value){return value.length>80||value==='Other';}))throw new Error('Name the other serving role (80 characters maximum).');
+  row.CALLING=callings.length?JSON.stringify(callings.map(function(name){return {name:name};})):'';
+  const family=[];
+  for(let index=0;index<CHOIR_V2.familyLimit;index++){
+    const prefix='family.'+index+'.';const name=String(answers[prefix+'name']||'').trim();const relation=String(answers[prefix+'relation']||'').trim();
+    const dob=answers[prefix+'dateOfBirth'];const gender=answers[prefix+'gender'];
+    const phone=String(answers[prefix+'phone']||'').trim(),nationalId=String(answers[prefix+'nationalId']||'').trim();
+    if(!name&&!relation&&!dob&&!gender&&!phone&&!nationalId)continue;
+    const rel=CHOIR_V2.relations.find(function(item){return item.code===relation||item.label===relation;});
+    if(!name||name.length>120||!rel)throw new Error('Complete the name and relationship for family member '+(index+1)+'.');
+    const member={name:name,relation:rel.code};
+    if(phone.length>30||nationalId.length>30)throw new Error('Family phone and National ID must be 30 characters or fewer.');
+    if(phone)member.phone=phone;if(nationalId)member.nationalId=nationalId;
+    if(dob)member.dateOfBirth=choirReviewDate_(dob);
+    if(gender){const code=String(gender).toUpperCase();if(['MALE','FEMALE'].indexOf(code)<0)throw new Error('Invalid family gender.');member.gender=code;}
+    family.push(member);
+  }
+  row.FAMILY=family.length?JSON.stringify(family):'';
+  if(row['Marriage - Marriage ended by']==='DEATH'){
+    if(!row['Marriage - Date']||!row['Marriage - Marriage ended on'])throw new Error('Record the marriage date and spouse’s passing date.');
+    if(row['Marriage - Marriage ended on']<row['Marriage - Date'])throw new Error('Spouse’s passing date precedes the marriage date.');
+  }else{
+    if(row['Marriage - Marriage ended on'])throw new Error('Select Yes if recording the spouse’s passing date.');
+    delete row['Marriage - Marriage ended by'];
+  }
+  return row;
+}
+
+function choirReviewCsv_(answers){
+  const rows=[CHOIR_V2.headers].concat(answers.map(function(answer){const row=choirReviewRow_(answer);return CHOIR_V2.headers.map(function(header){return row[header]||'';});}));
+  return '\uFEFF'+rows.map(function(row){return row.map(function(value){return '"'+String(value).replace(/"/g,'""')+'"';}).join(',');}).join('\r\n')+'\r\n';
+}
+
+function exportChoirReviewCsv(){
+  const state=JSON.parse(PropertiesService.getScriptProperties().getProperty('MORIAH_CHOIR_REVIEW:'+CHOIR_V2.version)||'null');
+  if(!state||state.state!=='READY')throw new Error('Create the choir review form first.');
+  const form=FormApp.openById(state.formId);const responses=form.getResponses();if(!responses.length)throw new Error('No responses to export.');
+  const rows=responses.map(function(response){const answers={};response.getItemResponses().forEach(function(item){const key=state.items[String(item.getItem().getId())];if(key)answers[key]=item.getResponse();});return answers;});
+  const file=DriveApp.createFile('choir-revised-person-360.csv',choirCollectionCsv_(state,rows),'text/csv');console.log('CHOIR_CSV '+file.getUrl());
+}
+
+/** An older saved collection must not silently lose newly added family contact fields. */
+function choirCollectionCsv_(state,rows){
+  if(state.familyContactsReady){
+    if(typeof familyContactCsv_!=='function')throw new Error('The family-contact exporter is required for this updated collection.');
+    return familyContactCsv_(rows);
+  }
+  return choirReviewCsv_(rows);
+}
+
+const form=document.getElementById('registration'),sections=document.getElementById('sections');
+const escapeHtml=value=>String(value).replace(/[&<>"']/g,char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const headings={BASICS:'About you',CALLING:'Serving in the church',FAMILY:'Family',BAPTISM:'Baptism'};
+function control(key,question,options,type='text',required=false){const id='field-'+key;return '<label for="'+id+'">'+escapeHtml(question)+'</label>'+(options?'<select id="'+id+'" name="'+key+'" '+(required?'required':'')+'><option value="">Choose…</option>'+options.map(option=>'<option value="'+escapeHtml(option)+'">'+escapeHtml(option)+'</option>').join('')+'</select>':'<input id="'+id+'" name="'+key+'" '+(required?'required':'')+' '+(type==='date'?'placeholder="DD-MM-YYYY" pattern="[0-9]{2}-[0-9]{2}-[0-9]{4}"':type==='number'?'type="number" min="1930" max="2100"':type==='email'?'type="email"':'type="text"')+'>');}
+for(const key of Object.keys(headings)){const section=document.createElement('section');section.innerHTML='<h2>'+headings[key]+'</h2>';section.id='section-'+key;
+  if(key==='CALLING'){section.innerHTML+='<p>How do you serve in the church?</p><div class="checks">'+CHOIR_V2.callings.concat(['Other']).map(role=>'<label><input type="checkbox" name="callings" value="'+escapeHtml(role)+'">'+role+'</label>').join('')+'</div><div id="other-role" hidden>'+control('otherCalling','What other role do you serve in?')+'</div>';}
+  else if(key==='FAMILY'){section.innerHTML+='<div id="family-list"></div><button type="button" class="secondary" id="family-add">Add a family member</button>';}
+  else for(const column of CHOIR_V2.columns.filter(column=>column.section===key)){const html=control(column.key,column.question,column.choices?.map(choice=>choice.label),column.type,!!column.required);section.innerHTML+=column.key==='MARRIAGE.endedOn'?'<div id="passing-date" hidden>'+html+'</div>':html;}
+  sections.append(section);
+}
+function updateFamilyControls(){const cards=[...document.querySelectorAll('#family-list .family')];cards.forEach((card,index)=>card.querySelector('h3').textContent='Family member '+(index+1));const button=document.getElementById('family-add');button.disabled=cards.length>=CHOIR_V2.familyLimit;button.textContent=cards.length?'Add another family member':'Add a family member';}
+document.getElementById('family-add').onclick=()=>{const used=[...document.querySelectorAll('#family-list .family')].map(card=>Number(card.dataset.index));const index=Array.from({length:CHOIR_V2.familyLimit},(_,position)=>position).find(position=>!used.includes(position));if(index===undefined)return;const card=document.createElement('div');card.className='family';card.dataset.index=String(index);card.innerHTML='<h3>Family member '+(index+1)+'</h3>'+control('family.'+index+'.relation','How is this person related to you?',CHOIR_V2.relations.map(row=>row.label),'text',true)+control('family.'+index+'.name','What is this family member’s full name?',null,'text',true)+control('family.'+index+'.dateOfBirth','What is this family member’s date of birth?',null,'date')+control('family.'+index+'.gender','What is this family member’s gender?',['Male','Female'])+control('family.'+index+'.phone','What is this family member’s phone number?')+control('family.'+index+'.nationalId','What is this family member’s National ID number?')+'<button type="button" class="secondary" style="margin-top:16px">Remove family member</button>';card.querySelector('button').onclick=()=>{card.remove();updateFamilyControls();};document.getElementById('family-list').append(card);updateFamilyControls();};
+form.addEventListener('change',()=>{const other=form.querySelector('input[name="callings"][value="Other"]').checked;document.getElementById('other-role').hidden=!other;form.elements.otherCalling.required=other;if(!form.elements['MARRIAGE.endedBy'])return;const passing=form.elements['MARRIAGE.endedBy'].value==='Yes';document.getElementById('passing-date').hidden=!passing;form.elements['MARRIAGE.endedOn'].required=passing;if(!passing)form.elements['MARRIAGE.endedOn'].value='';});
+form.addEventListener('submit',event=>{event.preventDefault();const data=new FormData(form),answers=Object.fromEntries(data);answers.callings=data.getAll('callings').filter(value=>value!=='Other');if(data.getAll('callings').includes('Other'))answers.callings.push(String(data.get('otherCalling')||'').trim());try{const csv=choirReviewCsv_([answers]);const url=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));const link=document.createElement('a');link.href=url;link.download='children-person-360.csv';link.click();setTimeout(()=>URL.revokeObjectURL(url),5000);document.getElementById('error').textContent='';}catch(error){document.getElementById('error').textContent=error.message;}});
+form.addEventListener('reset',()=>{document.getElementById('family-list').replaceChildren();updateFamilyControls();document.getElementById('other-role').hidden=true;if(document.getElementById('passing-date'))document.getElementById('passing-date').hidden=true;document.getElementById('error').textContent='';setTimeout(()=>{form.elements.otherCalling.required=false;if(form.elements['MARRIAGE.endedOn'])form.elements['MARRIAGE.endedOn'].required=false;});});
+</script></html>

@@ -40,7 +40,7 @@ export function EmptyState({
 }) {
   const defaults = DEFAULTS[variant];
   return (
-    <div className={`empty-state empty-${variant}`} data-variant={variant}>
+    <div className={`empty-state empty-${variant}`} data-variant={variant} role={variant === 'error' ? 'alert' : undefined}>
       <span className="empty-icon">
         <Icon name={defaults.icon} size={28} />
       </span>
